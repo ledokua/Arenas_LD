@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "arenas_ld",
+  "version": "${version}",
+
+  "name": "Arenas_LD",
+  "description": "Mod that adds admin utilities for creating dungeons/raids",
+  "authors": [],
+  "contact": {},
+
+  "license": "MIT",
+  "icon": "assets/arenas_ld/icon.png",
+
+  "environment": "*",
+  "entrypoints": {
+    "fabric-datagen": [
+      "net.ledok.arenas_ld.client.ArenasLdDataGenerator"
+    ],
+    "client": [
+      "net.ledok.arenas_ld.client.ArenasLdClient"
+    ],
+    "main": [
+      "net.ledok.arenas_ld.Arenas_ldMod"
+    ]
+  },
+
+  "mixins": [
+    "arenas_ld.mixins.json"
+  ],
+
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}
