@@ -68,6 +68,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
     private final List<UUID> activeMobUuids = new ArrayList<>();
     private final Map<UUID, Float> playerDamageDealt = new HashMap<>();
     private int regenerationTickTimer = 0;
+    private boolean firstTick = true;
 
 
     public MobSpawnerBlockEntity(BlockPos pos, BlockState state) {
@@ -94,6 +95,14 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
     public static void tick(Level world, BlockPos pos, BlockState state, MobSpawnerBlockEntity be) {
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
 
+        if (be.firstTick) {
+            ArenasLdMod.PHASE_BLOCK_MANAGER.registerSpawner(be);
+            if (be.respawnCooldown > 0) {
+                ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerBattleWon(be.groupId, be.worldPosition);
+            }
+            be.firstTick = false;
+        }
+
         if (be.isBattleActive) {
             be.handleActiveBattle(serverLevel);
         } else {
@@ -101,11 +110,19 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         }
     }
 
+    @Override
+    public void setRemoved() {
+        if (this.level != null && !this.level.isClientSide()) {
+            ArenasLdMod.PHASE_BLOCK_MANAGER.unregisterSpawner(this);
+        }
+        super.setRemoved();
+    }
+
     private void handleIdleState(ServerLevel world, BlockPos pos) {
         if (respawnCooldown > 0) {
             respawnCooldown--;
             if (respawnCooldown == 0) {
-                ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, true);
+                ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerReset(this.groupId, this.worldPosition);
             }
             return;
         }
@@ -163,6 +180,8 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
             return;
         }
 
+        ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerReset(this.groupId, this.worldPosition);
+
         isBattleActive = true;
         playerDamageDealt.clear();
 
@@ -208,7 +227,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
 
     private void handleBattleWin(ServerLevel world) {
         ArenasLdMod.LOGGER.info("Mob Spawner won at {}", worldPosition);
-        ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, false);
+        ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerBattleWon(this.groupId, this.worldPosition);
 
         if (lootTableId != null && !lootTableId.isEmpty()) {
             ResourceLocation lootTableIdentifier = ResourceLocation.tryParse(lootTableId);
@@ -347,6 +366,10 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
              attributes.add(new AttributeData("minecraft:generic.max_health", 20.0));
             attributes.add(new AttributeData("minecraft:generic.attack_damage", 3.0));
         }
+    }
+
+    public String getGroupId() {
+        return groupId;
     }
 
     @Nullable

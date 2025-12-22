@@ -162,7 +162,13 @@ public class ModPackets {
                     blockEntity.skillExperiencePerWin = payload.skillExperience();
                     blockEntity.mobCount = payload.mobCount();
                     blockEntity.mobSpread = payload.mobSpread();
-                    blockEntity.groupId = payload.groupId();
+                    
+                    if (!blockEntity.groupId.equals(payload.groupId())) {
+                        ArenasLdMod.PHASE_BLOCK_MANAGER.unregisterSpawner(blockEntity);
+                        blockEntity.groupId = payload.groupId();
+                        ArenasLdMod.PHASE_BLOCK_MANAGER.registerSpawner(blockEntity);
+                    }
+
                     blockEntity.setChanged();
                     world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
                 }
