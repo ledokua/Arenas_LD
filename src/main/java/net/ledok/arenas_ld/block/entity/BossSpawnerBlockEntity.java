@@ -2,14 +2,14 @@ package net.ledok.arenas_ld.block.entity;
 
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.fabricmc.loader.api.FabricLoader;
-import net.ledok.YggdrasilLdMod;
-import net.ledok.compat.PuffishSkillsCompat;
-import net.ledok.registry.BlockEntitiesRegistry;
-import net.ledok.registry.BlockRegistry;
-import net.ledok.screen.BossSpawnerData;
-import net.ledok.screen.BossSpawnerScreenHandler;
-import net.ledok.util.AttributeData;
-import net.ledok.util.AttributeProvider;
+import net.ledok.arenas_ld.ArenasLdMod;
+//import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
+import net.ledok.arenas_ld.registry.BlockRegistry;
+import net.ledok.arenas_ld.screen.BossSpawnerData;
+import net.ledok.arenas_ld.screen.BossSpawnerScreenHandler;
+import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.AttributeProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
@@ -123,7 +123,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             this.enterPortalRemovalTimer--;
             if (this.enterPortalRemovalTimer == 0) {
                 removeEnterPortal(world);
-                YggdrasilLdMod.LOGGER.info("Enter portal at {} has timed out and was removed.", enterPortalSpawnCoords);
+                ArenasLdMod.LOGGER.info("Enter portal at {} has timed out and was removed.", enterPortalSpawnCoords);
             }
         }
 
@@ -174,7 +174,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         Objects.requireNonNull(world.getServer()).getPlayerList().broadcastSystemMessage(announcement, false);
 
         if (entityTypeOpt.isEmpty()) {
-            YggdrasilLdMod.LOGGER.error("Invalid mob ID in spawner at {}: {}", this.worldPosition, this.mobId);
+            ArenasLdMod.LOGGER.error("Invalid mob ID in spawner at {}: {}", this.worldPosition, this.mobId);
             this.respawnCooldown = this.respawnTime;
             return;
         }
@@ -196,7 +196,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             livingBoss.heal(livingBoss.getMaxHealth());
         }
         if (boss == null) {
-            YggdrasilLdMod.LOGGER.error("Failed to create entity from ID: {}", this.mobId);
+            ArenasLdMod.LOGGER.error("Failed to create entity from ID: {}", this.mobId);
             return;
         }
         boss.moveTo(spawnPos.getX() + 0.5, spawnPos.getY() + 1, spawnPos.getZ() + 0.5, 0, 0);
@@ -205,13 +205,13 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         this.activeBossUuid = boss.getUUID();
         this.bossDimension = world.dimension();
         this.setChanged();
-        YggdrasilLdMod.LOGGER.info("Battle started at spawner {} with boss {}", this.worldPosition, this.mobId);
+        ArenasLdMod.LOGGER.info("Battle started at spawner {} with boss {}", this.worldPosition, this.mobId);
     }
 
     private void handleBattleWin(ServerLevel world, Entity defeatedBoss) {
-        YggdrasilLdMod.LOGGER.info("Battle won at spawner {}", worldPosition);
+        ArenasLdMod.LOGGER.info("Battle won at spawner {}", worldPosition);
 
-        if (this.skillExperiencePerWin > 0) {
+        /*if (this.skillExperiencePerWin > 0) {
             AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
             List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
             for (ServerPlayer player : playersInBattle) {
@@ -219,7 +219,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
                     PuffishSkillsCompat.addExperience(player, this.skillExperiencePerWin);
                 }
             }
-        }
+        }*/
 
         ResourceLocation lootTableIdentifier = ResourceLocation.tryParse(this.lootTableId);
         if (lootTableIdentifier != null) {
@@ -245,14 +245,14 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         world.setBlock(portalPos, BlockRegistry.EXIT_PORTAL_BLOCK.defaultBlockState(), 3);
         if (world.getBlockEntity(portalPos) instanceof ExitPortalBlockEntity portal) {
             portal.setDetails(this.portalActiveTime, this.exitPortalCoords);
-            YggdrasilLdMod.LOGGER.info("Spawned exit portal at {} for {} ticks.", portalPos, this.portalActiveTime);
+            ArenasLdMod.LOGGER.info("Spawned exit portal at {} for {} ticks.", portalPos, this.portalActiveTime);
         }
         resetSpawner(world);
         removeEnterPortal(world);
     }
 
     private void handleBattleLoss(ServerLevel world, String reason) {
-        YggdrasilLdMod.LOGGER.info("Battle lost at spawner {}: {}", worldPosition, reason);
+        ArenasLdMod.LOGGER.info("Battle lost at spawner {}: {}", worldPosition, reason);
 
         if (activeBossUuid != null && bossDimension != null) {
             ServerLevel bossWorld = Objects.requireNonNull(world.getServer()).getLevel(bossDimension);
@@ -260,7 +260,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
                 Entity bossEntity = bossWorld.getEntity(activeBossUuid);
                 if (bossEntity != null && bossEntity.isAlive()) {
                     bossEntity.discard();
-                    YggdrasilLdMod.LOGGER.info("Despawned boss after battle loss at {}.", worldPosition);
+                    ArenasLdMod.LOGGER.info("Despawned boss after battle loss at {}.", worldPosition);
                 }
             }
         }
@@ -274,7 +274,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         this.enterPortalRemovalTimer = -1;
         this.setChanged();
         world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
-        YggdrasilLdMod.LOGGER.info("Spawner at {} on short cooldown (60s) after battle loss.", worldPosition);
+        ArenasLdMod.LOGGER.info("Spawner at {} on short cooldown (60s) after battle loss.", worldPosition);
     }
 
     private void resetSpawner(ServerLevel world) {

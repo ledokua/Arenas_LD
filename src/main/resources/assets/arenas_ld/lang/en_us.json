@@ -1,9 +1,10 @@
 {
-  "block.yggdrasil_ld.boss_spawner": "Raid boss spawner",
-  "block.yggdrasil_ld.mob_spawner": "Mob spawner",
-  "block.yggdrasil_ld.enter_portal": "Raid enter portal",
-  "block.yggdrasil_ld.exit_portal": "Raid exit portal",
-  "block.yggdrasil_ld.phase_block": "Phase Block",
+  "block.arenas_ld.boss_spawner": "Raid boss spawner",
+  "block.arenas_ld.mob_spawner": "Mob spawner",
+  "block.arenas_ld.enter_portal": "Raid enter portal",
+  "block.arenas_ld.exit_portal": "Raid exit portal",
+  "block.arenas_ld.phase_block": "Phase Block",
+  "item.arenas_ld.linker": "Linker",
 
-  "message.yggdrasil_ld.raid_start": "%1$s has started a raid against %2$s!"
+  "message.arenas_ld.raid_start": "%1$s has started a raid against %2$s!"
 }

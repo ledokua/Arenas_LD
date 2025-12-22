@@ -1,7 +1,7 @@
 package net.ledok.arenas_ld.registry;
 
-import net.ledok.YggdrasilLdMod;
-import net.ledok.block.*;
+import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.block.*;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -31,11 +31,11 @@ public class BlockRegistry {
 
     private static Block registerBlock(String name, Block block) {
         registerBlockItem(name, block);
-        return Registry.register(BuiltInRegistries.BLOCK, ResourceLocation.parse(YggdrasilLdMod.MOD_ID + ":" + name), block);
+        return Registry.register(BuiltInRegistries.BLOCK, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":" + name), block);
     }
 
     private static void registerBlockItem(String name, Block block) {
-        Registry.register(BuiltInRegistries.ITEM, ResourceLocation.parse(YggdrasilLdMod.MOD_ID + ":" + name),
+        Registry.register(BuiltInRegistries.ITEM, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":" + name),
                 new BlockItem(block, new Item.Properties()));
     }
 

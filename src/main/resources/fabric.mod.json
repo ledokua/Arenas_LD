@@ -20,7 +20,7 @@
       "net.ledok.arenas_ld.client.ArenasLdClient"
     ],
     "main": [
-      "net.ledok.arenas_ld.Arenas_ldMod"
+      "net.ledok.arenas_ld.ArenasLdMod"
     ]
   },
 

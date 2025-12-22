@@ -1,8 +1,8 @@
 package net.ledok.arenas_ld.manager;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.ledok.block.PhaseBlock;
-import net.ledok.block.entity.PhaseBlockEntity;
+import net.ledok.arenas_ld.block.PhaseBlock;
+import net.ledok.arenas_ld.block.entity.PhaseBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;

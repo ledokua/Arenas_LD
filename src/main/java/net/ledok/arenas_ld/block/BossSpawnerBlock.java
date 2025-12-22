@@ -1,8 +1,8 @@
 package net.ledok.arenas_ld.block;
 
 import com.mojang.serialization.MapCodec;
-import net.ledok.block.entity.BossSpawnerBlockEntity;
-import net.ledok.registry.BlockEntitiesRegistry;
+import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
@@ -64,4 +64,3 @@ public class BossSpawnerBlock extends BaseEntityBlock {
         return createTickerHelper(type, BlockEntitiesRegistry.BOSS_SPAWNER_BLOCK_ENTITY, BossSpawnerBlockEntity::tick);
     }
 }
-

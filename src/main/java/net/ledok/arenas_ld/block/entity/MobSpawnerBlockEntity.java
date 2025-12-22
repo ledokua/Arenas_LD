@@ -2,13 +2,13 @@ package net.ledok.arenas_ld.block.entity;
 
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.fabricmc.loader.api.FabricLoader;
-import net.ledok.YggdrasilLdMod;
-import net.ledok.compat.PuffishSkillsCompat;
-import net.ledok.registry.BlockEntitiesRegistry;
-import net.ledok.screen.MobSpawnerData;
-import net.ledok.screen.MobSpawnerScreenHandler;
-import net.ledok.util.AttributeData;
-import net.ledok.util.AttributeProvider;
+import net.ledok.arenas_ld.ArenasLdMod;
+//import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
+import net.ledok.arenas_ld.screen.MobSpawnerData;
+import net.ledok.arenas_ld.screen.MobSpawnerScreenHandler;
+import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.AttributeProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
@@ -105,7 +105,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         if (respawnCooldown > 0) {
             respawnCooldown--;
             if (respawnCooldown == 0) {
-                YggdrasilLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, true);
+                ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, true);
             }
             return;
         }
@@ -159,7 +159,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
     private void startBattle(ServerLevel world, BlockPos spawnCenter) {
         Optional<EntityType<?>> entityTypeOpt = EntityType.byString(mobId);
         if (entityTypeOpt.isEmpty()) {
-            YggdrasilLdMod.LOGGER.error("Invalid mob ID in arena spawner at {}: {}", this.worldPosition, this.mobId);
+            ArenasLdMod.LOGGER.error("Invalid mob ID in arena spawner at {}: {}", this.worldPosition, this.mobId);
             return;
         }
 
@@ -202,13 +202,13 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
                 activeMobUuids.add(livingMob.getUUID());
             }
         }
-        YggdrasilLdMod.LOGGER.info("Mob Spawner started at {} with {} of {}", this.worldPosition, this.mobCount, this.mobId);
+        ArenasLdMod.LOGGER.info("Mob Spawner started at {} with {} of {}", this.worldPosition, this.mobCount, this.mobId);
         setChanged();
     }
 
     private void handleBattleWin(ServerLevel world) {
-        YggdrasilLdMod.LOGGER.info("Mob Spawner won at {}", worldPosition);
-        YggdrasilLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, false);
+        ArenasLdMod.LOGGER.info("Mob Spawner won at {}", worldPosition);
+        ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, false);
 
         if (lootTableId != null && !lootTableId.isEmpty()) {
             ResourceLocation lootTableIdentifier = ResourceLocation.tryParse(lootTableId);
@@ -238,12 +238,12 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
                             world.addFreshEntity(new ItemEntity(world, worldPosition.getX() + 0.5, worldPosition.getY() + 1.5, worldPosition.getZ() + 0.5, stack)));
 
                 } else {
-                    YggdrasilLdMod.LOGGER.warn("Mob Spawner at {} won, but no player could be found to generate loot.", worldPosition);
+                    ArenasLdMod.LOGGER.warn("Mob Spawner at {} won, but no player could be found to generate loot.", worldPosition);
                 }
             }
         }
 
-        if (this.skillExperiencePerWin > 0) {
+        /*if (this.skillExperiencePerWin > 0) {
             AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
             List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
             for (ServerPlayer player : playersInBattle) {
@@ -251,13 +251,13 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
                     PuffishSkillsCompat.addExperience(player, this.skillExperiencePerWin);
                 }
             }
-        }
+        }*/
 
         resetSpawner(world, true);
     }
 
     private void handleBattleLoss(ServerLevel world, String reason) {
-        YggdrasilLdMod.LOGGER.info("Mob Spawner lost at {}: {}", worldPosition, reason);
+        ArenasLdMod.LOGGER.info("Mob Spawner lost at {}: {}", worldPosition, reason);
         for (UUID mobUuid : activeMobUuids) {
             Entity mob = world.getEntity(mobUuid);
             if (mob != null && mob.isAlive()) {

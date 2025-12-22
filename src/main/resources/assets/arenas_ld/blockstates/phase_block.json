@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "solid=true": {
+      "model": "arenas_ld:block/phase_block_solid"
+    },
+    "solid=false": {
+      "model": "arenas_ld:block/phase_block_unsolid"
+    }
+  }
+}

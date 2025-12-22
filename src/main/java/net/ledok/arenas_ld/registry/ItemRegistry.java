@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.registry;
 
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.item.LinkerItem;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -8,6 +9,8 @@ import net.minecraft.world.item.Item;
 
 @SuppressWarnings("unused")
 public class ItemRegistry {
+
+    public static final Item LINKER = ItemInit.register(new LinkerItem(new Item.Properties()), "linker");
 
     public class ItemInit {
         public static Item register(Item item, String id) {

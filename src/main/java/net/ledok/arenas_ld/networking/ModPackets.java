@@ -2,11 +2,11 @@ package net.ledok.arenas_ld.networking;
 
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.ledok.YggdrasilLdMod;
-import net.ledok.block.entity.BossSpawnerBlockEntity;
-import net.ledok.block.entity.MobSpawnerBlockEntity;
-import net.ledok.util.AttributeData;
-import net.ledok.util.AttributeProvider;
+import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
+import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
+import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.AttributeProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -16,7 +16,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.List;
-import java.util.UUID;
 
 public class ModPackets {
 
@@ -25,7 +24,7 @@ public class ModPackets {
             BlockPos exitCoords, BlockPos enterSpawnCoords, BlockPos enterDestCoords,
             int triggerRadius, int battleRadius, int regeneration, int minPlayers, int skillExperiencePerWin
     ) implements CustomPacketPayload {
-        public static final Type<UpdateBossSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(YggdrasilLdMod.MOD_ID, "update_boss_spawner"));
+        public static final Type<UpdateBossSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_boss_spawner"));
 
         public static final StreamCodec<FriendlyByteBuf, UpdateBossSpawnerPayload> STREAM_CODEC = StreamCodec.of(
                 (buf, payload) -> payload.write(buf), UpdateBossSpawnerPayload::new);
@@ -55,9 +54,7 @@ public class ModPackets {
         }
 
         @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
+        public Type<? extends CustomPacketPayload> type() { return TYPE; }
     }
 
     public record UpdateMobSpawnerPayload(
@@ -65,7 +62,7 @@ public class ModPackets {
             int triggerRadius, int battleRadius, int regeneration, int skillExperience,
             int mobCount, int mobSpread, String groupId
     ) implements CustomPacketPayload {
-        public static final Type<UpdateMobSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(YggdrasilLdMod.MOD_ID, "update_mob_spawner"));
+        public static final Type<UpdateMobSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_spawner"));
 
         public static final StreamCodec<FriendlyByteBuf, UpdateMobSpawnerPayload> STREAM_CODEC = StreamCodec.of(
                 (buf, payload) -> payload.write(buf), UpdateMobSpawnerPayload::new);
@@ -93,15 +90,13 @@ public class ModPackets {
         }
 
         @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
+        public Type<? extends CustomPacketPayload> type() {return TYPE;}
     }
 
     public record UpdateAttributesPayload(
             BlockPos pos, List<AttributeData> attributes
     ) implements CustomPacketPayload {
-        public static final Type<UpdateAttributesPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(YggdrasilLdMod.MOD_ID, "update_attributes"));
+        public static final Type<UpdateAttributesPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_attributes"));
 
         public static final StreamCodec<FriendlyByteBuf, UpdateAttributesPayload> STREAM_CODEC = StreamCodec.of(
                 (buf, payload) -> payload.write(buf), UpdateAttributesPayload::new);

@@ -1,7 +1,7 @@
 package net.ledok.arenas_ld.block.entity;
 
-import net.ledok.YggdrasilLdMod;
-import net.ledok.registry.BlockEntitiesRegistry;
+import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -19,7 +19,7 @@ public class PhaseBlockEntity extends BlockEntity {
 
     public static void tick(Level world, BlockPos pos, BlockState state, PhaseBlockEntity be) {
         if (be.firstTick && !world.isClientSide()) {
-            YggdrasilLdMod.PHASE_BLOCK_MANAGER.register(be);
+            ArenasLdMod.PHASE_BLOCK_MANAGER.register(be);
             be.firstTick = false;
         }
     }
@@ -27,7 +27,7 @@ public class PhaseBlockEntity extends BlockEntity {
     @Override
     public void setRemoved() {
         if (this.level != null && !this.level.isClientSide()) {
-            YggdrasilLdMod.PHASE_BLOCK_MANAGER.unregister(this);
+            ArenasLdMod.PHASE_BLOCK_MANAGER.unregister(this);
         }
         super.setRemoved();
     }
@@ -50,11 +50,11 @@ public class PhaseBlockEntity extends BlockEntity {
 
     public void setGroupId(String groupId) {
         if (this.level != null && !this.level.isClientSide()) {
-            YggdrasilLdMod.PHASE_BLOCK_MANAGER.unregister(this);
+            ArenasLdMod.PHASE_BLOCK_MANAGER.unregister(this);
         }
         this.groupId = groupId;
         if (this.level != null && !this.level.isClientSide()) {
-            YggdrasilLdMod.PHASE_BLOCK_MANAGER.register(this);
+            ArenasLdMod.PHASE_BLOCK_MANAGER.register(this);
         }
         setChanged();
     }

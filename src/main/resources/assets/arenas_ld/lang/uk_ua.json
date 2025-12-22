@@ -1,9 +1,10 @@
 {
-  "block.yggdrasil_ld.boss_spawner": "Викликач рейд босса",
-  "block.yggdrasil_ld.mob_spawner": "Викликач мобів",
-  "block.yggdrasil_ld.enter_portal": "Рейд портал входу",
-  "block.yggdrasil_ld.exit_portal": "Рейд портал виходу",
-  "block.yggdrasil_ld.phase_block": "Барєрний блок",
+  "block.arenas_ld.boss_spawner": "Викликач рейд босса",
+  "block.arenas_ld.mob_spawner": "Викликач мобів",
+  "block.arenas_ld.enter_portal": "Рейд портал входу",
+  "block.arenas_ld.exit_portal": "Рейд портал виходу",
+  "block.arenas_ld.phase_block": "Барєрний блок",
+  "item.arenas_ld.linker": "Зв'язувач",
 
-  "message.yggdrasil_ld.raid_start": "%1$s розпочав рейд проти %2$s!"
+  "message.arenas_ld.raid_start": "%1$s розпочав рейд проти %2$s!"
 }

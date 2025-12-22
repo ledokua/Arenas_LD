@@ -1,7 +1,7 @@
 package net.ledok.arenas_ld.util;
 
 import com.mojang.serialization.Codec;
-import net.ledok.YggdrasilLdMod;
+import net.ledok.arenas_ld.ArenasLdMod;
 import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -14,7 +14,7 @@ public record BossDataComponent(int bossLevel) {
     // --- MIGRATED DATA COMPONENT ---
     public static final DataComponentType<BossDataComponent> BOSS_DATA = Registry.register(
             BuiltInRegistries.DATA_COMPONENT_TYPE,
-            ResourceLocation.fromNamespaceAndPath(YggdrasilLdMod.MOD_ID, "boss_data"),
+            ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "boss_data"),
             DataComponentType.<BossDataComponent>builder()
                     .persistent(CODEC) // Renamed from codec()
                     .networkSynchronized(ByteBufCodecs.fromCodec(CODEC)) // Replaced packetCodec(PacketCodecs.codec(...))

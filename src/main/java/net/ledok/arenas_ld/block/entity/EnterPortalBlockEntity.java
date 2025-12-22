@@ -1,6 +1,6 @@
 package net.ledok.arenas_ld.block.entity;
 
-import net.ledok.registry.BlockEntitiesRegistry;
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;

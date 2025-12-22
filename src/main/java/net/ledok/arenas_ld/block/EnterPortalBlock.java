@@ -1,7 +1,7 @@
 package net.ledok.arenas_ld.block;
 
 import com.mojang.serialization.MapCodec;
-import net.ledok.block.entity.EnterPortalBlockEntity;
+import net.ledok.arenas_ld.block.entity.EnterPortalBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;

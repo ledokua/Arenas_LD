@@ -1,8 +1,8 @@
 package net.ledok.arenas_ld.block;
 
 import com.mojang.serialization.MapCodec;
-import net.ledok.block.entity.PhaseBlockEntity;
-import net.ledok.registry.BlockEntitiesRegistry;
+import net.ledok.arenas_ld.block.entity.PhaseBlockEntity;
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;

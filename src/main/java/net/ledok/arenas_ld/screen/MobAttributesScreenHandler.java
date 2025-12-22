@@ -1,7 +1,7 @@
 package net.ledok.arenas_ld.screen;
 
-import net.ledok.util.AttributeData;
-import net.ledok.util.AttributeProvider;
+import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.AttributeProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;

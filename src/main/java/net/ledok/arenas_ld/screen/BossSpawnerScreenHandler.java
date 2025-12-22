@@ -1,6 +1,6 @@
 package net.ledok.arenas_ld.screen;
 
-import net.ledok.block.entity.BossSpawnerBlockEntity;
+import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;

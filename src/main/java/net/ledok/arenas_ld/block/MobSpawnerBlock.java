@@ -1,8 +1,8 @@
 package net.ledok.arenas_ld.block;
 
 import com.mojang.serialization.MapCodec;
-import net.ledok.block.entity.MobSpawnerBlockEntity;
-import net.ledok.registry.BlockEntitiesRegistry;
+import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
@@ -64,4 +64,3 @@ public class MobSpawnerBlock extends BaseEntityBlock {
         return createTickerHelper(type, BlockEntitiesRegistry.MOB_SPAWNER_BLOCK_ENTITY, MobSpawnerBlockEntity::tick);
     }
 }
-
