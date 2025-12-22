@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "arenas_ld:block/phase_block_unsolid"
+  }
+}

@@ -1,0 +1,21 @@
+/give @a arenas_ld:boss_spawner
+/give @a arenas_ld:mob_spawner
+/give @a arenas_ld:phase_block
+/data modify block 4 -60 13 GroupId set value test1
+/data get block 6 -60 13
+/data get block 4 -60 13
+/data modify block 4 -60 13 groupId set value test1
+/data get block 4 -60 13
+/data get block 6 -60 13
+/data modify block 4 -60 13 GroupId set value test1
+/data get block 4 -60 13
+/data get block 6 -60 13
+/data modify block 4 -60 13 GroupId set value test2
+/give @a arenas_ld:phase_block
+/give @a arenas_ld:mob_spawner
+/data get block 6 -60 12
+/data modify block 6 -60 12 groupId set value test1
+/data get block 6 -60 12
+/data get block 8 -60 12
+/data get block 6 -60 12
+/give @a arenas_ld:linker
