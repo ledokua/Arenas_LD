@@ -5,6 +5,7 @@
   "block.arenas_ld.exit_portal": "Raid exit portal",
   "block.arenas_ld.phase_block": "Phase Block",
   "item.arenas_ld.linker": "Linker",
+  "item.arenas_ld.loot_bundle": "Loot Bundle",
 
   "message.arenas_ld.raid_start": "%1$s has started a raid against %2$s!"
 }

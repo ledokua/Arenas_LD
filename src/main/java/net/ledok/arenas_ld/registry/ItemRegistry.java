@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.registry;
 
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.item.LinkerItem;
+import net.ledok.arenas_ld.item.LootBundleItem;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -11,6 +12,7 @@ import net.minecraft.world.item.Item;
 public class ItemRegistry {
 
     public static final Item LINKER = ItemInit.register(new LinkerItem(new Item.Properties()), "linker");
+    public static final Item LOOT_BUNDLE = ItemInit.register(new LootBundleItem(new Item.Properties()), "loot_bundle");
 
     public class ItemInit {
         public static Item register(Item item, String id) {

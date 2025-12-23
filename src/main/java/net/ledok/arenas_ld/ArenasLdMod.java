@@ -11,6 +11,7 @@ import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.screen.ModScreenHandlers;
 import net.ledok.arenas_ld.util.BossDataComponent;
 import net.ledok.arenas_ld.util.LinkerDataComponent;
+import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,6 +31,7 @@ public class ArenasLdMod implements ModInitializer {
         ModPackets.registerC2SPackets();
         BossDataComponent.initialize();
         LinkerDataComponent.initialize();
+        LootBundleDataComponent.initialize();
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
 

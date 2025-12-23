@@ -6,10 +6,12 @@ import net.ledok.arenas_ld.ArenasLdMod;
 //import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.registry.BlockRegistry;
+import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.screen.BossSpawnerData;
 import net.ledok.arenas_ld.screen.BossSpawnerScreenHandler;
 import net.ledok.arenas_ld.util.AttributeData;
 import net.ledok.arenas_ld.util.AttributeProvider;
+import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
@@ -33,6 +35,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -53,6 +56,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     public int respawnTime = 6000;
     public int portalActiveTime = 600;
     public String lootTableId = "minecraft:chests/simple_dungeon";
+    public String perPlayerLootTableId = "";
     public BlockPos exitPortalCoords = BlockPos.ZERO;
     public BlockPos enterPortalSpawnCoords = BlockPos.ZERO;
     public BlockPos enterPortalDestCoords = BlockPos.ZERO;
@@ -241,6 +245,19 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
                 world.addFreshEntity(itemEntity);
             });
         }
+
+        if (this.perPlayerLootTableId != null && !this.perPlayerLootTableId.isEmpty()) {
+            AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
+            List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
+            for (ServerPlayer player : playersInBattle) {
+                ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
+                bundle.set(LootBundleDataComponent.LOOT_BUNDLE_DATA, new LootBundleDataComponent(this.perPlayerLootTableId));
+                if (!player.getInventory().add(bundle)) {
+                    player.drop(bundle, false);
+                }
+            }
+        }
+
         BlockPos portalPos = worldPosition.above(2);
         world.setBlock(portalPos, BlockRegistry.EXIT_PORTAL_BLOCK.defaultBlockState(), 3);
         if (world.getBlockEntity(portalPos) instanceof ExitPortalBlockEntity portal) {
@@ -314,6 +331,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         nbt.putInt("RespawnTime", respawnTime);
         nbt.putInt("PortalActiveTime", portalActiveTime);
         nbt.putString("LootTableId", lootTableId);
+        nbt.putString("PerPlayerLootTableId", perPlayerLootTableId);
         nbt.putLong("ExitPortalCoords", exitPortalCoords.asLong());
         if (enterPortalSpawnCoords != null) nbt.putLong("EnterPortalSpawn", enterPortalSpawnCoords.asLong());
         if (enterPortalDestCoords != null) nbt.putLong("EnterPortalDest", enterPortalDestCoords.asLong());
@@ -341,6 +359,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         respawnTime = nbt.getInt("RespawnTime");
         portalActiveTime = nbt.getInt("PortalActiveTime");
         lootTableId = nbt.getString("LootTableId");
+        perPlayerLootTableId = nbt.getString("PerPlayerLootTableId");
         exitPortalCoords = BlockPos.of(nbt.getLong("ExitPortalCoords"));
         if (nbt.contains("EnterPortalSpawn"))
             enterPortalSpawnCoords = BlockPos.of(nbt.getLong("EnterPortalSpawn"));

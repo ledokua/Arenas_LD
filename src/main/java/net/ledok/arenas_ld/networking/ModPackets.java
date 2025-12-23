@@ -20,7 +20,7 @@ import java.util.List;
 public class ModPackets {
 
     public record UpdateBossSpawnerPayload(
-            BlockPos pos, String mobId, int respawnTime, int portalTime, String lootTable,
+            BlockPos pos, String mobId, int respawnTime, int portalTime, String lootTable, String perPlayerLootTable,
             BlockPos exitCoords, BlockPos enterSpawnCoords, BlockPos enterDestCoords,
             int triggerRadius, int battleRadius, int regeneration, int minPlayers, int skillExperiencePerWin
     ) implements CustomPacketPayload {
@@ -31,7 +31,7 @@ public class ModPackets {
 
         public UpdateBossSpawnerPayload(FriendlyByteBuf buf) {
             this(
-                    buf.readBlockPos(), buf.readUtf(), buf.readVarInt(), buf.readVarInt(), buf.readUtf(),
+                    buf.readBlockPos(), buf.readUtf(), buf.readVarInt(), buf.readVarInt(), buf.readUtf(), buf.readUtf(),
                     buf.readBlockPos(), buf.readBlockPos(), buf.readBlockPos(), buf.readVarInt(),
                     buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt()
             );
@@ -43,6 +43,7 @@ public class ModPackets {
             buf.writeVarInt(respawnTime);
             buf.writeVarInt(portalTime);
             buf.writeUtf(lootTable);
+            buf.writeUtf(perPlayerLootTable);
             buf.writeBlockPos(exitCoords);
             buf.writeBlockPos(enterSpawnCoords);
             buf.writeBlockPos(enterDestCoords);
@@ -135,6 +136,7 @@ public class ModPackets {
                     blockEntity.respawnTime = payload.respawnTime();
                     blockEntity.portalActiveTime = payload.portalTime();
                     blockEntity.lootTableId = payload.lootTable();
+                    blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
                     blockEntity.exitPortalCoords = payload.exitCoords();
                     blockEntity.enterPortalSpawnCoords = payload.enterSpawnCoords();
                     blockEntity.enterPortalDestCoords = payload.enterDestCoords();

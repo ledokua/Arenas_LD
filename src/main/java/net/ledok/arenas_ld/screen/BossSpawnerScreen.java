@@ -16,6 +16,7 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
     private EditBox respawnTimeField;
     private EditBox portalActiveTimeField;
     private EditBox lootTableIdField;
+    private EditBox perPlayerLootTableIdField;
     private EditBox exitPortalCoordsField;
     private EditBox triggerRadiusField;
     private EditBox battleRadiusField;
@@ -51,6 +52,12 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
         lootTableIdField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         lootTableIdField.setMaxLength(128);
         this.addRenderableWidget(lootTableIdField);
+        y += yOffset * 1.7;
+
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Per Player Loot Table ID"), (button) -> {}, this.font));
+        perPlayerLootTableIdField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
+        perPlayerLootTableIdField.setMaxLength(128);
+        this.addRenderableWidget(perPlayerLootTableIdField);
         y += yOffset * 1.7;
 
         addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Enter Portal Spawn (X Y Z)"), (button) -> {}, this.font));
@@ -132,6 +139,7 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
             respawnTimeField.setValue(String.valueOf(menu.blockEntity.respawnTime));
             portalActiveTimeField.setValue(String.valueOf(menu.blockEntity.portalActiveTime));
             lootTableIdField.setValue(menu.blockEntity.lootTableId);
+            perPlayerLootTableIdField.setValue(menu.blockEntity.perPlayerLootTableId);
             exitPortalCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.exitPortalCoords.getX(), menu.blockEntity.exitPortalCoords.getY(), menu.blockEntity.exitPortalCoords.getZ()));
             triggerRadiusField.setValue(String.valueOf(menu.blockEntity.triggerRadius));
             battleRadiusField.setValue(String.valueOf(menu.blockEntity.battleRadius));
@@ -162,6 +170,7 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
                     Integer.parseInt(respawnTimeField.getValue()),
                     Integer.parseInt(portalActiveTimeField.getValue()),
                     lootTableIdField.getValue(),
+                    perPlayerLootTableIdField.getValue(),
                     parseCoords(exitPortalCoordsField.getValue()),
                     parseCoords(enterPortalSpawnCoordsField.getValue()),
                     parseCoords(enterPortalDestCoordsField.getValue()),

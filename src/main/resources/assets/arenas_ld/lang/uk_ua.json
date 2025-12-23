@@ -5,6 +5,7 @@
   "block.arenas_ld.exit_portal": "Рейд портал виходу",
   "block.arenas_ld.phase_block": "Барєрний блок",
   "item.arenas_ld.linker": "Зв'язувач",
+  "item.arenas_ld.loot_bundle": "Мішечок здобичі",
 
   "message.arenas_ld.raid_start": "%1$s розпочав рейд проти %2$s!"
 }
