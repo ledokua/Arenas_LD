@@ -86,6 +86,7 @@ public class EnterPortalBlock extends BaseEntityBlock {
                     if(destination != null && world instanceof ServerLevel) {
                         // Teleport the player
                         player.teleportTo(destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5);
+                        player.setPortalCooldown();
 
                         // --- Apply Cooldown ---
                         playerCooldowns.put(player.getUUID(), currentTime + COOLDOWN_TICKS);
