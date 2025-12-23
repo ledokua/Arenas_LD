@@ -7,6 +7,8 @@ import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
 import net.ledok.arenas_ld.util.AttributeData;
 import net.ledok.arenas_ld.util.AttributeProvider;
+import net.ledok.arenas_ld.util.EquipmentData;
+import net.ledok.arenas_ld.util.EquipmentProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -123,10 +125,45 @@ public class ModPackets {
         }
     }
 
+    public record UpdateEquipmentPayload(
+            BlockPos pos, EquipmentData equipment
+    ) implements CustomPacketPayload {
+        public static final Type<UpdateEquipmentPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_equipment"));
+
+        public static final StreamCodec<FriendlyByteBuf, UpdateEquipmentPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> payload.write(buf), UpdateEquipmentPayload::new);
+
+        public UpdateEquipmentPayload(FriendlyByteBuf buf) {
+            this(
+                    buf.readBlockPos(),
+                    new EquipmentData(
+                            buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readBoolean()
+                    )
+            );
+        }
+
+        public void write(FriendlyByteBuf buf) {
+            buf.writeBlockPos(pos);
+            buf.writeUtf(equipment.head);
+            buf.writeUtf(equipment.chest);
+            buf.writeUtf(equipment.legs);
+            buf.writeUtf(equipment.feet);
+            buf.writeUtf(equipment.mainHand);
+            buf.writeUtf(equipment.offHand);
+            buf.writeBoolean(equipment.dropChance);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     public static void registerC2SPackets() {
         PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerPayload.TYPE, UpdateMobSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateAttributesPayload.TYPE, UpdateAttributesPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateEquipmentPayload.TYPE, UpdateEquipmentPayload.STREAM_CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -183,6 +220,18 @@ public class ModPackets {
                 BlockEntity be = world.getBlockEntity(payload.pos());
                 if (be instanceof AttributeProvider provider) {
                     provider.setAttributes(payload.attributes());
+                    be.setChanged();
+                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(UpdateEquipmentPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                Level world = context.player().level();
+                BlockEntity be = world.getBlockEntity(payload.pos());
+                if (be instanceof EquipmentProvider provider) {
+                    provider.setEquipment(payload.equipment());
                     be.setChanged();
                     world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
                 }

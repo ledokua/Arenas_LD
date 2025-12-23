@@ -11,9 +11,12 @@ import net.ledok.arenas_ld.screen.BossSpawnerData;
 import net.ledok.arenas_ld.screen.BossSpawnerScreenHandler;
 import net.ledok.arenas_ld.util.AttributeData;
 import net.ledok.arenas_ld.util.AttributeProvider;
+import net.ledok.arenas_ld.util.EquipmentData;
+import net.ledok.arenas_ld.util.EquipmentProvider;
 import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -28,13 +31,16 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -49,7 +55,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<BossSpawnerData>, AttributeProvider {
+public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<BossSpawnerData>, AttributeProvider, EquipmentProvider {
 
     // --- Configuration Fields ---
     public String mobId = "minecraft:zombie";
@@ -66,6 +72,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     public int minPlayers = 2;
     public int skillExperiencePerWin = 100;
     private final List<AttributeData> attributes = new ArrayList<>();
+    private EquipmentData equipment = new EquipmentData();
 
     // --- State Machine Fields ---
     private boolean isBattleActive = false;
@@ -92,6 +99,17 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     public void setAttributes(List<AttributeData> attributes) {
         this.attributes.clear();
         this.attributes.addAll(attributes);
+        setChanged();
+    }
+
+    @Override
+    public EquipmentData getEquipment() {
+        return equipment;
+    }
+
+    @Override
+    public void setEquipment(EquipmentData equipment) {
+        this.equipment = equipment;
         setChanged();
     }
 
@@ -197,6 +215,15 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
                     });
                 }
             }
+            
+            // Apply Equipment
+            applyEquipment(livingBoss, EquipmentSlot.HEAD, equipment.head);
+            applyEquipment(livingBoss, EquipmentSlot.CHEST, equipment.chest);
+            applyEquipment(livingBoss, EquipmentSlot.LEGS, equipment.legs);
+            applyEquipment(livingBoss, EquipmentSlot.FEET, equipment.feet);
+            applyEquipment(livingBoss, EquipmentSlot.MAINHAND, equipment.mainHand);
+            applyEquipment(livingBoss, EquipmentSlot.OFFHAND, equipment.offHand);
+
             livingBoss.heal(livingBoss.getMaxHealth());
         }
         if (boss == null) {
@@ -210,6 +237,25 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         this.bossDimension = world.dimension();
         this.setChanged();
         ArenasLdMod.LOGGER.info("Battle started at spawner {} with boss {}", this.worldPosition, this.mobId);
+    }
+
+    private void applyEquipment(LivingEntity entity, EquipmentSlot slot, String itemId) {
+        if (itemId != null && !itemId.isEmpty()) {
+            ResourceLocation id = ResourceLocation.tryParse(itemId);
+            if (id != null) {
+                Item item = BuiltInRegistries.ITEM.get(id);
+                if (item != null) {
+                    entity.setItemSlot(slot, new ItemStack(item));
+                    if (entity instanceof Mob mob) {
+                        if (equipment.dropChance) {
+                            mob.setDropChance(slot, 1.0F);
+                        } else {
+                            mob.setDropChance(slot, 0.0F);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private void handleBattleWin(ServerLevel world, Entity defeatedBoss) {
@@ -350,6 +396,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             attributeList.add(attr.toNbt());
         }
         nbt.put("Attributes", attributeList);
+        nbt.put("Equipment", equipment.toNbt());
     }
 
     @Override
@@ -385,6 +432,9 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         if (attributes.isEmpty()) {
             attributes.add(new AttributeData("minecraft:generic.max_health", 300.0));
             attributes.add(new AttributeData("minecraft:generic.attack_damage", 15.0));
+        }
+        if (nbt.contains("Equipment")) {
+            equipment = EquipmentData.fromNbt(nbt.getCompound("Equipment"));
         }
     }
 

@@ -9,8 +9,11 @@ import net.ledok.arenas_ld.screen.MobSpawnerData;
 import net.ledok.arenas_ld.screen.MobSpawnerScreenHandler;
 import net.ledok.arenas_ld.util.AttributeData;
 import net.ledok.arenas_ld.util.AttributeProvider;
+import net.ledok.arenas_ld.util.EquipmentData;
+import net.ledok.arenas_ld.util.EquipmentProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -26,13 +29,17 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -47,7 +54,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<MobSpawnerData>, AttributeProvider {
+public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<MobSpawnerData>, AttributeProvider, EquipmentProvider {
 
     // --- Configuration Fields ---
     public String mobId = "minecraft:zombie";
@@ -61,6 +68,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
     public int mobSpread = 5;
     public String groupId = "";
     private final List<AttributeData> attributes = new ArrayList<>();
+    private EquipmentData equipment = new EquipmentData();
 
     // --- State Machine Fields ---
     private boolean isBattleActive = false;
@@ -89,6 +97,17 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
     public void setAttributes(List<AttributeData> attributes) {
         this.attributes.clear();
         this.attributes.addAll(attributes);
+        setChanged();
+    }
+
+    @Override
+    public EquipmentData getEquipment() {
+        return equipment;
+    }
+
+    @Override
+    public void setEquipment(EquipmentData equipment) {
+        this.equipment = equipment;
         setChanged();
     }
 
@@ -201,6 +220,15 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
                         });
                     }
                 }
+                
+                // Apply Equipment
+                applyEquipment(livingMob, EquipmentSlot.HEAD, equipment.head);
+                applyEquipment(livingMob, EquipmentSlot.CHEST, equipment.chest);
+                applyEquipment(livingMob, EquipmentSlot.LEGS, equipment.legs);
+                applyEquipment(livingMob, EquipmentSlot.FEET, equipment.feet);
+                applyEquipment(livingMob, EquipmentSlot.MAINHAND, equipment.mainHand);
+                applyEquipment(livingMob, EquipmentSlot.OFFHAND, equipment.offHand);
+
                 livingMob.heal(livingMob.getMaxHealth());
 
                 if (!this.groupId.isEmpty()) {
@@ -223,6 +251,25 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         }
         ArenasLdMod.LOGGER.info("Mob Spawner started at {} with {} of {}", this.worldPosition, this.mobCount, this.mobId);
         setChanged();
+    }
+
+    private void applyEquipment(LivingEntity entity, EquipmentSlot slot, String itemId) {
+        if (itemId != null && !itemId.isEmpty()) {
+            ResourceLocation id = ResourceLocation.tryParse(itemId);
+            if (id != null) {
+                Item item = BuiltInRegistries.ITEM.get(id);
+                if (item != null) {
+                    entity.setItemSlot(slot, new ItemStack(item));
+                    if (entity instanceof Mob mob) {
+                        if (equipment.dropChance) {
+                            mob.setDropChance(slot, 1.0F);
+                        } else {
+                            mob.setDropChance(slot, 0.0F);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private void handleBattleWin(ServerLevel world) {
@@ -332,6 +379,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
             attributeList.add(attr.toNbt());
         }
         nbt.put("Attributes", attributeList);
+        nbt.put("Equipment", equipment.toNbt());
     }
 
     @Override
@@ -365,6 +413,9 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         if (attributes.isEmpty()) {
              attributes.add(new AttributeData("minecraft:generic.max_health", 20.0));
             attributes.add(new AttributeData("minecraft:generic.attack_damage", 3.0));
+        }
+        if (nbt.contains("Equipment")) {
+            equipment = EquipmentData.fromNbt(nbt.getCompound("Equipment"));
         }
     }
 

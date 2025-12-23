@@ -126,6 +126,10 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
             this.minecraft.setScreen(new MobAttributesScreen(new MobAttributesScreenHandler(menu.containerId, minecraft.player.getInventory(), new MobAttributesData(menu.blockEntity.getBlockPos())), minecraft.player.getInventory(), Component.literal("Boss Attributes")));
         }).bounds(this.width / 2 - 150, this.height - 70, 100, 20).build());
 
+        this.addRenderableWidget(Button.builder(Component.literal("Equipment"), button -> {
+            this.minecraft.setScreen(new EquipmentScreen(new EquipmentScreenHandler(menu.containerId, minecraft.player.getInventory(), new EquipmentScreenData(menu.blockEntity.getBlockPos())), minecraft.player.getInventory(), Component.literal("Boss Equipment")));
+        }).bounds(this.width / 2 + 50, this.height - 70, 100, 20).build());
+
         this.addRenderableWidget(Button.builder(Component.literal("Save"), button -> onSave())
                 .bounds(this.width / 2 - 50, this.height - 50, 100, 20)
                 .build());
