@@ -57,7 +57,7 @@ Enter & Exit Portals: Teleportation blocks used to move players into and out of 
 •
 In-Game GUI: Almost every aspect of the spawners (radius, timers, loot tables, mob stats) can be edited directly in-game using a custom user interface.
 
-<img width="1381" height="686" alt="image" src="https://github.com/user-attachments/assets/8b9cd912-27aa-49f3-af74-32ad0fec1964" />
+<img width="1381" height="686" alt="image" src="https://github.com/user-attachments/assets/8b9cd912-27aa-49f3-af74-32ad0fec1964" /><img width="542" height="479" alt="image" src="https://github.com/user-attachments/assets/a294e2a5-19ec-4fdb-a05b-513e34c1a4b7" />
 <img width="661" height="958" alt="image" src="https://github.com/user-attachments/assets/4b2c0bb4-fe4e-41b9-9a4f-3abd61c172d5" />
 <img width="657" height="949" alt="image" src="https://github.com/user-attachments/assets/680c5c96-667f-4d78-a797-d461c807df39" />
 <img width="656" height="938" alt="image" src="https://github.com/user-attachments/assets/c0be8167-3b91-40e7-a88a-8a8b22021d83" />
