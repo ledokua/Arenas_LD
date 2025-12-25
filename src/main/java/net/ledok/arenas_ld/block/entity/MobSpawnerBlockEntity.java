@@ -241,12 +241,42 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
                     scoreboard.addPlayerToTeam(livingMob.getScoreboardName(), team);
                 }
 
-                double x = spawnCenter.getX() + 0.5 + (world.random.nextDouble() - 0.5) * mobSpread * 2;
-                double y = spawnCenter.getY() + 1;
-                double z = spawnCenter.getZ() + 0.5 + (world.random.nextDouble() - 0.5) * mobSpread * 2;
-                livingMob.moveTo(x, y, z, world.random.nextFloat() * 360.0F, 0.0F);
-                world.addFreshEntity(livingMob);
-                activeMobUuids.add(livingMob.getUUID());
+                // Attempt to find a safe spawn location
+                boolean spawned = false;
+                for (int attempt = 0; attempt < 10; attempt++) {
+                    double x = spawnCenter.getX() + 0.5 + (world.random.nextDouble() - 0.5) * mobSpread * 2;
+                    double z = spawnCenter.getZ() + 0.5 + (world.random.nextDouble() - 0.5) * mobSpread * 2;
+                    
+                    // Search for ground starting from spawner level up to +5
+                    for (int yOffset = 0; yOffset <= 5; yOffset++) {
+                        int targetY = spawnCenter.getY() + yOffset;
+                        BlockPos pos = new BlockPos((int)x, targetY, (int)z);
+                        
+                        // Check if feet are in air and block below is solid
+                        if (world.getBlockState(pos).getCollisionShape(world, pos).isEmpty() &&
+                            !world.getBlockState(pos.below()).getCollisionShape(world, pos.below()).isEmpty()) {
+                            
+                            livingMob.moveTo(x, targetY, z, world.random.nextFloat() * 360.0F, 0.0F);
+                            if (world.noCollision(livingMob) && !world.containsAnyLiquid(livingMob.getBoundingBox())) {
+                                world.addFreshEntity(livingMob);
+                                activeMobUuids.add(livingMob.getUUID());
+                                spawned = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (spawned) break;
+                }
+                
+                if (!spawned) {
+                    // Fallback: spawn at center + 1
+                    double x = spawnCenter.getX() + 0.5;
+                    double y = spawnCenter.getY() + 1;
+                    double z = spawnCenter.getZ() + 0.5;
+                    livingMob.moveTo(x, y, z, world.random.nextFloat() * 360.0F, 0.0F);
+                    world.addFreshEntity(livingMob);
+                    activeMobUuids.add(livingMob.getUUID());
+                }
             }
         }
         ArenasLdMod.LOGGER.info("Mob Spawner started at {} with {} of {}", this.worldPosition, this.mobCount, this.mobId);
