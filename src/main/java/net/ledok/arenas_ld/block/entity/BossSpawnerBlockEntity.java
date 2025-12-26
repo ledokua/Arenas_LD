@@ -3,7 +3,7 @@ package net.ledok.arenas_ld.block.entity;
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.fabricmc.loader.api.FabricLoader;
 import net.ledok.arenas_ld.ArenasLdMod;
-//import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
+import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
@@ -261,7 +261,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     private void handleBattleWin(ServerLevel world, Entity defeatedBoss) {
         ArenasLdMod.LOGGER.info("Battle won at spawner {}", worldPosition);
 
-        /*if (this.skillExperiencePerWin > 0) {
+        if (this.skillExperiencePerWin > 0) {
             AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
             List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
             for (ServerPlayer player : playersInBattle) {
@@ -269,7 +269,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
                     PuffishSkillsCompat.addExperience(player, this.skillExperiencePerWin);
                 }
             }
-        }*/
+        }
 
         ResourceLocation lootTableIdentifier = ResourceLocation.tryParse(this.lootTableId);
         if (lootTableIdentifier != null) {

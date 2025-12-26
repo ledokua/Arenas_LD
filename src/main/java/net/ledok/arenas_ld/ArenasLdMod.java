@@ -3,6 +3,7 @@ package net.ledok.arenas_ld;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.ledok.arenas_ld.config.ArenasLdConfig;
 import net.ledok.arenas_ld.manager.PhaseBlockManager;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
@@ -20,6 +21,7 @@ public class ArenasLdMod implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     public static final PhaseBlockManager PHASE_BLOCK_MANAGER = new PhaseBlockManager();
+    public static final ArenasLdConfig CONFIG = new ArenasLdConfig();
 
     @Override
     public void onInitialize() {

@@ -3,7 +3,7 @@ package net.ledok.arenas_ld.block.entity;
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.fabricmc.loader.api.FabricLoader;
 import net.ledok.arenas_ld.ArenasLdMod;
-//import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
+import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.screen.MobSpawnerData;
 import net.ledok.arenas_ld.screen.MobSpawnerScreenHandler;
@@ -339,7 +339,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
             }
         }
 
-        /*if (this.skillExperiencePerWin > 0) {
+        if (this.skillExperiencePerWin > 0) {
             AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
             List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
             for (ServerPlayer player : playersInBattle) {
@@ -347,7 +347,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
                     PuffishSkillsCompat.addExperience(player, this.skillExperiencePerWin);
                 }
             }
-        }*/
+        }
 
         resetSpawner(world, true);
     }
