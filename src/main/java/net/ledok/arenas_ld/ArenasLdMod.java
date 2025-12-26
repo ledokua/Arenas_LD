@@ -1,13 +1,13 @@
 package net.ledok.arenas_ld;
 
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.ledok.arenas_ld.config.ArenasLdConfig;
 import net.ledok.arenas_ld.manager.PhaseBlockManager;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.registry.BlockRegistry;
+import net.ledok.arenas_ld.registry.CommandRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.screen.ModScreenHandlers;
 import net.ledok.arenas_ld.util.BossDataComponent;
@@ -21,7 +21,7 @@ public class ArenasLdMod implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     public static final PhaseBlockManager PHASE_BLOCK_MANAGER = new PhaseBlockManager();
-    public static final ArenasLdConfig CONFIG = new ArenasLdConfig();
+    public static final ArenasLdConfig CONFIG = ArenasLdConfig.load();
 
     @Override
     public void onInitialize() {
@@ -34,10 +34,7 @@ public class ArenasLdMod implements ModInitializer {
         BossDataComponent.initialize();
         LinkerDataComponent.initialize();
         LootBundleDataComponent.initialize();
-
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-
-        });
+        CommandRegistry.initialize();
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             PHASE_BLOCK_MANAGER.start();

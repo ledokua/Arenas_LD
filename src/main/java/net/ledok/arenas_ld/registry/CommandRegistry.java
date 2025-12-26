@@ -1,0 +1,21 @@
+package net.ledok.arenas_ld.registry;
+
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.ledok.arenas_ld.ArenasLdMod;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+
+public class CommandRegistry {
+    public static void initialize() {
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+            dispatcher.register(Commands.literal("arenas_ld")
+                    .requires(source -> source.hasPermission(2))
+                    .then(Commands.literal("reload")
+                            .executes(context -> {
+                                ArenasLdMod.CONFIG.reloadFromFile();
+                                context.getSource().sendSuccess(() -> Component.literal("Arenas LD config reloaded!"), true);
+                                return 1;
+                            })));
+        });
+    }
+}
