@@ -13,18 +13,14 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerScreenHa
 
     private EditBox mobIdField;
     private EditBox respawnTimeField;
-    private EditBox lootTableIdField;
     private EditBox triggerRadiusField;
-    private EditBox battleRadiusField;
-    private EditBox regenerationField;
-    private EditBox skillExperienceField;
     private EditBox mobCountField;
     private EditBox mobSpreadField;
     private EditBox groupIdField;
 
     public MobSpawnerScreen(MobSpawnerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
-        this.imageHeight = 260;
+        this.imageHeight = 220;
     }
 
     @Override
@@ -44,28 +40,17 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerScreenHa
         this.addRenderableWidget(mobIdField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Loot Table ID"), (button) -> {}, this.font));
-        lootTableIdField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
-        lootTableIdField.setMaxLength(128);
-        this.addRenderableWidget(lootTableIdField);
-        y += yOffset * 1.7;
-
         addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Mob Count"), (button) -> {}, this.font));
         mobCountField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         mobCountField.setMaxLength(4);
         this.addRenderableWidget(mobCountField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Mob Spread Radius"), (button) -> {}, this.font));
-        mobSpreadField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
-        mobSpreadField.setMaxLength(4);
-        this.addRenderableWidget(mobSpreadField);
-        y += yOffset * 1.7;
-
         addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Group ID"), (button) -> {}, this.font));
         groupIdField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         groupIdField.setMaxLength(128);
         this.addRenderableWidget(groupIdField);
+        y += yOffset * 1.7;
 
         int col2X = (this.width / 2) + 5;
         y = 20;
@@ -82,22 +67,10 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerScreenHa
         this.addRenderableWidget(triggerRadiusField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Battle Radius"), (button) -> {}, this.font));
-        battleRadiusField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
-        battleRadiusField.setMaxLength(4);
-        this.addRenderableWidget(battleRadiusField);
-        y += yOffset * 1.7;
-
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Regeneration / 5s"), (button) -> {}, this.font));
-        regenerationField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
-        regenerationField.setMaxLength(4);
-        this.addRenderableWidget(regenerationField);
-        y += yOffset * 1.7;
-
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Skill XP on Win"), (button) -> {}, this.font));
-        skillExperienceField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
-        skillExperienceField.setMaxLength(8);
-        this.addRenderableWidget(skillExperienceField);
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Mob Spread"), (button) -> {}, this.font));
+        mobSpreadField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
+        mobSpreadField.setMaxLength(4);
+        this.addRenderableWidget(mobSpreadField);
 
         this.addRenderableWidget(Button.builder(Component.literal("Attributes"), button -> {
             this.minecraft.setScreen(new MobAttributesScreen(new MobAttributesScreenHandler(menu.containerId, minecraft.player.getInventory(), new MobAttributesData(menu.blockEntity.getBlockPos())), minecraft.player.getInventory(), Component.literal("Mob Attributes")));
@@ -118,11 +91,7 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerScreenHa
         if (menu.blockEntity != null) {
             mobIdField.setValue(menu.blockEntity.mobId);
             respawnTimeField.setValue(String.valueOf(menu.blockEntity.respawnTime));
-            lootTableIdField.setValue(menu.blockEntity.lootTableId);
             triggerRadiusField.setValue(String.valueOf(menu.blockEntity.triggerRadius));
-            battleRadiusField.setValue(String.valueOf(menu.blockEntity.battleRadius));
-            regenerationField.setValue(String.valueOf(menu.blockEntity.regeneration));
-            skillExperienceField.setValue(String.valueOf(menu.blockEntity.skillExperiencePerWin));
             mobCountField.setValue(String.valueOf(menu.blockEntity.mobCount));
             mobSpreadField.setValue(String.valueOf(menu.blockEntity.mobSpread));
             groupIdField.setValue(menu.blockEntity.groupId);
@@ -135,11 +104,7 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerScreenHa
                     menu.blockEntity.getBlockPos(),
                     mobIdField.getValue(),
                     Integer.parseInt(respawnTimeField.getValue()),
-                    lootTableIdField.getValue(),
                     Integer.parseInt(triggerRadiusField.getValue()),
-                    Integer.parseInt(battleRadiusField.getValue()),
-                    Integer.parseInt(regenerationField.getValue()),
-                    Integer.parseInt(skillExperienceField.getValue()),
                     Integer.parseInt(mobCountField.getValue()),
                     Integer.parseInt(mobSpreadField.getValue()),
                     groupIdField.getValue()

@@ -78,7 +78,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
 
     // --- State Machine Fields ---
     protected boolean isBattleActive = false;
-    protected int respawnCooldown = 0;
+    public int respawnCooldown = 0;
     protected UUID activeBossUuid = null;
     protected ResourceKey<Level> bossDimension = null;
     protected int regenerationTickTimer = 0;

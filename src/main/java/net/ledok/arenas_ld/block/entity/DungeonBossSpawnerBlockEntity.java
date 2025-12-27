@@ -79,7 +79,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     // --- State Machine Fields ---
     private boolean isBattleActive = false;
-    private int respawnCooldown = 0;
+    public int respawnCooldown = 0;
     private UUID activeBossUuid = null;
     private ResourceKey<Level> bossDimension = null;
     private int regenerationTickTimer = 0;
@@ -165,8 +165,10 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (!be.trackedPlayers.isEmpty()) {
             be.trackedPlayers.removeIf(uuid -> {
                 ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(uuid);
-                boolean remove = player == null || player.level() != world || player.isDeadOrDying();
-                if (remove && player != null) {
+                if (player == null) return false;
+
+                boolean remove = player.level() != world || player.isDeadOrDying();
+                if (remove) {
                     be.dungeonCloseBossBar.removePlayer(player);
                 }
                 return remove;

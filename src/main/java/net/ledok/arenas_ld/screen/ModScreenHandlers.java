@@ -30,6 +30,22 @@ public class ModScreenHandlers {
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":equipment"),
                     new ExtendedScreenHandlerType<>(EquipmentScreenHandler::new, EquipmentScreenData.STREAM_CODEC));
 
+    public static final MenuType<LobbyScreenHandler> LOBBY_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":lobby"),
+                    new ExtendedScreenHandlerType<>(LobbyScreenHandler::new, LobbyData.CODEC));
+
+    public static final MenuType<CreateLobbyScreenHandler> CREATE_LOBBY_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":create_lobby"),
+                    new ExtendedScreenHandlerType<>(CreateLobbyScreenHandler::new, CreateLobbyData.CODEC));
+                    
+    public static final MenuType<DungeonLobbyScreenHandler> DUNGEON_LOBBY_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_lobby"),
+                    new ExtendedScreenHandlerType<>(DungeonLobbyScreenHandler::new, DungeonLobbyData.CODEC));
+
+    public static final MenuType<JoinLobbyScreenHandler> JOIN_LOBBY_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":join_lobby"),
+                    new ExtendedScreenHandlerType<>(JoinLobbyScreenHandler::new, JoinLobbyData.CODEC));
+
     public static void initialize() {
     }
 }

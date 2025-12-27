@@ -7,5 +7,7 @@
   "item.arenas_ld.linker": "Linker",
   "item.arenas_ld.loot_bundle": "Loot Bundle",
 
-  "message.arenas_ld.raid_start": "%1$s has started a raid against %2$s!"
+  "message.arenas_ld.raid_start": "%1$s has started a raid against %2$s!",
+  "gui.arenas_ld.create_lobby": "Create Lobby",
+  "gui.arenas_ld.join_lobby": "Join Lobby"
 }

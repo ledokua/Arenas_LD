@@ -3,6 +3,7 @@ package net.ledok.arenas_ld;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.ledok.arenas_ld.config.ArenasLdConfig;
+import net.ledok.arenas_ld.manager.DungeonManager;
 import net.ledok.arenas_ld.manager.PhaseBlockManager;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
@@ -35,6 +36,7 @@ public class ArenasLdMod implements ModInitializer {
         LinkerDataComponent.initialize();
         LootBundleDataComponent.initialize();
         CommandRegistry.initialize();
+        DungeonManager.load();
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             PHASE_BLOCK_MANAGER.start();

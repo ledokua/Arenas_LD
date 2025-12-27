@@ -7,5 +7,7 @@
   "item.arenas_ld.linker": "Зв'язувач",
   "item.arenas_ld.loot_bundle": "Мішечок здобичі",
 
-  "message.arenas_ld.raid_start": "%1$s розпочав рейд проти %2$s!"
+  "message.arenas_ld.raid_start": "%1$s розпочав рейд проти %2$s!",
+  "gui.arenas_ld.create_lobby": "Створити лобі",
+  "gui.arenas_ld.join_lobby": "Приєднатися до лобі"
 }
