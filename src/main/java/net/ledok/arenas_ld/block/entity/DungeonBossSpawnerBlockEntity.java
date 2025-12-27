@@ -27,8 +27,10 @@ import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.BossEvent;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -84,6 +86,12 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     private int enterPortalRemovalTimer = -1;
     private int internalDungeonCloseTimer = -1; // Renamed from exitPortalTimer
     private final Set<UUID> trackedPlayers = new HashSet<>(); // Track players who entered
+    
+    private final ServerBossEvent dungeonCloseBossBar = (ServerBossEvent) new ServerBossEvent(
+            Component.literal("Dungeon Closing"), 
+            BossEvent.BossBarColor.RED, 
+            BossEvent.BossBarOverlay.PROGRESS
+    ).setDarkenScreen(false).setPlayBossMusic(false).setCreateWorldFog(false);
 
     public DungeonBossSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.DUNGEON_BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
@@ -129,6 +137,11 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         } else if (be.internalDungeonCloseTimer > 0) {
             // Battle won, waiting for exit timer
             be.internalDungeonCloseTimer--;
+            
+            // Update Boss Bar
+            be.dungeonCloseBossBar.setProgress((float) be.internalDungeonCloseTimer / (float) be.dungeonCloseTimer);
+            be.updateBossBarPlayers(serverLevel);
+            
             if (be.internalDungeonCloseTimer == 0) {
                 be.teleportTrackedPlayersToExit(serverLevel);
                 be.resetSpawner(serverLevel, true);
@@ -137,12 +150,36 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             be.handleIdleState(serverLevel, pos);
         }
         
+        // Track players near enter portal destination if battle is active
+        if (be.isBattleActive && be.enterPortalDestCoords != null && !be.enterPortalDestCoords.equals(BlockPos.ZERO)) {
+             AABB checkArea = new AABB(be.enterPortalDestCoords).inflate(5);
+             List<ServerPlayer> players = serverLevel.getEntitiesOfClass(ServerPlayer.class, checkArea);
+             for (ServerPlayer player : players) {
+                 if (!player.isSpectator() && !be.trackedPlayers.contains(player.getUUID())) {
+                     be.trackedPlayers.add(player.getUUID());
+                 }
+             }
+        }
+        
         // Clean up tracked players
         if (!be.trackedPlayers.isEmpty()) {
             be.trackedPlayers.removeIf(uuid -> {
                 ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(uuid);
-                return player == null || player.level() != world || player.isDeadOrDying();
+                boolean remove = player == null || player.level() != world || player.isDeadOrDying();
+                if (remove && player != null) {
+                    be.dungeonCloseBossBar.removePlayer(player);
+                }
+                return remove;
             });
+        }
+    }
+    
+    private void updateBossBarPlayers(ServerLevel world) {
+        for (UUID uuid : trackedPlayers) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            if (player != null && !dungeonCloseBossBar.getPlayers().contains(player)) {
+                dungeonCloseBossBar.addPlayer(player);
+            }
         }
     }
 
@@ -335,6 +372,11 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         this.activeBossUuid = null;
         this.bossDimension = null;
         
+        // Initialize Boss Bar
+        this.dungeonCloseBossBar.setProgress(1.0F);
+        this.dungeonCloseBossBar.setVisible(true);
+        updateBossBarPlayers(world);
+        
         // Phase Blocks become Unsolid
         if (!this.groupId.isEmpty()) {
             ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, false);
@@ -407,6 +449,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         this.enterPortalRemovalTimer = -1;
         this.internalDungeonCloseTimer = -1;
         this.trackedPlayers.clear();
+        this.dungeonCloseBossBar.removeAllPlayers();
+        this.dungeonCloseBossBar.setVisible(false);
         this.setChanged();
         world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
         if (this.respawnCooldown <= 0) {
