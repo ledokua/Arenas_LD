@@ -4,6 +4,7 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
+import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
 import net.ledok.arenas_ld.util.AttributeData;
 import net.ledok.arenas_ld.util.AttributeProvider;
@@ -24,7 +25,7 @@ public class ModPackets {
     public record UpdateBossSpawnerPayload(
             BlockPos pos, String mobId, int respawnTime, int portalTime, String lootTable, String perPlayerLootTable,
             BlockPos exitCoords, BlockPos enterSpawnCoords, BlockPos enterDestCoords,
-            int triggerRadius, int battleRadius, int regeneration, int minPlayers, int skillExperiencePerWin
+            int triggerRadius, int battleRadius, int regeneration, int minPlayers, int skillExperiencePerWin, String groupId
     ) implements CustomPacketPayload {
         public static final Type<UpdateBossSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_boss_spawner"));
 
@@ -35,7 +36,7 @@ public class ModPackets {
             this(
                     buf.readBlockPos(), buf.readUtf(), buf.readVarInt(), buf.readVarInt(), buf.readUtf(), buf.readUtf(),
                     buf.readBlockPos(), buf.readBlockPos(), buf.readBlockPos(), buf.readVarInt(),
-                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt()
+                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readUtf()
             );
         }
 
@@ -54,6 +55,46 @@ public class ModPackets {
             buf.writeVarInt(regeneration);
             buf.writeVarInt(minPlayers);
             buf.writeVarInt(skillExperiencePerWin);
+            buf.writeUtf(groupId);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    public record UpdateDungeonBossSpawnerPayload(
+            BlockPos pos, String mobId, int respawnTime, int dungeonCloseTimer, String lootTable, String perPlayerLootTable,
+            BlockPos exitPositionCoords, BlockPos enterSpawnCoords, BlockPos enterDestCoords,
+            int triggerRadius, int battleRadius, int regeneration, int skillExperiencePerWin, String groupId
+    ) implements CustomPacketPayload {
+        public static final Type<UpdateDungeonBossSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_dungeon_boss_spawner"));
+
+        public static final StreamCodec<FriendlyByteBuf, UpdateDungeonBossSpawnerPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> payload.write(buf), UpdateDungeonBossSpawnerPayload::new);
+
+        public UpdateDungeonBossSpawnerPayload(FriendlyByteBuf buf) {
+            this(
+                    buf.readBlockPos(), buf.readUtf(), buf.readVarInt(), buf.readVarInt(), buf.readUtf(), buf.readUtf(),
+                    buf.readBlockPos(), buf.readBlockPos(), buf.readBlockPos(), buf.readVarInt(),
+                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readUtf()
+            );
+        }
+
+        public void write(FriendlyByteBuf buf) {
+            buf.writeBlockPos(pos);
+            buf.writeUtf(mobId);
+            buf.writeVarInt(respawnTime);
+            buf.writeVarInt(dungeonCloseTimer);
+            buf.writeUtf(lootTable);
+            buf.writeUtf(perPlayerLootTable);
+            buf.writeBlockPos(exitPositionCoords);
+            buf.writeBlockPos(enterSpawnCoords);
+            buf.writeBlockPos(enterDestCoords);
+            buf.writeVarInt(triggerRadius);
+            buf.writeVarInt(battleRadius);
+            buf.writeVarInt(regeneration);
+            buf.writeVarInt(skillExperiencePerWin);
+            buf.writeUtf(groupId);
         }
 
         @Override
@@ -161,6 +202,7 @@ public class ModPackets {
 
     public static void registerC2SPackets() {
         PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateDungeonBossSpawnerPayload.TYPE, UpdateDungeonBossSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerPayload.TYPE, UpdateMobSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateAttributesPayload.TYPE, UpdateAttributesPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateEquipmentPayload.TYPE, UpdateEquipmentPayload.STREAM_CODEC);
@@ -168,7 +210,8 @@ public class ModPackets {
         ServerPlayNetworking.registerGlobalReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 Level world = context.player().level();
-                if (world.getBlockEntity(payload.pos()) instanceof BossSpawnerBlockEntity blockEntity) {
+                BlockEntity be = world.getBlockEntity(payload.pos());
+                if (be instanceof BossSpawnerBlockEntity blockEntity) {
                     blockEntity.mobId = payload.mobId();
                     blockEntity.respawnTime = payload.respawnTime();
                     blockEntity.portalActiveTime = payload.portalTime();
@@ -182,6 +225,31 @@ public class ModPackets {
                     blockEntity.regeneration = payload.regeneration();
                     blockEntity.minPlayers = payload.minPlayers();
                     blockEntity.skillExperiencePerWin = payload.skillExperiencePerWin();
+                    blockEntity.groupId = payload.groupId();
+                    blockEntity.setChanged();
+                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(UpdateDungeonBossSpawnerPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                Level world = context.player().level();
+                BlockEntity be = world.getBlockEntity(payload.pos());
+                if (be instanceof DungeonBossSpawnerBlockEntity blockEntity) {
+                    blockEntity.mobId = payload.mobId();
+                    blockEntity.respawnTime = payload.respawnTime();
+                    blockEntity.dungeonCloseTimer = payload.dungeonCloseTimer();
+                    blockEntity.lootTableId = payload.lootTable();
+                    blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
+                    blockEntity.exitPositionCoords = payload.exitPositionCoords();
+                    blockEntity.enterPortalSpawnCoords = payload.enterSpawnCoords();
+                    blockEntity.enterPortalDestCoords = payload.enterDestCoords();
+                    blockEntity.triggerRadius = payload.triggerRadius();
+                    blockEntity.battleRadius = payload.battleRadius();
+                    blockEntity.regeneration = payload.regeneration();
+                    blockEntity.skillExperiencePerWin = payload.skillExperiencePerWin();
+                    blockEntity.groupId = payload.groupId();
                     blockEntity.setChanged();
                     world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
                 }

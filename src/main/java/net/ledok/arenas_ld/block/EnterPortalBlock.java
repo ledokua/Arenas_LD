@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.block;
 
 import com.mojang.serialization.MapCodec;
+import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.EnterPortalBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -84,6 +85,15 @@ public class EnterPortalBlock extends BaseEntityBlock {
                 if (world.getBlockEntity(pos) instanceof EnterPortalBlockEntity portalEntity) {
                     BlockPos destination = portalEntity.getDestination();
                     if(destination != null && world instanceof ServerLevel) {
+                        // Notify owner spawner to track player
+                        BlockPos ownerPos = portalEntity.getOwner();
+                        if (ownerPos != null) {
+                            BlockEntity ownerEntity = world.getBlockEntity(ownerPos);
+                            if (ownerEntity instanceof DungeonBossSpawnerBlockEntity spawner) {
+                                spawner.trackPlayer(player.getUUID());
+                            }
+                        }
+
                         // Teleport the player
                         player.teleportTo(destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5);
                         player.setPortalCooldown();

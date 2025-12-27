@@ -10,6 +10,7 @@ import net.minecraft.world.level.block.state.BlockState;
 public class EnterPortalBlockEntity extends BlockEntity {
 
     private BlockPos destination;
+    private BlockPos ownerPos;
 
     public EnterPortalBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.ENTER_PORTAL_BLOCK_ENTITY, pos, state);
@@ -24,11 +25,23 @@ public class EnterPortalBlockEntity extends BlockEntity {
         return this.destination;
     }
 
+    public void setOwner(BlockPos ownerPos) {
+        this.ownerPos = ownerPos;
+        this.setChanged();
+    }
+
+    public BlockPos getOwner() {
+        return this.ownerPos;
+    }
+
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.saveAdditional(nbt, registryLookup);
         if(destination != null) {
             nbt.putLong("destination", destination.asLong());
+        }
+        if(ownerPos != null) {
+            nbt.putLong("ownerPos", ownerPos.asLong());
         }
     }
 
@@ -37,6 +50,9 @@ public class EnterPortalBlockEntity extends BlockEntity {
         super.loadAdditional(nbt, registryLookup);
         if(nbt.contains("destination")) {
             destination = BlockPos.of(nbt.getLong("destination"));
+        }
+        if(nbt.contains("ownerPos")) {
+            ownerPos = BlockPos.of(nbt.getLong("ownerPos"));
         }
     }
 }

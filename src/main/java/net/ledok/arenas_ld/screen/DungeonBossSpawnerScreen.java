@@ -10,26 +10,25 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 
-public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreenHandler> {
+public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBossSpawnerScreenHandler> {
 
     private EditBox mobIdField;
     private EditBox respawnTimeField;
-    private EditBox portalActiveTimeField;
+    private EditBox dungeonCloseTimerField;
     private EditBox lootTableIdField;
     private EditBox perPlayerLootTableIdField;
-    private EditBox exitPortalCoordsField;
+    private EditBox exitPositionCoordsField;
     private EditBox triggerRadiusField;
     private EditBox battleRadiusField;
     private EditBox regenerationField;
     private EditBox enterPortalSpawnCoordsField;
     private EditBox enterPortalDestCoordsField;
-    private EditBox minPlayersField;
     private EditBox skillExperienceField;
     private EditBox groupIdField;
 
-    public BossSpawnerScreen(BossSpawnerScreenHandler handler, Inventory inventory, Component title) {
+    public DungeonBossSpawnerScreen(DungeonBossSpawnerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
-        this.imageHeight = 280; // Increased height for the new button
+        this.imageHeight = 280;
     }
 
     @Override
@@ -79,10 +78,10 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
         this.addRenderableWidget(enterPortalDestCoordsField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Exit Portal Dest (X Y Z)"), (button) -> {}, this.font));
-        exitPortalCoordsField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
-        exitPortalCoordsField.setMaxLength(32);
-        this.addRenderableWidget(exitPortalCoordsField);
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Exit Position (X Y Z)"), (button) -> {}, this.font));
+        exitPositionCoordsField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
+        exitPositionCoordsField.setMaxLength(32);
+        this.addRenderableWidget(exitPositionCoordsField);
         y += yOffset * 1.7;
 
         int col2X = (this.width / 2) + 5;
@@ -94,10 +93,10 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
         this.addRenderableWidget(respawnTimeField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Portal Active Time (ticks)"), (button) -> {}, this.font));
-        portalActiveTimeField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
-        portalActiveTimeField.setMaxLength(8);
-        this.addRenderableWidget(portalActiveTimeField);
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Dungeon Close Timer (ticks)"), (button) -> {}, this.font));
+        dungeonCloseTimerField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
+        dungeonCloseTimerField.setMaxLength(8);
+        this.addRenderableWidget(dungeonCloseTimerField);
         y += yOffset * 1.7;
 
         addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Trigger Radius"), (button) -> {}, this.font));
@@ -116,12 +115,6 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
         regenerationField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
         regenerationField.setMaxLength(4);
         this.addRenderableWidget(regenerationField);
-        y += yOffset * 1.7;
-
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Min Players"), (button) -> {}, this.font));
-        minPlayersField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
-        minPlayersField.setMaxLength(3);
-        this.addRenderableWidget(minPlayersField);
         y += yOffset * 1.7;
 
         addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Skill XP on Win"), (button) -> {}, this.font));
@@ -148,16 +141,15 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
         if (menu.blockEntity != null) {
             mobIdField.setValue(menu.blockEntity.mobId);
             respawnTimeField.setValue(String.valueOf(menu.blockEntity.respawnTime));
-            portalActiveTimeField.setValue(String.valueOf(menu.blockEntity.portalActiveTime));
+            dungeonCloseTimerField.setValue(String.valueOf(menu.blockEntity.dungeonCloseTimer));
             lootTableIdField.setValue(menu.blockEntity.lootTableId);
             perPlayerLootTableIdField.setValue(menu.blockEntity.perPlayerLootTableId);
-            exitPortalCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.exitPortalCoords.getX(), menu.blockEntity.exitPortalCoords.getY(), menu.blockEntity.exitPortalCoords.getZ()));
+            exitPositionCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.exitPositionCoords.getX(), menu.blockEntity.exitPositionCoords.getY(), menu.blockEntity.exitPositionCoords.getZ()));
             triggerRadiusField.setValue(String.valueOf(menu.blockEntity.triggerRadius));
             battleRadiusField.setValue(String.valueOf(menu.blockEntity.battleRadius));
             regenerationField.setValue(String.valueOf(menu.blockEntity.regeneration));
             enterPortalSpawnCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.enterPortalSpawnCoords.getX(), menu.blockEntity.enterPortalSpawnCoords.getY(), menu.blockEntity.enterPortalSpawnCoords.getZ()));
             enterPortalDestCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.enterPortalDestCoords.getX(), menu.blockEntity.enterPortalDestCoords.getY(), menu.blockEntity.enterPortalDestCoords.getZ()));
-            minPlayersField.setValue(String.valueOf(menu.blockEntity.minPlayers));
             skillExperienceField.setValue(String.valueOf(menu.blockEntity.skillExperiencePerWin));
             groupIdField.setValue(menu.blockEntity.groupId);
         }
@@ -176,20 +168,19 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
 
     private void onSave() {
         try {
-            ClientPlayNetworking.send(new ModPackets.UpdateBossSpawnerPayload(
+            ClientPlayNetworking.send(new ModPackets.UpdateDungeonBossSpawnerPayload(
                     menu.blockEntity.getBlockPos(),
                     mobIdField.getValue(),
                     Integer.parseInt(respawnTimeField.getValue()),
-                    Integer.parseInt(portalActiveTimeField.getValue()),
+                    Integer.parseInt(dungeonCloseTimerField.getValue()),
                     lootTableIdField.getValue(),
                     perPlayerLootTableIdField.getValue(),
-                    parseCoords(exitPortalCoordsField.getValue()),
+                    parseCoords(exitPositionCoordsField.getValue()),
                     parseCoords(enterPortalSpawnCoordsField.getValue()),
                     parseCoords(enterPortalDestCoordsField.getValue()),
                     Integer.parseInt(triggerRadiusField.getValue()),
                     Integer.parseInt(battleRadiusField.getValue()),
                     Integer.parseInt(regenerationField.getValue()),
-                    Integer.parseInt(minPlayersField.getValue()),
                     Integer.parseInt(skillExperienceField.getValue()),
                     groupIdField.getValue()
             ));

@@ -16,6 +16,9 @@ public class BlockRegistry {
     public static final Block BOSS_SPAWNER_BLOCK = registerBlock("boss_spawner",
             new BossSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));
 
+    public static final Block DUNGEON_BOSS_SPAWNER_BLOCK = registerBlock("dungeon_boss_spawner",
+            new DungeonBossSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));
+
     public static final Block EXIT_PORTAL_BLOCK = registerBlock("exit_portal",
             new ExitPortalBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.STONE).sound(SoundType.GLASS).noCollission().strength(-1.0f, 3600000.0f)));
 
