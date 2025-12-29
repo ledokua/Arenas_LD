@@ -6,15 +6,20 @@ import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
+import net.ledok.arenas_ld.item.LinkerItem;
 import net.ledok.arenas_ld.util.AttributeData;
 import net.ledok.arenas_ld.util.AttributeProvider;
 import net.ledok.arenas_ld.util.EquipmentData;
 import net.ledok.arenas_ld.util.EquipmentProvider;
+import net.ledok.arenas_ld.util.LinkerModeDataComponent;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
@@ -200,12 +205,26 @@ public class ModPackets {
         }
     }
 
+    public record CycleLinkerModePayload(boolean forward) implements CustomPacketPayload {
+        public static final CustomPacketPayload.Type<CycleLinkerModePayload> TYPE = new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "cycle_linker_mode"));
+        public static final StreamCodec<FriendlyByteBuf, CycleLinkerModePayload> CODEC = StreamCodec.of(
+                (buf, payload) -> buf.writeBoolean(payload.forward()),
+                (buf) -> new CycleLinkerModePayload(buf.readBoolean())
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     public static void registerC2SPackets() {
         PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateDungeonBossSpawnerPayload.TYPE, UpdateDungeonBossSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerPayload.TYPE, UpdateMobSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateAttributesPayload.TYPE, UpdateAttributesPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateEquipmentPayload.TYPE, UpdateEquipmentPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -302,6 +321,22 @@ public class ModPackets {
                     provider.setEquipment(payload.equipment());
                     be.setChanged();
                     world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(CycleLinkerModePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ItemStack stack = context.player().getMainHandItem();
+                if (stack.getItem() instanceof LinkerItem) {
+                    LinkerModeDataComponent data = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
+                    int currentMode = data.mode();
+                    int newMode = (currentMode + (payload.forward() ? 1 : -1) + LinkerItem.Mode.values().length) % LinkerItem.Mode.values().length;
+                    stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(newMode, data.mainSpawnerPos()));
+                    
+                    LinkerItem.Mode mode = LinkerItem.Mode.values()[newMode];
+                    ChatFormatting color = mode == LinkerItem.Mode.SPAWNER_LINKING ? ChatFormatting.BLUE : ChatFormatting.YELLOW;
+                    context.player().sendSystemMessage(Component.literal("Mode: " + mode.getName()).withStyle(color));
                 }
             });
         });

@@ -7,16 +7,14 @@ import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.screen.MobSpawnerData;
 import net.ledok.arenas_ld.screen.MobSpawnerScreenHandler;
-import net.ledok.arenas_ld.util.AttributeData;
-import net.ledok.arenas_ld.util.AttributeProvider;
-import net.ledok.arenas_ld.util.EquipmentData;
-import net.ledok.arenas_ld.util.EquipmentProvider;
+import net.ledok.arenas_ld.util.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
@@ -54,7 +52,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<MobSpawnerData>, AttributeProvider, EquipmentProvider {
+public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<MobSpawnerData>, AttributeProvider, EquipmentProvider, LinkableSpawner {
 
     // --- Configuration Fields ---
     public String mobId = "minecraft:zombie";
@@ -69,6 +67,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
     public String groupId = "";
     private final List<AttributeData> attributes = new ArrayList<>();
     private EquipmentData equipment = new EquipmentData();
+    private final List<BlockPos> linkedSpawners = new ArrayList<>();
 
     // --- State Machine Fields ---
     private boolean isBattleActive = false;
@@ -111,6 +110,32 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         setChanged();
     }
 
+    @Override
+    public void addLinkedSpawner(BlockPos pos) {
+        if (!linkedSpawners.contains(pos)) {
+            linkedSpawners.add(pos);
+            setChanged();
+        }
+    }
+
+    @Override
+    public void clearLinkedSpawners() {
+        linkedSpawners.clear();
+        setChanged();
+    }
+
+    @Override
+    public List<BlockPos> getLinkedSpawners() {
+        return linkedSpawners;
+    }
+
+    @Override
+    public void forceReset() {
+        if (this.level instanceof ServerLevel serverLevel) {
+            resetSpawner(serverLevel, false);
+        }
+    }
+
     public static void tick(Level world, BlockPos pos, BlockState state, MobSpawnerBlockEntity be) {
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
 
@@ -142,6 +167,14 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
             respawnCooldown--;
             if (respawnCooldown == 0) {
                 ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerReset(this.groupId, this.worldPosition);
+                
+                // Trigger linked spawners
+                for (BlockPos linkedPos : linkedSpawners) {
+                    BlockEntity be = world.getBlockEntity(linkedPos);
+                    if (be instanceof LinkableSpawner linkedSpawner) {
+                        linkedSpawner.forceReset();
+                    }
+                }
             }
             return;
         }
@@ -410,6 +443,12 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         }
         nbt.put("Attributes", attributeList);
         nbt.put("Equipment", equipment.toNbt());
+        
+        ListTag linkedList = new ListTag();
+        for (BlockPos pos : linkedSpawners) {
+            linkedList.add(NbtUtils.writeBlockPos(pos));
+        }
+        nbt.put("LinkedSpawners", linkedList);
     }
 
     @Override
@@ -446,6 +485,14 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         }
         if (nbt.contains("Equipment")) {
             equipment = EquipmentData.fromNbt(nbt.getCompound("Equipment"));
+        }
+        
+        linkedSpawners.clear();
+        if (nbt.contains("LinkedSpawners")) {
+            ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
+            for (Tag tag : linkedList) {
+                NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawners::add);
+            }
         }
     }
 

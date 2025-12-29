@@ -9,17 +9,14 @@ import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.screen.BossSpawnerData;
 import net.ledok.arenas_ld.screen.DungeonBossSpawnerScreenHandler;
-import net.ledok.arenas_ld.util.AttributeData;
-import net.ledok.arenas_ld.util.AttributeProvider;
-import net.ledok.arenas_ld.util.EquipmentData;
-import net.ledok.arenas_ld.util.EquipmentProvider;
-import net.ledok.arenas_ld.util.LootBundleDataComponent;
+import net.ledok.arenas_ld.util.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
@@ -57,7 +54,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-public class DungeonBossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<BossSpawnerData>, AttributeProvider, EquipmentProvider {
+public class DungeonBossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<BossSpawnerData>, AttributeProvider, EquipmentProvider, LinkableSpawner {
 
     // --- Configuration Fields ---
     public String mobId = "minecraft:zombie";
@@ -76,6 +73,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     
     private final List<AttributeData> attributes = new ArrayList<>();
     private EquipmentData equipment = new EquipmentData();
+    private final List<BlockPos> linkedSpawners = new ArrayList<>();
 
     // --- State Machine Fields ---
     private boolean isBattleActive = false;
@@ -129,6 +127,32 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         this.setChanged();
     }
 
+    @Override
+    public void addLinkedSpawner(BlockPos pos) {
+        if (!linkedSpawners.contains(pos)) {
+            linkedSpawners.add(pos);
+            setChanged();
+        }
+    }
+
+    @Override
+    public void clearLinkedSpawners() {
+        linkedSpawners.clear();
+        setChanged();
+    }
+
+    @Override
+    public List<BlockPos> getLinkedSpawners() {
+        return linkedSpawners;
+    }
+
+    @Override
+    public void forceReset() {
+        if (this.level instanceof ServerLevel serverLevel) {
+            resetSpawner(serverLevel, false);
+        }
+    }
+
     public static void tick(Level world, BlockPos pos, BlockState state, DungeonBossSpawnerBlockEntity be) {
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
 
@@ -165,10 +189,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (!be.trackedPlayers.isEmpty()) {
             be.trackedPlayers.removeIf(uuid -> {
                 ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(uuid);
-                if (player == null) return false; 
-
-                boolean remove = player.level() != world || player.isDeadOrDying();
-                if (remove) {
+                boolean remove = player == null || player.level() != world || player.isDeadOrDying();
+                if (remove && player != null) {
                     be.dungeonCloseBossBar.removePlayer(player);
                 }
                 return remove;
@@ -192,6 +214,14 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 spawnEnterPortal(world);
                 if (!this.groupId.isEmpty()) {
                     ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, false); // Unsolid when ready
+                }
+                
+                // Trigger linked spawners
+                for (BlockPos linkedPos : linkedSpawners) {
+                    BlockEntity be = world.getBlockEntity(linkedPos);
+                    if (be instanceof LinkableSpawner linkedSpawner) {
+                        linkedSpawner.forceReset();
+                    }
                 }
             }
             return;
@@ -513,6 +543,12 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             trackedList.add(tag);
         }
         nbt.put("TrackedPlayers", trackedList);
+        
+        ListTag linkedList = new ListTag();
+        for (BlockPos pos : linkedSpawners) {
+            linkedList.add(NbtUtils.writeBlockPos(pos));
+        }
+        nbt.put("LinkedSpawners", linkedList);
     }
 
     @Override
@@ -560,6 +596,14 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             ListTag trackedList = nbt.getList("TrackedPlayers", CompoundTag.TAG_COMPOUND);
             for (Tag tag : trackedList) {
                 trackedPlayers.add(((CompoundTag) tag).getUUID("uuid"));
+            }
+        }
+        
+        linkedSpawners.clear();
+        if (nbt.contains("LinkedSpawners")) {
+            ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
+            for (Tag tag : linkedList) {
+                NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawners::add);
             }
         }
     }
