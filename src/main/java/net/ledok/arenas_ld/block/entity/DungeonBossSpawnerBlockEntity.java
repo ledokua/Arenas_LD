@@ -165,8 +165,10 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (!be.trackedPlayers.isEmpty()) {
             be.trackedPlayers.removeIf(uuid -> {
                 ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(uuid);
-                boolean remove = player == null || player.level() != world || player.isDeadOrDying();
-                if (remove && player != null) {
+                if (player == null) return false; 
+
+                boolean remove = player.level() != world || player.isDeadOrDying();
+                if (remove) {
                     be.dungeonCloseBossBar.removePlayer(player);
                 }
                 return remove;
