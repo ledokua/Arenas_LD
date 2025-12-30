@@ -229,7 +229,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
 
         Component mobDisplayName = entityTypeOpt.map(EntityType::getDescription).orElse(Component.literal(this.mobId));
 
-        Component announcement = Component.translatable("message.yggdrasil_ld.raid_start", triggeringPlayer.getDisplayName(), mobDisplayName)
+        Component announcement = Component.translatable("message.arenas_ld.raid_start", triggeringPlayer.getDisplayName(), mobDisplayName)
                 .withStyle(net.minecraft.ChatFormatting.GOLD);
         Objects.requireNonNull(world.getServer()).getPlayerList().broadcastSystemMessage(announcement, false);
 
@@ -505,7 +505,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
 
     @Override
     public Component getDisplayName() {
-        return Component.literal("Boss Spawner Configuration");
+        return Component.translatable("container.arenas_ld.boss_spawner_config");
     }
 
     @Nullable

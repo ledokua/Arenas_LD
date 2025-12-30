@@ -38,30 +38,30 @@ public class MobAttributesScreen extends AbstractContainerScreen<MobAttributesSc
             y += 24;
         }
 
-        addRenderableWidget(Button.builder(Component.literal("Add"), button -> {
+        addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.add"), button -> {
             menu.attributes.add(new AttributeData("minecraft:generic.max_health", 20.0));
             rebuildWidgets();
         }).bounds(this.width / 2 - 100, this.height - 50, 80, 20).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Save"), button -> onSave())
+        addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.save"), button -> onSave())
                 .bounds(this.width / 2 + 20, this.height - 50, 80, 20)
                 .build());
     }
 
     private void addAttributeFields(int y, AttributeData attribute) {
         int x = this.width / 2 - 155;
-        EditBox idField = new EditBox(this.font, x, y, 200, 20, Component.literal("Attribute ID"));
+        EditBox idField = new EditBox(this.font, x, y, 200, 20, Component.translatable("gui.arenas_ld.attribute_id"));
         idField.setMaxLength(128);
         idField.setValue(attribute.id());
         addRenderableWidget(idField);
 
         x += 205;
-        EditBox valueField = new EditBox(this.font, x, y, 60, 20, Component.literal("Value"));
+        EditBox valueField = new EditBox(this.font, x, y, 60, 20, Component.translatable("gui.arenas_ld.value"));
         valueField.setValue(String.valueOf(attribute.value()));
         addRenderableWidget(valueField);
 
         x += 65;
-        Button removeButton = Button.builder(Component.literal("X"), button -> {
+        Button removeButton = Button.builder(Component.translatable("gui.arenas_ld.remove"), button -> {
             menu.attributes.remove(attribute);
             rebuildWidgets();
         }).bounds(x, y, 20, 20).build();

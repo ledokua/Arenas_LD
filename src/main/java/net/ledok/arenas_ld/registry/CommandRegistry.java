@@ -13,7 +13,7 @@ public class CommandRegistry {
                     .then(Commands.literal("reload")
                             .executes(context -> {
                                 ArenasLdMod.CONFIG.reloadFromFile();
-                                context.getSource().sendSuccess(() -> Component.literal("Arenas LD config reloaded!"), true);
+                                context.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.config_reloaded"), true);
                                 return 1;
                             })));
         });

@@ -513,7 +513,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
 
     @Override
     public Component getDisplayName() {
-        return Component.literal("Mob Spawner Configuration");
+        return Component.translatable("container.arenas_ld.mob_spawner_config");
     }
 
     @Nullable

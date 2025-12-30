@@ -43,43 +43,43 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
         int col1X = (this.width / 2) - fieldWidth - 10;
         int y = 20;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Mob ID"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.mob_id"), (button) -> {}, this.font));
         mobIdField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         mobIdField.setMaxLength(128);
         this.addRenderableWidget(mobIdField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Loot Table ID"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.loot_table_id"), (button) -> {}, this.font));
         lootTableIdField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         lootTableIdField.setMaxLength(128);
         this.addRenderableWidget(lootTableIdField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Per Player Loot Table ID"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.per_player_loot_table_id"), (button) -> {}, this.font));
         perPlayerLootTableIdField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         perPlayerLootTableIdField.setMaxLength(128);
         this.addRenderableWidget(perPlayerLootTableIdField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Group ID"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.group_id"), (button) -> {}, this.font));
         groupIdField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         groupIdField.setMaxLength(128);
         this.addRenderableWidget(groupIdField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Enter Portal Spawn (X Y Z)"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_spawn"), (button) -> {}, this.font));
         enterPortalSpawnCoordsField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         enterPortalSpawnCoordsField.setMaxLength(32);
         this.addRenderableWidget(enterPortalSpawnCoordsField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Enter Portal Dest (X Y Z)"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_dest"), (button) -> {}, this.font));
         enterPortalDestCoordsField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         enterPortalDestCoordsField.setMaxLength(32);
         this.addRenderableWidget(enterPortalDestCoordsField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.literal("Exit Portal Dest (X Y Z)"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.exit_portal_dest"), (button) -> {}, this.font));
         exitPortalCoordsField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         exitPortalCoordsField.setMaxLength(32);
         this.addRenderableWidget(exitPortalCoordsField);
@@ -88,56 +88,56 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
         int col2X = (this.width / 2) + 5;
         y = 20;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Respawn Time (ticks)"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.respawn_time"), (button) -> {}, this.font));
         respawnTimeField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
         respawnTimeField.setMaxLength(8);
         this.addRenderableWidget(respawnTimeField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Portal Active Time (ticks)"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.portal_active_time"), (button) -> {}, this.font));
         portalActiveTimeField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
         portalActiveTimeField.setMaxLength(8);
         this.addRenderableWidget(portalActiveTimeField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Trigger Radius"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.trigger_radius"), (button) -> {}, this.font));
         triggerRadiusField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
         triggerRadiusField.setMaxLength(4);
         this.addRenderableWidget(triggerRadiusField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Battle Radius"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.battle_radius"), (button) -> {}, this.font));
         battleRadiusField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
         battleRadiusField.setMaxLength(4);
         this.addRenderableWidget(battleRadiusField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Regeneration / 5s"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.regeneration"), (button) -> {}, this.font));
         regenerationField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
         regenerationField.setMaxLength(4);
         this.addRenderableWidget(regenerationField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Min Players"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.min_players"), (button) -> {}, this.font));
         minPlayersField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
         minPlayersField.setMaxLength(3);
         this.addRenderableWidget(minPlayersField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.literal("Skill XP on Win"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.skill_xp"), (button) -> {}, this.font));
         skillExperienceField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
         skillExperienceField.setMaxLength(8);
         this.addRenderableWidget(skillExperienceField);
 
-        this.addRenderableWidget(Button.builder(Component.literal("Attributes"), button -> {
-            this.minecraft.setScreen(new MobAttributesScreen(new MobAttributesScreenHandler(menu.containerId, minecraft.player.getInventory(), new MobAttributesData(menu.blockEntity.getBlockPos())), minecraft.player.getInventory(), Component.literal("Boss Attributes")));
+        this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.attributes"), button -> {
+            this.minecraft.setScreen(new MobAttributesScreen(new MobAttributesScreenHandler(menu.containerId, minecraft.player.getInventory(), new MobAttributesData(menu.blockEntity.getBlockPos())), minecraft.player.getInventory(), Component.translatable("gui.arenas_ld.boss_attributes")));
         }).bounds(this.width / 2 - 150, this.height - 70, 100, 20).build());
 
-        this.addRenderableWidget(Button.builder(Component.literal("Equipment"), button -> {
-            this.minecraft.setScreen(new EquipmentScreen(new EquipmentScreenHandler(menu.containerId, minecraft.player.getInventory(), new EquipmentScreenData(menu.blockEntity.getBlockPos())), minecraft.player.getInventory(), Component.literal("Boss Equipment")));
+        this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.equipment"), button -> {
+            this.minecraft.setScreen(new EquipmentScreen(new EquipmentScreenHandler(menu.containerId, minecraft.player.getInventory(), new EquipmentScreenData(menu.blockEntity.getBlockPos())), minecraft.player.getInventory(), Component.translatable("gui.arenas_ld.boss_equipment")));
         }).bounds(this.width / 2 + 50, this.height - 70, 100, 20).build());
 
-        this.addRenderableWidget(Button.builder(Component.literal("Save"), button -> onSave())
+        this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.save"), button -> onSave())
                 .bounds(this.width / 2 - 50, this.height - 50, 100, 20)
                 .build());
 

@@ -37,13 +37,13 @@ public class LootBundleItem extends Item {
 
         LootBundleDataComponent data = stack.get(LootBundleDataComponent.LOOT_BUNDLE_DATA);
         if (data == null || data.lootTableId().isEmpty()) {
-            player.displayClientMessage(Component.literal("This bundle is empty or invalid."), true);
+            player.displayClientMessage(Component.translatable("message.arenas_ld.loot_bundle.empty_invalid"), true);
             return InteractionResultHolder.fail(stack);
         }
 
         ResourceLocation lootTableId = ResourceLocation.tryParse(data.lootTableId());
         if (lootTableId == null) {
-            player.displayClientMessage(Component.literal("Invalid loot table ID."), true);
+            player.displayClientMessage(Component.translatable("message.arenas_ld.loot_bundle.invalid_id"), true);
             return InteractionResultHolder.fail(stack);
         }
 
@@ -58,7 +58,7 @@ public class LootBundleItem extends Item {
         List<ItemStack> loot = lootTable.getRandomItems(lootParams);
 
         if (loot.isEmpty()) {
-            player.displayClientMessage(Component.literal("The bundle was empty."), true);
+            player.displayClientMessage(Component.translatable("message.arenas_ld.loot_bundle.empty"), true);
         } else {
             for (ItemStack lootStack : loot) {
                 if (!player.getInventory().add(lootStack)) {
@@ -76,7 +76,7 @@ public class LootBundleItem extends Item {
         super.appendHoverText(stack, context, tooltipComponents, tooltipFlag);
         LootBundleDataComponent data = stack.get(LootBundleDataComponent.LOOT_BUNDLE_DATA);
         if (data != null && !data.lootTableId().isEmpty()) {
-            tooltipComponents.add(Component.literal("Loot Table: " + data.lootTableId()).withStyle(net.minecraft.ChatFormatting.GRAY));
+            tooltipComponents.add(Component.translatable("tooltip.arenas_ld.loot_bundle.loot_table", data.lootTableId()).withStyle(net.minecraft.ChatFormatting.GRAY));
         }
     }
 }

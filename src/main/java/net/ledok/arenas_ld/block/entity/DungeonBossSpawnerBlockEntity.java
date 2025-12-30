@@ -86,7 +86,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     private final Set<UUID> trackedPlayers = new HashSet<>(); // Track players who entered
     
     private final ServerBossEvent dungeonCloseBossBar = (ServerBossEvent) new ServerBossEvent(
-            Component.literal("Dungeon Closing"), 
+            Component.translatable("bossbar.arenas_ld.dungeon_closing"), 
             BossEvent.BossBarColor.RED, 
             BossEvent.BossBarOverlay.PROGRESS
     ).setDarkenScreen(false).setPlayBossMusic(false).setCreateWorldFog(false);
@@ -455,7 +455,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 if (player != null && player.level() == world && !player.isDeadOrDying()) {
                     player.teleportTo(exitPositionCoords.getX() + 0.5, exitPositionCoords.getY(), exitPositionCoords.getZ() + 0.5);
                     player.setPortalCooldown();
-                    player.sendSystemMessage(Component.literal("Dungeon failed").withStyle(net.minecraft.ChatFormatting.RED));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_failed").withStyle(net.minecraft.ChatFormatting.RED));
                 }
             }
         }
@@ -621,7 +621,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     @Override
     public Component getDisplayName() {
-        return Component.literal("Dungeon Boss Spawner Configuration");
+        return Component.translatable("container.arenas_ld.dungeon_boss_spawner_config");
     }
 
     @Nullable

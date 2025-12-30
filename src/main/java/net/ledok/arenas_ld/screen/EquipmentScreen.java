@@ -36,47 +36,47 @@ public class EquipmentScreen extends AbstractContainerScreen<EquipmentScreenHand
         int x = (this.width - fieldWidth) / 2;
         int y = 40; // Moved down to make space for title
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.literal("Head Item ID"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.head_item_id"), (button) -> {}, this.font));
         headField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
         headField.setMaxLength(128);
         this.addRenderableWidget(headField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.literal("Chest Item ID"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.chest_item_id"), (button) -> {}, this.font));
         chestField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
         chestField.setMaxLength(128);
         this.addRenderableWidget(chestField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.literal("Legs Item ID"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.legs_item_id"), (button) -> {}, this.font));
         legsField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
         legsField.setMaxLength(128);
         this.addRenderableWidget(legsField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.literal("Feet Item ID"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.feet_item_id"), (button) -> {}, this.font));
         feetField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
         feetField.setMaxLength(128);
         this.addRenderableWidget(feetField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.literal("Main Hand Item ID"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.main_hand_item_id"), (button) -> {}, this.font));
         mainHandField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
         mainHandField.setMaxLength(128);
         this.addRenderableWidget(mainHandField);
         y += yOffset * 1.7;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.literal("Off Hand Item ID"), (button) -> {}, this.font));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.off_hand_item_id"), (button) -> {}, this.font));
         offHandField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
         offHandField.setMaxLength(128);
         this.addRenderableWidget(offHandField);
         y += yOffset;
 
-        dropChanceCheckbox = Checkbox.builder(Component.literal("Enable Drops"), this.font).pos(x, y).build();
+        dropChanceCheckbox = Checkbox.builder(Component.translatable("gui.arenas_ld.enable_drops"), this.font).pos(x, y).build();
         this.addRenderableWidget(dropChanceCheckbox);
         y += yOffset;
 
-        this.addRenderableWidget(Button.builder(Component.literal("Save"), button -> onSave())
+        this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.save"), button -> onSave())
                 .bounds(this.width / 2 - 50, this.height - 30, 100, 20)
                 .build());
 
