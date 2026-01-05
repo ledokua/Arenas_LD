@@ -84,6 +84,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     private int enterPortalRemovalTimer = -1;
     private int internalDungeonCloseTimer = -1; // Renamed from exitPortalTimer
     private final Set<UUID> trackedPlayers = new HashSet<>(); // Track players who entered
+    private boolean firstTick = true;
     
     private final ServerBossEvent dungeonCloseBossBar = (ServerBossEvent) new ServerBossEvent(
             Component.translatable("bossbar.arenas_ld.dungeon_closing"), 
@@ -126,6 +127,19 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         this.trackedPlayers.add(playerUuid);
         this.setChanged();
     }
+    
+    public boolean isTracked(UUID playerUuid) {
+        return this.trackedPlayers.contains(playerUuid);
+    }
+    
+    public void handlePlayerDisconnect(ServerPlayer player) {
+        if (exitPositionCoords != null && !exitPositionCoords.equals(BlockPos.ZERO)) {
+            player.teleportTo(exitPositionCoords.getX() + 0.5, exitPositionCoords.getY(), exitPositionCoords.getZ() + 0.5);
+        }
+        this.trackedPlayers.remove(player.getUUID());
+        this.dungeonCloseBossBar.removePlayer(player);
+        this.setChanged();
+    }
 
     @Override
     public void addLinkedSpawner(BlockPos pos) {
@@ -155,6 +169,11 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public static void tick(Level world, BlockPos pos, BlockState state, DungeonBossSpawnerBlockEntity be) {
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
+        
+        if (be.firstTick) {
+            ArenasLdMod.DUNGEON_BOSS_MANAGER.registerSpawner(be);
+            be.firstTick = false;
+        }
 
         if (be.isBattleActive) {
             be.handleActiveBattle(serverLevel);
@@ -196,6 +215,12 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 return remove;
             });
         }
+    }
+    
+    @Override
+    public void setRemoved() {
+        ArenasLdMod.DUNGEON_BOSS_MANAGER.unregisterSpawner(this);
+        super.setRemoved();
     }
     
     private void updateBossBarPlayers(ServerLevel world) {
