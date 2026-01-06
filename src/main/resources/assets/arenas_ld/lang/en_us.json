@@ -1,6 +1,7 @@
 {
   "block.arenas_ld.boss_spawner": "Raid boss spawner",
   "block.arenas_ld.mob_spawner": "Mob spawner",
+  "block.arenas_ld.dungeon_boss_spawner": "Dungeon boss spawner",
   "block.arenas_ld.enter_portal": "Raid enter portal",
   "block.arenas_ld.exit_portal": "Raid exit portal",
   "block.arenas_ld.phase_block": "Phase Block",

@@ -172,6 +172,15 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         
         if (be.firstTick) {
             ArenasLdMod.DUNGEON_BOSS_MANAGER.registerSpawner(be);
+            
+            // Re-link spawners on first tick
+            for (BlockPos linkedPos : be.linkedSpawners) {
+                if (world.isLoaded(linkedPos)) {
+                    BlockEntity linkedBe = world.getBlockEntity(linkedPos);
+                    // Just ensuring the chunk is loaded and we can access it if needed
+                }
+            }
+            
             be.firstTick = false;
         }
 
@@ -243,9 +252,11 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 
                 // Trigger linked spawners
                 for (BlockPos linkedPos : linkedSpawners) {
-                    BlockEntity be = world.getBlockEntity(linkedPos);
-                    if (be instanceof LinkableSpawner linkedSpawner) {
-                        linkedSpawner.forceReset();
+                    if (world.isLoaded(linkedPos)) {
+                        BlockEntity be = world.getBlockEntity(linkedPos);
+                        if (be instanceof LinkableSpawner linkedSpawner) {
+                            linkedSpawner.forceReset();
+                        }
                     }
                 }
             }
@@ -573,7 +584,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         for (BlockPos pos : linkedSpawners) {
             linkedList.add(NbtUtils.writeBlockPos(pos));
         }
-        nbt.put("LinkedSpawners", linkedList);
+        nbt.putLongArray("LinkedSpawners", linkedSpawners.stream().mapToLong(BlockPos::asLong).toArray());
     }
 
     @Override
@@ -626,9 +637,16 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         
         linkedSpawners.clear();
         if (nbt.contains("LinkedSpawners")) {
+           if (nbt.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
+                long[] array = nbt.getLongArray("LinkedSpawners");
+                for (long l : array) {
+                    linkedSpawners.add(BlockPos.of(l));
+                }
+            } else if (nbt.contains("LinkedSpawners", Tag.TAG_LIST)) {
             ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
             for (Tag tag : linkedList) {
                 NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawners::add);
+                }
             }
         }
     }

@@ -144,6 +144,15 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
             if (be.respawnCooldown > 0) {
                 ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerBattleWon(be.groupId, be.worldPosition);
             }
+            
+            // Re-link spawners on first tick
+            for (BlockPos linkedPos : be.linkedSpawners) {
+                if (world.isLoaded(linkedPos)) {
+                    BlockEntity linkedBe = world.getBlockEntity(linkedPos);
+                    // Just ensuring the chunk is loaded and we can access it if needed
+                }
+            }
+            
             be.firstTick = false;
         }
 
@@ -170,9 +179,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
                 
                 // Trigger linked spawners
                 for (BlockPos linkedPos : linkedSpawners) {
-                    BlockEntity be = world.getBlockEntity(linkedPos);
-                    if (be instanceof LinkableSpawner linkedSpawner) {
-                        linkedSpawner.forceReset();
+                    if (world.isLoaded(linkedPos)) {
+                        BlockEntity be = world.getBlockEntity(linkedPos);
+                        if (be instanceof LinkableSpawner linkedSpawner) {
+                            linkedSpawner.forceReset();
+                        }
                     }
                 }
             }
@@ -444,11 +455,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         nbt.put("Attributes", attributeList);
         nbt.put("Equipment", equipment.toNbt());
         
-        ListTag linkedList = new ListTag();
-        for (BlockPos pos : linkedSpawners) {
-            linkedList.add(NbtUtils.writeBlockPos(pos));
-        }
-        nbt.put("LinkedSpawners", linkedList);
+        nbt.putLongArray("LinkedSpawners", linkedSpawners.stream().mapToLong(BlockPos::asLong).toArray());
     }
 
     @Override
@@ -489,9 +496,16 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         
         linkedSpawners.clear();
         if (nbt.contains("LinkedSpawners")) {
-            ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
-            for (Tag tag : linkedList) {
-                NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawners::add);
+            if (nbt.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
+                long[] array = nbt.getLongArray("LinkedSpawners");
+                for (long l : array) {
+                    linkedSpawners.add(BlockPos.of(l));
+                }
+            } else if (nbt.contains("LinkedSpawners", Tag.TAG_LIST)) {
+                ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
+                for (Tag tag : linkedList) {
+                    NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawners::add);
+                }
             }
         }
     }
