@@ -16,7 +16,7 @@ public class EquipmentScreenHandler extends AbstractContainerMenu {
     }
 
     public EquipmentScreenHandler(int syncId, Inventory playerInventory, BlockEntity blockEntity) {
-        super(ModScreenHandlers.EQUIPMENT_SCREEN_HANDLER, syncId);
+        super(ModScreenHandlers.EQUIPMENT_SCREEN_HANDLER.get(), syncId);
         this.blockEntity = blockEntity;
         if (blockEntity instanceof EquipmentProvider provider) {
             this.equipmentProvider = provider;

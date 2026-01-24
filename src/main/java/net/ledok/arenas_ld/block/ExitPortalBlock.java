@@ -72,6 +72,6 @@ public class ExitPortalBlock extends BaseEntityBlock {
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level world, BlockState state, BlockEntityType<T> type) {
-        return createTickerHelper(type, BlockEntitiesRegistry.EXIT_PORTAL_BLOCK_ENTITY, ExitPortalBlockEntity::tick);
+        return createTickerHelper(type, BlockEntitiesRegistry.EXIT_PORTAL_BLOCK_ENTITY.get(), ExitPortalBlockEntity::tick);
     }
 }

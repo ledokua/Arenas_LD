@@ -17,7 +17,7 @@ public class MobAttributesScreenHandler extends AbstractContainerMenu {
     public final List<AttributeData> attributes;
 
     public MobAttributesScreenHandler(int syncId, Inventory inventory, MobAttributesData data) {
-        super(ModScreenHandlers.MOB_ATTRIBUTES_SCREEN_HANDLER, syncId);
+        super(ModScreenHandlers.MOB_ATTRIBUTES_SCREEN_HANDLER.get(), syncId);
         this.blockEntity = inventory.player.level().getBlockEntity(data.pos());
         if (this.blockEntity instanceof AttributeProvider) {
             this.attributeProvider = (AttributeProvider) this.blockEntity;

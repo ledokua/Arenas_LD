@@ -1,7 +1,5 @@
 package net.ledok.arenas_ld.block.entity;
 
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
-import net.fabricmc.loader.api.FabricLoader;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
@@ -28,6 +26,7 @@ import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.BossEvent;
+import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -50,11 +49,12 @@ import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.fml.ModList;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-public class DungeonBossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<BossSpawnerData>, AttributeProvider, EquipmentProvider, LinkableSpawner {
+public class DungeonBossSpawnerBlockEntity extends BlockEntity implements MenuProvider, AttributeProvider, EquipmentProvider, LinkableSpawner {
 
     // --- Configuration Fields ---
     public String mobId = "minecraft:zombie";
@@ -93,7 +93,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     ).setDarkenScreen(false).setPlayBossMusic(false).setCreateWorldFog(false);
 
     public DungeonBossSpawnerBlockEntity(BlockPos pos, BlockState state) {
-        super(BlockEntitiesRegistry.DUNGEON_BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
+        super(BlockEntitiesRegistry.DUNGEON_BOSS_SPAWNER_BLOCK_ENTITY.get(), pos, state);
         if (attributes.isEmpty()) {
             attributes.add(new AttributeData("minecraft:generic.max_health", 300.0));
             attributes.add(new AttributeData("minecraft:generic.attack_damage", 15.0));
@@ -395,7 +395,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
             List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
             for (ServerPlayer player : playersInBattle) {
-                if (FabricLoader.getInstance().isModLoaded("puffish_skills")) {
+                if (ModList.get().isLoaded("puffish_skills")) {
                     PuffishSkillsCompat.addExperience(player, this.skillExperiencePerWin);
                 }
             }
@@ -426,8 +426,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
             List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
             for (ServerPlayer player : playersInBattle) {
-                ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
-                bundle.set(LootBundleDataComponent.LOOT_BUNDLE_DATA, new LootBundleDataComponent(this.perPlayerLootTableId));
+                ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE.get());
+                bundle.set(LootBundleDataComponent.LOOT_BUNDLE_DATA.get(), new LootBundleDataComponent(this.perPlayerLootTableId));
                 if (!player.getInventory().add(bundle)) {
                     player.drop(bundle, false);
                 }
@@ -530,7 +530,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (enterPortalSpawnCoords == null || enterPortalDestCoords == null || enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
             return;
         }
-        world.setBlock(enterPortalSpawnCoords, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
+        world.setBlock(enterPortalSpawnCoords, BlockRegistry.ENTER_PORTAL_BLOCK.get().defaultBlockState(), 3);
         if (world.getBlockEntity(enterPortalSpawnCoords) instanceof EnterPortalBlockEntity be) {
             be.setDestination(enterPortalDestCoords);
             be.setOwner(this.worldPosition); // Set owner
@@ -538,7 +538,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     }
 
     private void removeEnterPortal(ServerLevel world) {
-        if (enterPortalSpawnCoords != null && world.getBlockState(enterPortalSpawnCoords).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
+        if (enterPortalSpawnCoords != null && world.getBlockState(enterPortalSpawnCoords).is(BlockRegistry.ENTER_PORTAL_BLOCK.get())) {
             world.setBlock(enterPortalSpawnCoords, Blocks.AIR.defaultBlockState(), 3);
         }
     }
@@ -673,7 +673,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         return new DungeonBossSpawnerScreenHandler(syncId, playerInventory, this);
     }
 
-    @Override
     public BossSpawnerData getScreenOpeningData(ServerPlayer player) {
         return new BossSpawnerData(this.worldPosition);
     }

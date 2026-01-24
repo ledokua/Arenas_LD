@@ -1,10 +1,9 @@
 package net.ledok.arenas_ld.manager;
 
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
-import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.block.entity.BlockEntity;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
 import java.util.Collections;
 import java.util.Set;
@@ -22,13 +21,16 @@ public class DungeonBossManager {
     }
 
     public void initialize() {
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
-            ServerPlayer player = handler.getPlayer();
+        NeoForge.EVENT_BUS.addListener(this::onPlayerLoggedOut);
+    }
+
+    private void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
             for (DungeonBossSpawnerBlockEntity spawner : activeSpawners) {
                 if (spawner.isTracked(player.getUUID())) {
                     spawner.handlePlayerDisconnect(player);
                 }
             }
-        });
+        }
     }
 }

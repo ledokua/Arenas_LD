@@ -1,7 +1,5 @@
 package net.ledok.arenas_ld.block.entity;
 
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
-import net.fabricmc.loader.api.FabricLoader;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
@@ -26,6 +24,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -49,11 +48,12 @@ import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.fml.ModList;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<BossSpawnerData>, AttributeProvider, EquipmentProvider, LinkableSpawner {
+public class BossSpawnerBlockEntity extends BlockEntity implements MenuProvider, AttributeProvider, EquipmentProvider, LinkableSpawner {
 
     // --- Configuration Fields ---
     public String mobId = "minecraft:zombie";
@@ -84,7 +84,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     protected boolean firstTick = true;
 
     public BossSpawnerBlockEntity(BlockPos pos, BlockState state) {
-        this(BlockEntitiesRegistry.BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
+        this(BlockEntitiesRegistry.BOSS_SPAWNER_BLOCK_ENTITY.get(), pos, state);
     }
 
     protected BossSpawnerBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
@@ -317,7 +317,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
             List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
             for (ServerPlayer player : playersInBattle) {
-                if (FabricLoader.getInstance().isModLoaded("puffish_skills")) {
+                if (ModList.get().isLoaded("puffish_skills")) {
                     PuffishSkillsCompat.addExperience(player, this.skillExperiencePerWin);
                 }
             }
@@ -348,8 +348,8 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
             List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
             for (ServerPlayer player : playersInBattle) {
-                ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
-                bundle.set(LootBundleDataComponent.LOOT_BUNDLE_DATA, new LootBundleDataComponent(this.perPlayerLootTableId));
+                ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE.get());
+                bundle.set(LootBundleDataComponent.LOOT_BUNDLE_DATA.get(), new LootBundleDataComponent(this.perPlayerLootTableId));
                 if (!player.getInventory().add(bundle)) {
                     player.drop(bundle, false);
                 }
@@ -357,7 +357,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         }
 
         BlockPos portalPos = worldPosition.above(2);
-        world.setBlock(portalPos, BlockRegistry.EXIT_PORTAL_BLOCK.defaultBlockState(), 3);
+        world.setBlock(portalPos, BlockRegistry.EXIT_PORTAL_BLOCK.get().defaultBlockState(), 3);
         if (world.getBlockEntity(portalPos) instanceof ExitPortalBlockEntity portal) {
             portal.setDetails(this.portalActiveTime, this.exitPortalCoords);
             ArenasLdMod.LOGGER.info("Spawned exit portal at {} for {} ticks.", portalPos, this.portalActiveTime);
@@ -410,14 +410,14 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         if (enterPortalSpawnCoords == null || enterPortalDestCoords == null || enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
             return;
         }
-        world.setBlock(enterPortalSpawnCoords, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
+        world.setBlock(enterPortalSpawnCoords, BlockRegistry.ENTER_PORTAL_BLOCK.get().defaultBlockState(), 3);
         if (world.getBlockEntity(enterPortalSpawnCoords) instanceof EnterPortalBlockEntity be) {
             be.setDestination(enterPortalDestCoords);
         }
     }
 
     protected void removeEnterPortal(ServerLevel world) {
-        if (enterPortalSpawnCoords != null && world.getBlockState(enterPortalSpawnCoords).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
+        if (enterPortalSpawnCoords != null && world.getBlockState(enterPortalSpawnCoords).is(BlockRegistry.ENTER_PORTAL_BLOCK.get())) {
             world.setBlock(enterPortalSpawnCoords, Blocks.AIR.defaultBlockState(), 3);
         }
     }
@@ -504,9 +504,10 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
                 for (long l : array) {
                     linkedSpawners.add(BlockPos.of(l));
                 }
-            ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
-            for (Tag tag : linkedList) {
-                NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawners::add);
+            } else if (nbt.contains("LinkedSpawners", Tag.TAG_LIST)) {
+                ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
+                for (Tag tag : linkedList) {
+                    NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawners::add);
                 }
             }
         }
@@ -534,7 +535,6 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         return new BossSpawnerScreenHandler(syncId, playerInventory, this);
     }
 
-    @Override
     public BossSpawnerData getScreenOpeningData(ServerPlayer player) {
         return new BossSpawnerData(this.worldPosition);
     }

@@ -1,7 +1,5 @@
 package net.ledok.arenas_ld.block.entity;
 
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
-import net.fabricmc.loader.api.FabricLoader;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
@@ -24,12 +22,9 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.MenuProvider;
 import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -48,11 +43,12 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
+import net.neoforged.fml.ModList;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<MobSpawnerData>, AttributeProvider, EquipmentProvider, LinkableSpawner {
+public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, AttributeProvider, EquipmentProvider, LinkableSpawner {
 
     // --- Configuration Fields ---
     public String mobId = "minecraft:zombie";
@@ -79,7 +75,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
 
 
     public MobSpawnerBlockEntity(BlockPos pos, BlockState state) {
-        super(BlockEntitiesRegistry.MOB_SPAWNER_BLOCK_ENTITY, pos, state);
+        super(BlockEntitiesRegistry.MOB_SPAWNER_BLOCK_ENTITY.get(), pos, state);
         // Default attributes
         if (attributes.isEmpty()) {
             attributes.add(new AttributeData("minecraft:generic.max_health", 20.0));
@@ -387,7 +383,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
             AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
             List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
             for (ServerPlayer player : playersInBattle) {
-                if (FabricLoader.getInstance().isModLoaded("puffish_skills")) {
+                if (ModList.get().isLoaded("puffish_skills")) {
                     PuffishSkillsCompat.addExperience(player, this.skillExperiencePerWin);
                 }
             }
@@ -536,7 +532,6 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         return new MobSpawnerScreenHandler(syncId, playerInventory, this);
     }
 
-    @Override
     public MobSpawnerData getScreenOpeningData(ServerPlayer player) {
         return new MobSpawnerData(this.worldPosition);
     }

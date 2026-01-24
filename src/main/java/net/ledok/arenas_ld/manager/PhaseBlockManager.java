@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.manager;
 
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.ledok.arenas_ld.block.PhaseBlock;
 import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.PhaseBlockEntity;
@@ -9,6 +8,8 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -116,24 +117,26 @@ public class PhaseBlockManager {
     }
 
     public void start() {
-        ServerTickEvents.END_SERVER_TICK.register(server -> {
-            for (String groupId : groupPositions.keySet()) {
-                if(!groupPositions.containsKey(groupId)) continue;
+        NeoForge.EVENT_BUS.addListener(this::onServerTick);
+    }
 
-                Boolean solid = groupSolidState.get(groupId);
-                if (solid == null) continue;
+    private void onServerTick(ServerTickEvent.Post event) {
+        for (String groupId : groupPositions.keySet()) {
+            if(!groupPositions.containsKey(groupId)) continue;
 
-                if (!groupWorld.containsKey(groupId)) continue;
-                ServerLevel world = server.getLevel(groupWorld.get(groupId));
-                if (world != null) {
-                    for (BlockPos pos : new ArrayList<>(groupPositions.get(groupId))) {
-                        BlockState currentState = world.getBlockState(pos);
-                        if (currentState.getBlock() instanceof PhaseBlock && currentState.getValue(PhaseBlock.SOLID) != solid) {
-                            world.setBlock(pos, currentState.setValue(PhaseBlock.SOLID, solid), 3);
-                        }
+            Boolean solid = groupSolidState.get(groupId);
+            if (solid == null) continue;
+
+            if (!groupWorld.containsKey(groupId)) continue;
+            ServerLevel world = event.getServer().getLevel(groupWorld.get(groupId));
+            if (world != null) {
+                for (BlockPos pos : new ArrayList<>(groupPositions.get(groupId))) {
+                    BlockState currentState = world.getBlockState(pos);
+                    if (currentState.getBlock() instanceof PhaseBlock && currentState.getValue(PhaseBlock.SOLID) != solid) {
+                        world.setBlock(pos, currentState.setValue(PhaseBlock.SOLID, solid), 3);
                     }
                 }
             }
-        });
+        }
     }
 }

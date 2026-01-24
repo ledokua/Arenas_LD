@@ -2,8 +2,8 @@ package net.ledok.arenas_ld.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import net.fabricmc.loader.api.FabricLoader;
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.neoforged.fml.loading.FMLPaths;
 
 import java.io.File;
 import java.io.FileReader;
@@ -17,7 +17,7 @@ public class ArenasLdConfig {
     public String puffish_skills_tree_id = "puffish_skills:combat";
 
     public static ArenasLdConfig load() {
-        Path configDir = FabricLoader.getInstance().getConfigDir().resolve(ArenasLdMod.MOD_ID);
+        Path configDir = FMLPaths.CONFIGDIR.get().resolve(ArenasLdMod.MOD_ID);
         File configFile = configDir.resolve("arenas_ld.json").toFile();
 
         if (!configFile.getParentFile().exists()) {
@@ -38,7 +38,7 @@ public class ArenasLdConfig {
     }
 
     public void save() {
-        Path configDir = FabricLoader.getInstance().getConfigDir().resolve(ArenasLdMod.MOD_ID);
+        Path configDir = FMLPaths.CONFIGDIR.get().resolve(ArenasLdMod.MOD_ID);
         File configFile = configDir.resolve("arenas_ld.json").toFile();
 
         if (!configFile.getParentFile().exists()) {
@@ -53,7 +53,7 @@ public class ArenasLdConfig {
     }
 
     public void reloadFromFile() {
-        Path configDir = FabricLoader.getInstance().getConfigDir().resolve(ArenasLdMod.MOD_ID);
+        Path configDir = FMLPaths.CONFIGDIR.get().resolve(ArenasLdMod.MOD_ID);
         File configFile = configDir.resolve("arenas_ld.json").toFile();
 
         if (configFile.exists()) {

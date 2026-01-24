@@ -3,29 +3,20 @@ package net.ledok.arenas_ld.registry;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.item.LinkerItem;
 import net.ledok.arenas_ld.item.LootBundleItem;
-import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.registries.DeferredItem;
+import net.neoforged.neoforge.registries.DeferredRegister;
 
 @SuppressWarnings("unused")
 public class ItemRegistry {
+    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(ArenasLdMod.MOD_ID);
 
-    public static final Item LINKER = ItemInit.register(new LinkerItem(new Item.Properties()), "linker");
-    public static final Item LOOT_BUNDLE = ItemInit.register(new LootBundleItem(new Item.Properties()), "loot_bundle");
+    public static final DeferredItem<Item> LINKER = ITEMS.register("linker", () -> new LinkerItem(new Item.Properties()));
+    public static final DeferredItem<Item> LOOT_BUNDLE = ITEMS.register("loot_bundle", () -> new LootBundleItem(new Item.Properties()));
 
-    public class ItemInit {
-        public static Item register(Item item, String id) {
-            ResourceLocation itemID = ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, id);
-
-            // Register the item to the built-in registry for items.
-            Item registeredItem = Registry.register(BuiltInRegistries.ITEM, itemID, item);
-
-            // Return the registered item.
-            return registeredItem;
-        }
-    }
-
-    public static void initialize() {
+    public static void initialize(IEventBus modEventBus) {
+        ITEMS.register(modEventBus);
     }
 }

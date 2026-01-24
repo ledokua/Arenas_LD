@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -9,6 +8,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreenHandler> {
 
@@ -176,7 +176,7 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
 
     private void onSave() {
         try {
-            ClientPlayNetworking.send(new ModPackets.UpdateBossSpawnerPayload(
+            PacketDistributor.sendToServer(new ModPackets.UpdateBossSpawnerPayload(
                     menu.blockEntity.getBlockPos(),
                     mobIdField.getValue(),
                     Integer.parseInt(respawnTimeField.getValue()),

@@ -62,7 +62,7 @@ public class LinkerItem extends Item {
             return InteractionResult.PASS;
         }
 
-        LinkerModeDataComponent modeData = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
+        LinkerModeDataComponent modeData = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA.get(), LinkerModeDataComponent.DEFAULT);
         Mode currentMode = Mode.values()[modeData.mode()];
         boolean isShiftDown = player.isShiftKeyDown();
         BlockEntity blockEntity = world.getBlockEntity(pos);
@@ -80,11 +80,11 @@ public class LinkerItem extends Item {
         if (blockEntity instanceof MobSpawnerBlockEntity spawner) {
             if (isShiftDown) {
                 String groupId = spawner.groupId;
-                stack.set(LinkerDataComponent.LINKER_DATA, new LinkerDataComponent(groupId));
+                stack.set(LinkerDataComponent.LINKER_DATA.get(), new LinkerDataComponent(groupId));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
                 return InteractionResult.SUCCESS;
             } else {
-                LinkerDataComponent data = stack.get(LinkerDataComponent.LINKER_DATA);
+                LinkerDataComponent data = stack.get(LinkerDataComponent.LINKER_DATA.get());
                 if (data != null) {
                     spawner.groupId = data.groupId();
                     spawner.setChanged();
@@ -96,11 +96,11 @@ public class LinkerItem extends Item {
         } else if (blockEntity instanceof PhaseBlockEntity phaseBlock) {
             if (isShiftDown) {
                 String groupId = phaseBlock.getGroupId();
-                stack.set(LinkerDataComponent.LINKER_DATA, new LinkerDataComponent(groupId));
+                stack.set(LinkerDataComponent.LINKER_DATA.get(), new LinkerDataComponent(groupId));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
                 return InteractionResult.SUCCESS;
             } else {
-                LinkerDataComponent data = stack.get(LinkerDataComponent.LINKER_DATA);
+                LinkerDataComponent data = stack.get(LinkerDataComponent.LINKER_DATA.get());
                 if (data != null) {
                     phaseBlock.setGroupId(data.groupId());
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.pasted_group_id", data.groupId()));
@@ -110,11 +110,11 @@ public class LinkerItem extends Item {
         } else if (blockEntity instanceof BossSpawnerBlockEntity spawner) {
             if (isShiftDown) {
                 String groupId = spawner.groupId;
-                stack.set(LinkerDataComponent.LINKER_DATA, new LinkerDataComponent(groupId));
+                stack.set(LinkerDataComponent.LINKER_DATA.get(), new LinkerDataComponent(groupId));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
                 return InteractionResult.SUCCESS;
             } else {
-                LinkerDataComponent data = stack.get(LinkerDataComponent.LINKER_DATA);
+                LinkerDataComponent data = stack.get(LinkerDataComponent.LINKER_DATA.get());
                 if (data != null) {
                     spawner.groupId = data.groupId();
                     spawner.setChanged();
@@ -126,11 +126,11 @@ public class LinkerItem extends Item {
         } else if (blockEntity instanceof DungeonBossSpawnerBlockEntity spawner) {
             if (isShiftDown) {
                 String groupId = spawner.groupId;
-                stack.set(LinkerDataComponent.LINKER_DATA, new LinkerDataComponent(groupId));
+                stack.set(LinkerDataComponent.LINKER_DATA.get(), new LinkerDataComponent(groupId));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
                 return InteractionResult.SUCCESS;
             } else {
-                LinkerDataComponent data = stack.get(LinkerDataComponent.LINKER_DATA);
+                LinkerDataComponent data = stack.get(LinkerDataComponent.LINKER_DATA.get());
                 if (data != null) {
                     spawner.groupId = data.groupId();
                     spawner.setChanged();
@@ -149,7 +149,7 @@ public class LinkerItem extends Item {
 
             if (mainPosOpt.isEmpty()) {
                 // Set Main Spawner
-                stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos)));
+                stack.set(LinkerModeDataComponent.LINKER_MODE_DATA.get(), new LinkerModeDataComponent(modeData.mode(), Optional.of(pos)));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.set_main_spawner", pos.toShortString()));
                 return InteractionResult.SUCCESS;
             } else {
@@ -166,7 +166,7 @@ public class LinkerItem extends Item {
                     return InteractionResult.SUCCESS;
                 } else {
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_spawner_invalid"));
-                    stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty()));
+                    stack.set(LinkerModeDataComponent.LINKER_MODE_DATA.get(), new LinkerModeDataComponent(modeData.mode(), Optional.empty()));
                     return InteractionResult.FAIL;
                 }
             }
@@ -180,11 +180,11 @@ public class LinkerItem extends Item {
         if (!world.isClientSide && player.isShiftKeyDown()) {
             BlockHitResult hitResult = getPlayerPOVHitResult(world, player, ClipContext.Fluid.NONE);
             if (hitResult.getType() == BlockHitResult.Type.MISS) {
-                LinkerModeDataComponent modeData = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
+                LinkerModeDataComponent modeData = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA.get(), LinkerModeDataComponent.DEFAULT);
                 
                 if (Mode.values()[modeData.mode()] == Mode.SPAWNER_LINKING) {
                     // Clear Main Spawner selection
-                    stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty()));
+                    stack.set(LinkerModeDataComponent.LINKER_MODE_DATA.get(), new LinkerModeDataComponent(modeData.mode(), Optional.empty()));
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.cleared_selection"));
                     return InteractionResultHolder.success(stack);
                 }
@@ -196,7 +196,7 @@ public class LinkerItem extends Item {
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
         super.appendHoverText(stack, context, tooltipComponents, tooltipFlag);
-        LinkerModeDataComponent modeData = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
+        LinkerModeDataComponent modeData = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA.get(), LinkerModeDataComponent.DEFAULT);
         Mode currentMode = Mode.values()[modeData.mode()];
         
         tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.mode", currentMode.getName()).withStyle(net.minecraft.ChatFormatting.GRAY));

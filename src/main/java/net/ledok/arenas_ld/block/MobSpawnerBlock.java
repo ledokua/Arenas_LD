@@ -51,7 +51,7 @@ public class MobSpawnerBlock extends BaseEntityBlock {
 
             BlockEntity blockEntity = world.getBlockEntity(pos);
             if (blockEntity instanceof MobSpawnerBlockEntity) {
-                player.openMenu((MobSpawnerBlockEntity) blockEntity);
+                player.openMenu((MobSpawnerBlockEntity) blockEntity, pos);
                 return InteractionResult.CONSUME;
             }
         }
@@ -61,6 +61,6 @@ public class MobSpawnerBlock extends BaseEntityBlock {
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level world, BlockState state, BlockEntityType<T> type) {
-        return createTickerHelper(type, BlockEntitiesRegistry.MOB_SPAWNER_BLOCK_ENTITY, MobSpawnerBlockEntity::tick);
+        return createTickerHelper(type, BlockEntitiesRegistry.MOB_SPAWNER_BLOCK_ENTITY.get(), MobSpawnerBlockEntity::tick);
     }
 }

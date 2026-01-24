@@ -14,7 +14,7 @@ public class PhaseBlockEntity extends BlockEntity {
     private boolean firstTick = true;
 
     public PhaseBlockEntity(BlockPos pos, BlockState state) {
-        super(BlockEntitiesRegistry.PHASE_BLOCK_ENTITY, pos, state);
+        super(BlockEntitiesRegistry.PHASE_BLOCK_ENTITY.get(), pos, state);
     }
 
     public static void tick(Level world, BlockPos pos, BlockState state, PhaseBlockEntity be) {

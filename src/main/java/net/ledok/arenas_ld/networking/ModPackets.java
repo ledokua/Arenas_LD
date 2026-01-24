@@ -1,7 +1,5 @@
 package net.ledok.arenas_ld.networking;
 
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
@@ -22,6 +20,10 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import java.util.List;
 
@@ -218,127 +220,132 @@ public class ModPackets {
         }
     }
 
-    public static void registerC2SPackets() {
-        PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateDungeonBossSpawnerPayload.TYPE, UpdateDungeonBossSpawnerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerPayload.TYPE, UpdateMobSpawnerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateAttributesPayload.TYPE, UpdateAttributesPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateEquipmentPayload.TYPE, UpdateEquipmentPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC);
+    public static void registerC2SPackets(IEventBus modEventBus) {
+        modEventBus.addListener(ModPackets::register);
+    }
 
-        ServerPlayNetworking.registerGlobalReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                Level world = context.player().level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (be instanceof BossSpawnerBlockEntity blockEntity) {
-                    blockEntity.mobId = payload.mobId();
-                    blockEntity.respawnTime = payload.respawnTime();
-                    blockEntity.portalActiveTime = payload.portalTime();
-                    blockEntity.lootTableId = payload.lootTable();
-                    blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
-                    blockEntity.exitPortalCoords = payload.exitCoords();
-                    blockEntity.enterPortalSpawnCoords = payload.enterSpawnCoords();
-                    blockEntity.enterPortalDestCoords = payload.enterDestCoords();
-                    blockEntity.triggerRadius = payload.triggerRadius();
-                    blockEntity.battleRadius = payload.battleRadius();
-                    blockEntity.regeneration = payload.regeneration();
-                    blockEntity.minPlayers = payload.minPlayers();
-                    blockEntity.skillExperiencePerWin = payload.skillExperiencePerWin();
+    private static void register(final RegisterPayloadHandlersEvent event) {
+        final PayloadRegistrar registrar = event.registrar(ArenasLdMod.MOD_ID);
+        registrar.playToServer(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC, ModPackets::handleUpdateBossSpawner);
+        registrar.playToServer(UpdateDungeonBossSpawnerPayload.TYPE, UpdateDungeonBossSpawnerPayload.STREAM_CODEC, ModPackets::handleUpdateDungeonBossSpawner);
+        registrar.playToServer(UpdateMobSpawnerPayload.TYPE, UpdateMobSpawnerPayload.STREAM_CODEC, ModPackets::handleUpdateMobSpawner);
+        registrar.playToServer(UpdateAttributesPayload.TYPE, UpdateAttributesPayload.STREAM_CODEC, ModPackets::handleUpdateAttributes);
+        registrar.playToServer(UpdateEquipmentPayload.TYPE, UpdateEquipmentPayload.STREAM_CODEC, ModPackets::handleUpdateEquipment);
+        registrar.playToServer(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC, ModPackets::handleCycleLinkerMode);
+    }
+
+    private static void handleUpdateBossSpawner(final UpdateBossSpawnerPayload payload, final IPayloadContext context) {
+        context.enqueueWork(() -> {
+            Level world = context.player().level();
+            BlockEntity be = world.getBlockEntity(payload.pos());
+            if (be instanceof BossSpawnerBlockEntity blockEntity) {
+                blockEntity.mobId = payload.mobId();
+                blockEntity.respawnTime = payload.respawnTime();
+                blockEntity.portalActiveTime = payload.portalTime();
+                blockEntity.lootTableId = payload.lootTable();
+                blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
+                blockEntity.exitPortalCoords = payload.exitCoords();
+                blockEntity.enterPortalSpawnCoords = payload.enterSpawnCoords();
+                blockEntity.enterPortalDestCoords = payload.enterDestCoords();
+                blockEntity.triggerRadius = payload.triggerRadius();
+                blockEntity.battleRadius = payload.battleRadius();
+                blockEntity.regeneration = payload.regeneration();
+                blockEntity.minPlayers = payload.minPlayers();
+                blockEntity.skillExperiencePerWin = payload.skillExperiencePerWin();
+                blockEntity.groupId = payload.groupId();
+                blockEntity.setChanged();
+                world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+            }
+        });
+    }
+
+    private static void handleUpdateDungeonBossSpawner(final UpdateDungeonBossSpawnerPayload payload, final IPayloadContext context) {
+        context.enqueueWork(() -> {
+            Level world = context.player().level();
+            BlockEntity be = world.getBlockEntity(payload.pos());
+            if (be instanceof DungeonBossSpawnerBlockEntity blockEntity) {
+                blockEntity.mobId = payload.mobId();
+                blockEntity.respawnTime = payload.respawnTime();
+                blockEntity.dungeonCloseTimer = payload.dungeonCloseTimer();
+                blockEntity.lootTableId = payload.lootTable();
+                blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
+                blockEntity.exitPositionCoords = payload.exitPositionCoords();
+                blockEntity.enterPortalSpawnCoords = payload.enterSpawnCoords();
+                blockEntity.enterPortalDestCoords = payload.enterDestCoords();
+                blockEntity.triggerRadius = payload.triggerRadius();
+                blockEntity.battleRadius = payload.battleRadius();
+                blockEntity.regeneration = payload.regeneration();
+                blockEntity.skillExperiencePerWin = payload.skillExperiencePerWin();
+                blockEntity.groupId = payload.groupId();
+                blockEntity.setChanged();
+                world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+            }
+        });
+    }
+
+    private static void handleUpdateMobSpawner(final UpdateMobSpawnerPayload payload, final IPayloadContext context) {
+        context.enqueueWork(() -> {
+            Level world = context.player().level();
+            if (world.getBlockEntity(payload.pos()) instanceof MobSpawnerBlockEntity blockEntity) {
+                blockEntity.mobId = payload.mobId();
+                blockEntity.respawnTime = payload.respawnTime();
+                blockEntity.lootTableId = payload.lootTable();
+                blockEntity.triggerRadius = payload.triggerRadius();
+                blockEntity.battleRadius = payload.battleRadius();
+                blockEntity.regeneration = payload.regeneration();
+                blockEntity.skillExperiencePerWin = payload.skillExperience();
+                blockEntity.mobCount = payload.mobCount();
+                blockEntity.mobSpread = payload.mobSpread();
+
+                if (!blockEntity.groupId.equals(payload.groupId())) {
+                    ArenasLdMod.PHASE_BLOCK_MANAGER.unregisterSpawner(blockEntity);
                     blockEntity.groupId = payload.groupId();
-                    blockEntity.setChanged();
-                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                    ArenasLdMod.PHASE_BLOCK_MANAGER.registerSpawner(blockEntity);
                 }
-            });
+
+                blockEntity.setChanged();
+                world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+            }
         });
+    }
 
-        ServerPlayNetworking.registerGlobalReceiver(UpdateDungeonBossSpawnerPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                Level world = context.player().level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (be instanceof DungeonBossSpawnerBlockEntity blockEntity) {
-                    blockEntity.mobId = payload.mobId();
-                    blockEntity.respawnTime = payload.respawnTime();
-                    blockEntity.dungeonCloseTimer = payload.dungeonCloseTimer();
-                    blockEntity.lootTableId = payload.lootTable();
-                    blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
-                    blockEntity.exitPositionCoords = payload.exitPositionCoords();
-                    blockEntity.enterPortalSpawnCoords = payload.enterSpawnCoords();
-                    blockEntity.enterPortalDestCoords = payload.enterDestCoords();
-                    blockEntity.triggerRadius = payload.triggerRadius();
-                    blockEntity.battleRadius = payload.battleRadius();
-                    blockEntity.regeneration = payload.regeneration();
-                    blockEntity.skillExperiencePerWin = payload.skillExperiencePerWin();
-                    blockEntity.groupId = payload.groupId();
-                    blockEntity.setChanged();
-                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
-                }
-            });
+    private static void handleUpdateAttributes(final UpdateAttributesPayload payload, final IPayloadContext context) {
+        context.enqueueWork(() -> {
+            Level world = context.player().level();
+            BlockEntity be = world.getBlockEntity(payload.pos());
+            if (be instanceof AttributeProvider provider) {
+                provider.setAttributes(payload.attributes());
+                be.setChanged();
+                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+            }
         });
+    }
 
-        ServerPlayNetworking.registerGlobalReceiver(UpdateMobSpawnerPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                Level world = context.player().level();
-                if (world.getBlockEntity(payload.pos()) instanceof MobSpawnerBlockEntity blockEntity) {
-                    blockEntity.mobId = payload.mobId();
-                    blockEntity.respawnTime = payload.respawnTime();
-                    blockEntity.lootTableId = payload.lootTable();
-                    blockEntity.triggerRadius = payload.triggerRadius();
-                    blockEntity.battleRadius = payload.battleRadius();
-                    blockEntity.regeneration = payload.regeneration();
-                    blockEntity.skillExperiencePerWin = payload.skillExperience();
-                    blockEntity.mobCount = payload.mobCount();
-                    blockEntity.mobSpread = payload.mobSpread();
-                    
-                    if (!blockEntity.groupId.equals(payload.groupId())) {
-                        ArenasLdMod.PHASE_BLOCK_MANAGER.unregisterSpawner(blockEntity);
-                        blockEntity.groupId = payload.groupId();
-                        ArenasLdMod.PHASE_BLOCK_MANAGER.registerSpawner(blockEntity);
-                    }
-
-                    blockEntity.setChanged();
-                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
-                }
-            });
+    private static void handleUpdateEquipment(final UpdateEquipmentPayload payload, final IPayloadContext context) {
+        context.enqueueWork(() -> {
+            Level world = context.player().level();
+            BlockEntity be = world.getBlockEntity(payload.pos());
+            if (be instanceof EquipmentProvider provider) {
+                provider.setEquipment(payload.equipment());
+                be.setChanged();
+                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+            }
         });
+    }
 
-        ServerPlayNetworking.registerGlobalReceiver(UpdateAttributesPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                Level world = context.player().level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (be instanceof AttributeProvider provider) {
-                    provider.setAttributes(payload.attributes());
-                    be.setChanged();
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                }
-            });
-        });
+    private static void handleCycleLinkerMode(final CycleLinkerModePayload payload, final IPayloadContext context) {
+        context.enqueueWork(() -> {
+            ItemStack stack = context.player().getMainHandItem();
+            if (stack.getItem() instanceof LinkerItem) {
+                LinkerModeDataComponent data = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
+                int currentMode = data.mode();
+                int newMode = (currentMode + (payload.forward() ? 1 : -1) + LinkerItem.Mode.values().length) % LinkerItem.Mode.values().length;
+                stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(newMode, data.mainSpawnerPos()));
 
-        ServerPlayNetworking.registerGlobalReceiver(UpdateEquipmentPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                Level world = context.player().level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (be instanceof EquipmentProvider provider) {
-                    provider.setEquipment(payload.equipment());
-                    be.setChanged();
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                }
-            });
-        });
-
-        ServerPlayNetworking.registerGlobalReceiver(CycleLinkerModePayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ItemStack stack = context.player().getMainHandItem();
-                if (stack.getItem() instanceof LinkerItem) {
-                    LinkerModeDataComponent data = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
-                    int currentMode = data.mode();
-                    int newMode = (currentMode + (payload.forward() ? 1 : -1) + LinkerItem.Mode.values().length) % LinkerItem.Mode.values().length;
-                    stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(newMode, data.mainSpawnerPos()));
-                    
-                    LinkerItem.Mode mode = LinkerItem.Mode.values()[newMode];
-                    ChatFormatting color = mode == LinkerItem.Mode.SPAWNER_LINKING ? ChatFormatting.BLUE : ChatFormatting.YELLOW;
-                    context.player().sendSystemMessage(Component.literal("Mode: " + mode.getName()).withStyle(color));
-                }
-            });
+                LinkerItem.Mode mode = LinkerItem.Mode.values()[newMode];
+                ChatFormatting color = mode == LinkerItem.Mode.SPAWNER_LINKING ? ChatFormatting.BLUE : ChatFormatting.YELLOW;
+                context.player().sendSystemMessage(Component.literal("Mode: " + mode.getName()).withStyle(color));
+            }
         });
     }
 }

@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.util.EquipmentData;
 import net.minecraft.client.gui.GuiGraphics;
@@ -10,6 +9,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 public class EquipmentScreen extends AbstractContainerScreen<EquipmentScreenHandler> {
 
@@ -109,7 +109,7 @@ public class EquipmentScreen extends AbstractContainerScreen<EquipmentScreenHand
                 dropChanceCheckbox.selected()
         );
         
-        ClientPlayNetworking.send(new ModPackets.UpdateEquipmentPayload(
+        PacketDistributor.sendToServer(new ModPackets.UpdateEquipmentPayload(
                 menu.blockEntity.getBlockPos(),
                 data
         ));

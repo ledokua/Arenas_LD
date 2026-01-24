@@ -13,7 +13,7 @@ public class EnterPortalBlockEntity extends BlockEntity {
     private BlockPos ownerPos;
 
     public EnterPortalBlockEntity(BlockPos pos, BlockState state) {
-        super(BlockEntitiesRegistry.ENTER_PORTAL_BLOCK_ENTITY, pos, state);
+        super(BlockEntitiesRegistry.ENTER_PORTAL_BLOCK_ENTITY.get(), pos, state);
     }
 
     public void setDestination(BlockPos destination) {

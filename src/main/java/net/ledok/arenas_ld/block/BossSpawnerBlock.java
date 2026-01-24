@@ -51,7 +51,7 @@ public class BossSpawnerBlock extends BaseEntityBlock {
 
             BlockEntity blockEntity = world.getBlockEntity(pos);
             if (blockEntity instanceof BossSpawnerBlockEntity) {
-                player.openMenu((BossSpawnerBlockEntity) blockEntity);
+                player.openMenu((BossSpawnerBlockEntity) blockEntity, pos);
                 return InteractionResult.CONSUME;
             }
         }
@@ -61,6 +61,6 @@ public class BossSpawnerBlock extends BaseEntityBlock {
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level world, BlockState state, BlockEntityType<T> type) {
-        return createTickerHelper(type, BlockEntitiesRegistry.BOSS_SPAWNER_BLOCK_ENTITY, BossSpawnerBlockEntity::tick);
+        return createTickerHelper(type, BlockEntitiesRegistry.BOSS_SPAWNER_BLOCK_ENTITY.get(), BossSpawnerBlockEntity::tick);
     }
 }

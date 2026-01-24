@@ -15,7 +15,7 @@ public class ExitPortalBlockEntity extends BlockEntity {
     private BlockPos destination;
 
     public ExitPortalBlockEntity(BlockPos pos, BlockState state) {
-        super(BlockEntitiesRegistry.EXIT_PORTAL_BLOCK_ENTITY, pos, state);
+        super(BlockEntitiesRegistry.EXIT_PORTAL_BLOCK_ENTITY.get(), pos, state);
     }
 
     public void setDetails(int lifetime, BlockPos destination) {

@@ -66,6 +66,6 @@ public class PhaseBlock extends BaseEntityBlock {
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level world, BlockState state, BlockEntityType<T> type) {
-        return createTickerHelper(type, BlockEntitiesRegistry.PHASE_BLOCK_ENTITY, PhaseBlockEntity::tick);
+        return createTickerHelper(type, BlockEntitiesRegistry.PHASE_BLOCK_ENTITY.get(), PhaseBlockEntity::tick);
     }
 }

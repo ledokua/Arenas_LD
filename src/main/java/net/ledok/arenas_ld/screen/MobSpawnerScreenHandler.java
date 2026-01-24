@@ -1,5 +1,6 @@
 package net.ledok.arenas_ld.screen;
 
+import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -13,12 +14,14 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
     // MOJANG MAPPINGS: PlayerInventory is now Inventory.
     public MobSpawnerScreenHandler(int syncId, Inventory playerInventory, MobSpawnerData data) {
         this(syncId, playerInventory, (MobSpawnerBlockEntity) playerInventory.player.level().getBlockEntity(data.blockPos()));
+        ArenasLdMod.LOGGER.info("MobSpawnerScreenHandler created on client for pos: " + data.blockPos());
     }
 
     public MobSpawnerScreenHandler(int syncId, Inventory playerInventory, MobSpawnerBlockEntity blockEntity) {
-        super(ModScreenHandlers.MOB_SPAWNER_SCREEN_HANDLER, syncId);
+        super(ModScreenHandlers.MOB_SPAWNER_SCREEN_HANDLER.get(), syncId);
         this.blockEntity = blockEntity;
         this.player = playerInventory.player;
+        ArenasLdMod.LOGGER.info("MobSpawnerScreenHandler created on server for pos: " + blockEntity.getBlockPos());
     }
 
     // MOJANG MAPPINGS: quickMove is now quickMoveStack, PlayerEntity is Player.

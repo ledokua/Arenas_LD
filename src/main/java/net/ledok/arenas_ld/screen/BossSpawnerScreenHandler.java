@@ -16,7 +16,7 @@ public class BossSpawnerScreenHandler extends AbstractContainerMenu {
     }
 
     public BossSpawnerScreenHandler(int syncId, Inventory playerInventory, BossSpawnerBlockEntity blockEntity) {
-        super(ModScreenHandlers.BOSS_SPAWNER_SCREEN_HANDLER, syncId);
+        super(ModScreenHandlers.BOSS_SPAWNER_SCREEN_HANDLER.get(), syncId);
         this.blockEntity = blockEntity;
         this.player = playerInventory.player;
     }

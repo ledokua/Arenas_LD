@@ -4,13 +4,14 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Registry;
+import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.core.component.DataComponentType;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.registries.DeferredRegister;
 
 import java.util.Optional;
+import java.util.function.Supplier;
 
 public record LinkerModeDataComponent(int mode, Optional<BlockPos> mainSpawnerPos) {
 
@@ -23,15 +24,15 @@ public record LinkerModeDataComponent(int mode, Optional<BlockPos> mainSpawnerPo
             ).apply(instance, LinkerModeDataComponent::new)
     );
 
-    public static final DataComponentType<LinkerModeDataComponent> LINKER_MODE_DATA = Registry.register(
-            BuiltInRegistries.DATA_COMPONENT_TYPE,
-            ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "linker_mode_data"),
+    public static final DeferredRegister<DataComponentType<?>> DATA_COMPONENT_TYPES = DeferredRegister.create(BuiltInRegistries.DATA_COMPONENT_TYPE, ArenasLdMod.MOD_ID);
+
+    public static final Supplier<DataComponentType<LinkerModeDataComponent>> LINKER_MODE_DATA = DATA_COMPONENT_TYPES.register("linker_mode_data", () ->
             DataComponentType.<LinkerModeDataComponent>builder()
                     .persistent(CODEC)
                     .networkSynchronized(ByteBufCodecs.fromCodec(CODEC))
-                    .build()
-    );
+                    .build());
 
-    public static void initialize() {
+    public static void initialize(IEventBus modEventBus) {
+        DATA_COMPONENT_TYPES.register(modEventBus);
     }
 }

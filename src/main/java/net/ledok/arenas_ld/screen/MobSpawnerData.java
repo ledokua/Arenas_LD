@@ -6,7 +6,7 @@ import net.minecraft.network.codec.StreamCodec;
 
 public record MobSpawnerData(BlockPos blockPos) {
     public static final StreamCodec<FriendlyByteBuf, MobSpawnerData> CODEC = StreamCodec.of(
-            (buf, value) -> buf.writeBlockPos(value.blockPos),
+            (buf, value) -> buf.writeBlockPos(value.blockPos()),
             (buf) -> new MobSpawnerData(buf.readBlockPos())
     );
 }

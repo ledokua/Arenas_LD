@@ -6,7 +6,7 @@ import net.minecraft.network.codec.StreamCodec;
 
 public record BossSpawnerData(BlockPos blockPos) {
     public static final StreamCodec<FriendlyByteBuf, BossSpawnerData> CODEC = StreamCodec.of(
-            (buf, value) -> buf.writeBlockPos(value.blockPos),
+            (buf, value) -> buf.writeBlockPos(value.blockPos()),
             (buf) -> new BossSpawnerData(buf.readBlockPos())
     );
 }

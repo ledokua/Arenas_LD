@@ -1,35 +1,34 @@
 package net.ledok.arenas_ld.screen;
 
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerType;
 import net.ledok.arenas_ld.ArenasLdMod;
-import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.MenuType;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
+import net.neoforged.neoforge.registries.DeferredRegister;
+
+import java.util.function.Supplier;
 
 
 public class ModScreenHandlers {
+    public static final DeferredRegister<MenuType<?>> MENU_TYPES = DeferredRegister.create(BuiltInRegistries.MENU, ArenasLdMod.MOD_ID);
 
-    public static final MenuType<BossSpawnerScreenHandler> BOSS_SPAWNER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":boss_spawner"),
-                    new ExtendedScreenHandlerType<>(BossSpawnerScreenHandler::new, BossSpawnerData.CODEC));
+    public static final Supplier<MenuType<BossSpawnerScreenHandler>> BOSS_SPAWNER_SCREEN_HANDLER =
+            MENU_TYPES.register("boss_spawner", () -> IMenuTypeExtension.create((windowId, inv, data) -> new BossSpawnerScreenHandler(windowId, inv, BossSpawnerData.CODEC.decode(data))));
 
-    public static final MenuType<DungeonBossSpawnerScreenHandler> DUNGEON_BOSS_SPAWNER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_boss_spawner"),
-                    new ExtendedScreenHandlerType<>(DungeonBossSpawnerScreenHandler::new, BossSpawnerData.CODEC));
+    public static final Supplier<MenuType<DungeonBossSpawnerScreenHandler>> DUNGEON_BOSS_SPAWNER_SCREEN_HANDLER =
+            MENU_TYPES.register("dungeon_boss_spawner", () -> IMenuTypeExtension.create((windowId, inv, data) -> new DungeonBossSpawnerScreenHandler(windowId, inv, BossSpawnerData.CODEC.decode(data))));
 
-    public static final MenuType<MobSpawnerScreenHandler> MOB_SPAWNER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_spawner"),
-                    new ExtendedScreenHandlerType<>(MobSpawnerScreenHandler::new, MobSpawnerData.CODEC));
+    public static final Supplier<MenuType<MobSpawnerScreenHandler>> MOB_SPAWNER_SCREEN_HANDLER =
+            MENU_TYPES.register("mob_spawner", () -> IMenuTypeExtension.create((windowId, inv, data) -> new MobSpawnerScreenHandler(windowId, inv, MobSpawnerData.CODEC.decode(data))));
 
-    public static final MenuType<MobAttributesScreenHandler> MOB_ATTRIBUTES_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_attributes"),
-                    new ExtendedScreenHandlerType<>(MobAttributesScreenHandler::new, MobAttributesData.STREAM_CODEC));
+    public static final Supplier<MenuType<MobAttributesScreenHandler>> MOB_ATTRIBUTES_SCREEN_HANDLER =
+            MENU_TYPES.register("mob_attributes", () -> IMenuTypeExtension.create((windowId, inv, data) -> new MobAttributesScreenHandler(windowId, inv, MobAttributesData.STREAM_CODEC.decode(data))));
 
-    public static final MenuType<EquipmentScreenHandler> EQUIPMENT_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":equipment"),
-                    new ExtendedScreenHandlerType<>(EquipmentScreenHandler::new, EquipmentScreenData.STREAM_CODEC));
+    public static final Supplier<MenuType<EquipmentScreenHandler>> EQUIPMENT_SCREEN_HANDLER =
+            MENU_TYPES.register("equipment", () -> IMenuTypeExtension.create((windowId, inv, data) -> new EquipmentScreenHandler(windowId, inv, EquipmentScreenData.STREAM_CODEC.decode(data))));
 
-    public static void initialize() {
+    public static void initialize(IEventBus modEventBus) {
+        MENU_TYPES.register(modEventBus);
     }
 }
