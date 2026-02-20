@@ -70,10 +70,11 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     public int regeneration = 0;
     public int skillExperiencePerWin = 100;
     public String groupId = "";
+    public String instanceId = "";
     
     private final List<AttributeData> attributes = new ArrayList<>();
     private EquipmentData equipment = new EquipmentData();
-    private final List<BlockPos> linkedSpawners = new ArrayList<>();
+    private final List<BlockPos> linkedSpawnerOffsets = new ArrayList<>();
 
     // --- State Machine Fields ---
     private boolean isBattleActive = false;
@@ -143,21 +144,26 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     @Override
     public void addLinkedSpawner(BlockPos pos) {
-        if (!linkedSpawners.contains(pos)) {
-            linkedSpawners.add(pos);
+        BlockPos offset = pos.subtract(this.worldPosition);
+        if (!linkedSpawnerOffsets.contains(offset)) {
+            linkedSpawnerOffsets.add(offset);
             setChanged();
         }
     }
 
     @Override
     public void clearLinkedSpawners() {
-        linkedSpawners.clear();
+        linkedSpawnerOffsets.clear();
         setChanged();
     }
 
     @Override
     public List<BlockPos> getLinkedSpawners() {
-        return linkedSpawners;
+        List<BlockPos> absolutes = new ArrayList<>();
+        for (BlockPos offset : linkedSpawnerOffsets) {
+            absolutes.add(this.worldPosition.offset(offset));
+        }
+        return absolutes;
     }
 
     @Override
@@ -171,10 +177,35 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
         
         if (be.firstTick) {
+            // Auto-Configuration Logic
+            if (be.instanceId.isEmpty()) {
+                be.instanceId = UUID.randomUUID().toString();
+                be.setChanged();
+                
+                // Propagate to linked spawners
+                for (BlockPos linkedPos : be.getLinkedSpawners()) {
+                    if (world.isLoaded(linkedPos)) {
+                        BlockEntity linkedBe = world.getBlockEntity(linkedPos);
+                        if (linkedBe instanceof MobSpawnerBlockEntity mobSpawner) {
+                            mobSpawner.instanceId = be.instanceId;
+                            mobSpawner.setChanged();
+                            // Re-register with new instance ID
+                            ArenasLdMod.PHASE_BLOCK_MANAGER.unregisterSpawner(mobSpawner);
+                            ArenasLdMod.PHASE_BLOCK_MANAGER.registerSpawner(mobSpawner);
+                        }
+                    }
+                }
+                
+                // Claim orphan Phase Blocks
+                if (!be.groupId.isEmpty()) {
+                    ArenasLdMod.PHASE_BLOCK_MANAGER.claimOrphans(serverLevel, be.groupId, be.instanceId);
+                }
+            }
+
             ArenasLdMod.DUNGEON_BOSS_MANAGER.registerSpawner(be);
             
             // Re-link spawners on first tick
-            for (BlockPos linkedPos : be.linkedSpawners) {
+            for (BlockPos linkedPos : be.getLinkedSpawners()) {
                 if (world.isLoaded(linkedPos)) {
                     BlockEntity linkedBe = world.getBlockEntity(linkedPos);
                     // Just ensuring the chunk is loaded and we can access it if needed
@@ -247,11 +278,11 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             if (respawnCooldown == 0) {
                 spawnEnterPortal(world);
                 if (!this.groupId.isEmpty()) {
-                    ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, false); // Unsolid when ready
+                    ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(ArenasLdMod.PHASE_BLOCK_MANAGER.getEffectiveGroup(this.instanceId, this.groupId), false); // Unsolid when ready
                 }
                 
                 // Trigger linked spawners
-                for (BlockPos linkedPos : linkedSpawners) {
+                for (BlockPos linkedPos : getLinkedSpawners()) {
                     if (world.isLoaded(linkedPos)) {
                         BlockEntity be = world.getBlockEntity(linkedPos);
                         if (be instanceof LinkableSpawner linkedSpawner) {
@@ -320,7 +351,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         
         // Phase Blocks become Solid
         if (!this.groupId.isEmpty()) {
-            ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, true);
+            ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(ArenasLdMod.PHASE_BLOCK_MANAGER.getEffectiveGroup(this.instanceId, this.groupId), true);
         }
 
         Optional<EntityType<?>> entityTypeOpt = EntityType.byString(this.mobId);
@@ -447,7 +478,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         
         // Phase Blocks become Unsolid
         if (!this.groupId.isEmpty()) {
-            ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, false);
+            ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(ArenasLdMod.PHASE_BLOCK_MANAGER.getEffectiveGroup(this.instanceId, this.groupId), false);
         }
         
         removeEnterPortal(world);
@@ -502,7 +533,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         
         // Phase Blocks become Unsolid (reset)
         if (!this.groupId.isEmpty()) {
-            ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, false);
+            ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(ArenasLdMod.PHASE_BLOCK_MANAGER.getEffectiveGroup(this.instanceId, this.groupId), false);
         }
         
         ArenasLdMod.LOGGER.info("Spawner at {} reset after battle loss.", worldPosition);
@@ -561,6 +592,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         nbt.putBoolean("IsBattleActive", isBattleActive);
         nbt.putInt("RespawnCooldown", respawnCooldown);
         nbt.putString("GroupId", groupId);
+        nbt.putString("InstanceId", instanceId);
         if (activeBossUuid != null) nbt.putUUID("ActiveBossUuid", activeBossUuid);
         if (bossDimension != null) nbt.putString("BossDimension", bossDimension.location().toString());
         nbt.putInt("InternalDungeonCloseTimer", internalDungeonCloseTimer);
@@ -580,11 +612,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         }
         nbt.put("TrackedPlayers", trackedList);
         
-        ListTag linkedList = new ListTag();
-        for (BlockPos pos : linkedSpawners) {
-            linkedList.add(NbtUtils.writeBlockPos(pos));
-        }
-        nbt.putLongArray("LinkedSpawners", linkedSpawners.stream().mapToLong(BlockPos::asLong).toArray());
+        nbt.putLongArray("LinkedSpawnerOffsets", linkedSpawnerOffsets.stream().mapToLong(BlockPos::asLong).toArray());
     }
 
     @Override
@@ -607,6 +635,9 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         isBattleActive = nbt.getBoolean("IsBattleActive");
         respawnCooldown = nbt.getInt("RespawnCooldown");
         groupId = nbt.getString("GroupId");
+        if (nbt.contains("InstanceId")) {
+            instanceId = nbt.getString("InstanceId");
+        }
         if (nbt.hasUUID("ActiveBossUuid")) activeBossUuid = nbt.getUUID("ActiveBossUuid");
         if (nbt.contains("BossDimension")) {
             bossDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("BossDimension")));
@@ -635,18 +666,27 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             }
         }
         
-        linkedSpawners.clear();
-        if (nbt.contains("LinkedSpawners")) {
-           if (nbt.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
+        linkedSpawnerOffsets.clear();
+        if (nbt.contains("LinkedSpawnerOffsets")) {
+            long[] array = nbt.getLongArray("LinkedSpawnerOffsets");
+            for (long l : array) {
+                linkedSpawnerOffsets.add(BlockPos.of(l));
+            }
+        } else if (nbt.contains("LinkedSpawners")) {
+            List<BlockPos> absolutes = new ArrayList<>();
+            if (nbt.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
                 long[] array = nbt.getLongArray("LinkedSpawners");
                 for (long l : array) {
-                    linkedSpawners.add(BlockPos.of(l));
+                    absolutes.add(BlockPos.of(l));
                 }
             } else if (nbt.contains("LinkedSpawners", Tag.TAG_LIST)) {
-            ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
-            for (Tag tag : linkedList) {
-                NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawners::add);
+                ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
+                for (Tag tag : linkedList) {
+                    NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(absolutes::add);
                 }
+            }
+            for (BlockPos abs : absolutes) {
+                linkedSpawnerOffsets.add(abs.subtract(this.worldPosition));
             }
         }
     }

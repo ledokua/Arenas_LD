@@ -8,6 +8,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
@@ -24,18 +25,27 @@ public class PhaseBlockManager {
     private final Map<String, Set<BlockPos>> mobSpawnersByGroup = new ConcurrentHashMap<>();
     private final Map<BlockPos, Boolean> spawnerWinStatus = new ConcurrentHashMap<>();
 
+    public String getEffectiveGroup(String instanceId, String templateGroupId) {
+        if (instanceId == null || instanceId.isEmpty()) {
+            return templateGroupId;
+        }
+        return instanceId + ":" + templateGroupId;
+    }
+
     public void register(PhaseBlockEntity be) {
         if (be.getLevel() == null || be.getLevel().isClientSide()) return;
         String groupId = be.getGroupId();
         if (groupId.isEmpty()) {
             return;
         }
+        String effectiveGroup = getEffectiveGroup(be.getInstanceId(), groupId);
+        
         BlockPos pos = be.getBlockPos();
         ResourceKey<Level> worldKey = be.getLevel().dimension();
-        groupPositions.computeIfAbsent(groupId, k -> new ArrayList<>()).add(pos);
-        groupWorld.put(groupId, worldKey);
-        if (!groupSolidState.containsKey(groupId)) {
-            groupSolidState.put(groupId, be.getBlockState().getValue(PhaseBlock.SOLID));
+        groupPositions.computeIfAbsent(effectiveGroup, k -> new ArrayList<>()).add(pos);
+        groupWorld.put(effectiveGroup, worldKey);
+        if (!groupSolidState.containsKey(effectiveGroup)) {
+            groupSolidState.put(effectiveGroup, be.getBlockState().getValue(PhaseBlock.SOLID));
         }
     }
 
@@ -45,14 +55,16 @@ public class PhaseBlockManager {
         if (groupId.isEmpty()) {
             return;
         }
+        String effectiveGroup = getEffectiveGroup(be.getInstanceId(), groupId);
+
         BlockPos pos = be.getBlockPos();
-        if (groupPositions.containsKey(groupId)) {
-            List<BlockPos> positions = groupPositions.get(groupId);
+        if (groupPositions.containsKey(effectiveGroup)) {
+            List<BlockPos> positions = groupPositions.get(effectiveGroup);
             positions.remove(pos);
             if (positions.isEmpty()) {
-                groupPositions.remove(groupId);
-                groupSolidState.remove(groupId);
-                groupWorld.remove(groupId);
+                groupPositions.remove(effectiveGroup);
+                groupSolidState.remove(effectiveGroup);
+                groupWorld.remove(effectiveGroup);
             }
         }
     }
@@ -63,11 +75,14 @@ public class PhaseBlockManager {
         if (groupId.isEmpty()) {
             return;
         }
+        
+        String effectiveGroup = getEffectiveGroup(be.getInstanceId(), groupId);
+
         BlockPos pos = be.getBlockPos();
-        mobSpawnersByGroup.computeIfAbsent(groupId, k -> ConcurrentHashMap.newKeySet()).add(pos);
+        mobSpawnersByGroup.computeIfAbsent(effectiveGroup, k -> ConcurrentHashMap.newKeySet()).add(pos);
         spawnerWinStatus.put(pos, false);
-        groupWorld.putIfAbsent(groupId, be.getLevel().dimension());
-        setGroupSolid(groupId, true);
+        groupWorld.putIfAbsent(effectiveGroup, be.getLevel().dimension());
+        setGroupSolid(effectiveGroup, true);
     }
 
     public void unregisterSpawner(MobSpawnerBlockEntity be) {
@@ -76,43 +91,72 @@ public class PhaseBlockManager {
         if (groupId.isEmpty()) {
             return;
         }
+        
+        String effectiveGroup = getEffectiveGroup(be.getInstanceId(), groupId);
+
         BlockPos pos = be.getBlockPos();
         spawnerWinStatus.remove(pos);
-        if (mobSpawnersByGroup.containsKey(groupId)) {
-            Set<BlockPos> spawners = mobSpawnersByGroup.get(groupId);
+        if (mobSpawnersByGroup.containsKey(effectiveGroup)) {
+            Set<BlockPos> spawners = mobSpawnersByGroup.get(effectiveGroup);
             spawners.remove(pos);
             if (spawners.isEmpty()) {
-                mobSpawnersByGroup.remove(groupId);
-                if (!groupPositions.containsKey(groupId)) {
-                    groupSolidState.remove(groupId);
-                    groupWorld.remove(groupId);
+                mobSpawnersByGroup.remove(effectiveGroup);
+                if (!groupPositions.containsKey(effectiveGroup)) {
+                    groupSolidState.remove(effectiveGroup);
+                    groupWorld.remove(effectiveGroup);
                 }
             }
         }
     }
 
-    public void onSpawnerBattleWon(String groupId, BlockPos spawnerPos) {
+    public void onSpawnerBattleWon(String groupId, String instanceId, BlockPos spawnerPos) {
         if (groupId == null || groupId.isEmpty()) return;
+        String effectiveGroup = getEffectiveGroup(instanceId, groupId);
+        
         spawnerWinStatus.put(spawnerPos, true);
 
-        Set<BlockPos> spawners = mobSpawnersByGroup.get(groupId);
+        Set<BlockPos> spawners = mobSpawnersByGroup.get(effectiveGroup);
         if (spawners != null) {
             boolean allWon = spawners.stream().allMatch(pos -> spawnerWinStatus.getOrDefault(pos, false));
             if (allWon) {
-                setGroupSolid(groupId, false);
+                setGroupSolid(effectiveGroup, false);
             }
         }
     }
 
-    public void onSpawnerReset(String groupId, BlockPos spawnerPos) {
+    public void onSpawnerReset(String groupId, String instanceId, BlockPos spawnerPos) {
         if (groupId == null || groupId.isEmpty()) return;
+        String effectiveGroup = getEffectiveGroup(instanceId, groupId);
+        
         spawnerWinStatus.put(spawnerPos, false);
-        setGroupSolid(groupId, true);
+        setGroupSolid(effectiveGroup, true);
     }
 
-    public void setGroupSolid(String groupId, boolean solid) {
-        if (groupId == null || groupId.isEmpty()) return;
-        groupSolidState.put(groupId, solid);
+    public void setGroupSolid(String effectiveGroup, boolean solid) {
+        if (effectiveGroup == null || effectiveGroup.isEmpty()) return;
+        groupSolidState.put(effectiveGroup, solid);
+    }
+
+    public void claimOrphans(ServerLevel world, String groupId, String instanceId) {
+        // This is a heuristic method. It finds Phase Blocks that have the same groupId but no instanceId
+        // and assigns them the new instanceId.
+        // Since we don't track orphans globally, we rely on the fact that they are registered with empty instanceId.
+        
+        String orphanKey = getEffectiveGroup("", groupId);
+        if (groupPositions.containsKey(orphanKey)) {
+            List<BlockPos> orphans = new ArrayList<>(groupPositions.get(orphanKey));
+            for (BlockPos pos : orphans) {
+                if (world.isLoaded(pos)) {
+                    BlockEntity be = world.getBlockEntity(pos);
+                    if (be instanceof PhaseBlockEntity phaseBlock) {
+                        // Double check it's the right world and group
+                        if (phaseBlock.getGroupId().equals(groupId) && (phaseBlock.getInstanceId() == null || phaseBlock.getInstanceId().isEmpty())) {
+                            phaseBlock.setInstanceId(instanceId);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     public void start() {

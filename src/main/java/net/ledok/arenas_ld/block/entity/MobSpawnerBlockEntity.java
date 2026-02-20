@@ -65,9 +65,10 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
     public int mobCount = 1;
     public int mobSpread = 5;
     public String groupId = "";
+    public String instanceId = "";
     private final List<AttributeData> attributes = new ArrayList<>();
     private EquipmentData equipment = new EquipmentData();
-    private final List<BlockPos> linkedSpawners = new ArrayList<>();
+    private final List<BlockPos> linkedSpawnerOffsets = new ArrayList<>();
 
     // --- State Machine Fields ---
     private boolean isBattleActive = false;
@@ -112,21 +113,26 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
 
     @Override
     public void addLinkedSpawner(BlockPos pos) {
-        if (!linkedSpawners.contains(pos)) {
-            linkedSpawners.add(pos);
+        BlockPos offset = pos.subtract(this.worldPosition);
+        if (!linkedSpawnerOffsets.contains(offset)) {
+            linkedSpawnerOffsets.add(offset);
             setChanged();
         }
     }
 
     @Override
     public void clearLinkedSpawners() {
-        linkedSpawners.clear();
+        linkedSpawnerOffsets.clear();
         setChanged();
     }
 
     @Override
     public List<BlockPos> getLinkedSpawners() {
-        return linkedSpawners;
+        List<BlockPos> absolutes = new ArrayList<>();
+        for (BlockPos offset : linkedSpawnerOffsets) {
+            absolutes.add(this.worldPosition.offset(offset));
+        }
+        return absolutes;
     }
 
     @Override
@@ -142,11 +148,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         if (be.firstTick) {
             ArenasLdMod.PHASE_BLOCK_MANAGER.registerSpawner(be);
             if (be.respawnCooldown > 0) {
-                ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerBattleWon(be.groupId, be.worldPosition);
+                ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerBattleWon(be.groupId, be.instanceId, be.worldPosition);
             }
             
             // Re-link spawners on first tick
-            for (BlockPos linkedPos : be.linkedSpawners) {
+            for (BlockPos linkedPos : be.getLinkedSpawners()) {
                 if (world.isLoaded(linkedPos)) {
                     BlockEntity linkedBe = world.getBlockEntity(linkedPos);
                     // Just ensuring the chunk is loaded and we can access it if needed
@@ -175,10 +181,10 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         if (respawnCooldown > 0) {
             respawnCooldown--;
             if (respawnCooldown == 0) {
-                ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerReset(this.groupId, this.worldPosition);
+                ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerReset(this.groupId, this.instanceId, this.worldPosition);
                 
                 // Trigger linked spawners
-                for (BlockPos linkedPos : linkedSpawners) {
+                for (BlockPos linkedPos : getLinkedSpawners()) {
                     if (world.isLoaded(linkedPos)) {
                         BlockEntity be = world.getBlockEntity(linkedPos);
                         if (be instanceof LinkableSpawner linkedSpawner) {
@@ -243,7 +249,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
             return;
         }
 
-        ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerReset(this.groupId, this.worldPosition);
+        ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerReset(this.groupId, this.instanceId, this.worldPosition);
 
         isBattleActive = true;
         playerDamageDealt.clear();
@@ -348,7 +354,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
 
     private void handleBattleWin(ServerLevel world) {
         ArenasLdMod.LOGGER.info("Mob Spawner won at {}", worldPosition);
-        ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerBattleWon(this.groupId, this.worldPosition);
+        ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerBattleWon(this.groupId, this.instanceId, this.worldPosition);
 
         if (lootTableId != null && !lootTableId.isEmpty()) {
             ResourceLocation lootTableIdentifier = ResourceLocation.tryParse(lootTableId);
@@ -437,6 +443,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         nbt.putInt("MobCount", mobCount);
         nbt.putInt("MobSpread", mobSpread);
         nbt.putString("GroupId", groupId);
+        nbt.putString("InstanceId", instanceId);
         nbt.putBoolean("IsBattleActive", isBattleActive);
         nbt.putInt("RespawnCooldown", respawnCooldown);
 
@@ -455,7 +462,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         nbt.put("Attributes", attributeList);
         nbt.put("Equipment", equipment.toNbt());
         
-        nbt.putLongArray("LinkedSpawners", linkedSpawners.stream().mapToLong(BlockPos::asLong).toArray());
+        nbt.putLongArray("LinkedSpawnerOffsets", linkedSpawnerOffsets.stream().mapToLong(BlockPos::asLong).toArray());
     }
 
     @Override
@@ -473,6 +480,9 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         isBattleActive = nbt.getBoolean("IsBattleActive");
         respawnCooldown = nbt.getInt("RespawnCooldown");
         groupId = nbt.getString("GroupId");
+        if (nbt.contains("InstanceId")) {
+            instanceId = nbt.getString("InstanceId");
+        }
 
         activeMobUuids.clear();
         ListTag mobUuids = nbt.getList("ActiveMobs", CompoundTag.TAG_COMPOUND);
@@ -494,24 +504,37 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
             equipment = EquipmentData.fromNbt(nbt.getCompound("Equipment"));
         }
         
-        linkedSpawners.clear();
-        if (nbt.contains("LinkedSpawners")) {
+        linkedSpawnerOffsets.clear();
+        if (nbt.contains("LinkedSpawnerOffsets")) {
+            long[] array = nbt.getLongArray("LinkedSpawnerOffsets");
+            for (long l : array) {
+                linkedSpawnerOffsets.add(BlockPos.of(l));
+            }
+        } else if (nbt.contains("LinkedSpawners")) {
+            List<BlockPos> absolutes = new ArrayList<>();
             if (nbt.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
                 long[] array = nbt.getLongArray("LinkedSpawners");
                 for (long l : array) {
-                    linkedSpawners.add(BlockPos.of(l));
+                    absolutes.add(BlockPos.of(l));
                 }
             } else if (nbt.contains("LinkedSpawners", Tag.TAG_LIST)) {
                 ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
                 for (Tag tag : linkedList) {
-                    NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawners::add);
+                    NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(absolutes::add);
                 }
+            }
+            for (BlockPos abs : absolutes) {
+                linkedSpawnerOffsets.add(abs.subtract(this.worldPosition));
             }
         }
     }
 
     public String getGroupId() {
         return groupId;
+    }
+
+    public String getInstanceId() {
+        return instanceId;
     }
 
     @Nullable

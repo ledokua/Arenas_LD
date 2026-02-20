@@ -11,6 +11,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 public class PhaseBlockEntity extends BlockEntity {
     private String groupId = "";
+    private String instanceId = "";
     private boolean firstTick = true;
 
     public PhaseBlockEntity(BlockPos pos, BlockState state) {
@@ -36,12 +37,16 @@ public class PhaseBlockEntity extends BlockEntity {
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         this.groupId = tag.getString("groupId");
+        if (tag.contains("instanceId")) {
+            this.instanceId = tag.getString("instanceId");
+        }
     }
 
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putString("groupId", this.groupId);
+        tag.putString("instanceId", this.instanceId);
     }
 
     public String getGroupId() {
@@ -53,6 +58,21 @@ public class PhaseBlockEntity extends BlockEntity {
             ArenasLdMod.PHASE_BLOCK_MANAGER.unregister(this);
         }
         this.groupId = groupId;
+        if (this.level != null && !this.level.isClientSide()) {
+            ArenasLdMod.PHASE_BLOCK_MANAGER.register(this);
+        }
+        setChanged();
+    }
+
+    public String getInstanceId() {
+        return instanceId;
+    }
+
+    public void setInstanceId(String instanceId) {
+        if (this.level != null && !this.level.isClientSide()) {
+            ArenasLdMod.PHASE_BLOCK_MANAGER.unregister(this);
+        }
+        this.instanceId = instanceId;
         if (this.level != null && !this.level.isClientSide()) {
             ArenasLdMod.PHASE_BLOCK_MANAGER.register(this);
         }
