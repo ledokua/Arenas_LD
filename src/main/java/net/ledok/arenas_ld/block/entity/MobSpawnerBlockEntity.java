@@ -456,6 +456,13 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         nbt.put("Equipment", equipment.toNbt());
         
         nbt.putLongArray("LinkedSpawners", linkedSpawners.stream().mapToLong(BlockPos::asLong).toArray());
+
+        ListTag offsets = new ListTag();
+        for (BlockPos pos : linkedSpawners) {
+            BlockPos offset = pos.subtract(this.worldPosition);
+            offsets.add(NbtUtils.writeBlockPos(offset));
+        }
+        nbt.put("LinkedSpawnerOffsets", offsets);
     }
 
     @Override
@@ -495,7 +502,14 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         }
         
         linkedSpawners.clear();
-        if (nbt.contains("LinkedSpawners")) {
+        if (nbt.contains("LinkedSpawnerOffsets")) {
+            ListTag offsets = nbt.getList("LinkedSpawnerOffsets", CompoundTag.TAG_COMPOUND);
+            for (Tag tag : offsets) {
+                NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(offset -> {
+                    linkedSpawners.add(this.worldPosition.offset(offset));
+                });
+            }
+        } else if (nbt.contains("LinkedSpawners")) {
             if (nbt.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
                 long[] array = nbt.getLongArray("LinkedSpawners");
                 for (long l : array) {

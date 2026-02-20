@@ -24,18 +24,27 @@ public class PhaseBlockManager {
     private final Map<String, Set<BlockPos>> mobSpawnersByGroup = new ConcurrentHashMap<>();
     private final Map<BlockPos, Boolean> spawnerWinStatus = new ConcurrentHashMap<>();
 
+    private String getUniqueGroupId(String groupId, BlockPos pos) {
+        long chunkX = pos.getX() >> 9; // 512 blocks
+        long chunkZ = pos.getZ() >> 9;
+        return groupId + "@" + chunkX + "," + chunkZ;
+    }
+
     public void register(PhaseBlockEntity be) {
         if (be.getLevel() == null || be.getLevel().isClientSide()) return;
         String groupId = be.getGroupId();
         if (groupId.isEmpty()) {
             return;
         }
+        
+        String uniqueGroupId = getUniqueGroupId(groupId, be.getBlockPos());
+
         BlockPos pos = be.getBlockPos();
         ResourceKey<Level> worldKey = be.getLevel().dimension();
-        groupPositions.computeIfAbsent(groupId, k -> new ArrayList<>()).add(pos);
-        groupWorld.put(groupId, worldKey);
-        if (!groupSolidState.containsKey(groupId)) {
-            groupSolidState.put(groupId, be.getBlockState().getValue(PhaseBlock.SOLID));
+        groupPositions.computeIfAbsent(uniqueGroupId, k -> new ArrayList<>()).add(pos);
+        groupWorld.put(uniqueGroupId, worldKey);
+        if (!groupSolidState.containsKey(uniqueGroupId)) {
+            groupSolidState.put(uniqueGroupId, be.getBlockState().getValue(PhaseBlock.SOLID));
         }
     }
 
@@ -45,14 +54,17 @@ public class PhaseBlockManager {
         if (groupId.isEmpty()) {
             return;
         }
+        
+        String uniqueGroupId = getUniqueGroupId(groupId, be.getBlockPos());
+
         BlockPos pos = be.getBlockPos();
-        if (groupPositions.containsKey(groupId)) {
-            List<BlockPos> positions = groupPositions.get(groupId);
+        if (groupPositions.containsKey(uniqueGroupId)) {
+            List<BlockPos> positions = groupPositions.get(uniqueGroupId);
             positions.remove(pos);
             if (positions.isEmpty()) {
-                groupPositions.remove(groupId);
-                groupSolidState.remove(groupId);
-                groupWorld.remove(groupId);
+                groupPositions.remove(uniqueGroupId);
+                groupSolidState.remove(uniqueGroupId);
+                groupWorld.remove(uniqueGroupId);
             }
         }
     }
@@ -63,11 +75,14 @@ public class PhaseBlockManager {
         if (groupId.isEmpty()) {
             return;
         }
+        
+        String uniqueGroupId = getUniqueGroupId(groupId, be.getBlockPos());
+
         BlockPos pos = be.getBlockPos();
-        mobSpawnersByGroup.computeIfAbsent(groupId, k -> ConcurrentHashMap.newKeySet()).add(pos);
+        mobSpawnersByGroup.computeIfAbsent(uniqueGroupId, k -> ConcurrentHashMap.newKeySet()).add(pos);
         spawnerWinStatus.put(pos, false);
-        groupWorld.putIfAbsent(groupId, be.getLevel().dimension());
-        setGroupSolid(groupId, true);
+        groupWorld.putIfAbsent(uniqueGroupId, be.getLevel().dimension());
+        setGroupSolid(uniqueGroupId, true);
     }
 
     public void unregisterSpawner(MobSpawnerBlockEntity be) {
@@ -76,16 +91,19 @@ public class PhaseBlockManager {
         if (groupId.isEmpty()) {
             return;
         }
+        
+        String uniqueGroupId = getUniqueGroupId(groupId, be.getBlockPos());
+
         BlockPos pos = be.getBlockPos();
         spawnerWinStatus.remove(pos);
-        if (mobSpawnersByGroup.containsKey(groupId)) {
-            Set<BlockPos> spawners = mobSpawnersByGroup.get(groupId);
+        if (mobSpawnersByGroup.containsKey(uniqueGroupId)) {
+            Set<BlockPos> spawners = mobSpawnersByGroup.get(uniqueGroupId);
             spawners.remove(pos);
             if (spawners.isEmpty()) {
-                mobSpawnersByGroup.remove(groupId);
-                if (!groupPositions.containsKey(groupId)) {
-                    groupSolidState.remove(groupId);
-                    groupWorld.remove(groupId);
+                mobSpawnersByGroup.remove(uniqueGroupId);
+                if (!groupPositions.containsKey(uniqueGroupId)) {
+                    groupSolidState.remove(uniqueGroupId);
+                    groupWorld.remove(uniqueGroupId);
                 }
             }
         }
@@ -93,21 +111,27 @@ public class PhaseBlockManager {
 
     public void onSpawnerBattleWon(String groupId, BlockPos spawnerPos) {
         if (groupId == null || groupId.isEmpty()) return;
+        
+        String uniqueGroupId = getUniqueGroupId(groupId, spawnerPos);
+
         spawnerWinStatus.put(spawnerPos, true);
 
-        Set<BlockPos> spawners = mobSpawnersByGroup.get(groupId);
+        Set<BlockPos> spawners = mobSpawnersByGroup.get(uniqueGroupId);
         if (spawners != null) {
             boolean allWon = spawners.stream().allMatch(pos -> spawnerWinStatus.getOrDefault(pos, false));
             if (allWon) {
-                setGroupSolid(groupId, false);
+                setGroupSolid(uniqueGroupId, false);
             }
         }
     }
 
     public void onSpawnerReset(String groupId, BlockPos spawnerPos) {
         if (groupId == null || groupId.isEmpty()) return;
+        
+        String uniqueGroupId = getUniqueGroupId(groupId, spawnerPos);
+
         spawnerWinStatus.put(spawnerPos, false);
-        setGroupSolid(groupId, true);
+        setGroupSolid(uniqueGroupId, true);
     }
 
     public void setGroupSolid(String groupId, boolean solid) {
@@ -127,9 +151,11 @@ public class PhaseBlockManager {
                 ServerLevel world = server.getLevel(groupWorld.get(groupId));
                 if (world != null) {
                     for (BlockPos pos : new ArrayList<>(groupPositions.get(groupId))) {
-                        BlockState currentState = world.getBlockState(pos);
-                        if (currentState.getBlock() instanceof PhaseBlock && currentState.getValue(PhaseBlock.SOLID) != solid) {
-                            world.setBlock(pos, currentState.setValue(PhaseBlock.SOLID, solid), 3);
+                        if (world.isLoaded(pos)) {
+                            BlockState currentState = world.getBlockState(pos);
+                            if (currentState.getBlock() instanceof PhaseBlock && currentState.getValue(PhaseBlock.SOLID) != solid) {
+                                world.setBlock(pos, currentState.setValue(PhaseBlock.SOLID, solid), 3);
+                            }
                         }
                     }
                 }

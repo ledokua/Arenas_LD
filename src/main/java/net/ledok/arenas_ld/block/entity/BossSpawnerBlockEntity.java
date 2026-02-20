@@ -456,6 +456,13 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             linkedList.add(NbtUtils.writeBlockPos(pos));
         }
         nbt.putLongArray("LinkedSpawners", linkedSpawners.stream().mapToLong(BlockPos::asLong).toArray());
+
+        ListTag offsets = new ListTag();
+        for (BlockPos pos : linkedSpawners) {
+            BlockPos offset = pos.subtract(this.worldPosition);
+            offsets.add(NbtUtils.writeBlockPos(offset));
+        }
+        nbt.put("LinkedSpawnerOffsets", offsets);
     }
 
     @Override
@@ -498,15 +505,23 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         }
         
         linkedSpawners.clear();
-        if (nbt.contains("LinkedSpawners")) {
+        if (nbt.contains("LinkedSpawnerOffsets")) {
+            ListTag offsets = nbt.getList("LinkedSpawnerOffsets", CompoundTag.TAG_COMPOUND);
+            for (Tag tag : offsets) {
+                NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(offset -> {
+                    linkedSpawners.add(this.worldPosition.offset(offset));
+                });
+            }
+        } else if (nbt.contains("LinkedSpawners")) {
             if (nbt.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
                 long[] array = nbt.getLongArray("LinkedSpawners");
                 for (long l : array) {
                     linkedSpawners.add(BlockPos.of(l));
                 }
-            ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
-            for (Tag tag : linkedList) {
-                NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawners::add);
+            } else if (nbt.contains("LinkedSpawners", Tag.TAG_LIST)) {
+                ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
+                for (Tag tag : linkedList) {
+                    NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawners::add);
                 }
             }
         }
