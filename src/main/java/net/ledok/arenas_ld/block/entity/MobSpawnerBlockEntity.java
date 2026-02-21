@@ -56,15 +56,15 @@ import java.util.stream.Collectors;
 public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<MobSpawnerData>, AttributeProvider, EquipmentProvider, LinkableSpawner {
 
     // --- Configuration Fields ---
-    public String mobId = "minecraft:zombie";
+    public String mobId = "minecraft:husk";
     public int respawnTime = 1200;
     public String lootTableId = "";
-    public int triggerRadius = 16;
-    public int battleRadius = 64;
+    public int triggerRadius = 6;
+    public int battleRadius = 32;
     public int regeneration = 0;
     public int skillExperiencePerWin = 0;
     public int mobCount = 1;
-    public int mobSpread = 5;
+    public int mobSpread = 0;
     public String groupId = "";
     private final List<AttributeData> attributes = new ArrayList<>();
     private EquipmentData equipment = new EquipmentData();
@@ -83,9 +83,17 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         super(BlockEntitiesRegistry.MOB_SPAWNER_BLOCK_ENTITY, pos, state);
         // Default attributes
         if (attributes.isEmpty()) {
-            attributes.add(new AttributeData("minecraft:generic.max_health", 20.0));
+            attributes.add(new AttributeData("minecraft:generic.max_health", 0.02));
             attributes.add(new AttributeData("minecraft:generic.attack_damage", 3.0));
         }
+    }
+
+    public boolean isBattleActive() {
+        return isBattleActive;
+    }
+
+    public int getRespawnCooldown() {
+        return respawnCooldown;
     }
 
     @Override
@@ -141,20 +149,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
 
         if (be.firstTick) {
-            ArenasLdMod.PHASE_BLOCK_MANAGER.registerSpawner(be);
-            if (be.respawnCooldown > 0) {
-                ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerBattleWon(be.groupId, be.worldPosition);
-            }
-            
-            // Re-link spawners on first tick
-            for (BlockPos relativePos : be.linkedSpawners) {
-                BlockPos absolutePos = pos.offset(relativePos);
-                if (world.isLoaded(absolutePos)) {
-                    BlockEntity linkedBe = world.getBlockEntity(absolutePos);
-                    // Just ensuring the chunk is loaded and we can access it if needed
-                }
-            }
-            
+            // The old PhaseBlockManager logic is no longer needed here
             be.firstTick = false;
         }
 
@@ -167,9 +162,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
 
     @Override
     public void setRemoved() {
-        if (this.level != null && !this.level.isClientSide()) {
-            ArenasLdMod.PHASE_BLOCK_MANAGER.unregisterSpawner(this);
-        }
+        // The old PhaseBlockManager logic is no longer needed here
         super.setRemoved();
     }
 
@@ -177,8 +170,6 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         if (respawnCooldown > 0) {
             respawnCooldown--;
             if (respawnCooldown == 0) {
-                ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerReset(this.groupId, this.worldPosition);
-                
                 // Trigger linked spawners
                 for (BlockPos relativePos : linkedSpawners) {
                     BlockPos absolutePos = pos.offset(relativePos);
@@ -245,8 +236,6 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
             ArenasLdMod.LOGGER.error("Invalid mob ID in arena spawner at {}: {}", this.worldPosition, this.mobId);
             return;
         }
-
-        ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerReset(this.groupId, this.worldPosition);
 
         isBattleActive = true;
         playerDamageDealt.clear();
@@ -351,7 +340,6 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
 
     private void handleBattleWin(ServerLevel world) {
         ArenasLdMod.LOGGER.info("Mob Spawner won at {}", worldPosition);
-        ArenasLdMod.PHASE_BLOCK_MANAGER.onSpawnerBattleWon(this.groupId, this.worldPosition);
 
         if (lootTableId != null && !lootTableId.isEmpty()) {
             ResourceLocation lootTableIdentifier = ResourceLocation.tryParse(lootTableId);

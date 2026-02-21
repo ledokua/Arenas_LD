@@ -171,8 +171,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
         
         if (be.firstTick) {
-            ArenasLdMod.DUNGEON_BOSS_MANAGER.registerSpawner(be);
-            
             // Re-link spawners on first tick
             for (BlockPos relativePos : be.linkedSpawners) {
                 BlockPos absolutePos = pos.offset(relativePos);
@@ -229,7 +227,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     
     @Override
     public void setRemoved() {
-        ArenasLdMod.DUNGEON_BOSS_MANAGER.unregisterSpawner(this);
         super.setRemoved();
     }
     
@@ -247,9 +244,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             respawnCooldown--;
             if (respawnCooldown == 0) {
                 spawnEnterPortal(world);
-                if (!this.groupId.isEmpty()) {
-                    ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, false); // Unsolid when ready
-                }
                 
                 // Trigger linked spawners
                 for (BlockPos relativePos : linkedSpawners) {
@@ -320,11 +314,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     private void startBattle(ServerLevel world, BlockPos spawnPos, ServerPlayer triggeringPlayer) {
         this.enterPortalRemovalTimer = 100; // Remove portal shortly after start
         
-        // Phase Blocks become Solid
-        if (!this.groupId.isEmpty()) {
-            ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, true);
-        }
-
         Optional<EntityType<?>> entityTypeOpt = EntityType.byString(this.mobId);
 
         if (entityTypeOpt.isEmpty()) {
@@ -447,11 +436,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         this.dungeonCloseBossBar.setVisible(true);
         updateBossBarPlayers(world);
         
-        // Phase Blocks become Unsolid
-        if (!this.groupId.isEmpty()) {
-            ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, false);
-        }
-        
         removeEnterPortal(world);
         this.setChanged();
         world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
@@ -501,11 +485,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
         // No cooldown on loss, reset immediately
         resetSpawner(world, false);
-        
-        // Phase Blocks become Unsolid (reset)
-        if (!this.groupId.isEmpty()) {
-            ArenasLdMod.PHASE_BLOCK_MANAGER.setGroupSolid(this.groupId, false);
-        }
         
         ArenasLdMod.LOGGER.info("Spawner at {} reset after battle loss.", worldPosition);
     }
