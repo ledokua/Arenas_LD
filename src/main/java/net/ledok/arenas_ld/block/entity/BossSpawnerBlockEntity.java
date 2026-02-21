@@ -149,9 +149,10 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         
         if (be.firstTick) {
             // Re-link spawners on first tick
-            for (BlockPos linkedPos : be.linkedSpawners) {
-                if (world.isLoaded(linkedPos)) {
-                    BlockEntity linkedBe = world.getBlockEntity(linkedPos);
+            for (BlockPos relativePos : be.linkedSpawners) {
+                BlockPos absolutePos = pos.offset(relativePos);
+                if (world.isLoaded(absolutePos)) {
+                    BlockEntity linkedBe = world.getBlockEntity(absolutePos);
                     // Just ensuring the chunk is loaded and we can access it if needed
                 }
             }
@@ -172,9 +173,10 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
                 spawnEnterPortal(world);
                 
                 // Trigger linked spawners
-                for (BlockPos linkedPos : linkedSpawners) {
-                    if (world.isLoaded(linkedPos)) {
-                        BlockEntity be = world.getBlockEntity(linkedPos);
+                for (BlockPos relativePos : linkedSpawners) {
+                    BlockPos absolutePos = pos.offset(relativePos);
+                    if (world.isLoaded(absolutePos)) {
+                        BlockEntity be = world.getBlockEntity(absolutePos);
                         if (be instanceof LinkableSpawner linkedSpawner) {
                             linkedSpawner.forceReset();
                         }
@@ -451,10 +453,6 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         nbt.put("Attributes", attributeList);
         nbt.put("Equipment", equipment.toNbt());
         
-        ListTag linkedList = new ListTag();
-        for (BlockPos pos : linkedSpawners) {
-            linkedList.add(NbtUtils.writeBlockPos(pos));
-        }
         nbt.putLongArray("LinkedSpawners", linkedSpawners.stream().mapToLong(BlockPos::asLong).toArray());
     }
 
@@ -498,16 +496,10 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         }
         
         linkedSpawners.clear();
-        if (nbt.contains("LinkedSpawners")) {
-            if (nbt.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
-                long[] array = nbt.getLongArray("LinkedSpawners");
-                for (long l : array) {
-                    linkedSpawners.add(BlockPos.of(l));
-                }
-            ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
-            for (Tag tag : linkedList) {
-                NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawners::add);
-                }
+        if (nbt.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
+            long[] linkedSpawnersArray = nbt.getLongArray("LinkedSpawners");
+            for (long posLong : linkedSpawnersArray) {
+                linkedSpawners.add(BlockPos.of(posLong));
             }
         }
     }

@@ -161,7 +161,8 @@ public class LinkerItem extends Item {
 
                 BlockEntity mainBe = world.getBlockEntity(mainPos);
                 if (mainBe instanceof LinkableSpawner mainSpawner) {
-                    mainSpawner.addLinkedSpawner(pos);
+                    BlockPos relativePos = pos.subtract(mainPos);
+                    mainSpawner.addLinkedSpawner(relativePos);
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.linked_spawner", pos.toShortString(), mainPos.toShortString()));
                     return InteractionResult.SUCCESS;
                 } else {

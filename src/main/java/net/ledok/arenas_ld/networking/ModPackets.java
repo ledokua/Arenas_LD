@@ -335,8 +335,8 @@ public class ModPackets {
                     stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(newMode, data.mainSpawnerPos()));
                     
                     LinkerItem.Mode mode = LinkerItem.Mode.values()[newMode];
-                    ChatFormatting color = mode == LinkerItem.Mode.SPAWNER_LINKING ? ChatFormatting.BLUE : ChatFormatting.YELLOW;
-                    context.player().sendSystemMessage(Component.literal("Mode: " + mode.getName()).withStyle(color));
+                    // ChatFormatting color = mode == LinkerItem.Mode.SPAWNER_LINKING ? ChatFormatting.BLUE : ChatFormatting.YELLOW;
+                    context.player().sendSystemMessage(Component.translatable("message.arenas_ld.linker.mode_changed", mode.getName()));
                 }
             });
         });
