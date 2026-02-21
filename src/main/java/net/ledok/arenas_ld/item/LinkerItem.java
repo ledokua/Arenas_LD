@@ -33,7 +33,8 @@ public class LinkerItem extends Item {
 
     public enum Mode {
         GROUP_CONFIG("item.arenas_ld.linker.mode.group_config"),
-        SPAWNER_LINKING("item.arenas_ld.linker.mode.spawner_linking");
+        SPAWNER_LINKING("item.arenas_ld.linker.mode.spawner_linking"),
+        STRUCTURE_PREP("item.arenas_ld.linker.mode.structure_prep");
 
         private final String translationKey;
 
@@ -71,6 +72,8 @@ public class LinkerItem extends Item {
             return handleGroupConfig(world, pos, state, player, stack, blockEntity, isShiftDown);
         } else if (currentMode == Mode.SPAWNER_LINKING) {
             return handleSpawnerLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
+        } else if (currentMode == Mode.STRUCTURE_PREP) {
+            return handleStructurePrep(world, pos, player, blockEntity);
         }
 
         return super.useOn(context);
@@ -174,6 +177,23 @@ public class LinkerItem extends Item {
         }
         return InteractionResult.PASS;
     }
+    
+    private InteractionResult handleStructurePrep(Level world, BlockPos pos, Player player, BlockEntity blockEntity) {
+        if (blockEntity instanceof MobSpawnerBlockEntity spawner) {
+            spawner.prepareForStructure();
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.structure_prep_success", pos.toShortString()));
+            return InteractionResult.SUCCESS;
+        } else if (blockEntity instanceof BossSpawnerBlockEntity spawner) {
+            spawner.prepareForStructure();
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.structure_prep_success", pos.toShortString()));
+            return InteractionResult.SUCCESS;
+        } else if (blockEntity instanceof DungeonBossSpawnerBlockEntity spawner) {
+            spawner.prepareForStructure();
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.structure_prep_success", pos.toShortString()));
+            return InteractionResult.SUCCESS;
+        }
+        return InteractionResult.PASS;
+    }
 
     @Override
     public InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand usedHand) {
@@ -189,6 +209,13 @@ public class LinkerItem extends Item {
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.cleared_selection"));
                     return InteractionResultHolder.success(stack);
                 }
+                
+                // Cycle Mode
+                int nextModeIndex = (modeData.mode() + 1) % Mode.values().length;
+                Mode nextMode = Mode.values()[nextModeIndex];
+                stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(nextModeIndex, Optional.empty()));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.mode_changed", nextMode.getName()));
+                return InteractionResultHolder.success(stack);
             }
         }
         return InteractionResultHolder.pass(stack);

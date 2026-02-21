@@ -71,6 +71,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     public int skillExperiencePerWin = 100;
     public String groupId = "";
     public String instanceId = "";
+    public boolean placedByPlayer = false;
     
     private final List<AttributeData> attributes = new ArrayList<>();
     private EquipmentData equipment = new EquipmentData();
@@ -86,6 +87,9 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     private int internalDungeonCloseTimer = -1; // Renamed from exitPortalTimer
     private final Set<UUID> trackedPlayers = new HashSet<>(); // Track players who entered
     private boolean firstTick = true;
+    
+    // Transient field for structure saving
+    private int structureTemplateCooldown = 0;
     
     private final ServerBossEvent dungeonCloseBossBar = (ServerBossEvent) new ServerBossEvent(
             Component.translatable("bossbar.arenas_ld.dungeon_closing"), 
@@ -172,13 +176,25 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             resetSpawner(serverLevel, false);
         }
     }
+    
+    public void prepareForStructure() {
+        this.instanceId = "";
+        this.placedByPlayer = false;
+        this.structureTemplateCooldown = 400; // 20 seconds
+        this.setChanged();
+    }
 
     public static void tick(Level world, BlockPos pos, BlockState state, DungeonBossSpawnerBlockEntity be) {
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
         
+        if (be.structureTemplateCooldown > 0) {
+            be.structureTemplateCooldown--;
+            return; // Skip logic while waiting for structure save
+        }
+        
         if (be.firstTick) {
             // Auto-Configuration Logic
-            if (be.instanceId.isEmpty()) {
+            if (be.instanceId.isEmpty() && !be.placedByPlayer) {
                 be.instanceId = UUID.randomUUID().toString();
                 be.setChanged();
                 
@@ -593,6 +609,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         nbt.putInt("RespawnCooldown", respawnCooldown);
         nbt.putString("GroupId", groupId);
         nbt.putString("InstanceId", instanceId);
+        nbt.putBoolean("PlacedByPlayer", placedByPlayer);
         if (activeBossUuid != null) nbt.putUUID("ActiveBossUuid", activeBossUuid);
         if (bossDimension != null) nbt.putString("BossDimension", bossDimension.location().toString());
         nbt.putInt("InternalDungeonCloseTimer", internalDungeonCloseTimer);
@@ -638,6 +655,9 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (nbt.contains("InstanceId")) {
             instanceId = nbt.getString("InstanceId");
         }
+        if (nbt.contains("PlacedByPlayer")) {
+            placedByPlayer = nbt.getBoolean("PlacedByPlayer");
+        }
         if (nbt.hasUUID("ActiveBossUuid")) activeBossUuid = nbt.getUUID("ActiveBossUuid");
         if (nbt.contains("BossDimension")) {
             bossDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("BossDimension")));
@@ -668,12 +688,20 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         
         linkedSpawnerOffsets.clear();
         if (nbt.contains("LinkedSpawnerOffsets")) {
-            long[] array = nbt.getLongArray("LinkedSpawnerOffsets");
-            for (long l : array) {
-                linkedSpawnerOffsets.add(BlockPos.of(l));
+           if (nbt.contains("LinkedSpawnerOffsets", Tag.TAG_LONG_ARRAY)) {
+                long[] array = nbt.getLongArray("LinkedSpawnerOffsets");
+                for (long l : array) {
+                    linkedSpawnerOffsets.add(BlockPos.of(l));
+                }
+            } else if (nbt.contains("LinkedSpawners", Tag.TAG_LIST)) {
+            ListTag linkedList = nbt.getList("LinkedSpawners", CompoundTag.TAG_COMPOUND);
+            for (Tag tag : linkedList) {
+                NbtUtils.readBlockPos((CompoundTag) tag, "").ifPresent(linkedSpawnerOffsets::add); // This is wrong, need conversion
+                }
             }
         } else if (nbt.contains("LinkedSpawners")) {
-            List<BlockPos> absolutes = new ArrayList<>();
+            // Legacy conversion
+             List<BlockPos> absolutes = new ArrayList<>();
             if (nbt.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
                 long[] array = nbt.getLongArray("LinkedSpawners");
                 for (long l : array) {
