@@ -56,6 +56,7 @@
   "message.arenas_ld.linker.linked_spawner": "Linked spawner at %s to Main Spawner at %s",
   "message.arenas_ld.linker.main_spawner_invalid": "Main Spawner is no longer valid.",
   "message.arenas_ld.linker.cleared_selection": "Cleared Main Spawner selection.",
+  "message.arenas_ld.linker.mode_changed": "Mode changed to: %s",
   "tooltip.arenas_ld.linker.mode": "Mode: %s",
   "tooltip.arenas_ld.linker.main_spawner": "Main Spawner: %s",
   "tooltip.arenas_ld.linker.shift_scroll": "Shift + Scroll to change mode",
