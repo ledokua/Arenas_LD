@@ -49,6 +49,7 @@
 
   "item.arenas_ld.linker.mode.group_config": "Group Configuration",
   "item.arenas_ld.linker.mode.spawner_linking": "Spawner Linking",
+  "item.arenas_ld.linker.mode.phase_block_linking": "Phase Block Linking",
   "message.arenas_ld.linker.copied_group_id": "Copied GroupID: %s",
   "message.arenas_ld.linker.pasted_group_id": "Pasted GroupID: %s",
   "message.arenas_ld.linker.set_main_spawner": "Set Main Spawner at %s",
@@ -57,8 +58,12 @@
   "message.arenas_ld.linker.main_spawner_invalid": "Main Spawner is no longer valid.",
   "message.arenas_ld.linker.cleared_selection": "Cleared Main Spawner selection.",
   "message.arenas_ld.linker.mode_changed": "Mode changed to: %s",
+  "message.arenas_ld.linker.set_main_phase_block": "Set Main Phase Block at %s",
+  "message.arenas_ld.linker.linked_spawner_to_phase_block": "Linked spawner at %s to Main Phase Block at %s",
+  "message.arenas_ld.linker.main_phase_block_invalid": "Main Phase Block is no longer valid.",
   "tooltip.arenas_ld.linker.mode": "Mode: %s",
   "tooltip.arenas_ld.linker.main_spawner": "Main Spawner: %s",
+  "tooltip.arenas_ld.linker.main_phase_block": "Main Phase Block: %s",
   "tooltip.arenas_ld.linker.shift_scroll": "Shift + Scroll to change mode",
 
   "message.arenas_ld.loot_bundle.empty_invalid": "This bundle is empty or invalid.",

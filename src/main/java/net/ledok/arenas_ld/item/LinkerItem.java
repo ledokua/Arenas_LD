@@ -1,9 +1,6 @@
 package net.ledok.arenas_ld.item;
 
-import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
-import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
-import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
-import net.ledok.arenas_ld.block.entity.PhaseBlockEntity;
+import net.ledok.arenas_ld.block.entity.*;
 import net.ledok.arenas_ld.util.LinkableSpawner;
 import net.ledok.arenas_ld.util.LinkerDataComponent;
 import net.ledok.arenas_ld.util.LinkerModeDataComponent;
@@ -33,7 +30,8 @@ public class LinkerItem extends Item {
 
     public enum Mode {
         GROUP_CONFIG("item.arenas_ld.linker.mode.group_config"),
-        SPAWNER_LINKING("item.arenas_ld.linker.mode.spawner_linking");
+        SPAWNER_LINKING("item.arenas_ld.linker.mode.spawner_linking"),
+        PHASE_BLOCK_LINKING("item.arenas_ld.linker.mode.phase_block_linking");
 
         private final String translationKey;
 
@@ -71,6 +69,8 @@ public class LinkerItem extends Item {
             return handleGroupConfig(world, pos, state, player, stack, blockEntity, isShiftDown);
         } else if (currentMode == Mode.SPAWNER_LINKING) {
             return handleSpawnerLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
+        } else if (currentMode == Mode.PHASE_BLOCK_LINKING) {
+            return handlePhaseBlockLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
         }
 
         return super.useOn(context);
@@ -89,20 +89,6 @@ public class LinkerItem extends Item {
                     spawner.groupId = data.groupId();
                     spawner.setChanged();
                     world.sendBlockUpdated(pos, state, state, 3);
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.pasted_group_id", data.groupId()));
-                    return InteractionResult.SUCCESS;
-                }
-            }
-        } else if (blockEntity instanceof PhaseBlockEntity phaseBlock) {
-            if (isShiftDown) {
-                String groupId = phaseBlock.getGroupId();
-                stack.set(LinkerDataComponent.LINKER_DATA, new LinkerDataComponent(groupId));
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
-                return InteractionResult.SUCCESS;
-            } else {
-                LinkerDataComponent data = stack.get(LinkerDataComponent.LINKER_DATA);
-                if (data != null) {
-                    phaseBlock.setGroupId(data.groupId());
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.pasted_group_id", data.groupId()));
                     return InteractionResult.SUCCESS;
                 }
@@ -175,6 +161,41 @@ public class LinkerItem extends Item {
         return InteractionResult.PASS;
     }
 
+    private InteractionResult handlePhaseBlockLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, boolean isShiftDown, LinkerModeDataComponent modeData) {
+        if (!isShiftDown) return InteractionResult.PASS;
+
+        Optional<BlockPos> mainPosOpt = modeData.mainSpawnerPos();
+
+        if (blockEntity instanceof PhaseBlockEntity phaseBlock) {
+            if (mainPosOpt.isEmpty()) {
+                // Set Main Phase Block
+                phaseBlock.setIsMain(true);
+                stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos)));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.set_main_phase_block", pos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
+        }
+
+        if (blockEntity instanceof MobSpawnerBlockEntity || blockEntity instanceof BossSpawnerBlockEntity || blockEntity instanceof DungeonBossSpawnerBlockEntity) {
+            if (mainPosOpt.isPresent()) {
+                BlockPos mainPos = mainPosOpt.get();
+                BlockEntity mainBe = world.getBlockEntity(mainPos);
+                if (mainBe instanceof PhaseBlockEntity mainPhaseBlock) {
+                    BlockPos relativePos = pos.subtract(mainPos);
+                    mainPhaseBlock.addLinkedSpawner(relativePos);
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.linked_spawner_to_phase_block", pos.toShortString(), mainPos.toShortString()));
+                    return InteractionResult.SUCCESS;
+                } else {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_phase_block_invalid"));
+                    stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty()));
+                    return InteractionResult.FAIL;
+                }
+            }
+        }
+
+        return InteractionResult.PASS;
+    }
+
     @Override
     public InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand usedHand) {
         ItemStack stack = player.getItemInHand(usedHand);
@@ -183,8 +204,8 @@ public class LinkerItem extends Item {
             if (hitResult.getType() == BlockHitResult.Type.MISS) {
                 LinkerModeDataComponent modeData = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
                 
-                if (Mode.values()[modeData.mode()] == Mode.SPAWNER_LINKING) {
-                    // Clear Main Spawner selection
+                if (Mode.values()[modeData.mode()] == Mode.SPAWNER_LINKING || Mode.values()[modeData.mode()] == Mode.PHASE_BLOCK_LINKING) {
+                    // Clear Main Spawner/Phase Block selection
                     stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty()));
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.cleared_selection"));
                     return InteractionResultHolder.success(stack);
@@ -204,6 +225,8 @@ public class LinkerItem extends Item {
         
         if (currentMode == Mode.SPAWNER_LINKING && modeData.mainSpawnerPos().isPresent()) {
             tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.main_spawner", modeData.mainSpawnerPos().get().toShortString()).withStyle(net.minecraft.ChatFormatting.GOLD));
+        } else if (currentMode == Mode.PHASE_BLOCK_LINKING && modeData.mainSpawnerPos().isPresent()) {
+            tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.main_phase_block", modeData.mainSpawnerPos().get().toShortString()).withStyle(net.minecraft.ChatFormatting.GOLD));
         }
         
         tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.shift_scroll").withStyle(net.minecraft.ChatFormatting.DARK_GRAY));
