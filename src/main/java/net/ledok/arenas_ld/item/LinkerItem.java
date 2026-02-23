@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.item;
 
 import net.ledok.arenas_ld.block.entity.*;
+import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.LinkableSpawner;
 import net.ledok.arenas_ld.util.LinkerDataComponent;
 import net.ledok.arenas_ld.util.LinkerModeDataComponent;
@@ -60,7 +61,7 @@ public class LinkerItem extends Item {
             return InteractionResult.PASS;
         }
 
-        LinkerModeDataComponent modeData = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
+        LinkerModeDataComponent modeData = stack.getOrDefault(DataComponentRegistry.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
         Mode currentMode = Mode.values()[modeData.mode()];
         boolean isShiftDown = player.isShiftKeyDown();
         BlockEntity blockEntity = world.getBlockEntity(pos);
@@ -80,11 +81,11 @@ public class LinkerItem extends Item {
         if (blockEntity instanceof MobSpawnerBlockEntity spawner) {
             if (isShiftDown) {
                 String groupId = spawner.groupId;
-                stack.set(LinkerDataComponent.LINKER_DATA, new LinkerDataComponent(groupId));
+                stack.set(DataComponentRegistry.LINKER_DATA, new LinkerDataComponent(groupId));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
                 return InteractionResult.SUCCESS;
             } else {
-                LinkerDataComponent data = stack.get(LinkerDataComponent.LINKER_DATA);
+                LinkerDataComponent data = stack.get(DataComponentRegistry.LINKER_DATA);
                 if (data != null) {
                     spawner.groupId = data.groupId();
                     spawner.setChanged();
@@ -96,11 +97,11 @@ public class LinkerItem extends Item {
         } else if (blockEntity instanceof BossSpawnerBlockEntity spawner) {
             if (isShiftDown) {
                 String groupId = spawner.groupId;
-                stack.set(LinkerDataComponent.LINKER_DATA, new LinkerDataComponent(groupId));
+                stack.set(DataComponentRegistry.LINKER_DATA, new LinkerDataComponent(groupId));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
                 return InteractionResult.SUCCESS;
             } else {
-                LinkerDataComponent data = stack.get(LinkerDataComponent.LINKER_DATA);
+                LinkerDataComponent data = stack.get(DataComponentRegistry.LINKER_DATA);
                 if (data != null) {
                     spawner.groupId = data.groupId();
                     spawner.setChanged();
@@ -112,11 +113,11 @@ public class LinkerItem extends Item {
         } else if (blockEntity instanceof DungeonBossSpawnerBlockEntity spawner) {
             if (isShiftDown) {
                 String groupId = spawner.groupId;
-                stack.set(LinkerDataComponent.LINKER_DATA, new LinkerDataComponent(groupId));
+                stack.set(DataComponentRegistry.LINKER_DATA, new LinkerDataComponent(groupId));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
                 return InteractionResult.SUCCESS;
             } else {
-                LinkerDataComponent data = stack.get(LinkerDataComponent.LINKER_DATA);
+                LinkerDataComponent data = stack.get(DataComponentRegistry.LINKER_DATA);
                 if (data != null) {
                     spawner.groupId = data.groupId();
                     spawner.setChanged();
@@ -135,7 +136,7 @@ public class LinkerItem extends Item {
 
             if (mainPosOpt.isEmpty()) {
                 // Set Main Spawner
-                stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos)));
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos)));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.set_main_spawner", pos.toShortString()));
                 return InteractionResult.SUCCESS;
             } else {
@@ -153,7 +154,7 @@ public class LinkerItem extends Item {
                     return InteractionResult.SUCCESS;
                 } else {
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_spawner_invalid"));
-                    stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty()));
+                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty()));
                     return InteractionResult.FAIL;
                 }
             }
@@ -170,7 +171,7 @@ public class LinkerItem extends Item {
             if (mainPosOpt.isEmpty()) {
                 // Set Main Phase Block
                 phaseBlock.setIsMain(true);
-                stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos)));
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos)));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.set_main_phase_block", pos.toShortString()));
                 return InteractionResult.SUCCESS;
             }
@@ -187,7 +188,7 @@ public class LinkerItem extends Item {
                     return InteractionResult.SUCCESS;
                 } else {
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_phase_block_invalid"));
-                    stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty()));
+                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty()));
                     return InteractionResult.FAIL;
                 }
             }
@@ -202,11 +203,11 @@ public class LinkerItem extends Item {
         if (!world.isClientSide && player.isShiftKeyDown()) {
             BlockHitResult hitResult = getPlayerPOVHitResult(world, player, ClipContext.Fluid.NONE);
             if (hitResult.getType() == BlockHitResult.Type.MISS) {
-                LinkerModeDataComponent modeData = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
-                
+                LinkerModeDataComponent modeData = stack.getOrDefault(DataComponentRegistry.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
+
                 if (Mode.values()[modeData.mode()] == Mode.SPAWNER_LINKING || Mode.values()[modeData.mode()] == Mode.PHASE_BLOCK_LINKING) {
                     // Clear Main Spawner/Phase Block selection
-                    stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty()));
+                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty()));
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.cleared_selection"));
                     return InteractionResultHolder.success(stack);
                 }
@@ -218,7 +219,7 @@ public class LinkerItem extends Item {
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
         super.appendHoverText(stack, context, tooltipComponents, tooltipFlag);
-        LinkerModeDataComponent modeData = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
+        LinkerModeDataComponent modeData = stack.getOrDefault(DataComponentRegistry.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
         Mode currentMode = Mode.values()[modeData.mode()];
         
         tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.mode", currentMode.getName()).withStyle(net.minecraft.ChatFormatting.GRAY));

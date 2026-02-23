@@ -1,5 +1,6 @@
 package net.ledok.arenas_ld.item;
 
+import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -35,7 +36,7 @@ public class LootBundleItem extends Item {
             return InteractionResultHolder.success(stack);
         }
 
-        LootBundleDataComponent data = stack.get(LootBundleDataComponent.LOOT_BUNDLE_DATA);
+        LootBundleDataComponent data = stack.get(DataComponentRegistry.LOOT_BUNDLE_DATA);
         if (data == null || data.lootTableId().isEmpty()) {
             player.displayClientMessage(Component.translatable("message.arenas_ld.loot_bundle.empty_invalid"), true);
             return InteractionResultHolder.fail(stack);
@@ -74,7 +75,7 @@ public class LootBundleItem extends Item {
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
         super.appendHoverText(stack, context, tooltipComponents, tooltipFlag);
-        LootBundleDataComponent data = stack.get(LootBundleDataComponent.LOOT_BUNDLE_DATA);
+        LootBundleDataComponent data = stack.get(DataComponentRegistry.LOOT_BUNDLE_DATA);
         if (data != null && !data.lootTableId().isEmpty()) {
             tooltipComponents.add(Component.translatable("tooltip.arenas_ld.loot_bundle.loot_table", data.lootTableId()).withStyle(net.minecraft.ChatFormatting.GRAY));
         }

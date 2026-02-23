@@ -7,12 +7,9 @@ import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
 import net.ledok.arenas_ld.item.LinkerItem;
-import net.ledok.arenas_ld.util.AttributeData;
-import net.ledok.arenas_ld.util.AttributeProvider;
-import net.ledok.arenas_ld.util.EquipmentData;
-import net.ledok.arenas_ld.util.EquipmentProvider;
-import net.ledok.arenas_ld.util.LinkerModeDataComponent;
-import net.minecraft.ChatFormatting;
+import net.ledok.arenas_ld.item.SpawnerConfiguratorItem;
+import net.ledok.arenas_ld.registry.DataComponentRegistry;
+import net.ledok.arenas_ld.util.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -218,6 +215,19 @@ public class ModPackets {
         }
     }
 
+    public record CycleConfiguratorModePayload(boolean forward) implements CustomPacketPayload {
+        public static final CustomPacketPayload.Type<CycleConfiguratorModePayload> TYPE = new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "cycle_configurator_mode"));
+        public static final StreamCodec<FriendlyByteBuf, CycleConfiguratorModePayload> CODEC = StreamCodec.of(
+                (buf, payload) -> buf.writeBoolean(payload.forward()),
+                (buf) -> new CycleConfiguratorModePayload(buf.readBoolean())
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     public static void registerC2SPackets() {
         PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateDungeonBossSpawnerPayload.TYPE, UpdateDungeonBossSpawnerPayload.STREAM_CODEC);
@@ -225,6 +235,7 @@ public class ModPackets {
         PayloadTypeRegistry.playC2S().register(UpdateAttributesPayload.TYPE, UpdateAttributesPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateEquipmentPayload.TYPE, UpdateEquipmentPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(CycleConfiguratorModePayload.TYPE, CycleConfiguratorModePayload.CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -288,13 +299,7 @@ public class ModPackets {
                     blockEntity.skillExperiencePerWin = payload.skillExperience();
                     blockEntity.mobCount = payload.mobCount();
                     blockEntity.mobSpread = payload.mobSpread();
-                    
-                    if (!blockEntity.groupId.equals(payload.groupId())) {
-                        ArenasLdMod.PHASE_BLOCK_MANAGER.unregisterSpawner(blockEntity);
-                        blockEntity.groupId = payload.groupId();
-                        ArenasLdMod.PHASE_BLOCK_MANAGER.registerSpawner(blockEntity);
-                    }
-
+                    blockEntity.groupId = payload.groupId();
                     blockEntity.setChanged();
                     world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
                 }
@@ -329,14 +334,28 @@ public class ModPackets {
             context.server().execute(() -> {
                 ItemStack stack = context.player().getMainHandItem();
                 if (stack.getItem() instanceof LinkerItem) {
-                    LinkerModeDataComponent data = stack.getOrDefault(LinkerModeDataComponent.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
+                    LinkerModeDataComponent data = stack.getOrDefault(DataComponentRegistry.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
                     int currentMode = data.mode();
                     int newMode = (currentMode + (payload.forward() ? 1 : -1) + LinkerItem.Mode.values().length) % LinkerItem.Mode.values().length;
-                    stack.set(LinkerModeDataComponent.LINKER_MODE_DATA, new LinkerModeDataComponent(newMode, data.mainSpawnerPos()));
+                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(newMode, data.mainSpawnerPos()));
                     
                     LinkerItem.Mode mode = LinkerItem.Mode.values()[newMode];
-                    // ChatFormatting color = mode == LinkerItem.Mode.SPAWNER_LINKING ? ChatFormatting.BLUE : ChatFormatting.YELLOW;
                     context.player().sendSystemMessage(Component.translatable("message.arenas_ld.linker.mode_changed", mode.getName()));
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(CycleConfiguratorModePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ItemStack stack = context.player().getMainHandItem();
+                if (stack.getItem() instanceof SpawnerConfiguratorItem) {
+                    SpawnerSelectionDataComponent data = stack.getOrDefault(DataComponentRegistry.SPAWNER_SELECTION_DATA, SpawnerSelectionDataComponent.DEFAULT);
+                    int currentMode = data.mode();
+                    int newMode = (currentMode + (payload.forward() ? 1 : -1) + SpawnerConfiguratorItem.Mode.values().length) % SpawnerConfiguratorItem.Mode.values().length;
+                    stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(newMode, data.selectedSpawnerPos()));
+
+                    SpawnerConfiguratorItem.Mode mode = SpawnerConfiguratorItem.Mode.values()[newMode];
+                    context.player().sendSystemMessage(Component.translatable("message.arenas_ld.configurator.mode_changed", mode.getName()));
                 }
             });
         });

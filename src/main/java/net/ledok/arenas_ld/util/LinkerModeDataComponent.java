@@ -2,13 +2,9 @@ package net.ledok.arenas_ld.util;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.ledok.arenas_ld.ArenasLdMod;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.core.component.DataComponentType;
+import net.minecraft.network.codec.StreamCodec;
 
 import java.util.Optional;
 
@@ -23,15 +19,11 @@ public record LinkerModeDataComponent(int mode, Optional<BlockPos> mainSpawnerPo
             ).apply(instance, LinkerModeDataComponent::new)
     );
 
-    public static final DataComponentType<LinkerModeDataComponent> LINKER_MODE_DATA = Registry.register(
-            BuiltInRegistries.DATA_COMPONENT_TYPE,
-            ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "linker_mode_data"),
-            DataComponentType.<LinkerModeDataComponent>builder()
-                    .persistent(CODEC)
-                    .networkSynchronized(ByteBufCodecs.fromCodec(CODEC))
-                    .build()
+    public static final StreamCodec<io.netty.buffer.ByteBuf, LinkerModeDataComponent> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.VAR_INT,
+            LinkerModeDataComponent::mode,
+            ByteBufCodecs.optional(BlockPos.STREAM_CODEC),
+            LinkerModeDataComponent::mainSpawnerPos,
+            LinkerModeDataComponent::new
     );
-
-    public static void initialize() {
-    }
 }

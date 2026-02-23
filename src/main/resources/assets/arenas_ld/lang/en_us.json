@@ -7,6 +7,7 @@
   "block.arenas_ld.phase_block": "Phase Block",
   "item.arenas_ld.linker": "Linker",
   "item.arenas_ld.loot_bundle": "Loot Bundle",
+  "item.arenas_ld.spawner_configurator": "Spawner Configurator",
 
   "message.arenas_ld.raid_start": "%1$s has started a raid against %2$s!",
 
@@ -66,6 +67,21 @@
   "tooltip.arenas_ld.linker.main_phase_block": "Main Phase Block: %s",
   "tooltip.arenas_ld.linker.shift_scroll": "Shift + Scroll to change mode",
 
+  "item.arenas_ld.configurator.mode.spawner_selection": "Spawner Selection",
+  "item.arenas_ld.configurator.mode.exit_position": "Exit Position",
+  "item.arenas_ld.configurator.mode.enter_portal_position": "Enter Portal Position",
+  "item.arenas_ld.configurator.mode.enter_portal_destination": "Enter Portal Destination",
+  "message.arenas_ld.configurator.spawner_selected": "Selected Spawner at %s",
+  "message.arenas_ld.configurator.no_spawner_selected": "No spawner selected. Shift + Right-click a spawner to select it.",
+  "message.arenas_ld.configurator.invalid_spawner": "Selected spawner is no longer valid.",
+  "message.arenas_ld.configurator.exit_pos_set": "Set Exit Position to %s",
+  "message.arenas_ld.configurator.enter_portal_pos_set": "Set Enter Portal Position to %s",
+  "message.arenas_ld.configurator.enter_portal_dest_set": "Set Enter Portal Destination to %s",
+  "message.arenas_ld.configurator.cleared_selection": "Cleared spawner selection.",
+  "message.arenas_ld.configurator.mode_changed": "Mode changed to: %s",
+  "tooltip.arenas_ld.configurator.mode": "Mode: %s",
+  "tooltip.arenas_ld.configurator.selected_spawner": "Selected Spawner: %s",
+
   "message.arenas_ld.loot_bundle.empty_invalid": "This bundle is empty or invalid.",
   "message.arenas_ld.loot_bundle.invalid_id": "Invalid loot table ID.",
   "message.arenas_ld.loot_bundle.empty": "The bundle was empty.",
@@ -77,5 +93,6 @@
 
   "bossbar.arenas_ld.dungeon_closing": "Dungeon Closing",
   "message.arenas_ld.dungeon_failed": "Dungeon failed",
-  "message.arenas_ld.config_reloaded": "Arenas LD config reloaded!"
+  "message.arenas_ld.config_reloaded": "Arenas LD config reloaded!",
+  "creativetab.arenas_ld_tab": "Arenas LD"
 }

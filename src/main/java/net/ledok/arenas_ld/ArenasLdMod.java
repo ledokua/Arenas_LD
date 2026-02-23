@@ -6,15 +6,9 @@ import net.ledok.arenas_ld.config.ArenasLdConfig;
 import net.ledok.arenas_ld.manager.DungeonBossManager;
 import net.ledok.arenas_ld.manager.PhaseBlockManager;
 import net.ledok.arenas_ld.networking.ModPackets;
-import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
-import net.ledok.arenas_ld.registry.BlockRegistry;
-import net.ledok.arenas_ld.registry.CommandRegistry;
-import net.ledok.arenas_ld.registry.ItemRegistry;
+import net.ledok.arenas_ld.registry.*;
 import net.ledok.arenas_ld.screen.ModScreenHandlers;
 import net.ledok.arenas_ld.util.BossDataComponent;
-import net.ledok.arenas_ld.util.LinkerDataComponent;
-import net.ledok.arenas_ld.util.LinkerModeDataComponent;
-import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,12 +26,11 @@ public class ArenasLdMod implements ModInitializer {
         ItemRegistry.initialize();
         BlockRegistry.initialize();
         BlockEntitiesRegistry.initialize();
+        DataComponentRegistry.initialize();
+        ModCreativeModeTabs.initialize();
         ModScreenHandlers.initialize();
         ModPackets.registerC2SPackets();
         BossDataComponent.initialize();
-        LinkerDataComponent.initialize();
-        LinkerModeDataComponent.initialize();
-        LootBundleDataComponent.initialize();
         CommandRegistry.initialize();
         DUNGEON_BOSS_MANAGER.initialize();
 
