@@ -11,10 +11,12 @@ import net.ledok.arenas_ld.item.SpawnerConfiguratorItem;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.*;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -26,7 +28,9 @@ public class ModPackets {
 
     public record UpdateBossSpawnerPayload(
             BlockPos pos, String mobId, int respawnTime, int portalTime, String lootTable, String perPlayerLootTable,
-            BlockPos exitPortalCoords, BlockPos enterPortalSpawnCoords, BlockPos enterPortalDestCoords,
+            BlockPos exitPortalCoords, ResourceLocation exitDimension,
+            BlockPos enterPortalSpawnCoords, ResourceLocation enterPortalSpawnDimension,
+            BlockPos enterPortalDestCoords, ResourceLocation enterPortalDestDimension,
             int triggerRadius, int battleRadius, int regeneration, int minPlayers, int skillExperiencePerWin, String groupId
     ) implements CustomPacketPayload {
         public static final Type<UpdateBossSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_boss_spawner"));
@@ -37,8 +41,10 @@ public class ModPackets {
         public UpdateBossSpawnerPayload(FriendlyByteBuf buf) {
             this(
                     buf.readBlockPos(), buf.readUtf(), buf.readVarInt(), buf.readVarInt(), buf.readUtf(), buf.readUtf(),
-                    buf.readBlockPos(), buf.readBlockPos(), buf.readBlockPos(), buf.readVarInt(),
-                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readUtf()
+                    buf.readBlockPos(), buf.readResourceLocation(),
+                    buf.readBlockPos(), buf.readResourceLocation(),
+                    buf.readBlockPos(), buf.readResourceLocation(),
+                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readUtf()
             );
         }
 
@@ -49,9 +55,12 @@ public class ModPackets {
             buf.writeVarInt(portalTime);
             buf.writeUtf(lootTable);
             buf.writeUtf(perPlayerLootTable);
-            buf.writeBlockPos(exitPortalCoords); // Now relative
-            buf.writeBlockPos(enterPortalSpawnCoords); // Now relative
-            buf.writeBlockPos(enterPortalDestCoords); // Now relative
+            buf.writeBlockPos(exitPortalCoords);
+            buf.writeResourceLocation(exitDimension);
+            buf.writeBlockPos(enterPortalSpawnCoords);
+            buf.writeResourceLocation(enterPortalSpawnDimension);
+            buf.writeBlockPos(enterPortalDestCoords);
+            buf.writeResourceLocation(enterPortalDestDimension);
             buf.writeVarInt(triggerRadius);
             buf.writeVarInt(battleRadius);
             buf.writeVarInt(regeneration);
@@ -66,7 +75,9 @@ public class ModPackets {
 
     public record UpdateDungeonBossSpawnerPayload(
             BlockPos pos, String mobId, int respawnTime, int dungeonCloseTimer, String lootTable, String perPlayerLootTable,
-            BlockPos exitPositionCoords, BlockPos enterPortalSpawnCoords, BlockPos enterPortalDestCoords,
+            BlockPos exitPositionCoords, ResourceLocation exitDimension,
+            BlockPos enterPortalSpawnCoords, ResourceLocation enterPortalSpawnDimension,
+            BlockPos enterPortalDestCoords, ResourceLocation enterPortalDestDimension,
             int triggerRadius, int battleRadius, int regeneration, int skillExperiencePerWin, String groupId
     ) implements CustomPacketPayload {
         public static final Type<UpdateDungeonBossSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_dungeon_boss_spawner"));
@@ -77,8 +88,10 @@ public class ModPackets {
         public UpdateDungeonBossSpawnerPayload(FriendlyByteBuf buf) {
             this(
                     buf.readBlockPos(), buf.readUtf(), buf.readVarInt(), buf.readVarInt(), buf.readUtf(), buf.readUtf(),
-                    buf.readBlockPos(), buf.readBlockPos(), buf.readBlockPos(), buf.readVarInt(),
-                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readUtf()
+                    buf.readBlockPos(), buf.readResourceLocation(),
+                    buf.readBlockPos(), buf.readResourceLocation(),
+                    buf.readBlockPos(), buf.readResourceLocation(),
+                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readUtf()
             );
         }
 
@@ -89,9 +102,12 @@ public class ModPackets {
             buf.writeVarInt(dungeonCloseTimer);
             buf.writeUtf(lootTable);
             buf.writeUtf(perPlayerLootTable);
-            buf.writeBlockPos(exitPositionCoords); // Now relative
-            buf.writeBlockPos(enterPortalSpawnCoords); // Now relative
-            buf.writeBlockPos(enterPortalDestCoords); // Now relative
+            buf.writeBlockPos(exitPositionCoords);
+            buf.writeResourceLocation(exitDimension);
+            buf.writeBlockPos(enterPortalSpawnCoords);
+            buf.writeResourceLocation(enterPortalSpawnDimension);
+            buf.writeBlockPos(enterPortalDestCoords);
+            buf.writeResourceLocation(enterPortalDestDimension);
             buf.writeVarInt(triggerRadius);
             buf.writeVarInt(battleRadius);
             buf.writeVarInt(regeneration);
@@ -247,9 +263,9 @@ public class ModPackets {
                     blockEntity.portalActiveTime = payload.portalTime();
                     blockEntity.lootTableId = payload.lootTable();
                     blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
-                    blockEntity.setExitPortalCoords(payload.exitPortalCoords()); // Use setter for relative pos
-                    blockEntity.setEnterPortalSpawnCoords(payload.enterPortalSpawnCoords()); // Use setter for relative pos
-                    blockEntity.setEnterPortalDestCoords(payload.enterPortalDestCoords()); // Use setter for relative pos
+                    blockEntity.setExitPortalCoords(payload.exitPortalCoords(), ResourceKey.create(Registries.DIMENSION, payload.exitDimension()));
+                    blockEntity.setEnterPortalSpawnCoords(payload.enterPortalSpawnCoords(), ResourceKey.create(Registries.DIMENSION, payload.enterPortalSpawnDimension()));
+                    blockEntity.setEnterPortalDestCoords(payload.enterPortalDestCoords(), ResourceKey.create(Registries.DIMENSION, payload.enterPortalDestDimension()));
                     blockEntity.triggerRadius = payload.triggerRadius();
                     blockEntity.battleRadius = payload.battleRadius();
                     blockEntity.regeneration = payload.regeneration();
@@ -272,9 +288,9 @@ public class ModPackets {
                     blockEntity.dungeonCloseTimer = payload.dungeonCloseTimer();
                     blockEntity.lootTableId = payload.lootTable();
                     blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
-                    blockEntity.setExitPositionCoords(payload.exitPositionCoords()); // Use setter for relative pos
-                    blockEntity.setEnterPortalSpawnCoords(payload.enterPortalSpawnCoords()); // Use setter for relative pos
-                    blockEntity.setEnterPortalDestCoords(payload.enterPortalDestCoords()); // Use setter for relative pos
+                    blockEntity.setExitPositionCoords(payload.exitPositionCoords(), ResourceKey.create(Registries.DIMENSION, payload.exitDimension()));
+                    blockEntity.setEnterPortalSpawnCoords(payload.enterPortalSpawnCoords(), ResourceKey.create(Registries.DIMENSION, payload.enterPortalSpawnDimension()));
+                    blockEntity.setEnterPortalDestCoords(payload.enterPortalDestCoords(), ResourceKey.create(Registries.DIMENSION, payload.enterPortalDestDimension()));
                     blockEntity.triggerRadius = payload.triggerRadius();
                     blockEntity.battleRadius = payload.battleRadius();
                     blockEntity.regeneration = payload.regeneration();

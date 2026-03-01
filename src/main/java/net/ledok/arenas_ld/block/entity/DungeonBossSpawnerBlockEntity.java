@@ -64,8 +64,11 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     public String lootTableId = "minecraft:chests/simple_dungeon";
     public String perPlayerLootTableId = "";
     public BlockPos exitPositionCoords = BlockPos.ZERO; // Renamed from exitPortalCoords
+    public ResourceKey<Level> exitPositionDimension = Level.OVERWORLD;
     public BlockPos enterPortalSpawnCoords = BlockPos.ZERO;
+    public ResourceKey<Level> enterPortalSpawnDimension = Level.OVERWORLD;
     public BlockPos enterPortalDestCoords = BlockPos.ZERO;
+    public ResourceKey<Level> enterPortalDestDimension = Level.OVERWORLD;
     public int triggerRadius = 16;
     public int battleRadius = 64;
     public int regeneration = 0;
@@ -135,7 +138,10 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     
     public void handlePlayerDisconnect(ServerPlayer player) {
         if (exitPositionCoords != null && !exitPositionCoords.equals(BlockPos.ZERO)) {
-            player.teleportTo(this.worldPosition.offset(exitPositionCoords).getX() + 0.5, this.worldPosition.offset(exitPositionCoords).getY(), this.worldPosition.offset(exitPositionCoords).getZ() + 0.5);
+            ServerLevel exitWorld = Objects.requireNonNull(player.getServer()).getLevel(exitPositionDimension);
+            if (exitWorld != null) {
+                player.teleportTo(exitWorld, this.worldPosition.offset(exitPositionCoords).getX() + 0.5, this.worldPosition.offset(exitPositionCoords).getY(), this.worldPosition.offset(exitPositionCoords).getZ() + 0.5, player.getYRot(), player.getXRot());
+            }
         }
         this.trackedPlayers.remove(player.getUUID());
         this.dungeonCloseBossBar.removePlayer(player);
@@ -448,9 +454,12 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         for (UUID uuid : trackedPlayers) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
             if (player != null && player.level() == world && !player.isDeadOrDying()) {
-                BlockPos absoluteExitPos = this.worldPosition.offset(exitPositionCoords);
-                player.teleportTo(absoluteExitPos.getX() + 0.5, absoluteExitPos.getY(), absoluteExitPos.getZ() + 0.5);
-                player.setPortalCooldown();
+                ServerLevel exitWorld = Objects.requireNonNull(player.getServer()).getLevel(exitPositionDimension);
+                if (exitWorld != null) {
+                    BlockPos absoluteExitPos = this.worldPosition.offset(exitPositionCoords);
+                    player.teleportTo(exitWorld, absoluteExitPos.getX() + 0.5, absoluteExitPos.getY(), absoluteExitPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+                    player.setPortalCooldown();
+                }
             }
         }
         trackedPlayers.clear();
@@ -477,10 +486,13 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             for (UUID uuid : trackedPlayers) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
                 if (player != null && player.level() == world && !player.isDeadOrDying()) {
-                    BlockPos absoluteExitPos = this.worldPosition.offset(exitPositionCoords);
-                    player.teleportTo(absoluteExitPos.getX() + 0.5, absoluteExitPos.getY(), absoluteExitPos.getZ() + 0.5);
-                    player.setPortalCooldown();
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_failed").withStyle(net.minecraft.ChatFormatting.RED));
+                    ServerLevel exitWorld = Objects.requireNonNull(player.getServer()).getLevel(exitPositionDimension);
+                    if (exitWorld != null) {
+                        BlockPos absoluteExitPos = this.worldPosition.offset(exitPositionCoords);
+                        player.teleportTo(exitWorld, absoluteExitPos.getX() + 0.5, absoluteExitPos.getY(), absoluteExitPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+                        player.setPortalCooldown();
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_failed").withStyle(net.minecraft.ChatFormatting.RED));
+                    }
                 }
             }
         }
@@ -519,7 +531,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
         world.setBlock(absoluteEnterSpawnPos, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
         if (world.getBlockEntity(absoluteEnterSpawnPos) instanceof EnterPortalBlockEntity be) {
-            be.setDestination(absoluteEnterDestPos);
+            be.setDestination(absoluteEnterDestPos, enterPortalDestDimension);
             be.setOwner(this.worldPosition); // Set owner
         }
     }
@@ -542,8 +554,11 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         nbt.putString("LootTableId", lootTableId);
         nbt.putString("PerPlayerLootTableId", perPlayerLootTableId);
         nbt.putLong("ExitPositionCoords", exitPositionCoords.asLong()); // Save relative
-        nbt.putLong("EnterPortalSpawn", enterPortalSpawnCoords.asLong()); // Save relative
-        nbt.putLong("EnterPortalDest", enterPortalDestCoords.asLong()); // Save relative
+        nbt.putString("ExitPositionDimension", exitPositionDimension.location().toString());
+        if (enterPortalSpawnCoords != null) nbt.putLong("EnterPortalSpawn", enterPortalSpawnCoords.asLong()); // Save relative
+        if (enterPortalSpawnDimension != null) nbt.putString("EnterPortalSpawnDimension", enterPortalSpawnDimension.location().toString());
+        if (enterPortalDestCoords != null) nbt.putLong("EnterPortalDest", enterPortalDestCoords.asLong()); // Save relative
+        if (enterPortalDestDimension != null) nbt.putString("EnterPortalDestDimension", enterPortalDestDimension.location().toString());
         nbt.putInt("TriggerRadius", triggerRadius);
         nbt.putInt("BattleRadius", battleRadius);
         nbt.putInt("Regeneration", regeneration);
@@ -582,10 +597,19 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         lootTableId = nbt.getString("LootTableId");
         perPlayerLootTableId = nbt.getString("PerPlayerLootTableId");
         exitPositionCoords = BlockPos.of(nbt.getLong("ExitPositionCoords")); // Load relative
+        if (nbt.contains("ExitPositionDimension")) {
+            exitPositionDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitPositionDimension")));
+        }
         if (nbt.contains("EnterPortalSpawn"))
             enterPortalSpawnCoords = BlockPos.of(nbt.getLong("EnterPortalSpawn")); // Load relative
+        if (nbt.contains("EnterPortalSpawnDimension")) {
+            enterPortalSpawnDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("EnterPortalSpawnDimension")));
+        }
         if (nbt.contains("EnterPortalDest"))
             enterPortalDestCoords = BlockPos.of(nbt.getLong("EnterPortalDest")); // Load relative
+        if (nbt.contains("EnterPortalDestDimension")) {
+            enterPortalDestDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("EnterPortalDestDimension")));
+        }
         triggerRadius = nbt.getInt("TriggerRadius");
         battleRadius = nbt.getInt("BattleRadius");
         regeneration = nbt.getInt("Regeneration");
@@ -641,18 +665,21 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         return saveWithoutMetadata(registryLookup);
     }
 
-    public void setExitPositionCoords(BlockPos exitPositionCoords) {
+    public void setExitPositionCoords(BlockPos exitPositionCoords, ResourceKey<Level> exitPositionDimension) {
         this.exitPositionCoords = exitPositionCoords;
+        this.exitPositionDimension = exitPositionDimension;
         setChanged();
     }
 
-    public void setEnterPortalSpawnCoords(BlockPos enterPortalSpawnCoords) {
+    public void setEnterPortalSpawnCoords(BlockPos enterPortalSpawnCoords, ResourceKey<Level> enterPortalSpawnDimension) {
         this.enterPortalSpawnCoords = enterPortalSpawnCoords;
+        this.enterPortalSpawnDimension = enterPortalSpawnDimension;
         setChanged();
     }
 
-    public void setEnterPortalDestCoords(BlockPos enterPortalDestCoords) {
+    public void setEnterPortalDestCoords(BlockPos enterPortalDestCoords, ResourceKey<Level> enterPortalDestDimension) {
         this.enterPortalDestCoords = enterPortalDestCoords;
+        this.enterPortalDestDimension = enterPortalDestDimension;
         setChanged();
     }
 

@@ -6,6 +6,7 @@ import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.InteractionResultHolder;
@@ -87,31 +88,32 @@ public class SpawnerConfiguratorItem extends Item {
 
         // Calculate relative position
         BlockPos relativePos = clickedPos.subtract(selectedSpawnerPos);
+        ResourceKey<Level> clickedDimension = world.dimension();
 
         switch (currentMode) {
             case EXIT_POSITION:
                 if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
-                    bossSpawner.setExitPortalCoords(relativePos);
+                    bossSpawner.setExitPortalCoords(relativePos, clickedDimension);
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
-                    dungeonBossSpawner.setExitPositionCoords(relativePos);
+                    dungeonBossSpawner.setExitPositionCoords(relativePos, clickedDimension);
                 }
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.exit_pos_set", clickedPos.toShortString()));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.exit_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
             case ENTER_PORTAL_POSITION:
                 if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
-                    bossSpawner.setEnterPortalSpawnCoords(relativePos);
+                    bossSpawner.setEnterPortalSpawnCoords(relativePos, clickedDimension);
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
-                    dungeonBossSpawner.setEnterPortalSpawnCoords(relativePos);
+                    dungeonBossSpawner.setEnterPortalSpawnCoords(relativePos, clickedDimension);
                 }
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.enter_portal_pos_set", clickedPos.toShortString()));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.enter_portal_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
             case ENTER_PORTAL_DESTINATION:
                 if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
-                    bossSpawner.setEnterPortalDestCoords(relativePos);
+                    bossSpawner.setEnterPortalDestCoords(relativePos, clickedDimension);
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
-                    dungeonBossSpawner.setEnterPortalDestCoords(relativePos);
+                    dungeonBossSpawner.setEnterPortalDestCoords(relativePos, clickedDimension);
                 }
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.enter_portal_dest_set", clickedPos.toShortString()));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.enter_portal_dest_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
             default:
                 return InteractionResult.PASS;

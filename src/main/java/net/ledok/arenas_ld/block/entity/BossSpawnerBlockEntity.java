@@ -63,8 +63,11 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     public String lootTableId = "minecraft:chests/simple_dungeon";
     public String perPlayerLootTableId = "";
     public BlockPos exitPortalCoords = BlockPos.ZERO;
+    public ResourceKey<Level> exitDimension = Level.OVERWORLD;
     public BlockPos enterPortalSpawnCoords = BlockPos.ZERO;
+    public ResourceKey<Level> enterPortalSpawnDimension = Level.OVERWORLD;
     public BlockPos enterPortalDestCoords = BlockPos.ZERO;
+    public ResourceKey<Level> enterPortalDestDimension = Level.OVERWORLD;
     public int triggerRadius = 16;
     public int battleRadius = 64;
     public int regeneration = 0;
@@ -362,7 +365,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         BlockPos portalPos = worldPosition.above(2);
         world.setBlock(portalPos, BlockRegistry.EXIT_PORTAL_BLOCK.defaultBlockState(), 3);
         if (world.getBlockEntity(portalPos) instanceof ExitPortalBlockEntity portal) {
-            portal.setDetails(this.portalActiveTime, this.exitPortalCoords);
+            portal.setDetails(this.portalActiveTime, this.exitPortalCoords, this.exitDimension);
             ArenasLdMod.LOGGER.info("Spawned exit portal at {} for {} ticks.", portalPos, this.portalActiveTime);
         }
         resetSpawner(world);
@@ -418,7 +421,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
 
         world.setBlock(absoluteEnterSpawnPos, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
         if (world.getBlockEntity(absoluteEnterSpawnPos) instanceof EnterPortalBlockEntity be) {
-            be.setDestination(absoluteEnterDestPos);
+            be.setDestination(absoluteEnterDestPos, enterPortalDestDimension);
         }
     }
 
@@ -440,8 +443,11 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         nbt.putString("LootTableId", lootTableId);
         nbt.putString("PerPlayerLootTableId", perPlayerLootTableId);
         nbt.putLong("ExitPortalCoords", exitPortalCoords.asLong());
+        nbt.putString("ExitDimension", exitDimension.location().toString());
         if (enterPortalSpawnCoords != null) nbt.putLong("EnterPortalSpawn", enterPortalSpawnCoords.asLong());
+        if (enterPortalSpawnDimension != null) nbt.putString("EnterPortalSpawnDimension", enterPortalSpawnDimension.location().toString());
         if (enterPortalDestCoords != null) nbt.putLong("EnterPortalDest", enterPortalDestCoords.asLong());
+        if (enterPortalDestDimension != null) nbt.putString("EnterPortalDestDimension", enterPortalDestDimension.location().toString());
         nbt.putInt("TriggerRadius", triggerRadius);
         nbt.putInt("BattleRadius", battleRadius);
         nbt.putInt("Regeneration", regeneration);
@@ -472,10 +478,19 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         lootTableId = nbt.getString("LootTableId");
         perPlayerLootTableId = nbt.getString("PerPlayerLootTableId");
         exitPortalCoords = BlockPos.of(nbt.getLong("ExitPortalCoords"));
+        if (nbt.contains("ExitDimension")) {
+            exitDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitDimension")));
+        }
         if (nbt.contains("EnterPortalSpawn"))
             enterPortalSpawnCoords = BlockPos.of(nbt.getLong("EnterPortalSpawn"));
+        if (nbt.contains("EnterPortalSpawnDimension")) {
+            enterPortalSpawnDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("EnterPortalSpawnDimension")));
+        }
         if (nbt.contains("EnterPortalDest"))
             enterPortalDestCoords = BlockPos.of(nbt.getLong("EnterPortalDest"));
+        if (nbt.contains("EnterPortalDestDimension")) {
+            enterPortalDestDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("EnterPortalDestDimension")));
+        }
         triggerRadius = nbt.getInt("TriggerRadius");
         battleRadius = nbt.getInt("BattleRadius");
         regeneration = nbt.getInt("Regeneration");
@@ -522,18 +537,21 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         return saveWithoutMetadata(registryLookup);
     }
 
-    public void setExitPortalCoords(BlockPos exitPortalCoords) {
+    public void setExitPortalCoords(BlockPos exitPortalCoords, ResourceKey<Level> exitDimension) {
         this.exitPortalCoords = exitPortalCoords;
+        this.exitDimension = exitDimension;
         setChanged();
     }
 
-    public void setEnterPortalSpawnCoords(BlockPos enterPortalSpawnCoords) {
+    public void setEnterPortalSpawnCoords(BlockPos enterPortalSpawnCoords, ResourceKey<Level> enterPortalSpawnDimension) {
         this.enterPortalSpawnCoords = enterPortalSpawnCoords;
+        this.enterPortalSpawnDimension = enterPortalSpawnDimension;
         setChanged();
     }
 
-    public void setEnterPortalDestCoords(BlockPos enterPortalDestCoords) {
+    public void setEnterPortalDestCoords(BlockPos enterPortalDestCoords, ResourceKey<Level> enterPortalDestDimension) {
         this.enterPortalDestCoords = enterPortalDestCoords;
+        this.enterPortalDestDimension = enterPortalDestDimension;
         setChanged();
     }
 
