@@ -26,7 +26,7 @@ public class ModPackets {
 
     public record UpdateBossSpawnerPayload(
             BlockPos pos, String mobId, int respawnTime, int portalTime, String lootTable, String perPlayerLootTable,
-            BlockPos exitCoords, BlockPos enterSpawnCoords, BlockPos enterDestCoords,
+            BlockPos exitPortalCoords, BlockPos enterPortalSpawnCoords, BlockPos enterPortalDestCoords,
             int triggerRadius, int battleRadius, int regeneration, int minPlayers, int skillExperiencePerWin, String groupId
     ) implements CustomPacketPayload {
         public static final Type<UpdateBossSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_boss_spawner"));
@@ -49,9 +49,9 @@ public class ModPackets {
             buf.writeVarInt(portalTime);
             buf.writeUtf(lootTable);
             buf.writeUtf(perPlayerLootTable);
-            buf.writeBlockPos(exitCoords);
-            buf.writeBlockPos(enterSpawnCoords);
-            buf.writeBlockPos(enterDestCoords);
+            buf.writeBlockPos(exitPortalCoords); // Now relative
+            buf.writeBlockPos(enterPortalSpawnCoords); // Now relative
+            buf.writeBlockPos(enterPortalDestCoords); // Now relative
             buf.writeVarInt(triggerRadius);
             buf.writeVarInt(battleRadius);
             buf.writeVarInt(regeneration);
@@ -66,7 +66,7 @@ public class ModPackets {
 
     public record UpdateDungeonBossSpawnerPayload(
             BlockPos pos, String mobId, int respawnTime, int dungeonCloseTimer, String lootTable, String perPlayerLootTable,
-            BlockPos exitPositionCoords, BlockPos enterSpawnCoords, BlockPos enterDestCoords,
+            BlockPos exitPositionCoords, BlockPos enterPortalSpawnCoords, BlockPos enterPortalDestCoords,
             int triggerRadius, int battleRadius, int regeneration, int skillExperiencePerWin, String groupId
     ) implements CustomPacketPayload {
         public static final Type<UpdateDungeonBossSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_dungeon_boss_spawner"));
@@ -89,9 +89,9 @@ public class ModPackets {
             buf.writeVarInt(dungeonCloseTimer);
             buf.writeUtf(lootTable);
             buf.writeUtf(perPlayerLootTable);
-            buf.writeBlockPos(exitPositionCoords);
-            buf.writeBlockPos(enterSpawnCoords);
-            buf.writeBlockPos(enterDestCoords);
+            buf.writeBlockPos(exitPositionCoords); // Now relative
+            buf.writeBlockPos(enterPortalSpawnCoords); // Now relative
+            buf.writeBlockPos(enterPortalDestCoords); // Now relative
             buf.writeVarInt(triggerRadius);
             buf.writeVarInt(battleRadius);
             buf.writeVarInt(regeneration);
@@ -247,9 +247,9 @@ public class ModPackets {
                     blockEntity.portalActiveTime = payload.portalTime();
                     blockEntity.lootTableId = payload.lootTable();
                     blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
-                    blockEntity.exitPortalCoords = payload.exitCoords();
-                    blockEntity.enterPortalSpawnCoords = payload.enterSpawnCoords();
-                    blockEntity.enterPortalDestCoords = payload.enterDestCoords();
+                    blockEntity.setExitPortalCoords(payload.exitPortalCoords()); // Use setter for relative pos
+                    blockEntity.setEnterPortalSpawnCoords(payload.enterPortalSpawnCoords()); // Use setter for relative pos
+                    blockEntity.setEnterPortalDestCoords(payload.enterPortalDestCoords()); // Use setter for relative pos
                     blockEntity.triggerRadius = payload.triggerRadius();
                     blockEntity.battleRadius = payload.battleRadius();
                     blockEntity.regeneration = payload.regeneration();
@@ -272,9 +272,9 @@ public class ModPackets {
                     blockEntity.dungeonCloseTimer = payload.dungeonCloseTimer();
                     blockEntity.lootTableId = payload.lootTable();
                     blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
-                    blockEntity.exitPositionCoords = payload.exitPositionCoords();
-                    blockEntity.enterPortalSpawnCoords = payload.enterSpawnCoords();
-                    blockEntity.enterPortalDestCoords = payload.enterDestCoords();
+                    blockEntity.setExitPositionCoords(payload.exitPositionCoords()); // Use setter for relative pos
+                    blockEntity.setEnterPortalSpawnCoords(payload.enterPortalSpawnCoords()); // Use setter for relative pos
+                    blockEntity.setEnterPortalDestCoords(payload.enterPortalDestCoords()); // Use setter for relative pos
                     blockEntity.triggerRadius = payload.triggerRadius();
                     blockEntity.battleRadius = payload.battleRadius();
                     blockEntity.regeneration = payload.regeneration();

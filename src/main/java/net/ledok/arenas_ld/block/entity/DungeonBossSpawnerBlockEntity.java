@@ -135,7 +135,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     
     public void handlePlayerDisconnect(ServerPlayer player) {
         if (exitPositionCoords != null && !exitPositionCoords.equals(BlockPos.ZERO)) {
-            player.teleportTo(exitPositionCoords.getX() + 0.5, exitPositionCoords.getY(), exitPositionCoords.getZ() + 0.5);
+            player.teleportTo(this.worldPosition.offset(exitPositionCoords).getX() + 0.5, this.worldPosition.offset(exitPositionCoords).getY(), this.worldPosition.offset(exitPositionCoords).getZ() + 0.5);
         }
         this.trackedPlayers.remove(player.getUUID());
         this.dungeonCloseBossBar.removePlayer(player);
@@ -204,7 +204,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         
         // Track players near enter portal destination if battle is active
         if (be.isBattleActive && be.enterPortalDestCoords != null && !be.enterPortalDestCoords.equals(BlockPos.ZERO)) {
-             AABB checkArea = new AABB(be.enterPortalDestCoords).inflate(5);
+             AABB checkArea = new AABB(be.worldPosition.offset(be.enterPortalDestCoords)).inflate(5);
              List<ServerPlayer> players = serverLevel.getEntitiesOfClass(ServerPlayer.class, checkArea);
              for (ServerPlayer player : players) {
                  if (!player.isSpectator() && !be.trackedPlayers.contains(player.getUUID())) {
@@ -273,7 +273,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             this.enterPortalRemovalTimer--;
             if (this.enterPortalRemovalTimer == 0) {
                 removeEnterPortal(world);
-                ArenasLdMod.LOGGER.info("Enter portal at {} has timed out and was removed.", enterPortalSpawnCoords);
+                ArenasLdMod.LOGGER.info("Enter portal at {} has timed out and was removed.", this.worldPosition.offset(enterPortalSpawnCoords));
             }
         }
 
@@ -448,7 +448,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         for (UUID uuid : trackedPlayers) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
             if (player != null && player.level() == world && !player.isDeadOrDying()) {
-                player.teleportTo(exitPositionCoords.getX() + 0.5, exitPositionCoords.getY(), exitPositionCoords.getZ() + 0.5);
+                BlockPos absoluteExitPos = this.worldPosition.offset(exitPositionCoords);
+                player.teleportTo(absoluteExitPos.getX() + 0.5, absoluteExitPos.getY(), absoluteExitPos.getZ() + 0.5);
                 player.setPortalCooldown();
             }
         }
@@ -476,7 +477,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             for (UUID uuid : trackedPlayers) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
                 if (player != null && player.level() == world && !player.isDeadOrDying()) {
-                    player.teleportTo(exitPositionCoords.getX() + 0.5, exitPositionCoords.getY(), exitPositionCoords.getZ() + 0.5);
+                    BlockPos absoluteExitPos = this.worldPosition.offset(exitPositionCoords);
+                    player.teleportTo(absoluteExitPos.getX() + 0.5, absoluteExitPos.getY(), absoluteExitPos.getZ() + 0.5);
                     player.setPortalCooldown();
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_failed").withStyle(net.minecraft.ChatFormatting.RED));
                 }
@@ -512,16 +514,22 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (enterPortalSpawnCoords == null || enterPortalDestCoords == null || enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
             return;
         }
-        world.setBlock(enterPortalSpawnCoords, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
-        if (world.getBlockEntity(enterPortalSpawnCoords) instanceof EnterPortalBlockEntity be) {
-            be.setDestination(enterPortalDestCoords);
+        BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
+        BlockPos absoluteEnterDestPos = this.worldPosition.offset(enterPortalDestCoords);
+
+        world.setBlock(absoluteEnterSpawnPos, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
+        if (world.getBlockEntity(absoluteEnterSpawnPos) instanceof EnterPortalBlockEntity be) {
+            be.setDestination(absoluteEnterDestPos);
             be.setOwner(this.worldPosition); // Set owner
         }
     }
 
     private void removeEnterPortal(ServerLevel world) {
-        if (enterPortalSpawnCoords != null && world.getBlockState(enterPortalSpawnCoords).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
-            world.setBlock(enterPortalSpawnCoords, Blocks.AIR.defaultBlockState(), 3);
+        if (enterPortalSpawnCoords != null && !enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
+            BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
+            if (world.getBlockState(absoluteEnterSpawnPos).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
+                world.setBlock(absoluteEnterSpawnPos, Blocks.AIR.defaultBlockState(), 3);
+            }
         }
     }
 
@@ -533,9 +541,9 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         nbt.putInt("DungeonCloseTimer", dungeonCloseTimer);
         nbt.putString("LootTableId", lootTableId);
         nbt.putString("PerPlayerLootTableId", perPlayerLootTableId);
-        nbt.putLong("ExitPositionCoords", exitPositionCoords.asLong());
-        if (enterPortalSpawnCoords != null) nbt.putLong("EnterPortalSpawn", enterPortalSpawnCoords.asLong());
-        if (enterPortalDestCoords != null) nbt.putLong("EnterPortalDest", enterPortalDestCoords.asLong());
+        nbt.putLong("ExitPositionCoords", exitPositionCoords.asLong()); // Save relative
+        nbt.putLong("EnterPortalSpawn", enterPortalSpawnCoords.asLong()); // Save relative
+        nbt.putLong("EnterPortalDest", enterPortalDestCoords.asLong()); // Save relative
         nbt.putInt("TriggerRadius", triggerRadius);
         nbt.putInt("BattleRadius", battleRadius);
         nbt.putInt("Regeneration", regeneration);
@@ -573,11 +581,11 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         dungeonCloseTimer = nbt.getInt("DungeonCloseTimer");
         lootTableId = nbt.getString("LootTableId");
         perPlayerLootTableId = nbt.getString("PerPlayerLootTableId");
-        exitPositionCoords = BlockPos.of(nbt.getLong("ExitPositionCoords"));
+        exitPositionCoords = BlockPos.of(nbt.getLong("ExitPositionCoords")); // Load relative
         if (nbt.contains("EnterPortalSpawn"))
-            enterPortalSpawnCoords = BlockPos.of(nbt.getLong("EnterPortalSpawn"));
+            enterPortalSpawnCoords = BlockPos.of(nbt.getLong("EnterPortalSpawn")); // Load relative
         if (nbt.contains("EnterPortalDest"))
-            enterPortalDestCoords = BlockPos.of(nbt.getLong("EnterPortalDest"));
+            enterPortalDestCoords = BlockPos.of(nbt.getLong("EnterPortalDest")); // Load relative
         triggerRadius = nbt.getInt("TriggerRadius");
         battleRadius = nbt.getInt("BattleRadius");
         regeneration = nbt.getInt("Regeneration");
@@ -631,6 +639,21 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registryLookup) {
         return saveWithoutMetadata(registryLookup);
+    }
+
+    public void setExitPositionCoords(BlockPos exitPositionCoords) {
+        this.exitPositionCoords = exitPositionCoords;
+        setChanged();
+    }
+
+    public void setEnterPortalSpawnCoords(BlockPos enterPortalSpawnCoords) {
+        this.enterPortalSpawnCoords = enterPortalSpawnCoords;
+        setChanged();
+    }
+
+    public void setEnterPortalDestCoords(BlockPos enterPortalDestCoords) {
+        this.enterPortalDestCoords = enterPortalDestCoords;
+        setChanged();
     }
 
     @Override

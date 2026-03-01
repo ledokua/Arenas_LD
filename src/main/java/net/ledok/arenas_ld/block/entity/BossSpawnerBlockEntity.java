@@ -200,7 +200,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             this.enterPortalRemovalTimer--;
             if (this.enterPortalRemovalTimer == 0) {
                 removeEnterPortal(world);
-                ArenasLdMod.LOGGER.info("Enter portal at {} has timed out and was removed.", enterPortalSpawnCoords);
+                ArenasLdMod.LOGGER.info("Enter portal at {} has timed out and was removed.", this.worldPosition.offset(enterPortalSpawnCoords));
             }
         }
 
@@ -413,15 +413,21 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         if (enterPortalSpawnCoords == null || enterPortalDestCoords == null || enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
             return;
         }
-        world.setBlock(enterPortalSpawnCoords, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
-        if (world.getBlockEntity(enterPortalSpawnCoords) instanceof EnterPortalBlockEntity be) {
-            be.setDestination(enterPortalDestCoords);
+        BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
+        BlockPos absoluteEnterDestPos = this.worldPosition.offset(enterPortalDestCoords);
+
+        world.setBlock(absoluteEnterSpawnPos, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
+        if (world.getBlockEntity(absoluteEnterSpawnPos) instanceof EnterPortalBlockEntity be) {
+            be.setDestination(absoluteEnterDestPos);
         }
     }
 
     protected void removeEnterPortal(ServerLevel world) {
-        if (enterPortalSpawnCoords != null && world.getBlockState(enterPortalSpawnCoords).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
-            world.setBlock(enterPortalSpawnCoords, Blocks.AIR.defaultBlockState(), 3);
+        if (enterPortalSpawnCoords != null && !enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
+            BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
+            if (world.getBlockState(absoluteEnterSpawnPos).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
+                world.setBlock(absoluteEnterSpawnPos, Blocks.AIR.defaultBlockState(), 3);
+            }
         }
     }
 
@@ -514,6 +520,21 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registryLookup) {
         return saveWithoutMetadata(registryLookup);
+    }
+
+    public void setExitPortalCoords(BlockPos exitPortalCoords) {
+        this.exitPortalCoords = exitPortalCoords;
+        setChanged();
+    }
+
+    public void setEnterPortalSpawnCoords(BlockPos enterPortalSpawnCoords) {
+        this.enterPortalSpawnCoords = enterPortalSpawnCoords;
+        setChanged();
+    }
+
+    public void setEnterPortalDestCoords(BlockPos enterPortalDestCoords) {
+        this.enterPortalDestCoords = enterPortalDestCoords;
+        setChanged();
     }
 
     @Override
