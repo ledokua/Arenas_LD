@@ -40,6 +40,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -86,6 +87,8 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     protected int regenerationTickTimer = 0;
     protected int enterPortalRemovalTimer = -1;
     protected boolean firstTick = true;
+    protected long lastTickTime = -1;
+    private boolean isChunkLoaded = false;
 
     public BossSpawnerBlockEntity(BlockPos pos, BlockState state) {
         this(BlockEntitiesRegistry.BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
@@ -151,6 +154,32 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     public static void tick(Level world, BlockPos pos, BlockState state, BossSpawnerBlockEntity be) {
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
         
+        long currentTime = world.getGameTime();
+        if (be.lastTickTime != -1) {
+            long timeDiff = currentTime - be.lastTickTime;
+            if (timeDiff > 1) {
+                // Chunk was unloaded or server lagged, catch up cooldown
+                if (be.respawnCooldown > 0) {
+                    int oldCooldown = be.respawnCooldown;
+                    be.respawnCooldown = Math.max(0, be.respawnCooldown - (int) timeDiff);
+                    if (oldCooldown > 0 && be.respawnCooldown == 0) {
+                        be.spawnEnterPortal(serverLevel);
+                        // Trigger linked spawners
+                        for (BlockPos relativePos : be.linkedSpawners) {
+                            BlockPos absolutePos = pos.offset(relativePos);
+                            BlockEntity linkedBe = world.getBlockEntity(absolutePos);
+                            if (linkedBe instanceof LinkableSpawner linkedSpawner) {
+                                linkedSpawner.forceReset();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        be.lastTickTime = currentTime;
+        
+        be.updateChunkLoading(serverLevel);
+
         if (be.firstTick) {
             // Re-link spawners on first tick
             for (BlockPos relativePos : be.linkedSpawners) {
@@ -169,6 +198,25 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             be.handleIdleState(serverLevel, pos);
         }
     }
+    
+    private void updateChunkLoading(ServerLevel world) {
+        boolean shouldBeLoaded = this.respawnCooldown > 0 || this.isBattleActive;
+        if (shouldBeLoaded != isChunkLoaded) {
+            ChunkPos chunkPos = new ChunkPos(this.worldPosition);
+            world.setChunkForced(chunkPos.x, chunkPos.z, shouldBeLoaded);
+            isChunkLoaded = shouldBeLoaded;
+        }
+    }
+    
+    @Override
+    public void setRemoved() {
+        if (level instanceof ServerLevel serverLevel && isChunkLoaded) {
+            ChunkPos chunkPos = new ChunkPos(this.worldPosition);
+            serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
+            isChunkLoaded = false;
+        }
+        super.setRemoved();
+    }
 
     protected void handleIdleState(ServerLevel world, BlockPos pos) {
         if (respawnCooldown > 0) {
@@ -179,11 +227,9 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
                 // Trigger linked spawners
                 for (BlockPos relativePos : linkedSpawners) {
                     BlockPos absolutePos = pos.offset(relativePos);
-                    if (world.isLoaded(absolutePos)) {
-                        BlockEntity be = world.getBlockEntity(absolutePos);
-                        if (be instanceof LinkableSpawner linkedSpawner) {
-                            linkedSpawner.forceReset();
-                        }
+                    BlockEntity be = world.getBlockEntity(absolutePos);
+                    if (be instanceof LinkableSpawner linkedSpawner) {
+                        linkedSpawner.forceReset();
                     }
                 }
             }
@@ -410,6 +456,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         if (this.respawnCooldown <= 0) {
             spawnEnterPortal(world);
         }
+        updateChunkLoading(world);
     }
 
     protected void spawnEnterPortal(ServerLevel world) {
@@ -458,6 +505,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         nbt.putString("GroupId", groupId);
         if (activeBossUuid != null) nbt.putUUID("ActiveBossUuid", activeBossUuid);
         if (bossDimension != null) nbt.putString("BossDimension", bossDimension.location().toString());
+        nbt.putLong("LastTickTime", lastTickTime);
 
         ListTag attributeList = new ListTag();
         for (AttributeData attr : attributes) {
@@ -502,6 +550,9 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         if (nbt.hasUUID("ActiveBossUuid")) activeBossUuid = nbt.getUUID("ActiveBossUuid");
         if (nbt.contains("BossDimension")) {
             bossDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("BossDimension")));
+        }
+        if (nbt.contains("LastTickTime")) {
+            lastTickTime = nbt.getLong("LastTickTime");
         }
 
         attributes.clear();

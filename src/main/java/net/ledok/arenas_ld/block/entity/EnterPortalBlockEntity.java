@@ -16,6 +16,7 @@ public class EnterPortalBlockEntity extends BlockEntity {
     private BlockPos destination;
     private ResourceKey<Level> destinationDimension = Level.OVERWORLD; // Default to overworld
     private BlockPos ownerPos;
+    private ResourceKey<Level> ownerDimension = Level.OVERWORLD; // Default to overworld
 
     public EnterPortalBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.ENTER_PORTAL_BLOCK_ENTITY, pos, state);
@@ -35,13 +36,18 @@ public class EnterPortalBlockEntity extends BlockEntity {
         return this.destinationDimension;
     }
 
-    public void setOwner(BlockPos ownerPos) {
+    public void setOwner(BlockPos ownerPos, ResourceKey<Level> ownerDimension) {
         this.ownerPos = ownerPos;
+        this.ownerDimension = ownerDimension;
         this.setChanged();
     }
 
     public BlockPos getOwner() {
         return this.ownerPos;
+    }
+
+    public ResourceKey<Level> getOwnerDimension() {
+        return this.ownerDimension;
     }
 
     @Override
@@ -54,6 +60,7 @@ public class EnterPortalBlockEntity extends BlockEntity {
         if(ownerPos != null) {
             nbt.putLong("ownerPos", ownerPos.asLong());
         }
+        nbt.putString("ownerDimension", ownerDimension.location().toString());
     }
 
     @Override
@@ -67,6 +74,9 @@ public class EnterPortalBlockEntity extends BlockEntity {
         }
         if(nbt.contains("ownerPos")) {
             ownerPos = BlockPos.of(nbt.getLong("ownerPos"));
+        }
+        if (nbt.contains("ownerDimension")) {
+            ownerDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ownerDimension")));
         }
     }
 }

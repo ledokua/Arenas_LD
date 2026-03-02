@@ -42,6 +42,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -89,6 +90,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     private int internalDungeonCloseTimer = -1; // Renamed from exitPortalTimer
     private final Set<UUID> trackedPlayers = new HashSet<>(); // Track players who entered
     private boolean firstTick = true;
+    private long lastTickTime = -1;
+    private boolean isChunkLoaded = false;
     
     private final ServerBossEvent dungeonCloseBossBar = (ServerBossEvent) new ServerBossEvent(
             Component.translatable("bossbar.arenas_ld.dungeon_closing"), 
@@ -177,6 +180,31 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     public static void tick(Level world, BlockPos pos, BlockState state, DungeonBossSpawnerBlockEntity be) {
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
         
+        long currentTime = world.getGameTime();
+        if (be.lastTickTime != -1) {
+            long timeDiff = currentTime - be.lastTickTime;
+            if (timeDiff > 1) {
+                // Chunk was unloaded or server lagged, catch up cooldown
+                if (be.respawnCooldown > 0) {
+                    be.respawnCooldown = Math.max(0, be.respawnCooldown - (int) timeDiff);
+                    if (be.respawnCooldown == 0) {
+                        be.spawnEnterPortal(serverLevel);
+                        // Trigger linked spawners
+                        for (BlockPos relativePos : be.linkedSpawners) {
+                            BlockPos absolutePos = pos.offset(relativePos);
+                            BlockEntity linkedBe = world.getBlockEntity(absolutePos);
+                            if (linkedBe instanceof LinkableSpawner linkedSpawner) {
+                                linkedSpawner.forceReset();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        be.lastTickTime = currentTime;
+        
+        be.updateChunkLoading(serverLevel);
+        
         if (be.firstTick) {
             // Re-link spawners on first tick
             for (BlockPos relativePos : be.linkedSpawners) {
@@ -232,8 +260,22 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         }
     }
     
+    private void updateChunkLoading(ServerLevel world) {
+        boolean shouldBeLoaded = this.respawnCooldown > 0 || this.isBattleActive || this.internalDungeonCloseTimer > 0;
+        if (shouldBeLoaded != isChunkLoaded) {
+            ChunkPos chunkPos = new ChunkPos(this.worldPosition);
+            world.setChunkForced(chunkPos.x, chunkPos.z, shouldBeLoaded);
+            isChunkLoaded = shouldBeLoaded;
+        }
+    }
+    
     @Override
     public void setRemoved() {
+        if (level instanceof ServerLevel serverLevel && isChunkLoaded) {
+            ChunkPos chunkPos = new ChunkPos(this.worldPosition);
+            serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
+            isChunkLoaded = false;
+        }
         super.setRemoved();
     }
     
@@ -255,11 +297,9 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 // Trigger linked spawners
                 for (BlockPos relativePos : linkedSpawners) {
                     BlockPos absolutePos = pos.offset(relativePos);
-                    if (world.isLoaded(absolutePos)) {
-                        BlockEntity be = world.getBlockEntity(absolutePos);
-                        if (be instanceof LinkableSpawner linkedSpawner) {
-                            linkedSpawner.forceReset();
-                        }
+                    BlockEntity be = world.getBlockEntity(absolutePos);
+                    if (be instanceof LinkableSpawner linkedSpawner) {
+                        linkedSpawner.forceReset();
                     }
                 }
             }
@@ -520,6 +560,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (this.respawnCooldown <= 0) {
             spawnEnterPortal(world);
         }
+        updateChunkLoading(world);
     }
 
     private void spawnEnterPortal(ServerLevel world) {
@@ -529,18 +570,22 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
         BlockPos absoluteEnterDestPos = this.worldPosition.offset(enterPortalDestCoords);
 
-        world.setBlock(absoluteEnterSpawnPos, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
-        if (world.getBlockEntity(absoluteEnterSpawnPos) instanceof EnterPortalBlockEntity be) {
-            be.setDestination(absoluteEnterDestPos, enterPortalDestDimension);
-            be.setOwner(this.worldPosition); // Set owner
+        ServerLevel spawnWorld = Objects.requireNonNull(world.getServer()).getLevel(enterPortalSpawnDimension);
+        if (spawnWorld != null) {
+            spawnWorld.setBlock(absoluteEnterSpawnPos, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
+            if (spawnWorld.getBlockEntity(absoluteEnterSpawnPos) instanceof EnterPortalBlockEntity be) {
+                be.setDestination(absoluteEnterDestPos, enterPortalDestDimension);
+                be.setOwner(this.worldPosition, world.dimension()); // Set owner
+            }
         }
     }
 
     private void removeEnterPortal(ServerLevel world) {
         if (enterPortalSpawnCoords != null && !enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
             BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
-            if (world.getBlockState(absoluteEnterSpawnPos).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
-                world.setBlock(absoluteEnterSpawnPos, Blocks.AIR.defaultBlockState(), 3);
+            ServerLevel spawnWorld = Objects.requireNonNull(world.getServer()).getLevel(enterPortalSpawnDimension);
+            if (spawnWorld != null && spawnWorld.getBlockState(absoluteEnterSpawnPos).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
+                spawnWorld.setBlock(absoluteEnterSpawnPos, Blocks.AIR.defaultBlockState(), 3);
             }
         }
     }
@@ -569,6 +614,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (activeBossUuid != null) nbt.putUUID("ActiveBossUuid", activeBossUuid);
         if (bossDimension != null) nbt.putString("BossDimension", bossDimension.location().toString());
         nbt.putInt("InternalDungeonCloseTimer", internalDungeonCloseTimer);
+        nbt.putLong("LastTickTime", lastTickTime);
 
         ListTag attributeList = new ListTag();
         for (AttributeData attr : attributes) {
@@ -623,6 +669,9 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         }
         if (nbt.contains("InternalDungeonCloseTimer")) {
             internalDungeonCloseTimer = nbt.getInt("InternalDungeonCloseTimer");
+        }
+        if (nbt.contains("LastTickTime")) {
+            lastTickTime = nbt.getLong("LastTickTime");
         }
 
         attributes.clear();

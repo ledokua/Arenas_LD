@@ -5,6 +5,7 @@ import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.EnterPortalBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -21,6 +22,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 public class EnterPortalBlock extends BaseEntityBlock {
@@ -84,19 +86,28 @@ public class EnterPortalBlock extends BaseEntityBlock {
             if (player.canUsePortal(true) && currentTime >= cooldownEndTime) {
                 if (world.getBlockEntity(pos) instanceof EnterPortalBlockEntity portalEntity) {
                     BlockPos destination = portalEntity.getDestination();
-                    if(destination != null && world instanceof ServerLevel) {
+                    ResourceKey<Level> destinationDimension = portalEntity.getDestinationDimension();
+                    
+                    if(destination != null && world instanceof ServerLevel serverLevel) {
                         // Notify owner spawner to track player
                         BlockPos ownerPos = portalEntity.getOwner();
+                        ResourceKey<Level> ownerDimension = portalEntity.getOwnerDimension();
                         if (ownerPos != null) {
-                            BlockEntity ownerEntity = world.getBlockEntity(ownerPos);
-                            if (ownerEntity instanceof DungeonBossSpawnerBlockEntity spawner) {
-                                spawner.trackPlayer(player.getUUID());
+                            ServerLevel ownerLevel = serverLevel.getServer().getLevel(ownerDimension);
+                            if (ownerLevel != null) {
+                                BlockEntity ownerEntity = ownerLevel.getBlockEntity(ownerPos);
+                                if (ownerEntity instanceof DungeonBossSpawnerBlockEntity spawner) {
+                                    spawner.trackPlayer(player.getUUID());
+                                }
                             }
                         }
 
                         // Teleport the player
-                        player.teleportTo(destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5);
-                        player.setPortalCooldown();
+                        ServerLevel targetLevel = serverLevel.getServer().getLevel(destinationDimension);
+                        if (targetLevel != null) {
+                            player.teleportTo(targetLevel, destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5, player.getYRot(), player.getXRot());
+                            player.setPortalCooldown();
+                        }
 
                         // --- Apply Cooldown ---
                         playerCooldowns.put(player.getUUID(), currentTime + COOLDOWN_TICKS);
