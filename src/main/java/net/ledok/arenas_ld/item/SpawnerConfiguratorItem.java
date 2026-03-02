@@ -7,6 +7,7 @@ import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.InteractionResultHolder;
@@ -66,23 +67,33 @@ public class SpawnerConfiguratorItem extends Item {
 
         // Handle spawner selection regardless of current mode
         if (clickedBlockEntity instanceof BossSpawnerBlockEntity || clickedBlockEntity instanceof DungeonBossSpawnerBlockEntity) {
-            stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(data.mode(), Optional.of(clickedPos)));
+            stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(data.mode(), Optional.of(clickedPos), Optional.of(world.dimension())));
             player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawner_selected", clickedPos.toShortString()));
             return InteractionResult.SUCCESS;
         }
 
         Optional<BlockPos> selectedSpawnerPosOpt = data.selectedSpawnerPos();
-        if (selectedSpawnerPosOpt.isEmpty()) {
+        Optional<ResourceKey<Level>> selectedSpawnerDimOpt = data.selectedSpawnerDimension();
+        if (selectedSpawnerPosOpt.isEmpty() || selectedSpawnerDimOpt.isEmpty()) {
             player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.no_spawner_selected"));
             return InteractionResult.FAIL;
         }
 
         BlockPos selectedSpawnerPos = selectedSpawnerPosOpt.get();
-        BlockEntity selectedBlockEntity = world.getBlockEntity(selectedSpawnerPos);
+        ResourceKey<Level> selectedSpawnerDim = selectedSpawnerDimOpt.get();
+        ServerLevel spawnerWorld = world.getServer().getLevel(selectedSpawnerDim);
+
+        if (spawnerWorld == null) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.invalid_spawner"));
+            stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, SpawnerSelectionDataComponent.DEFAULT);
+            return InteractionResult.FAIL;
+        }
+
+        BlockEntity selectedBlockEntity = spawnerWorld.getBlockEntity(selectedSpawnerPos);
 
         if (!(selectedBlockEntity instanceof BossSpawnerBlockEntity) && !(selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity)) {
             player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.invalid_spawner"));
-            stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(data.mode(), Optional.empty()));
+            stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, SpawnerSelectionDataComponent.DEFAULT);
             return InteractionResult.FAIL;
         }
 
@@ -119,7 +130,7 @@ public class SpawnerConfiguratorItem extends Item {
                 return InteractionResult.PASS;
         }
 
-        world.sendBlockUpdated(selectedSpawnerPos, selectedBlockEntity.getBlockState(), selectedBlockEntity.getBlockState(), 3);
+        spawnerWorld.sendBlockUpdated(selectedSpawnerPos, selectedBlockEntity.getBlockState(), selectedBlockEntity.getBlockState(), 3);
         return InteractionResult.SUCCESS;
     }
 
