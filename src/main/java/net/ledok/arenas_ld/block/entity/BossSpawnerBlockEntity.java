@@ -466,17 +466,21 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
         BlockPos absoluteEnterDestPos = this.worldPosition.offset(enterPortalDestCoords);
 
-        world.setBlock(absoluteEnterSpawnPos, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
-        if (world.getBlockEntity(absoluteEnterSpawnPos) instanceof EnterPortalBlockEntity be) {
-            be.setDestination(absoluteEnterDestPos, enterPortalDestDimension);
+        ServerLevel spawnWorld = Objects.requireNonNull(world.getServer()).getLevel(enterPortalSpawnDimension);
+        if (spawnWorld != null) {
+            spawnWorld.setBlock(absoluteEnterSpawnPos, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
+            if (spawnWorld.getBlockEntity(absoluteEnterSpawnPos) instanceof EnterPortalBlockEntity be) {
+                be.setDestination(absoluteEnterDestPos, enterPortalDestDimension);
+            }
         }
     }
 
     protected void removeEnterPortal(ServerLevel world) {
         if (enterPortalSpawnCoords != null && !enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
             BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
-            if (world.getBlockState(absoluteEnterSpawnPos).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
-                world.setBlock(absoluteEnterSpawnPos, Blocks.AIR.defaultBlockState(), 3);
+            ServerLevel spawnWorld = Objects.requireNonNull(world.getServer()).getLevel(enterPortalSpawnDimension);
+            if (spawnWorld != null && spawnWorld.getBlockState(absoluteEnterSpawnPos).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
+                spawnWorld.setBlock(absoluteEnterSpawnPos, Blocks.AIR.defaultBlockState(), 3);
             }
         }
     }
