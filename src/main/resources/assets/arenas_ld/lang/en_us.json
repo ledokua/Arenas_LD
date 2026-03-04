@@ -2,6 +2,7 @@
   "block.arenas_ld.boss_spawner": "Raid boss spawner",
   "block.arenas_ld.mob_spawner": "Mob spawner",
   "block.arenas_ld.dungeon_boss_spawner": "Dungeon boss spawner",
+  "block.arenas_ld.mob_arena_spawner": "Mob Arena Spawner",
   "block.arenas_ld.enter_portal": "Raid enter portal",
   "block.arenas_ld.exit_portal": "Raid exit portal",
   "block.arenas_ld.phase_block": "Phase Block",
@@ -52,6 +53,12 @@
   "gui.arenas_ld.portal_active_time": "Portal Active Time (ticks)",
   "gui.arenas_ld.min_players": "Min Players",
   "gui.arenas_ld.dungeon_close_timer": "Dungeon Close Timer (ticks)",
+  "gui.arenas_ld.spawn_distance": "Spawn Distance",
+  "gui.arenas_ld.wave_timer": "Wave Timer (seconds)",
+  "gui.arenas_ld.additional_time": "Additional Time (seconds)",
+  "gui.arenas_ld.time_between_waves": "Time Between Waves (seconds)",
+  "gui.arenas_ld.attribute_scale": "Attribute Scale",
+  "gui.arenas_ld.mobs": "Mobs",
 
   "item.arenas_ld.linker.mode.group_config": "Group Configuration",
   "item.arenas_ld.linker.mode.spawner_linking": "Spawner Linking",
@@ -95,6 +102,7 @@
   "container.arenas_ld.mob_spawner_config": "Mob Spawner Configuration",
   "container.arenas_ld.boss_spawner_config": "Boss Spawner Configuration",
   "container.arenas_ld.dungeon_boss_spawner_config": "Dungeon Boss Spawner Configuration",
+  "container.arenas_ld.mob_arena_spawner_config": "Mob Arena Spawner Configuration",
 
   "bossbar.arenas_ld.dungeon_closing": "Dungeon Closing",
   "message.arenas_ld.dungeon_failed": "Dungeon failed",

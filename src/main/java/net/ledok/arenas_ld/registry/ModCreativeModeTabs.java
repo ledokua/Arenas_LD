@@ -19,6 +19,7 @@ public class ModCreativeModeTabs {
                 output.accept(BlockRegistry.MOB_SPAWNER_BLOCK);
                 output.accept(BlockRegistry.BOSS_SPAWNER_BLOCK);
                 output.accept(BlockRegistry.DUNGEON_BOSS_SPAWNER_BLOCK);
+                output.accept(BlockRegistry.MOB_ARENA_SPAWNER_BLOCK);
                 output.accept(BlockRegistry.PHASE_BLOCK);
                 // output.accept(BlockRegistry.DUNGEON_CONTROLLER_BLOCK); // This block is technical and should not be in the creative tab
                 output.accept(BlockRegistry.ENTER_PORTAL_BLOCK);

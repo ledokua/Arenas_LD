@@ -22,6 +22,10 @@ public class ModScreenHandlers {
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_spawner"),
                     new ExtendedScreenHandlerType<>(MobSpawnerScreenHandler::new, MobSpawnerData.CODEC));
 
+    public static final MenuType<MobArenaSpawnerScreenHandler> MOB_ARENA_SPAWNER_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_arena_spawner"),
+                    new ExtendedScreenHandlerType<>(MobArenaSpawnerScreenHandler::new, MobArenaSpawnerData.STREAM_CODEC));
+
     public static final MenuType<MobAttributesScreenHandler> MOB_ATTRIBUTES_SCREEN_HANDLER =
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_attributes"),
                     new ExtendedScreenHandlerType<>(MobAttributesScreenHandler::new, MobAttributesData.STREAM_CODEC));

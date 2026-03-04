@@ -28,6 +28,9 @@ public class BlockRegistry {
     public static final Block MOB_SPAWNER_BLOCK = registerBlock("mob_spawner",
             new MobSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));
 
+    public static final Block MOB_ARENA_SPAWNER_BLOCK = registerBlock("mob_arena_spawner",
+            new MobArenaSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));
+
     public static final Block PHASE_BLOCK = registerBlock("phase_block",
             new PhaseBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.GLASS).noOcclusion().strength(-1.0f, 3600000.0f)));
 

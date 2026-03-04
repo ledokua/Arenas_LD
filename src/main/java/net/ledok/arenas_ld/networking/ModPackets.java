@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
+import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
 import net.ledok.arenas_ld.item.LinkerItem;
 import net.ledok.arenas_ld.item.SpawnerConfiguratorItem;
@@ -12,6 +13,7 @@ import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
@@ -22,6 +24,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class ModPackets {
@@ -155,6 +158,76 @@ public class ModPackets {
         public Type<? extends CustomPacketPayload> type() {return TYPE;}
     }
 
+    public record UpdateMobArenaSpawnerPayload(
+            BlockPos pos, int triggerRadius, int battleRadius, int spawnDistance,
+            int waveTimer, int additionalTime, int timeBetweenWaves, double attributeScale
+    ) implements CustomPacketPayload {
+        public static final Type<UpdateMobArenaSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_spawner"));
+
+        public static final StreamCodec<FriendlyByteBuf, UpdateMobArenaSpawnerPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> payload.write(buf), UpdateMobArenaSpawnerPayload::new);
+
+        public UpdateMobArenaSpawnerPayload(FriendlyByteBuf buf) {
+            this(
+                    buf.readBlockPos(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(),
+                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readDouble()
+            );
+        }
+
+        public void write(FriendlyByteBuf buf) {
+            buf.writeBlockPos(pos);
+            buf.writeVarInt(triggerRadius);
+            buf.writeVarInt(battleRadius);
+            buf.writeVarInt(spawnDistance);
+            buf.writeVarInt(waveTimer);
+            buf.writeVarInt(additionalTime);
+            buf.writeVarInt(timeBetweenWaves);
+            buf.writeDouble(attributeScale);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    public record UpdateMobArenaMobsPayload(
+            BlockPos pos, List<MobArenaMobData> mobs
+    ) implements CustomPacketPayload {
+        public static final Type<UpdateMobArenaMobsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_mobs"));
+
+        public static final StreamCodec<FriendlyByteBuf, UpdateMobArenaMobsPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> payload.write(buf), UpdateMobArenaMobsPayload::new);
+
+        public UpdateMobArenaMobsPayload(FriendlyByteBuf buf) {
+            this(
+                    buf.readBlockPos(),
+                    readMobs(buf)
+            );
+        }
+
+        private static List<MobArenaMobData> readMobs(FriendlyByteBuf buf) {
+            List<MobArenaMobData> mobs = new ArrayList<>();
+            int size = buf.readVarInt();
+            for (int i = 0; i < size; i++) {
+                CompoundTag tag = buf.readNbt();
+                if (tag != null) {
+                    mobs.add(MobArenaMobData.fromNbt(tag));
+                }
+            }
+            return mobs;
+        }
+
+        public void write(FriendlyByteBuf buf) {
+            buf.writeBlockPos(pos);
+            buf.writeVarInt(mobs.size());
+            for (MobArenaMobData mob : mobs) {
+                buf.writeNbt(mob.toNbt());
+            }
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
     public record UpdateAttributesPayload(
             BlockPos pos, List<AttributeData> attributes
     ) implements CustomPacketPayload {
@@ -248,6 +321,8 @@ public class ModPackets {
         PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateDungeonBossSpawnerPayload.TYPE, UpdateDungeonBossSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerPayload.TYPE, UpdateMobSpawnerPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateMobArenaSpawnerPayload.TYPE, UpdateMobArenaSpawnerPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateMobArenaMobsPayload.TYPE, UpdateMobArenaMobsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateAttributesPayload.TYPE, UpdateAttributesPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateEquipmentPayload.TYPE, UpdateEquipmentPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC);
@@ -316,6 +391,34 @@ public class ModPackets {
                     blockEntity.mobCount = payload.mobCount();
                     blockEntity.mobSpread = payload.mobSpread();
                     blockEntity.groupId = payload.groupId();
+                    blockEntity.setChanged();
+                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(UpdateMobArenaSpawnerPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                Level world = context.player().level();
+                if (world.getBlockEntity(payload.pos()) instanceof MobArenaSpawnerBlockEntity blockEntity) {
+                    blockEntity.triggerRadius = payload.triggerRadius();
+                    blockEntity.battleRadius = payload.battleRadius();
+                    blockEntity.spawnDistance = payload.spawnDistance();
+                    blockEntity.waveTimer = payload.waveTimer();
+                    blockEntity.additionalTime = payload.additionalTime();
+                    blockEntity.timeBetweenWaves = payload.timeBetweenWaves();
+                    blockEntity.attributeScale = payload.attributeScale();
+                    blockEntity.setChanged();
+                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(UpdateMobArenaMobsPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                Level world = context.player().level();
+                if (world.getBlockEntity(payload.pos()) instanceof MobArenaSpawnerBlockEntity blockEntity) {
+                    blockEntity.mobs = payload.mobs();
                     blockEntity.setChanged();
                     world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
                 }
