@@ -6,7 +6,9 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 
 public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawnerScreenHandler> {
@@ -18,11 +20,18 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
     private EditBox additionalTimeField;
     private EditBox timeBetweenWavesField;
     private EditBox attributeScaleField;
+    private EditBox prepareTimeField;
+    private EditBox exitPortalDestinationField;
+    private EditBox exitPortalDestinationDimensionField;
+    private EditBox enterPortalSpawnCoordsField;
+    private EditBox enterPortalSpawnDimensionField;
+    private EditBox enterPortalDestCoordsField;
+    private EditBox enterPortalDestDimensionField;
 
     public MobArenaSpawnerScreen(MobArenaSpawnerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
-        this.imageWidth = 200;
-        this.imageHeight = 250;
+        this.imageWidth = 470;
+        this.imageHeight = 280;
     }
 
     @Override
@@ -33,50 +42,99 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
         int fieldWidth = 150;
         int fieldHeight = 20;
         int yOffset = 24;
-        int x = (this.width - fieldWidth) / 2;
-        int y = 20;
+        int columnPadding = 10;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.trigger_radius"), (button) -> {}, this.font));
-        triggerRadiusField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
+        int col1X = this.leftPos + 5;
+        int col2X = col1X + fieldWidth + columnPadding;
+        int col3X = col2X + fieldWidth + columnPadding;
+
+        int y;
+
+        // Column 1
+        y = 20;
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.trigger_radius"), (button) -> {}, this.font));
+        triggerRadiusField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         triggerRadiusField.setMaxLength(4);
         this.addRenderableWidget(triggerRadiusField);
-        y += yOffset * 1.7;
+        y += (int)(yOffset * 1.7);
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.battle_radius"), (button) -> {}, this.font));
-        battleRadiusField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.battle_radius"), (button) -> {}, this.font));
+        battleRadiusField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         battleRadiusField.setMaxLength(4);
         this.addRenderableWidget(battleRadiusField);
-        y += yOffset * 1.7;
+        y += (int)(yOffset * 1.7);
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.spawn_distance"), (button) -> {}, this.font));
-        spawnDistanceField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.spawn_distance"), (button) -> {}, this.font));
+        spawnDistanceField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         spawnDistanceField.setMaxLength(4);
         this.addRenderableWidget(spawnDistanceField);
-        y += yOffset * 1.7;
+        y += (int)(yOffset * 1.7);
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.wave_timer"), (button) -> {}, this.font));
-        waveTimerField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.wave_timer"), (button) -> {}, this.font));
+        waveTimerField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         waveTimerField.setMaxLength(8);
         this.addRenderableWidget(waveTimerField);
-        y += yOffset * 1.7;
+        y += (int)(yOffset * 1.7);
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.additional_time"), (button) -> {}, this.font));
-        additionalTimeField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.additional_time"), (button) -> {}, this.font));
+        additionalTimeField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         additionalTimeField.setMaxLength(8);
         this.addRenderableWidget(additionalTimeField);
-        y += yOffset * 1.7;
+        y += (int)(yOffset * 1.7);
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.time_between_waves"), (button) -> {}, this.font));
-        timeBetweenWavesField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.time_between_waves"), (button) -> {}, this.font));
+        timeBetweenWavesField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         timeBetweenWavesField.setMaxLength(8);
         this.addRenderableWidget(timeBetweenWavesField);
-        y += yOffset * 1.7;
+        y += (int)(yOffset * 1.7);
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(x, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.attribute_scale"), (button) -> {}, this.font));
-        attributeScaleField = new EditBox(this.font, x, y, fieldWidth, fieldHeight, Component.literal(""));
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.attribute_scale"), (button) -> {}, this.font));
+        attributeScaleField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         attributeScaleField.setMaxLength(8);
         this.addRenderableWidget(attributeScaleField);
-        y += yOffset * 1.7;
+        y += (int)(yOffset * 1.7);
+
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.prepare_time"), (button) -> {}, this.font));
+        prepareTimeField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
+        prepareTimeField.setMaxLength(8);
+        this.addRenderableWidget(prepareTimeField);
+
+        // Column 2
+        y = 20;
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_spawn"), (button) -> {}, this.font));
+        enterPortalSpawnCoordsField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
+        enterPortalSpawnCoordsField.setMaxLength(32);
+        this.addRenderableWidget(enterPortalSpawnCoordsField);
+        y += (int)(yOffset * 1.7);
+
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_spawn_dim"), (button) -> {}, this.font));
+        enterPortalSpawnDimensionField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
+        enterPortalSpawnDimensionField.setMaxLength(128);
+        this.addRenderableWidget(enterPortalSpawnDimensionField);
+        y += (int)(yOffset * 1.7);
+
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_dest"), (button) -> {}, this.font));
+        enterPortalDestCoordsField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
+        enterPortalDestCoordsField.setMaxLength(32);
+        this.addRenderableWidget(enterPortalDestCoordsField);
+        y += (int)(yOffset * 1.7);
+
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_dest_dim"), (button) -> {}, this.font));
+        enterPortalDestDimensionField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
+        enterPortalDestDimensionField.setMaxLength(128);
+        this.addRenderableWidget(enterPortalDestDimensionField);
+        y += (int)(yOffset * 1.7);
+
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.exit_portal_destination"), (button) -> {}, this.font));
+        exitPortalDestinationField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
+        exitPortalDestinationField.setMaxLength(32);
+        this.addRenderableWidget(exitPortalDestinationField);
+        y += (int)(yOffset * 1.7);
+
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.exit_portal_destination_dim"), (button) -> {}, this.font));
+        exitPortalDestinationDimensionField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
+        exitPortalDestinationDimensionField.setMaxLength(128);
+        this.addRenderableWidget(exitPortalDestinationDimensionField);
 
         this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.mobs"), button -> {
             this.minecraft.setScreen(new MobArenaMobsScreen(menu.blockEntity.getBlockPos(), menu.blockEntity.mobs, this));
@@ -98,7 +156,33 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
             additionalTimeField.setValue(String.valueOf(menu.blockEntity.additionalTime));
             timeBetweenWavesField.setValue(String.valueOf(menu.blockEntity.timeBetweenWaves));
             attributeScaleField.setValue(String.valueOf(menu.blockEntity.attributeScale));
+            prepareTimeField.setValue(String.valueOf(menu.blockEntity.prepareTime));
+            exitPortalDestinationField.setValue(String.format("%d %d %d", menu.blockEntity.exitPortalDestination.getX(), menu.blockEntity.exitPortalDestination.getY(), menu.blockEntity.exitPortalDestination.getZ()));
+            exitPortalDestinationDimensionField.setValue(menu.blockEntity.exitPortalDestinationDimension.location().toString());
+            enterPortalSpawnCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.enterPortalSpawnCoords.getX(), menu.blockEntity.enterPortalSpawnCoords.getY(), menu.blockEntity.enterPortalSpawnCoords.getZ()));
+            enterPortalSpawnDimensionField.setValue(menu.blockEntity.enterPortalSpawnDimension.location().toString());
+            enterPortalDestCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.enterPortalDestCoords.getX(), menu.blockEntity.enterPortalDestCoords.getY(), menu.blockEntity.enterPortalDestCoords.getZ()));
+            enterPortalDestDimensionField.setValue(menu.blockEntity.enterPortalDestDimension.location().toString());
         }
+    }
+
+    private BlockPos parseCoords(String text) {
+        try {
+            String[] parts = text.split(" ");
+            if (parts.length == 3) {
+                return new BlockPos(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
+            }
+        } catch (NumberFormatException ignored) {
+        }
+        return BlockPos.ZERO;
+    }
+
+    private ResourceLocation parseDimension(String text) {
+        try {
+            return ResourceLocation.parse(text);
+        } catch (Exception ignored) {
+        }
+        return ResourceLocation.fromNamespaceAndPath("minecraft", "overworld");
     }
 
     private void onSave() {
@@ -111,7 +195,14 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
                     Integer.parseInt(waveTimerField.getValue()),
                     Integer.parseInt(additionalTimeField.getValue()),
                     Integer.parseInt(timeBetweenWavesField.getValue()),
-                    Double.parseDouble(attributeScaleField.getValue())
+                    Double.parseDouble(attributeScaleField.getValue()),
+                    Integer.parseInt(prepareTimeField.getValue()),
+                    parseCoords(exitPortalDestinationField.getValue()),
+                    parseDimension(exitPortalDestinationDimensionField.getValue()),
+                    parseCoords(enterPortalSpawnCoordsField.getValue()),
+                    parseDimension(enterPortalSpawnDimensionField.getValue()),
+                    parseCoords(enterPortalDestCoordsField.getValue()),
+                    parseDimension(enterPortalDestDimensionField.getValue())
             ));
             this.onClose();
         } catch (NumberFormatException e) {

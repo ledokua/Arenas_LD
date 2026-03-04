@@ -50,6 +50,8 @@
   "gui.arenas_ld.exit_portal_dim": "Exit Portal Dim",
   "gui.arenas_ld.exit_position": "Exit Position (X Y Z)",
   "gui.arenas_ld.exit_position_dim": "Exit Position Dim",
+  "gui.arenas_ld.exit_portal_destination": "Exit Portal Destination (X Y Z)",
+  "gui.arenas_ld.exit_portal_destination_dim": "Exit Portal Destination Dim",
   "gui.arenas_ld.portal_active_time": "Portal Active Time (ticks)",
   "gui.arenas_ld.min_players": "Min Players",
   "gui.arenas_ld.dungeon_close_timer": "Dungeon Close Timer (ticks)",
@@ -58,6 +60,7 @@
   "gui.arenas_ld.additional_time": "Additional Time (seconds)",
   "gui.arenas_ld.time_between_waves": "Time Between Waves (seconds)",
   "gui.arenas_ld.attribute_scale": "Attribute Scale",
+  "gui.arenas_ld.prepare_time": "Prepare Time (seconds)",
   "gui.arenas_ld.mobs": "Mobs",
 
   "item.arenas_ld.linker.mode.group_config": "Group Configuration",
@@ -105,6 +108,9 @@
   "container.arenas_ld.mob_arena_spawner_config": "Mob Arena Spawner Configuration",
 
   "bossbar.arenas_ld.dungeon_closing": "Dungeon Closing",
+  "bossbar.arenas_ld.next_wave_in": "Next wave in %s seconds",
+  "bossbar.arenas_ld.wave_info": "Wave %s - %s seconds remaining",
+  "bossbar.arenas_ld.prepare_time": "Prepare Time: %s",
   "message.arenas_ld.dungeon_failed": "Dungeon failed",
   "message.arenas_ld.config_reloaded": "Arenas LD config reloaded!",
   "creativetab.arenas_ld_tab": "Arenas LD"

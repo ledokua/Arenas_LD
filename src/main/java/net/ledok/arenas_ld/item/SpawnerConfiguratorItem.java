@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.item;
 
 import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
+import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
 import net.minecraft.core.BlockPos;
@@ -66,7 +67,7 @@ public class SpawnerConfiguratorItem extends Item {
         BlockEntity clickedBlockEntity = world.getBlockEntity(clickedPos);
 
         // Handle spawner selection regardless of current mode
-        if (clickedBlockEntity instanceof BossSpawnerBlockEntity || clickedBlockEntity instanceof DungeonBossSpawnerBlockEntity) {
+        if (clickedBlockEntity instanceof BossSpawnerBlockEntity || clickedBlockEntity instanceof DungeonBossSpawnerBlockEntity || clickedBlockEntity instanceof MobArenaSpawnerBlockEntity) {
             stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(data.mode(), Optional.of(clickedPos), Optional.of(world.dimension())));
             player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawner_selected", clickedPos.toShortString()));
             return InteractionResult.SUCCESS;
@@ -91,7 +92,7 @@ public class SpawnerConfiguratorItem extends Item {
 
         BlockEntity selectedBlockEntity = spawnerWorld.getBlockEntity(selectedSpawnerPos);
 
-        if (!(selectedBlockEntity instanceof BossSpawnerBlockEntity) && !(selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity)) {
+        if (!(selectedBlockEntity instanceof BossSpawnerBlockEntity) && !(selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity) && !(selectedBlockEntity instanceof MobArenaSpawnerBlockEntity)) {
             player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.invalid_spawner"));
             stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, SpawnerSelectionDataComponent.DEFAULT);
             return InteractionResult.FAIL;
@@ -104,25 +105,40 @@ public class SpawnerConfiguratorItem extends Item {
         switch (currentMode) {
             case EXIT_POSITION:
                 if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
-                    bossSpawner.setExitPortalCoords(relativePos, clickedDimension);
+                    bossSpawner.exitPortalCoords = relativePos;
+                    bossSpawner.exitDimension = clickedDimension;
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
-                    dungeonBossSpawner.setExitPositionCoords(relativePos, clickedDimension);
+                    dungeonBossSpawner.exitPositionCoords = relativePos;
+                    dungeonBossSpawner.exitPositionDimension = clickedDimension;
+                } else if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
+                    mobArenaSpawner.exitPortalDestination = relativePos;
+                    mobArenaSpawner.exitPortalDestinationDimension = clickedDimension;
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.exit_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
             case ENTER_PORTAL_POSITION:
                 if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
-                    bossSpawner.setEnterPortalSpawnCoords(relativePos, clickedDimension);
+                    bossSpawner.enterPortalSpawnCoords = relativePos;
+                    bossSpawner.enterPortalSpawnDimension = clickedDimension;
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
-                    dungeonBossSpawner.setEnterPortalSpawnCoords(relativePos, clickedDimension);
+                    dungeonBossSpawner.enterPortalSpawnCoords = relativePos;
+                    dungeonBossSpawner.enterPortalSpawnDimension = clickedDimension;
+                } else if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
+                    mobArenaSpawner.enterPortalSpawnCoords = relativePos;
+                    mobArenaSpawner.enterPortalSpawnDimension = clickedDimension;
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.enter_portal_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
             case ENTER_PORTAL_DESTINATION:
                 if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
-                    bossSpawner.setEnterPortalDestCoords(relativePos, clickedDimension);
+                    bossSpawner.enterPortalDestCoords = relativePos;
+                    bossSpawner.enterPortalDestDimension = clickedDimension;
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
-                    dungeonBossSpawner.setEnterPortalDestCoords(relativePos, clickedDimension);
+                    dungeonBossSpawner.enterPortalDestCoords = relativePos;
+                    dungeonBossSpawner.enterPortalDestDimension = clickedDimension;
+                } else if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
+                    mobArenaSpawner.enterPortalDestCoords = relativePos;
+                    mobArenaSpawner.enterPortalDestDimension = clickedDimension;
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.enter_portal_dest_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
@@ -130,6 +146,7 @@ public class SpawnerConfiguratorItem extends Item {
                 return InteractionResult.PASS;
         }
 
+        selectedBlockEntity.setChanged();
         spawnerWorld.sendBlockUpdated(selectedSpawnerPos, selectedBlockEntity.getBlockState(), selectedBlockEntity.getBlockState(), 3);
         return InteractionResult.SUCCESS;
     }

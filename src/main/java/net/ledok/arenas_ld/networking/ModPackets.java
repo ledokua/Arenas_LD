@@ -160,7 +160,10 @@ public class ModPackets {
 
     public record UpdateMobArenaSpawnerPayload(
             BlockPos pos, int triggerRadius, int battleRadius, int spawnDistance,
-            int waveTimer, int additionalTime, int timeBetweenWaves, double attributeScale
+            int waveTimer, int additionalTime, int timeBetweenWaves, double attributeScale, int prepareTime,
+            BlockPos exitPortalDestination, ResourceLocation exitPortalDestinationDimension,
+            BlockPos enterPortalSpawnCoords, ResourceLocation enterPortalSpawnDimension,
+            BlockPos enterPortalDestCoords, ResourceLocation enterPortalDestDimension
     ) implements CustomPacketPayload {
         public static final Type<UpdateMobArenaSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_spawner"));
 
@@ -170,7 +173,10 @@ public class ModPackets {
         public UpdateMobArenaSpawnerPayload(FriendlyByteBuf buf) {
             this(
                     buf.readBlockPos(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(),
-                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readDouble()
+                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readDouble(), buf.readVarInt(),
+                    buf.readBlockPos(), buf.readResourceLocation(),
+                    buf.readBlockPos(), buf.readResourceLocation(),
+                    buf.readBlockPos(), buf.readResourceLocation()
             );
         }
 
@@ -183,6 +189,13 @@ public class ModPackets {
             buf.writeVarInt(additionalTime);
             buf.writeVarInt(timeBetweenWaves);
             buf.writeDouble(attributeScale);
+            buf.writeVarInt(prepareTime);
+            buf.writeBlockPos(exitPortalDestination);
+            buf.writeResourceLocation(exitPortalDestinationDimension);
+            buf.writeBlockPos(enterPortalSpawnCoords);
+            buf.writeResourceLocation(enterPortalSpawnDimension);
+            buf.writeBlockPos(enterPortalDestCoords);
+            buf.writeResourceLocation(enterPortalDestDimension);
         }
 
         @Override
@@ -408,6 +421,13 @@ public class ModPackets {
                     blockEntity.additionalTime = payload.additionalTime();
                     blockEntity.timeBetweenWaves = payload.timeBetweenWaves();
                     blockEntity.attributeScale = payload.attributeScale();
+                    blockEntity.prepareTime = payload.prepareTime();
+                    blockEntity.exitPortalDestination = payload.exitPortalDestination();
+                    blockEntity.exitPortalDestinationDimension = ResourceKey.create(Registries.DIMENSION, payload.exitPortalDestinationDimension());
+                    blockEntity.enterPortalSpawnCoords = payload.enterPortalSpawnCoords();
+                    blockEntity.enterPortalSpawnDimension = ResourceKey.create(Registries.DIMENSION, payload.enterPortalSpawnDimension());
+                    blockEntity.enterPortalDestCoords = payload.enterPortalDestCoords();
+                    blockEntity.enterPortalDestDimension = ResourceKey.create(Registries.DIMENSION, payload.enterPortalDestDimension());
                     blockEntity.setChanged();
                     world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
                 }
