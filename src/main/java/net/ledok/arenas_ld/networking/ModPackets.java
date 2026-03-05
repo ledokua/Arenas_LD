@@ -240,6 +240,45 @@ public class ModPackets {
         @Override
         public Type<? extends CustomPacketPayload> type() { return TYPE; }
     }
+    
+    public record UpdateMobArenaRewardsPayload(
+            BlockPos pos, List<MobArenaRewardData> rewards
+    ) implements CustomPacketPayload {
+        public static final Type<UpdateMobArenaRewardsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_rewards"));
+
+        public static final StreamCodec<FriendlyByteBuf, UpdateMobArenaRewardsPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> payload.write(buf), UpdateMobArenaRewardsPayload::new);
+
+        public UpdateMobArenaRewardsPayload(FriendlyByteBuf buf) {
+            this(
+                    buf.readBlockPos(),
+                    readRewards(buf)
+            );
+        }
+
+        private static List<MobArenaRewardData> readRewards(FriendlyByteBuf buf) {
+            List<MobArenaRewardData> rewards = new ArrayList<>();
+            int size = buf.readVarInt();
+            for (int i = 0; i < size; i++) {
+                CompoundTag tag = buf.readNbt();
+                if (tag != null) {
+                    rewards.add(MobArenaRewardData.fromNbt(tag));
+                }
+            }
+            return rewards;
+        }
+
+        public void write(FriendlyByteBuf buf) {
+            buf.writeBlockPos(pos);
+            buf.writeVarInt(rewards.size());
+            for (MobArenaRewardData reward : rewards) {
+                buf.writeNbt(reward.toNbt());
+            }
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
 
     public record UpdateAttributesPayload(
             BlockPos pos, List<AttributeData> attributes
@@ -336,6 +375,7 @@ public class ModPackets {
         PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerPayload.TYPE, UpdateMobSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobArenaSpawnerPayload.TYPE, UpdateMobArenaSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobArenaMobsPayload.TYPE, UpdateMobArenaMobsPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateMobArenaRewardsPayload.TYPE, UpdateMobArenaRewardsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateAttributesPayload.TYPE, UpdateAttributesPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateEquipmentPayload.TYPE, UpdateEquipmentPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC);
@@ -439,6 +479,17 @@ public class ModPackets {
                 Level world = context.player().level();
                 if (world.getBlockEntity(payload.pos()) instanceof MobArenaSpawnerBlockEntity blockEntity) {
                     blockEntity.mobs = payload.mobs();
+                    blockEntity.setChanged();
+                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                }
+            });
+        });
+        
+        ServerPlayNetworking.registerGlobalReceiver(UpdateMobArenaRewardsPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                Level world = context.player().level();
+                if (world.getBlockEntity(payload.pos()) instanceof MobArenaSpawnerBlockEntity blockEntity) {
+                    blockEntity.rewards = payload.rewards();
                     blockEntity.setChanged();
                     world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
                 }

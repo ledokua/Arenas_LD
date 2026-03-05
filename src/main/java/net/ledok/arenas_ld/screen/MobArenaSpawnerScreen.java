@@ -140,6 +140,10 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
             this.minecraft.setScreen(new MobArenaMobsScreen(menu.blockEntity.getBlockPos(), menu.blockEntity.mobs, this));
         }).bounds(this.width / 2 - 105, this.height - 30, 100, 20).build());
 
+        this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.rewards"), button -> {
+            this.minecraft.setScreen(new MobArenaRewardsScreen(menu.blockEntity.getBlockPos(), menu.blockEntity.rewards, this));
+        }).bounds(this.width / 2 - 105, this.height - 54, 100, 20).build());
+
         this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.save"), button -> onSave())
                 .bounds(this.width / 2 + 5, this.height - 30, 100, 20)
                 .build());

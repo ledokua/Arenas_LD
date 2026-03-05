@@ -3,10 +3,14 @@ package net.ledok.arenas_ld.block.entity;
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.registry.BlockRegistry;
+import net.ledok.arenas_ld.registry.DataComponentRegistry;
+import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.screen.MobArenaSpawnerData;
 import net.ledok.arenas_ld.screen.MobArenaSpawnerScreenHandler;
 import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.ledok.arenas_ld.util.MobArenaMobData;
+import net.ledok.arenas_ld.util.MobArenaRewardData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -31,6 +35,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -41,7 +46,11 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.LootTable;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -66,6 +75,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     public ResourceKey<Level> enterPortalDestDimension = Level.OVERWORLD;
 
     public List<MobArenaMobData> mobs = new ArrayList<>();
+    public List<MobArenaRewardData> rewards = new ArrayList<>();
 
     // --- State Machine Fields ---
     private boolean isArenaActive = false;
@@ -189,6 +199,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     }
 
     private void completeWave(ServerLevel world) {
+        distributeRewards(world);
         timeBetweenWavesTicks = timeBetweenWaves * 20;
         spawnExitPortal(world);
         setChanged();
@@ -357,6 +368,53 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
     }
 
+    private void distributeRewards(ServerLevel world) {
+        List<MobArenaRewardData> validRewards = new ArrayList<>();
+        for (MobArenaRewardData reward : rewards) {
+            if (currentWave >= reward.minWave && currentWave <= reward.maxWave && (currentWave - reward.minWave) % reward.waveFrequency == 0) {
+                validRewards.add(reward);
+            }
+        }
+
+        if (validRewards.isEmpty()) return;
+
+        AABB battleBox = new AABB(this.worldPosition).inflate(battleRadius);
+        List<ServerPlayer> players = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
+
+        for (MobArenaRewardData reward : validRewards) {
+            for (int i = 0; i < reward.rolls; i++) {
+                if (reward.perPlayer) {
+                    for (ServerPlayer player : players) {
+                        ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
+                        bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(reward.lootTableId));
+                        if (!player.getInventory().add(bundle)) {
+                            player.drop(bundle, false);
+                        }
+                    }
+                } else {
+                    if (players.isEmpty()) continue;
+                    ServerPlayer randomPlayer = players.get(world.random.nextInt(players.size()));
+                    ResourceLocation lootTableIdentifier = ResourceLocation.tryParse(reward.lootTableId);
+                    if (lootTableIdentifier != null) {
+                        LootTable lootTable = Objects.requireNonNull(world.getServer()).reloadableRegistries().getLootTable(ResourceKey.create(Registries.LOOT_TABLE, lootTableIdentifier));
+                        LootParams.Builder builder = new LootParams.Builder(world)
+                                .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(worldPosition))
+                                .withParameter(LootContextParams.THIS_ENTITY, randomPlayer);
+                        LootParams lootParams = builder.create(net.minecraft.world.level.storage.loot.parameters.LootContextParamSets.GIFT);
+                        lootTable.getRandomItems(lootParams).forEach(stack -> {
+                            double x = worldPosition.getX() + 0.5 + (world.random.nextDouble() * 8.0) - 4.0;
+                            double y = worldPosition.getY() + 3.5;
+                            double z = worldPosition.getZ() + 0.5 + (world.random.nextDouble() * 8.0) - 4.0;
+                            ItemEntity itemEntity = new ItemEntity(world, x, y, z, stack);
+                            itemEntity.setDeltaMovement(world.random.nextDouble() * 0.2 - 0.1, 0.4, world.random.nextDouble() * 0.2 - 0.1);
+                            world.addFreshEntity(itemEntity);
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.saveAdditional(nbt, registryLookup);
@@ -381,6 +439,12 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             mobsList.add(mob.toNbt());
         }
         nbt.put("Mobs", mobsList);
+        
+        ListTag rewardsList = new ListTag();
+        for (MobArenaRewardData reward : rewards) {
+            rewardsList.add(reward.toNbt());
+        }
+        nbt.put("Rewards", rewardsList);
         
         nbt.putBoolean("IsArenaActive", isArenaActive);
         nbt.putInt("CurrentWave", currentWave);
@@ -421,6 +485,14 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             ListTag mobsList = nbt.getList("Mobs", Tag.TAG_COMPOUND);
             for (Tag t : mobsList) {
                 mobs.add(MobArenaMobData.fromNbt((CompoundTag) t));
+            }
+        }
+        
+        rewards.clear();
+        if (nbt.contains("Rewards")) {
+            ListTag rewardsList = nbt.getList("Rewards", Tag.TAG_COMPOUND);
+            for (Tag t : rewardsList) {
+                rewards.add(MobArenaRewardData.fromNbt((CompoundTag) t));
             }
         }
         
