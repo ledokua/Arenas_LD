@@ -23,6 +23,7 @@ public class MobArenaMobsScreen extends Screen {
     private final List<MobArenaMobData> mobs;
     private MobList list;
     private final Screen parent;
+    private Component tooltip;
 
     public MobArenaMobsScreen(BlockPos blockPos, List<MobArenaMobData> mobs, Screen parent) {
         super(Component.translatable("gui.arenas_ld.mobs"));
@@ -53,10 +54,14 @@ public class MobArenaMobsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        this.tooltip = null;
         this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
         this.list.render(guiGraphics, mouseX, mouseY, partialTick);
         guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 15, 16777215);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
+        if (this.tooltip != null) {
+            guiGraphics.renderTooltip(this.font, this.tooltip, mouseX, mouseY);
+        }
     }
 
     class MobList extends ContainerObjectSelectionList<MobEntry> {
@@ -142,33 +147,56 @@ public class MobArenaMobsScreen extends Screen {
 
         @Override
         public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
+            boolean inBounds = mouseY >= 32 && mouseY <= MobArenaMobsScreen.this.height - 32;
+
             this.mobIdField.setX(left);
             this.mobIdField.setY(top);
             this.mobIdField.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.mobIdField.isMouseOver(mouseX, mouseY)) {
+                MobArenaMobsScreen.this.tooltip = Component.literal("Mob ID");
+            }
 
             this.attributesButton.setX(left + 105);
             this.attributesButton.setY(top);
             this.attributesButton.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.attributesButton.isMouseOver(mouseX, mouseY)) {
+                MobArenaMobsScreen.this.tooltip = this.attributesButton.getMessage();
+            }
 
             this.equipmentButton.setX(left + 170);
             this.equipmentButton.setY(top);
             this.equipmentButton.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.equipmentButton.isMouseOver(mouseX, mouseY)) {
+                MobArenaMobsScreen.this.tooltip = this.equipmentButton.getMessage();
+            }
 
             this.weightField.setX(left + 235);
             this.weightField.setY(top);
             this.weightField.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.weightField.isMouseOver(mouseX, mouseY)) {
+                MobArenaMobsScreen.this.tooltip = Component.literal("Weight");
+            }
 
             this.minWaveField.setX(left + 270);
             this.minWaveField.setY(top);
             this.minWaveField.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.minWaveField.isMouseOver(mouseX, mouseY)) {
+                MobArenaMobsScreen.this.tooltip = Component.literal("Min Wave");
+            }
 
             this.maxWaveField.setX(left + 305);
             this.maxWaveField.setY(top);
             this.maxWaveField.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.maxWaveField.isMouseOver(mouseX, mouseY)) {
+                MobArenaMobsScreen.this.tooltip = Component.literal("Max Wave");
+            }
 
             this.removeButton.setX(left + 340);
             this.removeButton.setY(top);
             this.removeButton.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.removeButton.isMouseOver(mouseX, mouseY)) {
+                MobArenaMobsScreen.this.tooltip = this.removeButton.getMessage();
+            }
         }
 
         @Override

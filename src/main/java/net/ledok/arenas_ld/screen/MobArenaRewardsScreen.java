@@ -23,6 +23,7 @@ public class MobArenaRewardsScreen extends Screen {
     private final List<MobArenaRewardData> rewards;
     private RewardList list;
     private final Screen parent;
+    private Component tooltip;
 
     public MobArenaRewardsScreen(BlockPos blockPos, List<MobArenaRewardData> rewards, Screen parent) {
         super(Component.translatable("gui.arenas_ld.rewards"));
@@ -55,10 +56,14 @@ public class MobArenaRewardsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        this.tooltip = null;
         this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
         this.list.render(guiGraphics, mouseX, mouseY, partialTick);
         guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 15, 16777215);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
+        if (this.tooltip != null) {
+            guiGraphics.renderTooltip(this.font, this.tooltip, mouseX, mouseY);
+        }
     }
 
     class RewardList extends ContainerObjectSelectionList<RewardEntry> {
@@ -154,37 +159,63 @@ public class MobArenaRewardsScreen extends Screen {
 
         @Override
         public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
+            boolean inBounds = mouseY >= 32 && mouseY <= MobArenaRewardsScreen.this.height - 32;
+
             this.perPlayerCheckbox.setX(left);
             this.perPlayerCheckbox.setY(top);
             this.perPlayerCheckbox.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.perPlayerCheckbox.isMouseOver(mouseX, mouseY)) {
+                MobArenaRewardsScreen.this.tooltip = Component.literal("Per Player");
+            }
             
             this.lootTableIdField.setX(left + 25);
             this.lootTableIdField.setY(top);
             this.lootTableIdField.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.lootTableIdField.isMouseOver(mouseX, mouseY)) {
+                MobArenaRewardsScreen.this.tooltip = Component.literal("Loot Table ID");
+            }
 
             this.weightField.setX(left + 130);
             this.weightField.setY(top);
             this.weightField.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.weightField.isMouseOver(mouseX, mouseY)) {
+                MobArenaRewardsScreen.this.tooltip = Component.literal("Weight");
+            }
             
             this.rollsField.setX(left + 165);
             this.rollsField.setY(top);
             this.rollsField.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.rollsField.isMouseOver(mouseX, mouseY)) {
+                MobArenaRewardsScreen.this.tooltip = Component.literal("Rolls");
+            }
 
             this.minWaveField.setX(left + 200);
             this.minWaveField.setY(top);
             this.minWaveField.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.minWaveField.isMouseOver(mouseX, mouseY)) {
+                MobArenaRewardsScreen.this.tooltip = Component.literal("Min Wave");
+            }
 
             this.maxWaveField.setX(left + 235);
             this.maxWaveField.setY(top);
             this.maxWaveField.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.maxWaveField.isMouseOver(mouseX, mouseY)) {
+                MobArenaRewardsScreen.this.tooltip = Component.literal("Max Wave");
+            }
             
             this.waveFrequencyField.setX(left + 270);
             this.waveFrequencyField.setY(top);
             this.waveFrequencyField.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.waveFrequencyField.isMouseOver(mouseX, mouseY)) {
+                MobArenaRewardsScreen.this.tooltip = Component.literal("Wave Frequency");
+            }
 
             this.removeButton.setX(left + 305);
             this.removeButton.setY(top);
             this.removeButton.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.removeButton.isMouseOver(mouseX, mouseY)) {
+                MobArenaRewardsScreen.this.tooltip = this.removeButton.getMessage();
+            }
         }
 
         @Override
