@@ -21,6 +21,7 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
     private EditBox timeBetweenWavesField;
     private EditBox attributeScaleField;
     private EditBox prepareTimeField;
+    private EditBox groupIdField;
     private EditBox exitPortalDestinationField;
     private EditBox exitPortalDestinationDimensionField;
     private EditBox enterPortalSpawnCoordsField;
@@ -98,6 +99,12 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
         prepareTimeField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         prepareTimeField.setMaxLength(8);
         this.addRenderableWidget(prepareTimeField);
+        y += (int)(yOffset * 1.7);
+        
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.group_id"), (button) -> {}, this.font));
+        groupIdField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
+        groupIdField.setMaxLength(32);
+        this.addRenderableWidget(groupIdField);
 
         // Column 2
         y = 20;
@@ -161,6 +168,7 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
             timeBetweenWavesField.setValue(String.valueOf(menu.blockEntity.timeBetweenWaves));
             attributeScaleField.setValue(String.valueOf(menu.blockEntity.attributeScale));
             prepareTimeField.setValue(String.valueOf(menu.blockEntity.prepareTime));
+            groupIdField.setValue(menu.blockEntity.groupId);
             exitPortalDestinationField.setValue(String.format("%d %d %d", menu.blockEntity.exitPortalDestination.getX(), menu.blockEntity.exitPortalDestination.getY(), menu.blockEntity.exitPortalDestination.getZ()));
             exitPortalDestinationDimensionField.setValue(menu.blockEntity.exitPortalDestinationDimension.location().toString());
             enterPortalSpawnCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.enterPortalSpawnCoords.getX(), menu.blockEntity.enterPortalSpawnCoords.getY(), menu.blockEntity.enterPortalSpawnCoords.getZ()));
@@ -206,7 +214,8 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
                     parseCoords(enterPortalSpawnCoordsField.getValue()),
                     parseDimension(enterPortalSpawnDimensionField.getValue()),
                     parseCoords(enterPortalDestCoordsField.getValue()),
-                    parseDimension(enterPortalDestDimensionField.getValue())
+                    parseDimension(enterPortalDestDimensionField.getValue()),
+                    groupIdField.getValue()
             ));
             this.onClose();
         } catch (NumberFormatException e) {

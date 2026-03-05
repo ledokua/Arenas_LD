@@ -51,6 +51,8 @@ import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -66,6 +68,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     public int timeBetweenWaves = 10;
     public double attributeScale = 0.1;
     public int prepareTime = 10;
+    public String groupId = "";
     
     public BlockPos exitPortalDestination = BlockPos.ZERO;
     public ResourceKey<Level> exitPortalDestinationDimension = Level.OVERWORLD;
@@ -140,6 +143,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             bossBar.setName(Component.translatable("bossbar.arenas_ld.prepare_time", prepareTicksRemaining / 20));
             bossBar.setProgress((float) prepareTicksRemaining / (prepareTime * 20));
             if (prepareTicksRemaining == 0) {
+                removeEnterPortal(world);
                 removeExitPortal(world);
                 startWave(world);
             }
@@ -185,7 +189,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         aliveMobs.clear();
         bossBar.setVisible(true);
         prepareTicksRemaining = prepareTime * 20;
-        removeEnterPortal(world);
         setChanged();
     }
 
@@ -194,6 +197,13 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         int waveTimeSeconds = waveTimer + (currentWave - 1) * additionalTime;
         waveTicksRemaining = waveTimeSeconds * 20;
         removeExitPortal(world);
+        
+        // Clear items on the ground
+        List<ItemEntity> items = world.getEntitiesOfClass(ItemEntity.class, new AABB(worldPosition).inflate(battleRadius));
+        for (ItemEntity item : items) {
+            item.discard();
+        }
+        
         spawnMobs(world);
         setChanged();
     }
@@ -293,6 +303,16 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
             livingEntity.heal(livingEntity.getMaxHealth());
             
+            if (!this.groupId.isEmpty()) {
+                Scoreboard scoreboard = world.getScoreboard();
+                PlayerTeam team = scoreboard.getPlayerTeam(this.groupId);
+                if (team == null) {
+                    team = scoreboard.addPlayerTeam(this.groupId);
+                    team.setAllowFriendlyFire(false);
+                }
+                scoreboard.addPlayerToTeam(livingEntity.getScoreboardName(), team);
+            }
+            
             double minRange = spawnDistance;
             double maxRange = Math.max(spawnDistance + 1, battleRadius - 2);
             
@@ -356,7 +376,12 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         BlockPos portalPos = this.worldPosition.above(2);
         world.setBlock(portalPos, BlockRegistry.EXIT_PORTAL_BLOCK.defaultBlockState(), 3);
         if (world.getBlockEntity(portalPos) instanceof ExitPortalBlockEntity portal) {
-            BlockPos absoluteDest = this.worldPosition.offset(this.exitPortalDestination);
+            BlockPos absoluteDest;
+            if (this.exitPortalDestinationDimension.equals(world.dimension())) {
+                absoluteDest = this.worldPosition.offset(this.exitPortalDestination);
+            } else {
+                absoluteDest = this.exitPortalDestination;
+            }
             portal.setDetails(Integer.MAX_VALUE, absoluteDest, this.exitPortalDestinationDimension);
         }
     }
@@ -426,6 +451,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         nbt.putInt("TimeBetweenWaves", timeBetweenWaves);
         nbt.putDouble("AttributeScale", attributeScale);
         nbt.putInt("PrepareTime", prepareTime);
+        nbt.putString("GroupId", groupId);
         
         nbt.putLong("ExitPortalDestination", exitPortalDestination.asLong());
         nbt.putString("ExitPortalDestinationDimension", exitPortalDestinationDimension.location().toString());
@@ -472,6 +498,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         timeBetweenWaves = nbt.getInt("TimeBetweenWaves");
         attributeScale = nbt.getDouble("AttributeScale");
         prepareTime = nbt.getInt("PrepareTime");
+        groupId = nbt.getString("GroupId");
         
         exitPortalDestination = BlockPos.of(nbt.getLong("ExitPortalDestination"));
         exitPortalDestinationDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitPortalDestinationDimension")));

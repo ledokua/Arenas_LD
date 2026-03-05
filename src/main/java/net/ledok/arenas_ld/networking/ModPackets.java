@@ -163,7 +163,8 @@ public class ModPackets {
             int waveTimer, int additionalTime, int timeBetweenWaves, double attributeScale, int prepareTime,
             BlockPos exitPortalDestination, ResourceLocation exitPortalDestinationDimension,
             BlockPos enterPortalSpawnCoords, ResourceLocation enterPortalSpawnDimension,
-            BlockPos enterPortalDestCoords, ResourceLocation enterPortalDestDimension
+            BlockPos enterPortalDestCoords, ResourceLocation enterPortalDestDimension,
+            String groupId
     ) implements CustomPacketPayload {
         public static final Type<UpdateMobArenaSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_spawner"));
 
@@ -176,7 +177,8 @@ public class ModPackets {
                     buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readDouble(), buf.readVarInt(),
                     buf.readBlockPos(), buf.readResourceLocation(),
                     buf.readBlockPos(), buf.readResourceLocation(),
-                    buf.readBlockPos(), buf.readResourceLocation()
+                    buf.readBlockPos(), buf.readResourceLocation(),
+                    buf.readUtf()
             );
         }
 
@@ -196,6 +198,7 @@ public class ModPackets {
             buf.writeResourceLocation(enterPortalSpawnDimension);
             buf.writeBlockPos(enterPortalDestCoords);
             buf.writeResourceLocation(enterPortalDestDimension);
+            buf.writeUtf(groupId);
         }
 
         @Override
@@ -468,6 +471,7 @@ public class ModPackets {
                     blockEntity.enterPortalSpawnDimension = ResourceKey.create(Registries.DIMENSION, payload.enterPortalSpawnDimension());
                     blockEntity.enterPortalDestCoords = payload.enterPortalDestCoords();
                     blockEntity.enterPortalDestDimension = ResourceKey.create(Registries.DIMENSION, payload.enterPortalDestDimension());
+                    blockEntity.groupId = payload.groupId();
                     blockEntity.setChanged();
                     world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
                 }
