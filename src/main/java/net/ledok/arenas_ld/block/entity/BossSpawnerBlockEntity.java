@@ -411,7 +411,13 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         BlockPos portalPos = worldPosition.above(2);
         world.setBlock(portalPos, BlockRegistry.EXIT_PORTAL_BLOCK.defaultBlockState(), 3);
         if (world.getBlockEntity(portalPos) instanceof ExitPortalBlockEntity portal) {
-            portal.setDetails(this.portalActiveTime, this.exitPortalCoords, this.exitDimension);
+            BlockPos absoluteDest;
+            if (this.exitDimension.equals(world.dimension())) {
+                absoluteDest = this.worldPosition.offset(this.exitPortalCoords);
+            } else {
+                absoluteDest = this.exitPortalCoords;
+            }
+            portal.setDetails(this.portalActiveTime, absoluteDest, this.exitDimension);
             ArenasLdMod.LOGGER.info("Spawned exit portal at {} for {} ticks.", portalPos, this.portalActiveTime);
         }
         resetSpawner(world);
