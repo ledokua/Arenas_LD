@@ -101,10 +101,21 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     public static void tick(Level world, BlockPos pos, BlockState state, MobArenaSpawnerBlockEntity be) {
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
 
+        be.updateChunkLoading(serverLevel);
+
         if (be.isArenaActive) {
             be.handleActiveArena(serverLevel);
         } else {
             be.handleIdleState(serverLevel);
+        }
+    }
+    
+    private void updateChunkLoading(ServerLevel world) {
+        boolean shouldBeLoaded = this.isArenaActive;
+        if (shouldBeLoaded != isChunkLoaded) {
+            ChunkPos chunkPos = new ChunkPos(this.worldPosition);
+            world.setChunkForced(chunkPos.x, chunkPos.z, shouldBeLoaded);
+            isChunkLoaded = shouldBeLoaded;
         }
     }
 
@@ -353,12 +364,16 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     
     private void spawnEnterPortal(ServerLevel world) {
         if (enterPortalSpawnCoords != null && !enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
+            BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
+
             ServerLevel spawnWorld = world.getServer().getLevel(enterPortalSpawnDimension);
             if (spawnWorld != null) {
-                BlockPos absolutePos = this.worldPosition.offset(enterPortalSpawnCoords);
-                spawnWorld.setBlock(absolutePos, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
-                if (spawnWorld.getBlockEntity(absolutePos) instanceof EnterPortalBlockEntity be) {
-                    be.setDestination(this.worldPosition.offset(enterPortalDestCoords), enterPortalDestDimension);
+                spawnWorld.setBlock(absoluteEnterSpawnPos, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
+                if (spawnWorld.getBlockEntity(absoluteEnterSpawnPos) instanceof EnterPortalBlockEntity be) {
+                    BlockPos absoluteDest = this.worldPosition.offset(enterPortalDestCoords);
+                    be.setDestination(absoluteDest, enterPortalDestDimension);
+                    be.setChanged();
+                    spawnWorld.sendBlockUpdated(absoluteEnterSpawnPos, be.getBlockState(), be.getBlockState(), 3);
                 }
             }
         }
@@ -366,11 +381,12 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     private void removeEnterPortal(ServerLevel world) {
         if (enterPortalSpawnCoords != null && !enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
+            BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
+
             ServerLevel spawnWorld = world.getServer().getLevel(enterPortalSpawnDimension);
             if (spawnWorld != null) {
-                BlockPos absolutePos = this.worldPosition.offset(enterPortalSpawnCoords);
-                if (spawnWorld.getBlockState(absolutePos).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
-                    spawnWorld.setBlock(absolutePos, Blocks.AIR.defaultBlockState(), 3);
+                if (spawnWorld.getBlockState(absoluteEnterSpawnPos).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
+                    spawnWorld.setBlock(absoluteEnterSpawnPos, Blocks.AIR.defaultBlockState(), 3);
                 }
             }
         }
@@ -380,13 +396,10 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         BlockPos portalPos = this.worldPosition.above(2);
         world.setBlock(portalPos, BlockRegistry.EXIT_PORTAL_BLOCK.defaultBlockState(), 3);
         if (world.getBlockEntity(portalPos) instanceof ExitPortalBlockEntity portal) {
-            BlockPos absoluteDest;
-            if (this.exitPortalDestinationDimension.equals(world.dimension())) {
-                absoluteDest = this.worldPosition.offset(this.exitPortalDestination);
-            } else {
-                absoluteDest = this.exitPortalDestination;
-            }
+            BlockPos absoluteDest = this.worldPosition.offset(this.exitPortalDestination);
             portal.setDetails(Integer.MAX_VALUE, absoluteDest, this.exitPortalDestinationDimension);
+            portal.setChanged();
+            world.sendBlockUpdated(portalPos, portal.getBlockState(), portal.getBlockState(), 3);
         }
     }
 
@@ -544,6 +557,11 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     
     @Override
     public void setRemoved() {
+        if (level instanceof ServerLevel serverLevel && isChunkLoaded) {
+            ChunkPos chunkPos = new ChunkPos(this.worldPosition);
+            serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
+            isChunkLoaded = false;
+        }
         bossBar.removeAllPlayers();
         super.setRemoved();
     }

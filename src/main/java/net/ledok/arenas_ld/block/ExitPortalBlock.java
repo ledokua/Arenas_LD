@@ -4,6 +4,7 @@ import com.mojang.serialization.MapCodec;
 import net.ledok.arenas_ld.block.entity.ExitPortalBlockEntity;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -55,10 +56,15 @@ public class ExitPortalBlock extends BaseEntityBlock {
             if (player.canUsePortal(true) && currentTime >= cooldownEndTime) {
                 if (world.getBlockEntity(pos) instanceof ExitPortalBlockEntity portalEntity) {
                     BlockPos destination = portalEntity.getDestination();
-                    if (destination != null && world instanceof ServerLevel serverLevel) {
-                        player.teleportTo(destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5);
-                        player.setPortalCooldown();
-                        playerCooldowns.put(player.getUUID(), currentTime + COOLDOWN_TICKS);
+                    ResourceKey<Level> dimensionKey = portalEntity.getDestinationDimension();
+                    
+                    if (destination != null && dimensionKey != null && world instanceof ServerLevel serverLevel) {
+                        ServerLevel targetWorld = serverLevel.getServer().getLevel(dimensionKey);
+                        if (targetWorld != null) {
+                            player.teleportTo(targetWorld, destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5, player.getYRot(), player.getXRot());
+                            player.setPortalCooldown();
+                            playerCooldowns.put(player.getUUID(), currentTime + COOLDOWN_TICKS);
+                        }
                     }
                 }
             }
