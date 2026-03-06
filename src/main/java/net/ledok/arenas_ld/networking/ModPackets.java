@@ -294,7 +294,7 @@ public class ModPackets {
         public UpdateAttributesPayload(FriendlyByteBuf buf) {
             this(
                     buf.readBlockPos(),
-                    buf.readList(b -> new AttributeData(b.readUtf(), b.readDouble()))
+                    buf.readList(b -> new AttributeData(b.readUtf(), b.readDouble(), b.readDouble()))
             );
         }
 
@@ -303,6 +303,7 @@ public class ModPackets {
             buf.writeCollection(attributes, (b, attr) -> {
                 b.writeUtf(attr.id());
                 b.writeDouble(attr.value());
+                b.writeDouble(attr.maxValue());
             });
         }
 

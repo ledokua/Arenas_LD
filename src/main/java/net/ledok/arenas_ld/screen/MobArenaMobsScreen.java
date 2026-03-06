@@ -132,7 +132,7 @@ public class MobArenaMobsScreen extends Screen {
             });
 
             this.attributesButton = Button.builder(Component.translatable("gui.arenas_ld.attributes"), button -> {
-                minecraft.setScreen(new ClientMobAttributesScreen(mobData, MobArenaMobsScreen.this));
+                minecraft.setScreen(new ClientMobArenaAttributeScreen(mobData, MobArenaMobsScreen.this));
             }).bounds(0, 0, 60, 20).build();
 
             this.equipmentButton = Button.builder(Component.translatable("gui.arenas_ld.equipment"), button -> {

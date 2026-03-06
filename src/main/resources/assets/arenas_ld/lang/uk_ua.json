@@ -39,6 +39,7 @@
   "gui.arenas_ld.add": "Додати",
   "gui.arenas_ld.attribute_id": "ID атрибута",
   "gui.arenas_ld.value": "Значення",
+  "gui.arenas_ld.max_value": "Макс. значення",
   "gui.arenas_ld.remove": "X",
   "gui.arenas_ld.per_player_loot_table_id": "ID таблиці здобичі для кожного гравця",
   "gui.arenas_ld.enter_portal_spawn": "Місце появи порталу входу (X Y Z)",
@@ -111,7 +112,7 @@
   "container.arenas_ld.mob_arena_spawner_config": "Конфігурація спавнера мобів на арені",
 
   "bossbar.arenas_ld.dungeon_closing": "Підземелля закривається",
-  "bossbar.arenas_ld.next_wave_in": "Наступна хвиля через %s секунд",
+  "bossbar.arenas_ld.next_wave_in": "Хвиля %s через %s секунд",
   "bossbar.arenas_ld.wave_info": "Хвиля %s - залишилось %s секунд",
   "bossbar.arenas_ld.prepare_time": "Час підготовки: %s",
   "message.arenas_ld.dungeon_failed": "Підземелля провалено",

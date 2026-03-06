@@ -157,7 +157,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         if (timeBetweenWavesTicks > 0) {
             timeBetweenWavesTicks--;
-            bossBar.setName(Component.translatable("bossbar.arenas_ld.next_wave_in", timeBetweenWavesTicks / 20));
+            bossBar.setName(Component.translatable("bossbar.arenas_ld.next_wave_in", currentWave + 1, timeBetweenWavesTicks / 20));
             bossBar.setProgress((float) timeBetweenWavesTicks / (timeBetweenWaves * 20));
             if (timeBetweenWavesTicks == 0) {
                 startWave(world);
@@ -288,7 +288,11 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
                     attributeRegistry.getHolder(key).ifPresent(holder -> {
                         AttributeInstance instance = livingEntity.getAttribute(holder);
                         if (instance != null) {
-                            instance.setBaseValue(attr.value() * scaleFactor);
+                            double value = attr.value() * scaleFactor;
+                            if (value > attr.maxValue()) {
+                                value = attr.maxValue();
+                            }
+                            instance.setBaseValue(value);
                         }
                     });
                 }

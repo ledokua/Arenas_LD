@@ -39,6 +39,7 @@
   "gui.arenas_ld.add": "Add",
   "gui.arenas_ld.attribute_id": "Attribute ID",
   "gui.arenas_ld.value": "Value",
+  "gui.arenas_ld.max_value": "Max Value",
   "gui.arenas_ld.remove": "X",
   "gui.arenas_ld.per_player_loot_table_id": "Per Player Loot Table ID",
   "gui.arenas_ld.enter_portal_spawn": "Enter Portal Spawn (X Y Z)",
@@ -111,7 +112,7 @@
   "container.arenas_ld.mob_arena_spawner_config": "Mob Arena Spawner Configuration",
 
   "bossbar.arenas_ld.dungeon_closing": "Dungeon Closing",
-  "bossbar.arenas_ld.next_wave_in": "Next wave in %s seconds",
+  "bossbar.arenas_ld.next_wave_in": "Wave %s in %s seconds",
   "bossbar.arenas_ld.wave_info": "Wave %s - %s seconds remaining",
   "bossbar.arenas_ld.prepare_time": "Prepare Time: %s",
   "message.arenas_ld.dungeon_failed": "Dungeon failed",
