@@ -190,9 +190,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             // Adjust progress bar if boss wave added time? 
             // The total time changes dynamically, so progress bar might jump, but that's acceptable.
             // Or I should store totalWaveTime for current wave.
-            // For simplicity, I'll recalculate it, but if boss added time, it should be included.
-            // But I don't know if boss was spawned here easily without storing it.
-            // I'll leave progress bar as is for now, it will just be slower/jump.
+            // For simplicity, I'll leave progress bar as is for now, it will just be slower/jump.
             bossBar.setProgress((float) waveTicksRemaining / totalWaveTime);
             
             if (waveTicksRemaining == 0) {
@@ -364,26 +362,48 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
                 scoreboard.addPlayerToTeam(livingEntity.getScoreboardName(), team);
             }
             
-            double x, y, z;
-            if (isBoss) {
-                // Spawn at center
-                x = this.worldPosition.getX() + 0.5;
-                y = this.worldPosition.getY() + 1;
-                z = this.worldPosition.getZ() + 0.5;
-            } else {
-                double minRange = spawnDistance;
-                double maxRange = Math.max(spawnDistance + 1, battleRadius - 2);
-                
-                double r = minRange + world.random.nextDouble() * (maxRange - minRange);
-                double angle = world.random.nextDouble() * 2 * Math.PI;
-                x = this.worldPosition.getX() + 0.5 + r * Math.cos(angle);
-                z = this.worldPosition.getZ() + 0.5 + r * Math.sin(angle);
-                y = this.worldPosition.getY() + 1;
+            boolean spawned = false;
+            for (int attempt = 0; attempt < 10; attempt++) {
+                double x, z;
+                if (isBoss) {
+                    x = this.worldPosition.getX() + 0.5;
+                    z = this.worldPosition.getZ() + 0.5;
+                } else {
+                    double minRange = spawnDistance;
+                    double maxRange = Math.max(spawnDistance + 1, battleRadius - 2);
+                    double r = minRange + world.random.nextDouble() * (maxRange - minRange);
+                    double angle = world.random.nextDouble() * 2 * Math.PI;
+                    x = this.worldPosition.getX() + 0.5 + r * Math.cos(angle);
+                    z = this.worldPosition.getZ() + 0.5 + r * Math.sin(angle);
+                }
+
+                for (int yOffset = 0; yOffset <= 5; yOffset++) {
+                    int targetY = this.worldPosition.getY() + yOffset;
+                    BlockPos pos = new BlockPos((int)x, targetY, (int)z);
+                    
+                    if (world.getBlockState(pos).getCollisionShape(world, pos).isEmpty() &&
+                        !world.getBlockState(pos.below()).getCollisionShape(world, pos.below()).isEmpty()) {
+                        
+                        livingEntity.moveTo(x, targetY, z, world.random.nextFloat() * 360.0F, 0.0F);
+                        if (world.noCollision(livingEntity) && !world.containsAnyLiquid(livingEntity.getBoundingBox())) {
+                            world.addFreshEntity(livingEntity);
+                            aliveMobs.add(livingEntity.getUUID());
+                            spawned = true;
+                            break;
+                        }
+                    }
+                }
+                if (spawned) break;
             }
             
-            livingEntity.moveTo(x, y, z, world.random.nextFloat() * 360F, 0);
-            world.addFreshEntity(livingEntity);
-            aliveMobs.add(livingEntity.getUUID());
+            if (!spawned) {
+                double x = this.worldPosition.getX() + 0.5;
+                double y = this.worldPosition.getY() + 1;
+                double z = this.worldPosition.getZ() + 0.5;
+                livingEntity.moveTo(x, y, z, world.random.nextFloat() * 360.0F, 0.0F);
+                world.addFreshEntity(livingEntity);
+                aliveMobs.add(livingEntity.getUUID());
+            }
         }
     }
     
