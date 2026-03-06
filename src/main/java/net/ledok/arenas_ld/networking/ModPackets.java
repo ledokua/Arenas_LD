@@ -164,7 +164,7 @@ public class ModPackets {
             BlockPos exitPortalDestination, ResourceLocation exitPortalDestinationDimension,
             BlockPos enterPortalSpawnCoords, ResourceLocation enterPortalSpawnDimension,
             BlockPos enterPortalDestCoords, ResourceLocation enterPortalDestDimension,
-            String groupId
+            String groupId, int bossWaveAdditionalTime
     ) implements CustomPacketPayload {
         public static final Type<UpdateMobArenaSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_spawner"));
 
@@ -178,7 +178,7 @@ public class ModPackets {
                     buf.readBlockPos(), buf.readResourceLocation(),
                     buf.readBlockPos(), buf.readResourceLocation(),
                     buf.readBlockPos(), buf.readResourceLocation(),
-                    buf.readUtf()
+                    buf.readUtf(), buf.readVarInt()
             );
         }
 
@@ -199,6 +199,7 @@ public class ModPackets {
             buf.writeBlockPos(enterPortalDestCoords);
             buf.writeResourceLocation(enterPortalDestDimension);
             buf.writeUtf(groupId);
+            buf.writeVarInt(bossWaveAdditionalTime);
         }
 
         @Override
@@ -473,6 +474,7 @@ public class ModPackets {
                     blockEntity.enterPortalDestCoords = payload.enterPortalDestCoords();
                     blockEntity.enterPortalDestDimension = ResourceKey.create(Registries.DIMENSION, payload.enterPortalDestDimension());
                     blockEntity.groupId = payload.groupId();
+                    blockEntity.bossWaveAdditionalTime = payload.bossWaveAdditionalTime();
                     blockEntity.setChanged();
                     world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
                 }

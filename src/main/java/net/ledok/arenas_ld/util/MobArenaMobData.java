@@ -14,16 +14,18 @@ public class MobArenaMobData {
     public int weight = 10;
     public int minWave = 1;
     public int maxWave = 100;
+    public boolean isBoss = false;
 
     public MobArenaMobData() {}
 
-    public MobArenaMobData(String mobId, List<AttributeData> attributes, EquipmentData equipment, int weight, int minWave, int maxWave) {
+    public MobArenaMobData(String mobId, List<AttributeData> attributes, EquipmentData equipment, int weight, int minWave, int maxWave, boolean isBoss) {
         this.mobId = mobId;
         this.attributes = attributes;
         this.equipment = equipment;
         this.weight = weight;
         this.minWave = minWave;
         this.maxWave = maxWave;
+        this.isBoss = isBoss;
     }
 
     public CompoundTag toNbt() {
@@ -40,6 +42,7 @@ public class MobArenaMobData {
         tag.putInt("Weight", weight);
         tag.putInt("MinWave", minWave);
         tag.putInt("MaxWave", maxWave);
+        tag.putBoolean("IsBoss", isBoss);
         return tag;
     }
 
@@ -59,6 +62,7 @@ public class MobArenaMobData {
         data.weight = tag.getInt("Weight");
         data.minWave = tag.getInt("MinWave");
         data.maxWave = tag.getInt("MaxWave");
+        data.isBoss = tag.getBoolean("IsBoss");
         return data;
     }
 }

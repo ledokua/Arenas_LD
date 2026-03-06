@@ -6,6 +6,7 @@ import net.ledok.arenas_ld.util.MobArenaMobData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.GuiEventListener;
@@ -13,7 +14,6 @@ import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.player.Inventory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -91,6 +91,7 @@ public class MobArenaMobsScreen extends Screen {
 
     class MobEntry extends ContainerObjectSelectionList.Entry<MobEntry> {
         private final MobArenaMobData mobData;
+        private final Checkbox isBossCheckbox;
         private final EditBox mobIdField;
         private final EditBox weightField;
         private final EditBox minWaveField;
@@ -101,6 +102,8 @@ public class MobArenaMobsScreen extends Screen {
 
         public MobEntry(MobArenaMobData mobData) {
             this.mobData = mobData;
+
+            this.isBossCheckbox = Checkbox.builder(Component.empty(), font).pos(0, 0).selected(mobData.isBoss).onValueChange((checkbox, selected) -> mobData.isBoss = selected).build();
 
             this.mobIdField = new EditBox(font, 0, 0, 100, 20, Component.literal("Mob ID"));
             this.mobIdField.setMaxLength(255);
@@ -149,49 +152,56 @@ public class MobArenaMobsScreen extends Screen {
         public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
             boolean inBounds = mouseY >= 32 && mouseY <= MobArenaMobsScreen.this.height - 32;
 
-            this.mobIdField.setX(left);
+            this.isBossCheckbox.setX(left);
+            this.isBossCheckbox.setY(top);
+            this.isBossCheckbox.render(guiGraphics, mouseX, mouseY, partialTick);
+            if (inBounds && this.isBossCheckbox.isMouseOver(mouseX, mouseY)) {
+                MobArenaMobsScreen.this.tooltip = Component.literal("Are Boss");
+            }
+
+            this.mobIdField.setX(left + 25);
             this.mobIdField.setY(top);
             this.mobIdField.render(guiGraphics, mouseX, mouseY, partialTick);
             if (inBounds && this.mobIdField.isMouseOver(mouseX, mouseY)) {
                 MobArenaMobsScreen.this.tooltip = Component.literal("Mob ID");
             }
 
-            this.attributesButton.setX(left + 105);
+            this.attributesButton.setX(left + 130);
             this.attributesButton.setY(top);
             this.attributesButton.render(guiGraphics, mouseX, mouseY, partialTick);
             if (inBounds && this.attributesButton.isMouseOver(mouseX, mouseY)) {
                 MobArenaMobsScreen.this.tooltip = this.attributesButton.getMessage();
             }
 
-            this.equipmentButton.setX(left + 170);
+            this.equipmentButton.setX(left + 195);
             this.equipmentButton.setY(top);
             this.equipmentButton.render(guiGraphics, mouseX, mouseY, partialTick);
             if (inBounds && this.equipmentButton.isMouseOver(mouseX, mouseY)) {
                 MobArenaMobsScreen.this.tooltip = this.equipmentButton.getMessage();
             }
 
-            this.weightField.setX(left + 235);
+            this.weightField.setX(left + 260);
             this.weightField.setY(top);
             this.weightField.render(guiGraphics, mouseX, mouseY, partialTick);
             if (inBounds && this.weightField.isMouseOver(mouseX, mouseY)) {
                 MobArenaMobsScreen.this.tooltip = Component.literal("Weight");
             }
 
-            this.minWaveField.setX(left + 270);
+            this.minWaveField.setX(left + 295);
             this.minWaveField.setY(top);
             this.minWaveField.render(guiGraphics, mouseX, mouseY, partialTick);
             if (inBounds && this.minWaveField.isMouseOver(mouseX, mouseY)) {
                 MobArenaMobsScreen.this.tooltip = Component.literal("Min Wave");
             }
 
-            this.maxWaveField.setX(left + 305);
+            this.maxWaveField.setX(left + 330);
             this.maxWaveField.setY(top);
             this.maxWaveField.render(guiGraphics, mouseX, mouseY, partialTick);
             if (inBounds && this.maxWaveField.isMouseOver(mouseX, mouseY)) {
                 MobArenaMobsScreen.this.tooltip = Component.literal("Max Wave");
             }
 
-            this.removeButton.setX(left + 340);
+            this.removeButton.setX(left + 365);
             this.removeButton.setY(top);
             this.removeButton.render(guiGraphics, mouseX, mouseY, partialTick);
             if (inBounds && this.removeButton.isMouseOver(mouseX, mouseY)) {
@@ -201,12 +211,12 @@ public class MobArenaMobsScreen extends Screen {
 
         @Override
         public List<? extends GuiEventListener> children() {
-            return List.of(mobIdField, weightField, minWaveField, maxWaveField, attributesButton, equipmentButton, removeButton);
+            return List.of(isBossCheckbox, mobIdField, weightField, minWaveField, maxWaveField, attributesButton, equipmentButton, removeButton);
         }
 
         @Override
         public List<? extends NarratableEntry> narratables() {
-            return List.of(mobIdField, weightField, minWaveField, maxWaveField, attributesButton, equipmentButton, removeButton);
+            return List.of(isBossCheckbox, mobIdField, weightField, minWaveField, maxWaveField, attributesButton, equipmentButton, removeButton);
         }
     }
 }

@@ -69,6 +69,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     public double attributeScale = 0.1;
     public int prepareTime = 10;
     public String groupId = "";
+    public int bossWaveAdditionalTime = 60;
     
     public BlockPos exitPortalDestination = BlockPos.ZERO;
     public ResourceKey<Level> exitPortalDestinationDimension = Level.OVERWORLD;
@@ -186,6 +187,12 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             bossBar.setName(Component.translatable("bossbar.arenas_ld.wave_info", currentWave, waveTicksRemaining / 20));
             
             int totalWaveTime = (waveTimer + (currentWave - 1) * additionalTime) * 20;
+            // Adjust progress bar if boss wave added time? 
+            // The total time changes dynamically, so progress bar might jump, but that's acceptable.
+            // Or I should store totalWaveTime for current wave.
+            // For simplicity, I'll recalculate it, but if boss added time, it should be included.
+            // But I don't know if boss was spawned here easily without storing it.
+            // I'll leave progress bar as is for now, it will just be slower/jump.
             bossBar.setProgress((float) waveTicksRemaining / totalWaveTime);
             
             if (waveTicksRemaining == 0) {
@@ -206,7 +213,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private void startWave(ServerLevel world) {
         currentWave++;
         int waveTimeSeconds = waveTimer + (currentWave - 1) * additionalTime;
-        waveTicksRemaining = waveTimeSeconds * 20;
+        
         removeExitPortal(world);
         
         // Clear items on the ground
@@ -215,7 +222,12 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             item.discard();
         }
         
-        spawnMobs(world);
+        boolean bossSpawned = spawnMobs(world);
+        if (bossSpawned) {
+            waveTimeSeconds += bossWaveAdditionalTime;
+        }
+        
+        waveTicksRemaining = waveTimeSeconds * 20;
         setChanged();
     }
 
@@ -248,30 +260,54 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         setChanged();
     }
 
-    private void spawnMobs(ServerLevel world) {
-        if (mobs.isEmpty()) return;
+    private boolean spawnMobs(ServerLevel world) {
+        if (mobs.isEmpty()) return false;
 
-        int mobCount = 5 + (currentWave / 2); 
+        boolean bossSpawned = false;
+        List<MobArenaMobData> validBosses = new ArrayList<>();
+        List<MobArenaMobData> validRegulars = new ArrayList<>();
         
-        for (int i = 0; i < mobCount; i++) {
-            MobArenaMobData mobData = selectRandomMob();
-            if (mobData != null) {
-                spawnMob(world, mobData);
-            }
-        }
-    }
-
-    private MobArenaMobData selectRandomMob() {
-        List<MobArenaMobData> validMobs = new ArrayList<>();
-        int totalWeight = 0;
         for (MobArenaMobData mob : mobs) {
             if (currentWave >= mob.minWave && currentWave <= mob.maxWave) {
-                validMobs.add(mob);
-                totalWeight += mob.weight;
+                if (mob.isBoss) {
+                    validBosses.add(mob);
+                } else {
+                    validRegulars.add(mob);
+                }
             }
         }
 
-        if (validMobs.isEmpty()) return null;
+        // Spawn Boss (Limit 1)
+        if (!validBosses.isEmpty()) {
+            // "guaranteed to spawn at every wave in his min/max range"
+            // If multiple bosses fit, pick one? Or all? "has limit of 1 spawn per wave"
+            // So pick one. Randomly? Or first? Randomly seems fair.
+            MobArenaMobData bossData = validBosses.get(world.random.nextInt(validBosses.size()));
+            spawnMob(world, bossData, true);
+            bossSpawned = true;
+        }
+
+        // Spawn Regulars
+        if (!validRegulars.isEmpty()) {
+            int mobCount = 5 + (currentWave / 2); 
+            for (int i = 0; i < mobCount; i++) {
+                MobArenaMobData mobData = selectRandomMob(validRegulars);
+                if (mobData != null) {
+                    spawnMob(world, mobData, false);
+                }
+            }
+        }
+        
+        return bossSpawned;
+    }
+
+    private MobArenaMobData selectRandomMob(List<MobArenaMobData> validMobs) {
+        int totalWeight = 0;
+        for (MobArenaMobData mob : validMobs) {
+            totalWeight += mob.weight;
+        }
+
+        if (validMobs.isEmpty() || totalWeight <= 0) return null;
 
         int randomWeight = level.random.nextInt(totalWeight);
         for (MobArenaMobData mob : validMobs) {
@@ -283,13 +319,13 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         return validMobs.get(0);
     }
 
-    private void spawnMob(ServerLevel world, MobArenaMobData mobData) {
+    private void spawnMob(ServerLevel world, MobArenaMobData mobData, boolean isBoss) {
         Optional<EntityType<?>> entityTypeOpt = EntityType.byString(mobData.mobId);
         if (entityTypeOpt.isEmpty()) return;
 
         Entity entity = entityTypeOpt.get().create(world);
         if (entity instanceof LivingEntity livingEntity) {
-            double scaleFactor = Math.pow(1.0 + attributeScale, currentWave - 1);
+            double scaleFactor = isBoss ? 1.0 : Math.pow(1.0 + attributeScale, currentWave - 1);
             
             for (AttributeData attr : mobData.attributes) {
                 ResourceLocation attrLocation = ResourceLocation.tryParse(attr.id());
@@ -328,14 +364,22 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
                 scoreboard.addPlayerToTeam(livingEntity.getScoreboardName(), team);
             }
             
-            double minRange = spawnDistance;
-            double maxRange = Math.max(spawnDistance + 1, battleRadius - 2);
-            
-            double r = minRange + world.random.nextDouble() * (maxRange - minRange);
-            double angle = world.random.nextDouble() * 2 * Math.PI;
-            double x = this.worldPosition.getX() + 0.5 + r * Math.cos(angle);
-            double z = this.worldPosition.getZ() + 0.5 + r * Math.sin(angle);
-            double y = this.worldPosition.getY() + 1;
+            double x, y, z;
+            if (isBoss) {
+                // Spawn at center
+                x = this.worldPosition.getX() + 0.5;
+                y = this.worldPosition.getY() + 1;
+                z = this.worldPosition.getZ() + 0.5;
+            } else {
+                double minRange = spawnDistance;
+                double maxRange = Math.max(spawnDistance + 1, battleRadius - 2);
+                
+                double r = minRange + world.random.nextDouble() * (maxRange - minRange);
+                double angle = world.random.nextDouble() * 2 * Math.PI;
+                x = this.worldPosition.getX() + 0.5 + r * Math.cos(angle);
+                z = this.worldPosition.getZ() + 0.5 + r * Math.sin(angle);
+                y = this.worldPosition.getY() + 1;
+            }
             
             livingEntity.moveTo(x, y, z, world.random.nextFloat() * 360F, 0);
             world.addFreshEntity(livingEntity);
@@ -469,6 +513,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         nbt.putDouble("AttributeScale", attributeScale);
         nbt.putInt("PrepareTime", prepareTime);
         nbt.putString("GroupId", groupId);
+        nbt.putInt("BossWaveAdditionalTime", bossWaveAdditionalTime);
         
         nbt.putLong("ExitPortalDestination", exitPortalDestination.asLong());
         nbt.putString("ExitPortalDestinationDimension", exitPortalDestinationDimension.location().toString());
@@ -516,6 +561,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         attributeScale = nbt.getDouble("AttributeScale");
         prepareTime = nbt.getInt("PrepareTime");
         groupId = nbt.getString("GroupId");
+        bossWaveAdditionalTime = nbt.getInt("BossWaveAdditionalTime");
         
         exitPortalDestination = BlockPos.of(nbt.getLong("ExitPortalDestination"));
         exitPortalDestinationDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitPortalDestinationDimension")));

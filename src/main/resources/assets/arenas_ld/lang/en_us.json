@@ -63,6 +63,7 @@
   "gui.arenas_ld.attribute_scale": "Attribute Scale",
   "gui.arenas_ld.prepare_time": "Prepare Time (seconds)",
   "gui.arenas_ld.mobs": "Mobs",
+  "gui.arenas_ld.boss_wave_additional_time": "Boss wave additional time",
   "gui.arenas_ld.rewards": "Rewards",
   "gui.arenas_ld.rolls": "Rolls",
   "gui.arenas_ld.wave_frequency": "Wave Freq",
