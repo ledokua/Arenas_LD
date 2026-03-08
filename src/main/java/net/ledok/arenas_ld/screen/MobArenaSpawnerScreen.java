@@ -23,12 +23,10 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
     private EditBox prepareTimeField;
     private EditBox groupIdField;
     private EditBox bossWaveAdditionalTimeField;
-    private EditBox exitPortalDestinationField;
-    private EditBox exitPortalDestinationDimensionField;
-    private EditBox enterPortalSpawnCoordsField;
-    private EditBox enterPortalSpawnDimensionField;
-    private EditBox enterPortalDestCoordsField;
-    private EditBox enterPortalDestDimensionField;
+    private EditBox exitPositionField;
+    private EditBox exitDimensionField;
+    private EditBox arenaEntrancePositionField;
+    private EditBox arenaEntranceDimensionField;
 
     public MobArenaSpawnerScreen(MobArenaSpawnerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
@@ -48,7 +46,6 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
 
         int col1X = this.leftPos + 5;
         int col2X = col1X + fieldWidth + columnPadding;
-        int col3X = col2X + fieldWidth + columnPadding;
 
         int y;
 
@@ -115,40 +112,28 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
 
         // Column 2
         y = 20;
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_spawn"), (button) -> {}, this.font));
-        enterPortalSpawnCoordsField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
-        enterPortalSpawnCoordsField.setMaxLength(32);
-        this.addRenderableWidget(enterPortalSpawnCoordsField);
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.arena_entrance_position"), (button) -> {}, this.font));
+        arenaEntrancePositionField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
+        arenaEntrancePositionField.setMaxLength(32);
+        this.addRenderableWidget(arenaEntrancePositionField);
         y += (int)(yOffset * 1.7);
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_spawn_dim"), (button) -> {}, this.font));
-        enterPortalSpawnDimensionField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
-        enterPortalSpawnDimensionField.setMaxLength(128);
-        this.addRenderableWidget(enterPortalSpawnDimensionField);
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.arena_entrance_dimension"), (button) -> {}, this.font));
+        arenaEntranceDimensionField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
+        arenaEntranceDimensionField.setMaxLength(128);
+        this.addRenderableWidget(arenaEntranceDimensionField);
         y += (int)(yOffset * 1.7);
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_dest"), (button) -> {}, this.font));
-        enterPortalDestCoordsField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
-        enterPortalDestCoordsField.setMaxLength(32);
-        this.addRenderableWidget(enterPortalDestCoordsField);
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.exit_position"), (button) -> {}, this.font));
+        exitPositionField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
+        exitPositionField.setMaxLength(32);
+        this.addRenderableWidget(exitPositionField);
         y += (int)(yOffset * 1.7);
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_dest_dim"), (button) -> {}, this.font));
-        enterPortalDestDimensionField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
-        enterPortalDestDimensionField.setMaxLength(128);
-        this.addRenderableWidget(enterPortalDestDimensionField);
-        y += (int)(yOffset * 1.7);
-
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.exit_portal_destination"), (button) -> {}, this.font));
-        exitPortalDestinationField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
-        exitPortalDestinationField.setMaxLength(32);
-        this.addRenderableWidget(exitPortalDestinationField);
-        y += (int)(yOffset * 1.7);
-
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.exit_portal_destination_dim"), (button) -> {}, this.font));
-        exitPortalDestinationDimensionField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
-        exitPortalDestinationDimensionField.setMaxLength(128);
-        this.addRenderableWidget(exitPortalDestinationDimensionField);
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.exit_dimension"), (button) -> {}, this.font));
+        exitDimensionField = new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal(""));
+        exitDimensionField.setMaxLength(128);
+        this.addRenderableWidget(exitDimensionField);
 
         this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.mobs"), button -> {
             this.minecraft.setScreen(new MobArenaMobsScreen(menu.blockEntity.getBlockPos(), menu.blockEntity.mobs, this));
@@ -177,12 +162,10 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
             prepareTimeField.setValue(String.valueOf(menu.blockEntity.prepareTime));
             groupIdField.setValue(menu.blockEntity.groupId);
             bossWaveAdditionalTimeField.setValue(String.valueOf(menu.blockEntity.bossWaveAdditionalTime));
-            exitPortalDestinationField.setValue(String.format("%d %d %d", menu.blockEntity.exitPortalDestination.getX(), menu.blockEntity.exitPortalDestination.getY(), menu.blockEntity.exitPortalDestination.getZ()));
-            exitPortalDestinationDimensionField.setValue(menu.blockEntity.exitPortalDestinationDimension.location().toString());
-            enterPortalSpawnCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.enterPortalSpawnCoords.getX(), menu.blockEntity.enterPortalSpawnCoords.getY(), menu.blockEntity.enterPortalSpawnCoords.getZ()));
-            enterPortalSpawnDimensionField.setValue(menu.blockEntity.enterPortalSpawnDimension.location().toString());
-            enterPortalDestCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.enterPortalDestCoords.getX(), menu.blockEntity.enterPortalDestCoords.getY(), menu.blockEntity.enterPortalDestCoords.getZ()));
-            enterPortalDestDimensionField.setValue(menu.blockEntity.enterPortalDestDimension.location().toString());
+            exitPositionField.setValue(String.format("%d %d %d", menu.blockEntity.exitPosition.getX(), menu.blockEntity.exitPosition.getY(), menu.blockEntity.exitPosition.getZ()));
+            exitDimensionField.setValue(menu.blockEntity.exitDimension.location().toString());
+            arenaEntrancePositionField.setValue(String.format("%d %d %d", menu.blockEntity.arenaEntrancePosition.getX(), menu.blockEntity.arenaEntrancePosition.getY(), menu.blockEntity.arenaEntrancePosition.getZ()));
+            arenaEntranceDimensionField.setValue(menu.blockEntity.arenaEntranceDimension.location().toString());
         }
     }
 
@@ -217,12 +200,10 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
                     Integer.parseInt(timeBetweenWavesField.getValue()),
                     Double.parseDouble(attributeScaleField.getValue()),
                     Integer.parseInt(prepareTimeField.getValue()),
-                    parseCoords(exitPortalDestinationField.getValue()),
-                    parseDimension(exitPortalDestinationDimensionField.getValue()),
-                    parseCoords(enterPortalSpawnCoordsField.getValue()),
-                    parseDimension(enterPortalSpawnDimensionField.getValue()),
-                    parseCoords(enterPortalDestCoordsField.getValue()),
-                    parseDimension(enterPortalDestDimensionField.getValue()),
+                    parseCoords(exitPositionField.getValue()),
+                    parseDimension(exitDimensionField.getValue()),
+                    parseCoords(arenaEntrancePositionField.getValue()),
+                    parseDimension(arenaEntranceDimensionField.getValue()),
                     groupIdField.getValue(),
                     Integer.parseInt(bossWaveAdditionalTimeField.getValue())
             ));

@@ -33,8 +33,9 @@ public class SpawnerConfiguratorItem extends Item {
     public enum Mode {
         SPAWNER_SELECTION("item.arenas_ld.configurator.mode.spawner_selection"),
         EXIT_POSITION("item.arenas_ld.configurator.mode.exit_position"),
-        ENTER_PORTAL_POSITION("item.arenas_ld.configurator.mode.enter_portal_position"),
-        ENTER_PORTAL_DESTINATION("item.arenas_ld.configurator.mode.enter_portal_destination");
+        ENTER_PORTAL_SPAWN("item.arenas_ld.configurator.mode.enter_portal_spawn"),
+        ENTER_PORTAL_DESTINATION("item.arenas_ld.configurator.mode.enter_portal_destination"),
+        ARENA_ENTRANCE_POSITION("item.arenas_ld.configurator.mode.arena_entrance_position");
 
         private final String translationKey;
 
@@ -54,23 +55,24 @@ public class SpawnerConfiguratorItem extends Item {
         Player player = context.getPlayer();
         ItemStack stack = context.getItemInHand();
 
-        if (world.isClientSide || player == null || !player.isShiftKeyDown()) {
+        if (world.isClientSide || player == null) {
             return InteractionResult.PASS;
         }
 
         if (!player.isCreative() && !player.hasPermissions(2)) {
             return InteractionResult.PASS;
         }
-
+        
         SpawnerSelectionDataComponent data = stack.getOrDefault(DataComponentRegistry.SPAWNER_SELECTION_DATA, SpawnerSelectionDataComponent.DEFAULT);
         Mode currentMode = Mode.values()[data.mode()];
         BlockEntity clickedBlockEntity = world.getBlockEntity(clickedPos);
 
-        // Handle spawner selection regardless of current mode
-        if (clickedBlockEntity instanceof BossSpawnerBlockEntity || clickedBlockEntity instanceof DungeonBossSpawnerBlockEntity || clickedBlockEntity instanceof MobArenaSpawnerBlockEntity) {
-            stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(data.mode(), Optional.of(clickedPos), Optional.of(world.dimension())));
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawner_selected", clickedPos.toShortString()));
-            return InteractionResult.SUCCESS;
+        if (player.isShiftKeyDown()) {
+            if (clickedBlockEntity instanceof BossSpawnerBlockEntity || clickedBlockEntity instanceof DungeonBossSpawnerBlockEntity || clickedBlockEntity instanceof MobArenaSpawnerBlockEntity) {
+                stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(data.mode(), Optional.of(clickedPos), Optional.of(world.dimension())));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawner_selected", clickedPos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
         }
 
         Optional<BlockPos> selectedSpawnerPosOpt = data.selectedSpawnerPos();
@@ -111,21 +113,18 @@ public class SpawnerConfiguratorItem extends Item {
                     dungeonBossSpawner.exitPositionCoords = relativePos;
                     dungeonBossSpawner.exitPositionDimension = clickedDimension;
                 } else if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
-                    mobArenaSpawner.exitPortalDestination = relativePos;
-                    mobArenaSpawner.exitPortalDestinationDimension = clickedDimension;
+                    mobArenaSpawner.exitPosition = relativePos;
+                    mobArenaSpawner.exitDimension = clickedDimension;
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.exit_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
-            case ENTER_PORTAL_POSITION:
+            case ENTER_PORTAL_SPAWN:
                 if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
                     bossSpawner.enterPortalSpawnCoords = relativePos;
                     bossSpawner.enterPortalSpawnDimension = clickedDimension;
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
                     dungeonBossSpawner.enterPortalSpawnCoords = relativePos;
                     dungeonBossSpawner.enterPortalSpawnDimension = clickedDimension;
-                } else if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
-                    mobArenaSpawner.enterPortalSpawnCoords = relativePos;
-                    mobArenaSpawner.enterPortalSpawnDimension = clickedDimension;
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.enter_portal_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
@@ -136,11 +135,15 @@ public class SpawnerConfiguratorItem extends Item {
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
                     dungeonBossSpawner.enterPortalDestCoords = relativePos;
                     dungeonBossSpawner.enterPortalDestDimension = clickedDimension;
-                } else if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
-                    mobArenaSpawner.enterPortalDestCoords = relativePos;
-                    mobArenaSpawner.enterPortalDestDimension = clickedDimension;
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.enter_portal_dest_set", clickedPos.toShortString(), clickedDimension.location().toString()));
+                break;
+            case ARENA_ENTRANCE_POSITION:
+                if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
+                    mobArenaSpawner.arenaEntrancePosition = relativePos;
+                    mobArenaSpawner.arenaEntranceDimension = clickedDimension;
+                }
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.arena_entrance_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
             default:
                 return InteractionResult.PASS;

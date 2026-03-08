@@ -34,6 +34,7 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
     public ResourceKey<Level> arenaSpawnerDimension = Level.OVERWORLD;
     public Set<UUID> partyMembers = new HashSet<>();
     public boolean isLocked = false;
+    public int currentWave = 0;
 
     public MobArenaControllerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.MOB_ARENA_CONTROLLER_BLOCK_ENTITY, pos, state);
@@ -42,7 +43,9 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
     public void reset() {
         partyMembers.clear();
         isLocked = false;
+        currentWave = 0;
         setChanged();
+        level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
     }
 
     @Override
@@ -51,6 +54,7 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
         nbt.putLong("ArenaSpawnerPos", arenaSpawnerPos.asLong());
         nbt.putString("ArenaSpawnerDimension", arenaSpawnerDimension.location().toString());
         nbt.putBoolean("IsLocked", isLocked);
+        nbt.putInt("CurrentWave", currentWave);
 
         ListTag membersList = new ListTag();
         for (UUID uuid : partyMembers) {
@@ -67,6 +71,7 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
         arenaSpawnerPos = BlockPos.of(nbt.getLong("ArenaSpawnerPos"));
         arenaSpawnerDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ArenaSpawnerDimension")));
         isLocked = nbt.getBoolean("IsLocked");
+        currentWave = nbt.getInt("CurrentWave");
 
         partyMembers.clear();
         if (nbt.contains("PartyMembers")) {

@@ -3,7 +3,6 @@ package net.ledok.arenas_ld.block.entity;
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
-import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.screen.MobArenaSpawnerData;
@@ -45,7 +44,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.loot.LootParams;
@@ -73,12 +71,10 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     public String groupId = "";
     public int bossWaveAdditionalTime = 60;
     
-    public BlockPos exitPortalDestination = BlockPos.ZERO;
-    public ResourceKey<Level> exitPortalDestinationDimension = Level.OVERWORLD;
-    public BlockPos enterPortalSpawnCoords = BlockPos.ZERO;
-    public ResourceKey<Level> enterPortalSpawnDimension = Level.OVERWORLD;
-    public BlockPos enterPortalDestCoords = BlockPos.ZERO;
-    public ResourceKey<Level> enterPortalDestDimension = Level.OVERWORLD;
+    public BlockPos exitPosition = BlockPos.ZERO;
+    public ResourceKey<Level> exitDimension = Level.OVERWORLD;
+    public BlockPos arenaEntrancePosition = BlockPos.ZERO;
+    public ResourceKey<Level> arenaEntranceDimension = Level.OVERWORLD;
 
     public List<MobArenaMobData> mobs = new ArrayList<>();
     public List<MobArenaRewardData> rewards = new ArrayList<>();
@@ -101,6 +97,21 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public MobArenaSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.MOB_ARENA_SPAWNER_BLOCK_ENTITY, pos, state);
+    }
+
+    public void removeParticipatingPlayer(UUID playerUUID) {
+        participatingPlayers.remove(playerUUID);
+        setChanged();
+    }
+
+    public int getParticipatingPlayerCount() {
+        return participatingPlayers.size();
+    }
+    
+    public void endArena() {
+        if (level instanceof ServerLevel serverLevel) {
+            endArena(serverLevel);
+        }
     }
 
     public static void tick(Level world, BlockPos pos, BlockState state, MobArenaSpawnerBlockEntity be) {
@@ -208,9 +219,9 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             for (UUID playerId : participatingPlayers) {
                 ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(playerId);
                 if (player != null) {
-                    ArenasLdMod.MOB_ARENA_MANAGER.addPlayer(player, this.worldPosition);
-                    BlockPos absoluteEnterDest = this.worldPosition.offset(this.enterPortalDestCoords);
-                    ServerLevel destLevel = serverLevel.getServer().getLevel(enterPortalDestDimension);
+                    ArenasLdMod.MOB_ARENA_MANAGER.addPlayer(player, this.worldPosition, this.level.dimension());
+                    BlockPos absoluteEnterDest = this.worldPosition.offset(this.arenaEntrancePosition);
+                    ServerLevel destLevel = serverLevel.getServer().getLevel(arenaEntranceDimension);
                     if (destLevel != null) {
                         player.teleportTo(destLevel, absoluteEnterDest.getX() + 0.5, absoluteEnterDest.getY(), absoluteEnterDest.getZ() + 0.5, player.getYRot(), player.getXRot());
                     }
@@ -228,9 +239,11 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     private void startWave(ServerLevel world) {
         currentWave++;
-        int waveTimeSeconds = waveTimer + (currentWave - 1) * additionalTime;
-        
-        removeExitPortal(world);
+        if (controllerPos != null && world.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller) {
+            controller.currentWave = currentWave;
+            controller.setChanged();
+            world.sendBlockUpdated(controllerPos, controller.getBlockState(), controller.getBlockState(), 3);
+        }
         
         // Clear items on the ground
         List<ItemEntity> items = world.getEntitiesOfClass(ItemEntity.class, new AABB(worldPosition).inflate(battleRadius));
@@ -239,6 +252,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
         
         boolean bossSpawned = spawnMobs(world);
+        int waveTimeSeconds = waveTimer + (currentWave - 1) * additionalTime;
         if (bossSpawned) {
             waveTimeSeconds += bossWaveAdditionalTime;
         }
@@ -250,7 +264,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private void completeWave(ServerLevel world) {
         distributeRewards(world);
         timeBetweenWavesTicks = timeBetweenWaves * 20;
-        spawnExitPortal(world);
         reviveSpectators(world);
         setChanged();
     }
@@ -282,8 +295,8 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             if (player != null) {
                 ArenasLdMod.MOB_ARENA_MANAGER.removePlayer(player);
                 player.setGameMode(GameType.SURVIVAL);
-                BlockPos absoluteExitDest = this.worldPosition.offset(this.exitPortalDestination);
-                ServerLevel destLevel = world.getServer().getLevel(exitPortalDestinationDimension);
+                BlockPos absoluteExitDest = this.worldPosition.offset(this.exitPosition);
+                ServerLevel destLevel = world.getServer().getLevel(exitDimension);
                 if (destLevel != null) {
                     player.teleportTo(destLevel, absoluteExitDest.getX() + 0.5, absoluteExitDest.getY(), absoluteExitDest.getZ() + 0.5, player.getYRot(), player.getXRot());
                 }
@@ -302,8 +315,8 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
             if (player != null && player.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) {
                 player.setGameMode(GameType.SURVIVAL);
-                BlockPos absoluteEnterDest = this.worldPosition.offset(this.enterPortalDestCoords);
-                ServerLevel destLevel = world.getServer().getLevel(enterPortalDestDimension);
+                BlockPos absoluteEnterDest = this.worldPosition.offset(this.arenaEntrancePosition);
+                ServerLevel destLevel = world.getServer().getLevel(arenaEntranceDimension);
                 if (destLevel != null) {
                     player.teleportTo(destLevel, absoluteEnterDest.getX() + 0.5, absoluteEnterDest.getY(), absoluteEnterDest.getZ() + 0.5, player.getYRot(), player.getXRot());
                 }
@@ -476,24 +489,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
     }
 
-    private void spawnExitPortal(ServerLevel world) {
-        BlockPos portalPos = this.worldPosition.above(2);
-        world.setBlock(portalPos, BlockRegistry.EXIT_PORTAL_BLOCK.defaultBlockState(), 3);
-        if (world.getBlockEntity(portalPos) instanceof ExitPortalBlockEntity portal) {
-            BlockPos absoluteDest = this.worldPosition.offset(this.exitPortalDestination);
-            portal.setDetails(Integer.MAX_VALUE, absoluteDest, this.exitPortalDestinationDimension);
-            portal.setChanged();
-            world.sendBlockUpdated(portalPos, portal.getBlockState(), portal.getBlockState(), 3);
-        }
-    }
-
-    private void removeExitPortal(ServerLevel world) {
-        BlockPos portalPos = this.worldPosition.above(2);
-        if (world.getBlockState(portalPos).is(BlockRegistry.EXIT_PORTAL_BLOCK)) {
-            world.setBlock(portalPos, Blocks.AIR.defaultBlockState(), 3);
-        }
-    }
-
     private void distributeRewards(ServerLevel world) {
         List<MobArenaRewardData> validRewards = new ArrayList<>();
         for (MobArenaRewardData reward : rewards) {
@@ -561,12 +556,10 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         nbt.putString("GroupId", groupId);
         nbt.putInt("BossWaveAdditionalTime", bossWaveAdditionalTime);
         
-        nbt.putLong("ExitPortalDestination", exitPortalDestination.asLong());
-        nbt.putString("ExitPortalDestinationDimension", exitPortalDestinationDimension.location().toString());
-        nbt.putLong("EnterPortalSpawnCoords", enterPortalSpawnCoords.asLong());
-        nbt.putString("EnterPortalSpawnDimension", enterPortalSpawnDimension.location().toString());
-        nbt.putLong("EnterPortalDestCoords", enterPortalDestCoords.asLong());
-        nbt.putString("EnterPortalDestDimension", enterPortalDestDimension.location().toString());
+        nbt.putLong("ExitPosition", exitPosition.asLong());
+        nbt.putString("ExitDimension", exitDimension.location().toString());
+        nbt.putLong("ArenaEntrancePosition", arenaEntrancePosition.asLong());
+        nbt.putString("ArenaEntranceDimension", arenaEntranceDimension.location().toString());
         
         ListTag mobsList = new ListTag();
         for (MobArenaMobData mob : mobs) {
@@ -621,12 +614,10 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         groupId = nbt.getString("GroupId");
         bossWaveAdditionalTime = nbt.getInt("BossWaveAdditionalTime");
         
-        exitPortalDestination = BlockPos.of(nbt.getLong("ExitPortalDestination"));
-        exitPortalDestinationDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitPortalDestinationDimension")));
-        enterPortalSpawnCoords = BlockPos.of(nbt.getLong("EnterPortalSpawnCoords"));
-        enterPortalSpawnDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("EnterPortalSpawnDimension")));
-        enterPortalDestCoords = BlockPos.of(nbt.getLong("EnterPortalDestCoords"));
-        enterPortalDestDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("EnterPortalDestDimension")));
+        exitPosition = BlockPos.of(nbt.getLong("ExitPosition"));
+        exitDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitDimension")));
+        arenaEntrancePosition = BlockPos.of(nbt.getLong("ArenaEntrancePosition"));
+        arenaEntranceDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ArenaEntranceDimension")));
         
         mobs.clear();
         if (nbt.contains("Mobs")) {
