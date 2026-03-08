@@ -34,6 +34,8 @@ public class BlockRegistry {
     public static final Block PHASE_BLOCK = registerBlock("phase_block",
             new PhaseBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.GLASS).noOcclusion().strength(-1.0f, 3600000.0f)));
 
+    public static final Block MOB_ARENA_CONTROLLER_BLOCK = registerBlock("mob_arena_controller",
+            new MobArenaControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));
 
     private static Block registerBlock(String name, Block block) {
         registerBlockItem(name, block);

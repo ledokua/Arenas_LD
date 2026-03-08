@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.block.entity;
 
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
+import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
@@ -42,6 +43,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -94,6 +96,8 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             BossEvent.BossBarOverlay.PROGRESS
     ).setDarkenScreen(false).setPlayBossMusic(false).setCreateWorldFog(false);
     private boolean isChunkLoaded = false;
+    private Set<UUID> participatingPlayers = new HashSet<>();
+    private BlockPos controllerPos;
 
     public MobArenaSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.MOB_ARENA_SPAWNER_BLOCK_ENTITY, pos, state);
@@ -106,8 +110,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         if (be.isArenaActive) {
             be.handleActiveArena(serverLevel);
-        } else {
-            be.handleIdleState(serverLevel);
         }
     }
     
@@ -120,32 +122,36 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
     }
 
-    private void handleIdleState(ServerLevel world) {
-        spawnEnterPortal(world);
-        spawnExitPortal(world);
-        AABB triggerBox = new AABB(this.worldPosition).inflate(triggerRadius);
-        List<ServerPlayer> players = world.getEntitiesOfClass(ServerPlayer.class, triggerBox, p -> !p.isSpectator());
-
-        if (!players.isEmpty()) {
-            startArena(world);
-        }
-    }
-
     private void handleActiveArena(ServerLevel world) {
-        AABB battleBox = new AABB(this.worldPosition).inflate(battleRadius);
-        List<ServerPlayer> players = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
+        // Check if any participating players are still in the arena
+        boolean anyPlayerPresent = false;
+        int spectatorCount = 0;
+        for (UUID playerId : participatingPlayers) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
+            if (player != null && ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) {
+                if (player.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) {
+                    spectatorCount++;
+                } else {
+                    anyPlayerPresent = true;
+                }
+            }
+        }
         
-        if (players.isEmpty()) {
+        if (!anyPlayerPresent && spectatorCount > 0) {
             failArena(world);
             return;
         }
 
-        for (ServerPlayer player : players) {
-            bossBar.addPlayer(player);
+        // Update boss bar players
+        for (UUID playerId : participatingPlayers) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
+            if (player != null) {
+                bossBar.addPlayer(player);
+            }
         }
         
         Set<ServerPlayer> playersToRemove = new HashSet<>(bossBar.getPlayers());
-        playersToRemove.removeAll(players);
+        playersToRemove.removeIf(p -> participatingPlayers.contains(p.getUUID()));
         for (ServerPlayer player : playersToRemove) {
             bossBar.removePlayer(player);
         }
@@ -155,8 +161,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             bossBar.setName(Component.translatable("bossbar.arenas_ld.prepare_time", prepareTicksRemaining / 20));
             bossBar.setProgress((float) prepareTicksRemaining / (prepareTime * 20));
             if (prepareTicksRemaining == 0) {
-                removeEnterPortal(world);
-                removeExitPortal(world);
                 startWave(world);
             }
             return;
@@ -187,10 +191,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             bossBar.setName(Component.translatable("bossbar.arenas_ld.wave_info", currentWave, waveTicksRemaining / 20));
             
             int totalWaveTime = (waveTimer + (currentWave - 1) * additionalTime) * 20;
-            // Adjust progress bar if boss wave added time? 
-            // The total time changes dynamically, so progress bar might jump, but that's acceptable.
-            // Or I should store totalWaveTime for current wave.
-            // For simplicity, I'll leave progress bar as is for now, it will just be slower/jump.
             bossBar.setProgress((float) waveTicksRemaining / totalWaveTime);
             
             if (waveTicksRemaining == 0) {
@@ -199,13 +199,31 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
     }
 
-    private void startArena(ServerLevel world) {
-        isArenaActive = true;
-        currentWave = 0;
-        aliveMobs.clear();
-        bossBar.setVisible(true);
-        prepareTicksRemaining = prepareTime * 20;
-        setChanged();
+    public void startArena(Set<UUID> players, BlockPos controllerPos) {
+        if (level instanceof ServerLevel serverLevel) {
+            this.participatingPlayers = new HashSet<>(players);
+            this.controllerPos = controllerPos;
+            
+            // Teleport players to arena
+            for (UUID playerId : participatingPlayers) {
+                ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(playerId);
+                if (player != null) {
+                    ArenasLdMod.MOB_ARENA_MANAGER.addPlayer(player, this.worldPosition);
+                    BlockPos absoluteEnterDest = this.worldPosition.offset(this.enterPortalDestCoords);
+                    ServerLevel destLevel = serverLevel.getServer().getLevel(enterPortalDestDimension);
+                    if (destLevel != null) {
+                        player.teleportTo(destLevel, absoluteEnterDest.getX() + 0.5, absoluteEnterDest.getY(), absoluteEnterDest.getZ() + 0.5, player.getYRot(), player.getXRot());
+                    }
+                }
+            }
+
+            isArenaActive = true;
+            currentWave = 0;
+            aliveMobs.clear();
+            bossBar.setVisible(true);
+            prepareTicksRemaining = prepareTime * 20;
+            setChanged();
+        }
     }
 
     private void startWave(ServerLevel world) {
@@ -233,10 +251,15 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         distributeRewards(world);
         timeBetweenWavesTicks = timeBetweenWaves * 20;
         spawnExitPortal(world);
+        reviveSpectators(world);
         setChanged();
     }
 
     private void failArena(ServerLevel world) {
+        endArena(world);
+    }
+
+    private void endArena(ServerLevel world) {
         isArenaActive = false;
         currentWave = 0;
         waveTicksRemaining = 0;
@@ -253,9 +276,39 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         
         bossBar.removeAllPlayers();
         bossBar.setVisible(false);
-        spawnEnterPortal(world);
-        spawnExitPortal(world);
+        
+        for (UUID playerId : participatingPlayers) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
+            if (player != null) {
+                ArenasLdMod.MOB_ARENA_MANAGER.removePlayer(player);
+                player.setGameMode(GameType.SURVIVAL);
+                BlockPos absoluteExitDest = this.worldPosition.offset(this.exitPortalDestination);
+                ServerLevel destLevel = world.getServer().getLevel(exitPortalDestinationDimension);
+                if (destLevel != null) {
+                    player.teleportTo(destLevel, absoluteExitDest.getX() + 0.5, absoluteExitDest.getY(), absoluteExitDest.getZ() + 0.5, player.getYRot(), player.getXRot());
+                }
+            }
+        }
+        
+        if (controllerPos != null && world.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller) {
+            controller.reset();
+        }
+        
         setChanged();
+    }
+
+    private void reviveSpectators(ServerLevel world) {
+        for (UUID playerId : participatingPlayers) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
+            if (player != null && player.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) {
+                player.setGameMode(GameType.SURVIVAL);
+                BlockPos absoluteEnterDest = this.worldPosition.offset(this.enterPortalDestCoords);
+                ServerLevel destLevel = world.getServer().getLevel(enterPortalDestDimension);
+                if (destLevel != null) {
+                    player.teleportTo(destLevel, absoluteEnterDest.getX() + 0.5, absoluteEnterDest.getY(), absoluteEnterDest.getZ() + 0.5, player.getYRot(), player.getXRot());
+                }
+            }
+        }
     }
 
     private boolean spawnMobs(ServerLevel world) {
@@ -277,9 +330,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         // Spawn Boss (Limit 1)
         if (!validBosses.isEmpty()) {
-            // "guaranteed to spawn at every wave in his min/max range"
-            // If multiple bosses fit, pick one? Or all? "has limit of 1 spawn per wave"
-            // So pick one. Randomly? Or first? Randomly seems fair.
             MobArenaMobData bossData = validBosses.get(world.random.nextInt(validBosses.size()));
             spawnMob(world, bossData, true);
             bossSpawned = true;
@@ -425,36 +475,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             }
         }
     }
-    
-    private void spawnEnterPortal(ServerLevel world) {
-        if (enterPortalSpawnCoords != null && !enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
-            BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
-
-            ServerLevel spawnWorld = world.getServer().getLevel(enterPortalSpawnDimension);
-            if (spawnWorld != null) {
-                spawnWorld.setBlock(absoluteEnterSpawnPos, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
-                if (spawnWorld.getBlockEntity(absoluteEnterSpawnPos) instanceof EnterPortalBlockEntity be) {
-                    BlockPos absoluteDest = this.worldPosition.offset(enterPortalDestCoords);
-                    be.setDestination(absoluteDest, enterPortalDestDimension);
-                    be.setChanged();
-                    spawnWorld.sendBlockUpdated(absoluteEnterSpawnPos, be.getBlockState(), be.getBlockState(), 3);
-                }
-            }
-        }
-    }
-
-    private void removeEnterPortal(ServerLevel world) {
-        if (enterPortalSpawnCoords != null && !enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
-            BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
-
-            ServerLevel spawnWorld = world.getServer().getLevel(enterPortalSpawnDimension);
-            if (spawnWorld != null) {
-                if (spawnWorld.getBlockState(absoluteEnterSpawnPos).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
-                    spawnWorld.setBlock(absoluteEnterSpawnPos, Blocks.AIR.defaultBlockState(), 3);
-                }
-            }
-        }
-    }
 
     private void spawnExitPortal(ServerLevel world) {
         BlockPos portalPos = this.worldPosition.above(2);
@@ -484,8 +504,14 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         if (validRewards.isEmpty()) return;
 
-        AABB battleBox = new AABB(this.worldPosition).inflate(battleRadius);
-        List<ServerPlayer> players = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
+        // Distribute rewards to participating players
+        List<ServerPlayer> players = new ArrayList<>();
+        for (UUID playerId : participatingPlayers) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
+            if (player != null) {
+                players.add(player);
+            }
+        }
 
         for (MobArenaRewardData reward : validRewards) {
             for (int i = 0; i < reward.rolls; i++) {
@@ -567,6 +593,18 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             aliveMobsList.add(tag);
         }
         nbt.put("AliveMobs", aliveMobsList);
+
+        ListTag participatingPlayersList = new ListTag();
+        for (UUID uuid : participatingPlayers) {
+            CompoundTag tag = new CompoundTag();
+            tag.putUUID("uuid", uuid);
+            participatingPlayersList.add(tag);
+        }
+        nbt.put("ParticipatingPlayers", participatingPlayersList);
+
+        if (controllerPos != null) {
+            nbt.putLong("ControllerPos", controllerPos.asLong());
+        }
     }
 
     @Override
@@ -618,6 +656,18 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             for (Tag t : aliveMobsList) {
                 aliveMobs.add(((CompoundTag) t).getUUID("uuid"));
             }
+        }
+
+        participatingPlayers.clear();
+        if (nbt.contains("ParticipatingPlayers")) {
+            ListTag participatingPlayersList = nbt.getList("ParticipatingPlayers", Tag.TAG_COMPOUND);
+            for (Tag t : participatingPlayersList) {
+                participatingPlayers.add(((CompoundTag) t).getUUID("uuid"));
+            }
+        }
+
+        if (nbt.contains("ControllerPos")) {
+            controllerPos = BlockPos.of(nbt.getLong("ControllerPos"));
         }
     }
     

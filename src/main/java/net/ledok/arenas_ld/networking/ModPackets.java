@@ -3,10 +3,7 @@ package net.ledok.arenas_ld.networking;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
-import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
-import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
-import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
-import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
+import net.ledok.arenas_ld.block.entity.*;
 import net.ledok.arenas_ld.item.LinkerItem;
 import net.ledok.arenas_ld.item.SpawnerConfiguratorItem;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
@@ -20,6 +17,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -374,6 +372,22 @@ public class ModPackets {
         }
     }
 
+    public record MobArenaControllerActionPayload(BlockPos pos, int action) implements CustomPacketPayload {
+        public static final Type<MobArenaControllerActionPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "mob_arena_controller_action"));
+        public static final StreamCodec<FriendlyByteBuf, MobArenaControllerActionPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> {
+                    buf.writeBlockPos(payload.pos);
+                    buf.writeVarInt(payload.action);
+                },
+                buf -> new MobArenaControllerActionPayload(buf.readBlockPos(), buf.readVarInt())
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     public static void registerC2SPackets() {
         PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateDungeonBossSpawnerPayload.TYPE, UpdateDungeonBossSpawnerPayload.STREAM_CODEC);
@@ -385,6 +399,7 @@ public class ModPackets {
         PayloadTypeRegistry.playC2S().register(UpdateEquipmentPayload.TYPE, UpdateEquipmentPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(CycleConfiguratorModePayload.TYPE, CycleConfiguratorModePayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(MobArenaControllerActionPayload.TYPE, MobArenaControllerActionPayload.STREAM_CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -553,6 +568,45 @@ public class ModPackets {
 
                     SpawnerConfiguratorItem.Mode mode = SpawnerConfiguratorItem.Mode.values()[newMode];
                     context.player().sendSystemMessage(Component.translatable("message.arenas_ld.configurator.mode_changed", mode.getName()));
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(MobArenaControllerActionPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.pos());
+                if (be instanceof MobArenaControllerBlockEntity controller) {
+                    switch (payload.action()) {
+                        case 0: // Start Arena
+                            if (!controller.isLocked && controller.partyMembers.contains(player.getUUID())) {
+                                if (controller.arenaSpawnerPos != BlockPos.ZERO) {
+                                    Level spawnerLevel = world.getServer().getLevel(controller.arenaSpawnerDimension);
+                                    if (spawnerLevel != null && spawnerLevel.getBlockEntity(controller.arenaSpawnerPos) instanceof MobArenaSpawnerBlockEntity spawner) {
+                                        spawner.startArena(controller.partyMembers, payload.pos());
+                                        controller.isLocked = true;
+                                        controller.setChanged();
+                                        world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                                    }
+                                }
+                            }
+                            break;
+                        case 1: // Join Party
+                            if (!controller.isLocked) {
+                                controller.partyMembers.add(player.getUUID());
+                                controller.setChanged();
+                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                            }
+                            break;
+                        case 2: // Leave Party
+                            if (!controller.isLocked) {
+                                controller.partyMembers.remove(player.getUUID());
+                                controller.setChanged();
+                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                            }
+                            break;
+                    }
                 }
             });
         });

@@ -44,6 +44,10 @@ public class BlockEntitiesRegistry {
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":phase_block_be"),
                     BlockEntityType.Builder.of(PhaseBlockEntity::new, BlockRegistry.PHASE_BLOCK).build(null));
 
+    public static final BlockEntityType<MobArenaControllerBlockEntity> MOB_ARENA_CONTROLLER_BLOCK_ENTITY =
+            Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
+                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_arena_controller_be"),
+                    BlockEntityType.Builder.of(MobArenaControllerBlockEntity::new, BlockRegistry.MOB_ARENA_CONTROLLER_BLOCK).build(null));
 
     public static void initialize() {
     }

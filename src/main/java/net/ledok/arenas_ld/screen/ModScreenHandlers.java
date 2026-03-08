@@ -34,6 +34,10 @@ public class ModScreenHandlers {
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":equipment"),
                     new ExtendedScreenHandlerType<>(EquipmentScreenHandler::new, EquipmentScreenData.STREAM_CODEC));
 
+    public static final MenuType<MobArenaControllerScreenHandler> MOB_ARENA_CONTROLLER_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_arena_controller"),
+                    new ExtendedScreenHandlerType<>(MobArenaControllerScreenHandler::new, MobArenaControllerData.STREAM_CODEC));
+
     public static void initialize() {
     }
 }

@@ -2,8 +2,11 @@ package net.ledok.arenas_ld;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.ledok.arenas_ld.config.ArenasLdConfig;
+import net.ledok.arenas_ld.event.PlayerTickHandler;
 import net.ledok.arenas_ld.manager.DungeonBossManager;
+import net.ledok.arenas_ld.manager.MobArenaManager;
 import net.ledok.arenas_ld.manager.PhaseBlockManager;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.registry.*;
@@ -18,6 +21,7 @@ public class ArenasLdMod implements ModInitializer {
 
     public static final PhaseBlockManager PHASE_BLOCK_MANAGER = new PhaseBlockManager();
     public static final DungeonBossManager DUNGEON_BOSS_MANAGER = new DungeonBossManager();
+    public static final MobArenaManager MOB_ARENA_MANAGER = new MobArenaManager();
     public static final ArenasLdConfig CONFIG = ArenasLdConfig.load();
 
     @Override
@@ -38,7 +42,10 @@ public class ArenasLdMod implements ModInitializer {
             PHASE_BLOCK_MANAGER.start();
         });
 
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            for (var player : server.getPlayerList().getPlayers()) {
+                PlayerTickHandler.onPlayerTick(player);
+            }
+        });
     }
-
-
 }
