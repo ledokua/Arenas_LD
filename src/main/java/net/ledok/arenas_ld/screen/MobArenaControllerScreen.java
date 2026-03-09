@@ -3,11 +3,13 @@ package net.ledok.arenas_ld.screen;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.networking.ModPackets;
+import net.ledok.arenas_ld.util.LeaderboardEntry;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 
@@ -24,8 +26,11 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
     private Button joinButton;
     private Button leaveButton;
     private List<Component> playerList = new ArrayList<>();
+    private List<LeaderboardEntry> leaderboard = new ArrayList<>();
     private int currentWave = 0;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private double scrollAmount = 0;
+    private boolean scrolling = false;
 
     public MobArenaControllerScreen(MobArenaControllerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
@@ -73,6 +78,7 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
                     }
                     this.playerList = newPlayerList;
                     this.currentWave = controller.currentWave;
+                    this.leaderboard = controller.leaderboard;
                 }
             });
         }
@@ -111,11 +117,50 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
         for (int i = 0; i < playerList.size(); i++) {
             guiGraphics.drawString(this.font, (i + 1) + ". " + playerList.get(i).getString(), playerListX, playerListY + i * 10, 0xFFFFFF);
         }
+
+        // Leaderboard Title
+        Component leaderboardTitle = Component.translatable("gui.arenas_ld.leaderboard");
+        int leaderboardTitleWidth = this.font.width(leaderboardTitle);
+        guiGraphics.drawString(this.font, leaderboardTitle, x + 15 + (90 / 2) - (leaderboardTitleWidth / 2), y + 110, 0xFFFFFF);
+
+        // Leaderboard
+        int leaderboardX = x + 15;
+        int leaderboardY = y + 125;
+        int leaderboardWidth = 90;
+        int leaderboardHeight = 40;
+
+        guiGraphics.enableScissor(leaderboardX, leaderboardY, leaderboardX + leaderboardWidth, leaderboardY + leaderboardHeight);
+
+        for (int i = 0; i < leaderboard.size(); i++) {
+            LeaderboardEntry entry = leaderboard.get(i);
+            guiGraphics.drawString(this.font, (i + 1) + ". " + entry.playerName + " - " + entry.wave, leaderboardX, (int) (leaderboardY + i * 10 - scrollAmount), 0xFFFFFF);
+        }
+
+        guiGraphics.disableScissor();
+
+        if (leaderboard.size() > 4) {
+            int scrollbarX = leaderboardX + leaderboardWidth + 5;
+            int scrollbarHeight = leaderboardHeight;
+            int maxScroll = leaderboard.size() * 10 - leaderboardHeight;
+            int scrollbarHandleHeight = (int) ((float) scrollbarHeight / (leaderboard.size() * 10) * scrollbarHeight);
+            int scrollbarHandleY = leaderboardY + (int) (scrollAmount / maxScroll * (scrollbarHeight - scrollbarHandleHeight));
+            guiGraphics.fill(scrollbarX, leaderboardY, scrollbarX + 6, leaderboardY + scrollbarHeight, 0x80000000);
+            guiGraphics.fill(scrollbarX, scrollbarHandleY, scrollbarX + 6, scrollbarHandleY + scrollbarHandleHeight, 0x80FFFFFF);
+        }
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        int maxScroll = leaderboard.size() * 10 - 40;
+        if (maxScroll > 0) {
+            scrollAmount = Mth.clamp(scrollAmount - verticalAmount * 10, 0, maxScroll);
+        }
+        return true;
     }
 
     @Override
     protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         int titleWidth = this.font.width(this.title);
-        guiGraphics.drawString(this.font, this.title, 60 + (120 / 2) - (titleWidth / 2), 4 + (10 / 2) - (this.font.lineHeight / 2), 0x000000, false);
+        guiGraphics.drawString(this.font, this.title, 60 + (120 / 2) - (titleWidth / 2), 5 + (10 / 2) - (this.font.lineHeight / 2), 0x000000, false);
     }
 }

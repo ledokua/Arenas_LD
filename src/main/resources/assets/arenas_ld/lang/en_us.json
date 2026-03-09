@@ -75,6 +75,7 @@
   "gui.arenas_ld.arena_entrance_dimension": "Arena Entrance Dimension",
   "gui.arenas_ld.current_wave": "Current Wave: %s",
   "gui.arenas_ld.players": "Joined Players",
+  "gui.arenas_ld.leaderboard": "Leaderboard",
 
   "item.arenas_ld.linker.mode.group_config": "Group Config",
   "item.arenas_ld.linker.mode.spawner_linking": "Spawner Linking",

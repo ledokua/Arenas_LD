@@ -8,6 +8,7 @@ import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.screen.MobArenaSpawnerData;
 import net.ledok.arenas_ld.screen.MobArenaSpawnerScreenHandler;
 import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.LeaderboardEntry;
 import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.ledok.arenas_ld.util.MobArenaMobData;
 import net.ledok.arenas_ld.util.MobArenaRewardData;
@@ -56,6 +57,7 @@ import net.minecraft.world.scores.Scoreboard;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<MobArenaSpawnerData> {
 
@@ -78,6 +80,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public List<MobArenaMobData> mobs = new ArrayList<>();
     public List<MobArenaRewardData> rewards = new ArrayList<>();
+    public List<LeaderboardEntry> leaderboard = new ArrayList<>();
 
     // --- State Machine Fields ---
     private boolean isArenaActive = false;
@@ -273,6 +276,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     }
 
     private void endArena(ServerLevel world) {
+        updateLeaderboard(world);
         isArenaActive = false;
         currentWave = 0;
         waveTicksRemaining = 0;
@@ -308,6 +312,28 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
         
         setChanged();
+    }
+
+    private void updateLeaderboard(ServerLevel world) {
+        for (UUID playerId : participatingPlayers) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
+            if (player != null) {
+                String playerName = player.getGameProfile().getName();
+                leaderboard.removeIf(entry -> entry.playerName.equals(playerName));
+                leaderboard.add(new LeaderboardEntry(playerName, currentWave));
+            }
+        }
+
+        leaderboard = leaderboard.stream()
+                .sorted(Comparator.comparingInt(e -> -e.wave))
+                .limit(20)
+                .collect(Collectors.toList());
+        
+        if (controllerPos != null && world.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller) {
+            controller.leaderboard = this.leaderboard;
+            controller.setChanged();
+            world.sendBlockUpdated(controllerPos, controller.getBlockState(), controller.getBlockState(), 3);
+        }
     }
 
     private void reviveSpectators(ServerLevel world) {
@@ -598,6 +624,12 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (controllerPos != null) {
             nbt.putLong("ControllerPos", controllerPos.asLong());
         }
+
+        ListTag leaderboardList = new ListTag();
+        for (LeaderboardEntry entry : leaderboard) {
+            leaderboardList.add(entry.toNbt());
+        }
+        nbt.put("Leaderboard", leaderboardList);
     }
 
     @Override
@@ -659,6 +691,14 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         if (nbt.contains("ControllerPos")) {
             controllerPos = BlockPos.of(nbt.getLong("ControllerPos"));
+        }
+
+        leaderboard.clear();
+        if (nbt.contains("Leaderboard")) {
+            ListTag leaderboardList = nbt.getList("Leaderboard", Tag.TAG_COMPOUND);
+            for (Tag t : leaderboardList) {
+                leaderboard.add(LeaderboardEntry.fromNbt((CompoundTag) t));
+            }
         }
     }
     

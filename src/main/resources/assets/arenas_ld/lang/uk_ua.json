@@ -75,6 +75,7 @@
   "gui.arenas_ld.arena_entrance_dimension": "Вимір входу на арену",
   "gui.arenas_ld.current_wave": "Поточна хвиля: %s",
   "gui.arenas_ld.players": "Гравці",
+  "gui.arenas_ld.leaderboard": "Таблиця лідерів",
 
   "item.arenas_ld.linker.mode.group_config": "Конфігурація групи",
   "item.arenas_ld.linker.mode.spawner_linking": "Зв'язування спавнерів",

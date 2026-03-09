@@ -4,6 +4,7 @@ import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.screen.MobArenaControllerData;
 import net.ledok.arenas_ld.screen.MobArenaControllerScreenHandler;
+import net.ledok.arenas_ld.util.LeaderboardEntry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
@@ -25,7 +26,9 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -35,6 +38,7 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
     public Set<UUID> partyMembers = new HashSet<>();
     public boolean isLocked = false;
     public int currentWave = 0;
+    public List<LeaderboardEntry> leaderboard = new ArrayList<>();
 
     public MobArenaControllerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.MOB_ARENA_CONTROLLER_BLOCK_ENTITY, pos, state);
@@ -63,6 +67,12 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
             membersList.add(tag);
         }
         nbt.put("PartyMembers", membersList);
+
+        ListTag leaderboardList = new ListTag();
+        for (LeaderboardEntry entry : leaderboard) {
+            leaderboardList.add(entry.toNbt());
+        }
+        nbt.put("Leaderboard", leaderboardList);
     }
 
     @Override
@@ -78,6 +88,14 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
             ListTag membersList = nbt.getList("PartyMembers", Tag.TAG_COMPOUND);
             for (Tag t : membersList) {
                 partyMembers.add(((CompoundTag) t).getUUID("uuid"));
+            }
+        }
+
+        leaderboard.clear();
+        if (nbt.contains("Leaderboard")) {
+            ListTag leaderboardList = nbt.getList("Leaderboard", Tag.TAG_COMPOUND);
+            for (Tag t : leaderboardList) {
+                leaderboard.add(LeaderboardEntry.fromNbt((CompoundTag) t));
             }
         }
     }
