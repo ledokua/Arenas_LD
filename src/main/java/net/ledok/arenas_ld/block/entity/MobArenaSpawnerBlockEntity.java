@@ -280,7 +280,38 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         distributeRewards(world);
         timeBetweenWavesTicks = timeBetweenWaves * 20;
         reviveSpectators(world);
+        applyWaveCompletionBonus(world);
         setChanged();
+    }
+
+    private void applyWaveCompletionBonus(ServerLevel world) {
+        float percentage = currentWave / 100.0f;
+
+        for (UUID playerId : participatingPlayers) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
+            if (player != null && player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
+                // Heal player
+                player.heal(player.getMaxHealth() * percentage);
+
+                // Repair items
+                for (ItemStack stack : player.getArmorSlots()) {
+                    if (stack.isDamageableItem()) {
+                        int repairAmount = (int) (stack.getMaxDamage() * percentage);
+                        stack.setDamageValue(Math.max(0, stack.getDamageValue() - repairAmount));
+                    }
+                }
+                ItemStack mainHand = player.getMainHandItem();
+                if (mainHand.isDamageableItem()) {
+                    int repairAmount = (int) (mainHand.getMaxDamage() * percentage);
+                    mainHand.setDamageValue(Math.max(0, mainHand.getDamageValue() - repairAmount));
+                }
+                ItemStack offHand = player.getOffhandItem();
+                if (offHand.isDamageableItem()) {
+                    int repairAmount = (int) (offHand.getMaxDamage() * percentage);
+                    offHand.setDamageValue(Math.max(0, offHand.getDamageValue() - repairAmount));
+                }
+            }
+        }
     }
 
     private void failArena(ServerLevel world) {
