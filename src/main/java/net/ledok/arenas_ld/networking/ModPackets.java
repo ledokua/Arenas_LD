@@ -17,6 +17,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -543,7 +544,7 @@ public class ModPackets {
                     LinkerModeDataComponent data = stack.getOrDefault(DataComponentRegistry.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
                     int currentMode = data.mode();
                     int newMode = (currentMode + (payload.forward() ? 1 : -1) + LinkerItem.Mode.values().length) % LinkerItem.Mode.values().length;
-                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(newMode, data.mainSpawnerPos()));
+                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(newMode, data.mainSpawnerPos(), data.mainSpawnerDimension()));
                     
                     LinkerItem.Mode mode = LinkerItem.Mode.values()[newMode];
                     context.player().sendSystemMessage(Component.translatable("message.arenas_ld.linker.mode_changed", mode.getName()));
@@ -576,9 +577,9 @@ public class ModPackets {
                         case 0: // Start Arena
                             if (!controller.isLocked && controller.partyMembers.contains(player.getUUID())) {
                                 if (controller.arenaSpawnerPos != BlockPos.ZERO) {
-                                    Level spawnerLevel = world.getServer().getLevel(controller.arenaSpawnerDimension);
+                                    ServerLevel spawnerLevel = world.getServer().getLevel(controller.arenaSpawnerDimension);
                                     if (spawnerLevel != null && spawnerLevel.getBlockEntity(controller.arenaSpawnerPos) instanceof MobArenaSpawnerBlockEntity spawner) {
-                                        spawner.startArena(controller.partyMembers, payload.pos());
+                                        spawner.startArena(controller.partyMembers, payload.pos(), world.dimension());
                                         controller.isLocked = true;
                                         controller.setChanged();
                                         world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);

@@ -97,6 +97,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private boolean isChunkLoaded = false;
     private Set<UUID> participatingPlayers = new HashSet<>();
     private BlockPos controllerPos;
+    private ResourceKey<Level> controllerDimension;
 
     public MobArenaSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.MOB_ARENA_SPAWNER_BLOCK_ENTITY, pos, state);
@@ -132,6 +133,13 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (shouldBeLoaded != isChunkLoaded) {
             ChunkPos chunkPos = new ChunkPos(this.worldPosition);
             world.setChunkForced(chunkPos.x, chunkPos.z, shouldBeLoaded);
+            if (controllerPos != null && controllerDimension != null) {
+                ServerLevel controllerWorld = world.getServer().getLevel(controllerDimension);
+                if (controllerWorld != null) {
+                    ChunkPos controllerChunkPos = new ChunkPos(controllerPos);
+                    controllerWorld.setChunkForced(controllerChunkPos.x, controllerChunkPos.z, shouldBeLoaded);
+                }
+            }
             isChunkLoaded = shouldBeLoaded;
         }
     }
@@ -213,10 +221,11 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
     }
 
-    public void startArena(Set<UUID> players, BlockPos controllerPos) {
+    public void startArena(Set<UUID> players, BlockPos controllerPos, ResourceKey<Level> controllerDimension) {
         if (level instanceof ServerLevel serverLevel) {
             this.participatingPlayers = new HashSet<>(players);
             this.controllerPos = controllerPos;
+            this.controllerDimension = controllerDimension;
             
             // Teleport players to arena
             for (UUID playerId : participatingPlayers) {
@@ -242,10 +251,13 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     private void startWave(ServerLevel world) {
         currentWave++;
-        if (controllerPos != null && world.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller) {
-            controller.currentWave = currentWave;
-            controller.setChanged();
-            world.sendBlockUpdated(controllerPos, controller.getBlockState(), controller.getBlockState(), 3);
+        if (controllerPos != null && controllerDimension != null) {
+            ServerLevel controllerWorld = world.getServer().getLevel(controllerDimension);
+            if (controllerWorld != null && controllerWorld.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller) {
+                controller.currentWave = currentWave;
+                controller.setChanged();
+                controllerWorld.sendBlockUpdated(controllerPos, controller.getBlockState(), controller.getBlockState(), 3);
+            }
         }
         
         // Clear items on the ground
@@ -307,21 +319,42 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             }
         }
         
-        if (controllerPos != null && world.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller) {
-            controller.reset();
+        if (controllerPos != null && controllerDimension != null) {
+            ServerLevel controllerWorld = world.getServer().getLevel(controllerDimension);
+            if (controllerWorld != null && controllerWorld.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller) {
+                controller.reset();
+            }
         }
         
         setChanged();
+    }
+
+    public void updateLeaderboardOnDisconnect(ServerPlayer player) {
+        updateLeaderboard(player, currentWave);
     }
 
     private void updateLeaderboard(ServerLevel world) {
         for (UUID playerId : participatingPlayers) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
             if (player != null) {
-                String playerName = player.getGameProfile().getName();
-                leaderboard.removeIf(entry -> entry.playerName.equals(playerName));
-                leaderboard.add(new LeaderboardEntry(playerName, currentWave));
+                updateLeaderboard(player, currentWave);
             }
+        }
+    }
+
+    private void updateLeaderboard(Player player, int wave) {
+        String playerName = player.getGameProfile().getName();
+        Optional<LeaderboardEntry> existingEntry = leaderboard.stream()
+                .filter(entry -> entry.playerName.equals(playerName))
+                .findFirst();
+
+        if (existingEntry.isPresent()) {
+            if (wave > existingEntry.get().wave) {
+                leaderboard.remove(existingEntry.get());
+                leaderboard.add(new LeaderboardEntry(playerName, wave));
+            }
+        } else {
+            leaderboard.add(new LeaderboardEntry(playerName, wave));
         }
 
         leaderboard = leaderboard.stream()
@@ -329,10 +362,13 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
                 .limit(20)
                 .collect(Collectors.toList());
         
-        if (controllerPos != null && world.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller) {
-            controller.leaderboard = this.leaderboard;
-            controller.setChanged();
-            world.sendBlockUpdated(controllerPos, controller.getBlockState(), controller.getBlockState(), 3);
+        if (controllerPos != null && controllerDimension != null) {
+            ServerLevel controllerWorld = player.getServer().getLevel(controllerDimension);
+            if (controllerWorld != null && controllerWorld.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller) {
+                controller.leaderboard = this.leaderboard;
+                controller.setChanged();
+                controllerWorld.sendBlockUpdated(controllerPos, controller.getBlockState(), controller.getBlockState(), 3);
+            }
         }
     }
 
@@ -623,6 +659,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         if (controllerPos != null) {
             nbt.putLong("ControllerPos", controllerPos.asLong());
+            nbt.putString("ControllerDimension", controllerDimension.location().toString());
         }
 
         ListTag leaderboardList = new ListTag();
@@ -691,6 +728,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         if (nbt.contains("ControllerPos")) {
             controllerPos = BlockPos.of(nbt.getLong("ControllerPos"));
+            controllerDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ControllerDimension")));
         }
 
         leaderboard.clear();
