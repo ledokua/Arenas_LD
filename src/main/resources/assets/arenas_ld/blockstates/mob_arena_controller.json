@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "arenas_ld:block/mob_arena_controller"
+    }
+  }
+}
