@@ -23,6 +23,7 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
     private EditBox prepareTimeField;
     private EditBox groupIdField;
     private EditBox bossWaveAdditionalTimeField;
+    private EditBox entityHighlightTimeField;
     private EditBox exitPositionField;
     private EditBox exitDimensionField;
     private EditBox arenaEntrancePositionField;
@@ -109,6 +110,12 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
         bossWaveAdditionalTimeField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         bossWaveAdditionalTimeField.setMaxLength(8);
         this.addRenderableWidget(bossWaveAdditionalTimeField);
+        y += (int)(yOffset * 1.7);
+
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.entity_highlight_time"), (button) -> {}, this.font));
+        entityHighlightTimeField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
+        entityHighlightTimeField.setMaxLength(8);
+        this.addRenderableWidget(entityHighlightTimeField);
 
         // Column 2
         y = 20;
@@ -162,6 +169,7 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
             prepareTimeField.setValue(String.valueOf(menu.blockEntity.prepareTime));
             groupIdField.setValue(menu.blockEntity.groupId);
             bossWaveAdditionalTimeField.setValue(String.valueOf(menu.blockEntity.bossWaveAdditionalTime));
+            entityHighlightTimeField.setValue(String.valueOf(menu.blockEntity.entityHighlightTime));
             exitPositionField.setValue(String.format("%d %d %d", menu.blockEntity.exitPosition.getX(), menu.blockEntity.exitPosition.getY(), menu.blockEntity.exitPosition.getZ()));
             exitDimensionField.setValue(menu.blockEntity.exitDimension.location().toString());
             arenaEntrancePositionField.setValue(String.format("%d %d %d", menu.blockEntity.arenaEntrancePosition.getX(), menu.blockEntity.arenaEntrancePosition.getY(), menu.blockEntity.arenaEntrancePosition.getZ()));
@@ -205,7 +213,8 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
                     parseCoords(arenaEntrancePositionField.getValue()),
                     parseDimension(arenaEntranceDimensionField.getValue()),
                     groupIdField.getValue(),
-                    Integer.parseInt(bossWaveAdditionalTimeField.getValue())
+                    Integer.parseInt(bossWaveAdditionalTimeField.getValue()),
+                    Integer.parseInt(entityHighlightTimeField.getValue())
             ));
             this.onClose();
         } catch (NumberFormatException e) {

@@ -72,7 +72,8 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     public int prepareTime = 10;
     public String groupId = "";
     public int bossWaveAdditionalTime = 60;
-    
+    public int entityHighlightTime = 0;
+
     public BlockPos exitPosition = BlockPos.ZERO;
     public ResourceKey<Level> exitDimension = Level.OVERWORLD;
     public BlockPos arenaEntrancePosition = BlockPos.ZERO;
@@ -98,6 +99,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private Set<UUID> participatingPlayers = new HashSet<>();
     private BlockPos controllerPos;
     private ResourceKey<Level> controllerDimension;
+    private boolean highlighting = false;
 
     public MobArenaSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.MOB_ARENA_SPAWNER_BLOCK_ENTITY, pos, state);
@@ -211,10 +213,20 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (waveTicksRemaining > 0) {
             waveTicksRemaining--;
             bossBar.setName(Component.translatable("bossbar.arenas_ld.wave_info", currentWave, waveTicksRemaining / 20));
-            
+
             int totalWaveTime = (waveTimer + (currentWave - 1) * additionalTime) * 20;
             bossBar.setProgress((float) waveTicksRemaining / totalWaveTime);
-            
+
+            if (waveTicksRemaining <= entityHighlightTime * 20 && !highlighting) {
+                highlighting = true;
+                for (UUID mobUuid : aliveMobs) {
+                    Entity mob = world.getEntity(mobUuid);
+                    if (mob != null) {
+                        mob.setGlowingTag(true);
+                    }
+                }
+            }
+
             if (waveTicksRemaining == 0) {
                 failArena(world);
             }
@@ -251,6 +263,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     private void startWave(ServerLevel world) {
         currentWave++;
+        highlighting = false;
         if (controllerPos != null && controllerDimension != null) {
             ServerLevel controllerWorld = world.getServer().getLevel(controllerDimension);
             if (controllerWorld != null && controllerWorld.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller) {
@@ -329,6 +342,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         for (UUID uuid : aliveMobs) {
             Entity entity = world.getEntity(uuid);
             if (entity != null) {
+                entity.setGlowingTag(false);
                 entity.discard();
             }
         }
@@ -648,6 +662,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         nbt.putInt("PrepareTime", prepareTime);
         nbt.putString("GroupId", groupId);
         nbt.putInt("BossWaveAdditionalTime", bossWaveAdditionalTime);
+        nbt.putInt("EntityHighlightTime", entityHighlightTime);
         
         nbt.putLong("ExitPosition", exitPosition.asLong());
         nbt.putString("ExitDimension", exitDimension.location().toString());
@@ -713,6 +728,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         prepareTime = nbt.getInt("PrepareTime");
         groupId = nbt.getString("GroupId");
         bossWaveAdditionalTime = nbt.getInt("BossWaveAdditionalTime");
+        entityHighlightTime = nbt.getInt("EntityHighlightTime");
         
         exitPosition = BlockPos.of(nbt.getLong("ExitPosition"));
         exitDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitDimension")));

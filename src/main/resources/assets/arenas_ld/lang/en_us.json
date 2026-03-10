@@ -64,6 +64,7 @@
   "gui.arenas_ld.attribute_scale": "Attribute Scale",
   "gui.arenas_ld.prepare_time": "Prepare Time (seconds)",
   "gui.arenas_ld.boss_wave_additional_time": "Boss Wave Additional Time (seconds)",
+  "gui.arenas_ld.entity_highlight_time": "Entity Highlight Time (seconds)",
   "gui.arenas_ld.mobs": "Mobs",
   "gui.arenas_ld.rewards": "Rewards",
   "gui.arenas_ld.rolls": "Rolls",

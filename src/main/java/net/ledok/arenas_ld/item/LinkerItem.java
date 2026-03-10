@@ -1,13 +1,13 @@
 package net.ledok.arenas_ld.item;
 
 import net.ledok.arenas_ld.block.entity.*;
+import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.LinkableSpawner;
 import net.ledok.arenas_ld.util.LinkerDataComponent;
 import net.ledok.arenas_ld.util.LinkerModeDataComponent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;

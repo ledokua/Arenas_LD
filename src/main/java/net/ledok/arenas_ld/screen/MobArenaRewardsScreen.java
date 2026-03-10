@@ -34,7 +34,7 @@ public class MobArenaRewardsScreen extends Screen {
 
     @Override
     protected void init() {
-        this.list = new RewardList(this.minecraft, this.width, 32, this.height - 32, 25);
+        this.list = new RewardList(this.minecraft, this.width, this.height - 64, 32, 25);
         for (MobArenaRewardData reward : rewards) {
             this.list.addEntry(new RewardEntry(reward));
         }
@@ -55,6 +55,15 @@ public class MobArenaRewardsScreen extends Screen {
     }
 
     @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (this.list.isMouseOver(mouseX, mouseY)) {
+            this.list.setScrollAmount(this.list.getScrollAmount() - verticalAmount * 12.5);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+    }
+
+    @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         this.tooltip = null;
         this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
@@ -67,8 +76,8 @@ public class MobArenaRewardsScreen extends Screen {
     }
 
     class RewardList extends ContainerObjectSelectionList<RewardEntry> {
-        public RewardList(Minecraft minecraft, int width, int y0, int y1, int itemHeight) {
-            super(minecraft, width, y1 - y0, y0, itemHeight);
+        public RewardList(Minecraft minecraft, int width, int height, int y, int itemHeight) {
+            super(minecraft, width, height, y, itemHeight);
         }
 
         public int addEntry(RewardEntry entry) {

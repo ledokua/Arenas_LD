@@ -46,14 +46,17 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
 
         joinButton = addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.join_party"), button -> {
             ClientPlayNetworking.send(new ModPackets.MobArenaControllerActionPayload(menu.getPos(), 1));
+            updateInfo();
         }).bounds(x + 10, y + 20, 100, 20).build());
 
         leaveButton = addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.leave_party"), button -> {
             ClientPlayNetworking.send(new ModPackets.MobArenaControllerActionPayload(menu.getPos(), 2));
+            updateInfo();
         }).bounds(x + 10, y + 50, 100, 20).build());
 
         startButton = addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.start_arena"), button -> {
             ClientPlayNetworking.send(new ModPackets.MobArenaControllerActionPayload(menu.getPos(), 0));
+            updateInfo();
         }).bounds(x + 10, y + 80, 100, 20).build());
 
         scheduler.scheduleAtFixedRate(this::updateInfo, 0, 1, TimeUnit.SECONDS);
@@ -118,14 +121,9 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
             guiGraphics.drawString(this.font, (i + 1) + ". " + playerList.get(i).getString(), playerListX, playerListY + i * 10, 0xFFFFFF);
         }
 
-        // Leaderboard Title
-        Component leaderboardTitle = Component.translatable("gui.arenas_ld.leaderboard");
-        int leaderboardTitleWidth = this.font.width(leaderboardTitle);
-        guiGraphics.drawString(this.font, leaderboardTitle, x + 15 + (90 / 2) - (leaderboardTitleWidth / 2), y + 110, 0xFFFFFF);
-
         // Leaderboard
         int leaderboardX = x + 15;
-        int leaderboardY = y + 125;
+        int leaderboardY = y + 110;
         int leaderboardWidth = 90;
         int leaderboardHeight = 40;
 

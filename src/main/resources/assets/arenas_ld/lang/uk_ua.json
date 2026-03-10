@@ -64,6 +64,7 @@
   "gui.arenas_ld.attribute_scale": "Масштаб атрибутів",
   "gui.arenas_ld.prepare_time": "Час підготовки (секунди)",
   "gui.arenas_ld.boss_wave_additional_time": "Додатковий час хвилі боса (секунди)",
+  "gui.arenas_ld.entity_highlight_time": "Час підсвічування сутностей (секунди)",
   "gui.arenas_ld.mobs": "Моби",
   "gui.arenas_ld.rewards": "Нагороди",
   "gui.arenas_ld.rolls": "Кидки",

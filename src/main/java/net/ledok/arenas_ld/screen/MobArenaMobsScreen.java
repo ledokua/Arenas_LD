@@ -34,7 +34,7 @@ public class MobArenaMobsScreen extends Screen {
 
     @Override
     protected void init() {
-        this.list = new MobList(this.minecraft, this.width, this.height, 32, 25);
+        this.list = new MobList(this.minecraft, this.width, this.height - 64, 32, 25);
         for (MobArenaMobData mob : mobs) {
             this.list.addEntry(new MobEntry(mob));
         }
@@ -53,6 +53,15 @@ public class MobArenaMobsScreen extends Screen {
     }
 
     @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (this.list.isMouseOver(mouseX, mouseY)) {
+            this.list.setScrollAmount(this.list.getScrollAmount() - verticalAmount * 12.5);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+    }
+
+    @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         this.tooltip = null;
         this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
@@ -65,8 +74,8 @@ public class MobArenaMobsScreen extends Screen {
     }
 
     class MobList extends ContainerObjectSelectionList<MobEntry> {
-        public MobList(Minecraft minecraft, int width, int height, int y0, int itemHeight) {
-            super(minecraft, width, height, y0, itemHeight);
+        public MobList(Minecraft minecraft, int width, int height, int y, int itemHeight) {
+            super(minecraft, width, height, y, itemHeight);
         }
 
         @Override

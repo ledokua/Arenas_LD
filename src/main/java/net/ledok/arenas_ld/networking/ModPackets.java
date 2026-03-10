@@ -4,6 +4,7 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.*;
+import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.item.LinkerItem;
 import net.ledok.arenas_ld.item.SpawnerConfiguratorItem;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
@@ -162,7 +163,7 @@ public class ModPackets {
             int waveTimer, int additionalTime, int timeBetweenWaves, double attributeScale, int prepareTime,
             BlockPos exitPosition, ResourceLocation exitDimension,
             BlockPos arenaEntrancePosition, ResourceLocation arenaEntranceDimension,
-            String groupId, int bossWaveAdditionalTime
+            String groupId, int bossWaveAdditionalTime, int entityHighlightTime
     ) implements CustomPacketPayload {
         public static final Type<UpdateMobArenaSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_spawner"));
 
@@ -175,7 +176,7 @@ public class ModPackets {
                     buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readDouble(), buf.readVarInt(),
                     buf.readBlockPos(), buf.readResourceLocation(),
                     buf.readBlockPos(), buf.readResourceLocation(),
-                    buf.readUtf(), buf.readVarInt()
+                    buf.readUtf(), buf.readVarInt(), buf.readVarInt()
             );
         }
 
@@ -195,6 +196,7 @@ public class ModPackets {
             buf.writeResourceLocation(arenaEntranceDimension);
             buf.writeUtf(groupId);
             buf.writeVarInt(bossWaveAdditionalTime);
+            buf.writeVarInt(entityHighlightTime);
         }
 
         @Override
@@ -485,6 +487,7 @@ public class ModPackets {
                     blockEntity.arenaEntranceDimension = ResourceKey.create(Registries.DIMENSION, payload.arenaEntranceDimension());
                     blockEntity.groupId = payload.groupId();
                     blockEntity.bossWaveAdditionalTime = payload.bossWaveAdditionalTime();
+                    blockEntity.entityHighlightTime = payload.entityHighlightTime();
                     blockEntity.setChanged();
                     world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
                 }
