@@ -41,6 +41,7 @@ public class PlayerListMixin {
             if (arenaInfo != null) {
                 ServerLevel world = player.server.getLevel(arenaInfo.dimension());
                 if (world != null && world.getBlockEntity(arenaInfo.pos()) instanceof MobArenaSpawnerBlockEntity spawner) {
+                    spawner.sendLossMessage(player);
                     spawner.updateLeaderboardOnDisconnect(player);
                     spawner.removeParticipatingPlayer(player.getUUID());
                     if (spawner.getParticipatingPlayerCount() == 0) {

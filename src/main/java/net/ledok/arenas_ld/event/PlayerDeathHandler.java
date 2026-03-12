@@ -1,12 +1,18 @@
 package net.ledok.arenas_ld.event;
 
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.level.GameType;
 
 public class PlayerDeathHandler {
     public static boolean onPlayerDeath(ServerPlayer player, DamageSource source) {
+        DungeonBossSpawnerBlockEntity dungeonSpawner = ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player);
+        if (dungeonSpawner != null && player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
+            dungeonSpawner.handlePlayerDown(player);
+            return true;
+        }
         if (ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player) && player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
             player.setHealth(1.0F); // Prevent death loop
             player.setGameMode(GameType.SPECTATOR);

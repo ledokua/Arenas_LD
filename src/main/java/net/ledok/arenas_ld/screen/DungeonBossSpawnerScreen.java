@@ -16,6 +16,7 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
     private EditBox mobIdField;
     private EditBox respawnTimeField;
     private EditBox dungeonCloseTimerField;
+    private EditBox dungeonTimeField;
     private EditBox lootTableIdField;
     private EditBox perPlayerLootTableIdField;
     private EditBox exitPositionCoordsField;
@@ -23,10 +24,6 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
     private EditBox triggerRadiusField;
     private EditBox battleRadiusField;
     private EditBox regenerationField;
-    private EditBox enterPortalSpawnCoordsField;
-    private EditBox enterPortalSpawnDimensionField;
-    private EditBox enterPortalDestCoordsField;
-    private EditBox enterPortalDestDimensionField;
     private EditBox skillExperienceField;
     private EditBox groupIdField;
 
@@ -93,6 +90,12 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
         this.addRenderableWidget(dungeonCloseTimerField);
         currentY += (int)(yOffset * 1.7);
 
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.dungeon_time"), (button) -> {}, this.font));
+        dungeonTimeField = new EditBox(this.font, col2X, currentY, fieldWidth, fieldHeight, Component.literal(""));
+        dungeonTimeField.setMaxLength(8);
+        this.addRenderableWidget(dungeonTimeField);
+        currentY += (int)(yOffset * 1.7);
+
         addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.trigger_radius"), (button) -> {}, this.font));
         triggerRadiusField = new EditBox(this.font, col2X, currentY, fieldWidth, fieldHeight, Component.literal(""));
         triggerRadiusField.setMaxLength(4);
@@ -117,32 +120,8 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
         this.addRenderableWidget(skillExperienceField);
 
 
-        // --- Column 3: Portal Settings ---
+        // --- Column 3: Exit Settings ---
         currentY = 20;
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_spawn"), (button) -> {}, this.font));
-        enterPortalSpawnCoordsField = new EditBox(this.font, col3X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        enterPortalSpawnCoordsField.setMaxLength(32);
-        this.addRenderableWidget(enterPortalSpawnCoordsField);
-        currentY += (int)(yOffset * 1.7);
-
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_spawn_dim"), (button) -> {}, this.font));
-        enterPortalSpawnDimensionField = new EditBox(this.font, col3X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        enterPortalSpawnDimensionField.setMaxLength(128);
-        this.addRenderableWidget(enterPortalSpawnDimensionField);
-        currentY += (int)(yOffset * 1.7);
-
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_dest"), (button) -> {}, this.font));
-        enterPortalDestCoordsField = new EditBox(this.font, col3X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        enterPortalDestCoordsField.setMaxLength(32);
-        this.addRenderableWidget(enterPortalDestCoordsField);
-        currentY += (int)(yOffset * 1.7);
-
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_dest_dim"), (button) -> {}, this.font));
-        enterPortalDestDimensionField = new EditBox(this.font, col3X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        enterPortalDestDimensionField.setMaxLength(128);
-        this.addRenderableWidget(enterPortalDestDimensionField);
-        currentY += (int)(yOffset * 1.7);
-
         addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.exit_position"), (button) -> {}, this.font));
         exitPositionCoordsField = new EditBox(this.font, col3X, currentY, fieldWidth, fieldHeight, Component.literal(""));
         exitPositionCoordsField.setMaxLength(32);
@@ -176,6 +155,7 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
             mobIdField.setValue(menu.blockEntity.mobId);
             respawnTimeField.setValue(String.valueOf(menu.blockEntity.respawnTime));
             dungeonCloseTimerField.setValue(String.valueOf(menu.blockEntity.dungeonCloseTimer));
+            dungeonTimeField.setValue(String.valueOf(menu.blockEntity.dungeonTime));
             lootTableIdField.setValue(menu.blockEntity.lootTableId);
             perPlayerLootTableIdField.setValue(menu.blockEntity.perPlayerLootTableId);
             exitPositionCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.exitPositionCoords.getX(), menu.blockEntity.exitPositionCoords.getY(), menu.blockEntity.exitPositionCoords.getZ()));
@@ -183,10 +163,6 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
             triggerRadiusField.setValue(String.valueOf(menu.blockEntity.triggerRadius));
             battleRadiusField.setValue(String.valueOf(menu.blockEntity.battleRadius));
             regenerationField.setValue(String.valueOf(menu.blockEntity.regeneration));
-            enterPortalSpawnCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.enterPortalSpawnCoords.getX(), menu.blockEntity.enterPortalSpawnCoords.getY(), menu.blockEntity.enterPortalSpawnCoords.getZ()));
-            enterPortalSpawnDimensionField.setValue(menu.blockEntity.enterPortalSpawnDimension.location().toString());
-            enterPortalDestCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.enterPortalDestCoords.getX(), menu.blockEntity.enterPortalDestCoords.getY(), menu.blockEntity.enterPortalDestCoords.getZ()));
-            enterPortalDestDimensionField.setValue(menu.blockEntity.enterPortalDestDimension.location().toString());
             skillExperienceField.setValue(String.valueOf(menu.blockEntity.skillExperiencePerWin));
             groupIdField.setValue(menu.blockEntity.groupId);
         }
@@ -218,14 +194,11 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
                     mobIdField.getValue(),
                     Integer.parseInt(respawnTimeField.getValue()),
                     Integer.parseInt(dungeonCloseTimerField.getValue()),
+                    Integer.parseInt(dungeonTimeField.getValue()),
                     lootTableIdField.getValue(),
                     perPlayerLootTableIdField.getValue(),
                     parseCoords(exitPositionCoordsField.getValue()),
                     parseDimension(exitPositionDimensionField.getValue()),
-                    parseCoords(enterPortalSpawnCoordsField.getValue()),
-                    parseDimension(enterPortalSpawnDimensionField.getValue()),
-                    parseCoords(enterPortalDestCoordsField.getValue()),
-                    parseDimension(enterPortalDestDimensionField.getValue()),
                     Integer.parseInt(triggerRadiusField.getValue()),
                     Integer.parseInt(battleRadiusField.getValue()),
                     Integer.parseInt(regenerationField.getValue()),

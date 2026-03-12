@@ -3,7 +3,7 @@ package net.ledok.arenas_ld.screen;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.networking.ModPackets;
-import net.ledok.arenas_ld.util.LeaderboardEntry;
+import net.ledok.arenas_ld.util.DungeonLeaderboardEntry;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -20,20 +20,20 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaControllerScreenHandler> {
+public class DungeonControllerScreen extends AbstractContainerScreen<DungeonControllerScreenHandler> {
     private static final ResourceLocation BACKGROUND_TEXTURE = ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "textures/test/arena_controller_background.png");
     private static final int LEADERBOARD_HEIGHT = 55;
     private Button startButton;
     private Button joinButton;
     private Button leaveButton;
     private List<Component> playerList = new ArrayList<>();
-    private List<LeaderboardEntry> leaderboard = new ArrayList<>();
-    private int currentWave = 0;
+    private List<DungeonLeaderboardEntry> leaderboard = new ArrayList<>();
+    private int remainingDungeonTimeSeconds = 0;
+    private int dungeonCooldownSeconds = 0;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private double scrollAmount = 0;
-    private boolean scrolling = false;
 
-    public MobArenaControllerScreen(MobArenaControllerScreenHandler handler, Inventory inventory, Component title) {
+    public DungeonControllerScreen(DungeonControllerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
         this.imageWidth = 240;
         this.imageHeight = 180;
@@ -46,17 +46,17 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
         int y = (height - imageHeight) / 2;
 
         joinButton = addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.join_party"), button -> {
-            ClientPlayNetworking.send(new ModPackets.MobArenaControllerActionPayload(menu.getPos(), 1));
+            ClientPlayNetworking.send(new ModPackets.DungeonControllerActionPayload(menu.getPos(), 1));
             updateInfo();
         }).bounds(x + 10, y + 20, 100, 20).build());
 
         leaveButton = addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.leave_party"), button -> {
-            ClientPlayNetworking.send(new ModPackets.MobArenaControllerActionPayload(menu.getPos(), 2));
+            ClientPlayNetworking.send(new ModPackets.DungeonControllerActionPayload(menu.getPos(), 2));
             updateInfo();
         }).bounds(x + 10, y + 50, 100, 20).build());
 
-        startButton = addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.start_arena"), button -> {
-            ClientPlayNetworking.send(new ModPackets.MobArenaControllerActionPayload(menu.getPos(), 0));
+        startButton = addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.start_dungeon"), button -> {
+            ClientPlayNetworking.send(new ModPackets.DungeonControllerActionPayload(menu.getPos(), 0));
             updateInfo();
         }).bounds(x + 10, y + 80, 100, 20).build());
 
@@ -72,7 +72,7 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
     private void updateInfo() {
         if (minecraft != null && minecraft.level != null) {
             minecraft.execute(() -> {
-                if (minecraft.level.getBlockEntity(menu.getPos()) instanceof net.ledok.arenas_ld.block.entity.MobArenaControllerBlockEntity controller) {
+                if (minecraft.level.getBlockEntity(menu.getPos()) instanceof net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity controller) {
                     List<Component> newPlayerList = new ArrayList<>();
                     for (UUID uuid : controller.partyMembers) {
                         Player player = minecraft.level.getPlayerByUUID(uuid);
@@ -81,7 +81,8 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
                         }
                     }
                     this.playerList = newPlayerList;
-                    this.currentWave = controller.currentWave;
+                    this.remainingDungeonTimeSeconds = controller.remainingDungeonTimeSeconds;
+                    this.dungeonCooldownSeconds = controller.dungeonCooldownSeconds;
                     this.leaderboard = controller.leaderboard;
                 }
             });
@@ -103,18 +104,30 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
         int x = (width - imageWidth) / 2;
         int y = (height - imageHeight) / 2;
 
-        // Wave Counter
-        if (currentWave > 0) {
-            Component waveText = Component.translatable("gui.arenas_ld.current_wave", currentWave);
-            int waveTextWidth = this.font.width(waveText);
-            guiGraphics.drawString(this.font, waveText, x + 130 + (100 / 2) - (waveTextWidth / 2), y + 20 + (20 / 2) - (this.font.lineHeight / 2), 0xFFFFFF);
+        // Remaining Dungeon Time / Cooldown
+        if (dungeonCooldownSeconds > 0) {
+            Component timeText = Component.translatable("gui.arenas_ld.dungeon_cooldown", formatTime(dungeonCooldownSeconds));
+            float timeScale = 0.75f;
+            int timeTextWidth = Math.round(this.font.width(timeText) * timeScale);
+            int timeTextHeight = Math.round(this.font.lineHeight * timeScale);
+            int timeX = x + 130 + (100 / 2) - (timeTextWidth / 2);
+            int timeY = y + 20 + (20 / 2) - (timeTextHeight / 2);
+            drawScaledString(guiGraphics, timeText, timeX, timeY, 0xFFFFFF, timeScale);
+        } else if (remainingDungeonTimeSeconds > 0) {
+            Component timeText = Component.translatable("gui.arenas_ld.dungeon_time_remaining", formatTime(remainingDungeonTimeSeconds));
+            float timeScale = 0.75f;
+            int timeTextWidth = Math.round(this.font.width(timeText) * timeScale);
+            int timeTextHeight = Math.round(this.font.lineHeight * timeScale);
+            int timeX = x + 130 + (100 / 2) - (timeTextWidth / 2);
+            int timeY = y + 20 + (20 / 2) - (timeTextHeight / 2);
+            drawScaledString(guiGraphics, timeText, timeX, timeY, 0xFFFFFF, timeScale);
         }
 
         // Player List Title
         Component playerListTitle = Component.translatable("gui.arenas_ld.players");
         int playerListTitleWidth = this.font.width(playerListTitle);
         guiGraphics.drawString(this.font, playerListTitle, x + 130 + (100 / 2) - (playerListTitleWidth / 2), y + 50 + (15 / 2) - (this.font.lineHeight / 2), 0xFFFFFF);
-        
+
         // Player List
         int playerListX = x + 135;
         int playerListY = y + 70;
@@ -132,7 +145,7 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
         int leaderboardWidth = 90;
         int leaderboardHeight = LEADERBOARD_HEIGHT;
 
-        Component leaderboardTitle = Component.translatable("gui.arenas_ld.highest_wave");
+        Component leaderboardTitle = Component.translatable("gui.arenas_ld.fastest_clears");
         int leaderboardTitleWidth = this.font.width(leaderboardTitle);
         guiGraphics.drawString(this.font, leaderboardTitle, leaderboardX + (leaderboardWidth / 2) - (leaderboardTitleWidth / 2), y + 105, 0xFFFFFF);
 
@@ -144,8 +157,8 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
         int maxScroll = Math.max(0, totalHeight - leaderboardHeight);
         scrollAmount = Mth.clamp(scrollAmount, 0, maxScroll);
         for (int i = 0; i < leaderboard.size(); i++) {
-            LeaderboardEntry entry = leaderboard.get(i);
-            Component entryText = Component.literal((i + 1) + ". " + entry.playerName + " - " + entry.wave);
+            DungeonLeaderboardEntry entry = leaderboard.get(i);
+            Component entryText = Component.literal((i + 1) + ". " + entry.playerName + " - " + formatTime(entry.timeSeconds));
             int entryY = (int) (leaderboardY + i * entryStep - scrollAmount);
             drawScaledString(guiGraphics, entryText, leaderboardX, entryY, 0xFFFFFF, entryScale);
         }
@@ -182,6 +195,12 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
     protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         int titleWidth = this.font.width(this.title);
         guiGraphics.drawString(this.font, this.title, 60 + (120 / 2) - (titleWidth / 2), 5 + (10 / 2) - (this.font.lineHeight / 2), 0x000000, false);
+    }
+
+    private static String formatTime(int totalSeconds) {
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return String.format("%02d:%02d", minutes, seconds);
     }
 
     private void drawScaledString(GuiGraphics guiGraphics, Component text, int x, int y, int color, float scale) {

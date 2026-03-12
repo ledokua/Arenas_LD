@@ -35,7 +35,8 @@ public class LinkerItem extends Item {
         GROUP_CONFIG("item.arenas_ld.linker.mode.group_config"),
         SPAWNER_LINKING("item.arenas_ld.linker.mode.spawner_linking"),
         PHASE_BLOCK_LINKING("item.arenas_ld.linker.mode.phase_block_linking"),
-        ARENA_CONTROLLER_LINKING("item.arenas_ld.linker.mode.arena_controller_linking");
+        ARENA_CONTROLLER_LINKING("item.arenas_ld.linker.mode.arena_controller_linking"),
+        DUNGEON_CONTROLLER_LINKING("item.arenas_ld.linker.mode.dungeon_controller_linking");
 
         private final String translationKey;
 
@@ -77,6 +78,8 @@ public class LinkerItem extends Item {
             return handlePhaseBlockLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
         } else if (currentMode == Mode.ARENA_CONTROLLER_LINKING) {
             return handleArenaControllerLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
+        } else if (currentMode == Mode.DUNGEON_CONTROLLER_LINKING) {
+            return handleDungeonControllerLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
         }
 
         return super.useOn(context);
@@ -242,6 +245,46 @@ public class LinkerItem extends Item {
                 if (mainBe instanceof MobArenaSpawnerBlockEntity) {
                     controller.arenaSpawnerPos = mainPos;
                     controller.arenaSpawnerDimension = modeData.mainSpawnerDimension().get();
+                    controller.setChanged();
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.linked_controller_to_spawner", pos.toShortString(), mainPos.toShortString()));
+                    return InteractionResult.SUCCESS;
+                } else {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_spawner_invalid"));
+                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+                    return InteractionResult.FAIL;
+                }
+            }
+        }
+
+        return InteractionResult.PASS;
+    }
+
+    private InteractionResult handleDungeonControllerLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, boolean isShiftDown, LinkerModeDataComponent modeData) {
+        if (!isShiftDown) return InteractionResult.PASS;
+
+        Optional<BlockPos> mainPosOpt = modeData.mainSpawnerPos();
+
+        if (blockEntity instanceof DungeonBossSpawnerBlockEntity) {
+            // Set Main Spawner
+            stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.set_main_spawner", pos.toShortString()));
+            return InteractionResult.SUCCESS;
+        }
+
+        if (blockEntity instanceof DungeonControllerBlockEntity controller) {
+            if (mainPosOpt.isPresent()) {
+                BlockPos mainPos = mainPosOpt.get();
+                ServerLevel mainWorld = world.getServer().getLevel(modeData.mainSpawnerDimension().get());
+                if (mainWorld == null) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_spawner_invalid"));
+                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+                    return InteractionResult.FAIL;
+                }
+
+                BlockEntity mainBe = mainWorld.getBlockEntity(mainPos);
+                if (mainBe instanceof DungeonBossSpawnerBlockEntity) {
+                    controller.dungeonSpawnerPos = mainPos;
+                    controller.dungeonSpawnerDimension = modeData.mainSpawnerDimension().get();
                     controller.setChanged();
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.linked_controller_to_spawner", pos.toShortString(), mainPos.toShortString()));
                     return InteractionResult.SUCCESS;

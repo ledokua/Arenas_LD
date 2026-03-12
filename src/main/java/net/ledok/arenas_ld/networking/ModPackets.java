@@ -77,10 +77,8 @@ public class ModPackets {
     }
 
     public record UpdateDungeonBossSpawnerPayload(
-            BlockPos pos, String mobId, int respawnTime, int dungeonCloseTimer, String lootTable, String perPlayerLootTable,
+            BlockPos pos, String mobId, int respawnTime, int dungeonCloseTimer, int dungeonTime, String lootTable, String perPlayerLootTable,
             BlockPos exitPositionCoords, ResourceLocation exitDimension,
-            BlockPos enterPortalSpawnCoords, ResourceLocation enterPortalSpawnDimension,
-            BlockPos enterPortalDestCoords, ResourceLocation enterPortalDestDimension,
             int triggerRadius, int battleRadius, int regeneration, int skillExperiencePerWin, String groupId
     ) implements CustomPacketPayload {
         public static final Type<UpdateDungeonBossSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_dungeon_boss_spawner"));
@@ -90,9 +88,7 @@ public class ModPackets {
 
         public UpdateDungeonBossSpawnerPayload(FriendlyByteBuf buf) {
             this(
-                    buf.readBlockPos(), buf.readUtf(), buf.readVarInt(), buf.readVarInt(), buf.readUtf(), buf.readUtf(),
-                    buf.readBlockPos(), buf.readResourceLocation(),
-                    buf.readBlockPos(), buf.readResourceLocation(),
+                    buf.readBlockPos(), buf.readUtf(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readUtf(), buf.readUtf(),
                     buf.readBlockPos(), buf.readResourceLocation(),
                     buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readUtf()
             );
@@ -103,14 +99,11 @@ public class ModPackets {
             buf.writeUtf(mobId);
             buf.writeVarInt(respawnTime);
             buf.writeVarInt(dungeonCloseTimer);
+            buf.writeVarInt(dungeonTime);
             buf.writeUtf(lootTable);
             buf.writeUtf(perPlayerLootTable);
             buf.writeBlockPos(exitPositionCoords);
             buf.writeResourceLocation(exitDimension);
-            buf.writeBlockPos(enterPortalSpawnCoords);
-            buf.writeResourceLocation(enterPortalSpawnDimension);
-            buf.writeBlockPos(enterPortalDestCoords);
-            buf.writeResourceLocation(enterPortalDestDimension);
             buf.writeVarInt(triggerRadius);
             buf.writeVarInt(battleRadius);
             buf.writeVarInt(regeneration);
@@ -387,6 +380,22 @@ public class ModPackets {
         }
     }
 
+    public record DungeonControllerActionPayload(BlockPos pos, int action) implements CustomPacketPayload {
+        public static final Type<DungeonControllerActionPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "dungeon_controller_action"));
+        public static final StreamCodec<FriendlyByteBuf, DungeonControllerActionPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> {
+                    buf.writeBlockPos(payload.pos);
+                    buf.writeVarInt(payload.action);
+                },
+                buf -> new DungeonControllerActionPayload(buf.readBlockPos(), buf.readVarInt())
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     public static void registerC2SPackets() {
         PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateDungeonBossSpawnerPayload.TYPE, UpdateDungeonBossSpawnerPayload.STREAM_CODEC);
@@ -399,6 +408,7 @@ public class ModPackets {
         PayloadTypeRegistry.playC2S().register(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(CycleConfiguratorModePayload.TYPE, CycleConfiguratorModePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(MobArenaControllerActionPayload.TYPE, MobArenaControllerActionPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(DungeonControllerActionPayload.TYPE, DungeonControllerActionPayload.STREAM_CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -433,11 +443,10 @@ public class ModPackets {
                     blockEntity.mobId = payload.mobId();
                     blockEntity.respawnTime = payload.respawnTime();
                     blockEntity.dungeonCloseTimer = payload.dungeonCloseTimer();
+                    blockEntity.dungeonTime = payload.dungeonTime();
                     blockEntity.lootTableId = payload.lootTable();
                     blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
                     blockEntity.setExitPositionCoords(payload.exitPositionCoords(), ResourceKey.create(Registries.DIMENSION, payload.exitDimension()));
-                    blockEntity.setEnterPortalSpawnCoords(payload.enterPortalSpawnCoords(), ResourceKey.create(Registries.DIMENSION, payload.enterPortalSpawnDimension()));
-                    blockEntity.setEnterPortalDestCoords(payload.enterPortalDestCoords(), ResourceKey.create(Registries.DIMENSION, payload.enterPortalDestDimension()));
                     blockEntity.triggerRadius = payload.triggerRadius();
                     blockEntity.battleRadius = payload.battleRadius();
                     blockEntity.regeneration = payload.regeneration();
@@ -608,5 +617,54 @@ public class ModPackets {
                 }
             });
         });
+
+        ServerPlayNetworking.registerGlobalReceiver(DungeonControllerActionPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.pos());
+                if (be instanceof DungeonControllerBlockEntity controller) {
+                    switch (payload.action()) {
+                        case 0: // Start Dungeon
+                            if (!controller.isLocked && controller.partyMembers.contains(player.getUUID())) {
+                                if (controller.dungeonSpawnerPos != BlockPos.ZERO) {
+                                    ServerLevel spawnerLevel = world.getServer().getLevel(controller.dungeonSpawnerDimension);
+                                    if (spawnerLevel != null && spawnerLevel.getBlockEntity(controller.dungeonSpawnerPos) instanceof DungeonBossSpawnerBlockEntity spawner) {
+                                        if (spawner.startDungeon(controller.partyMembers, payload.pos(), world.dimension())) {
+                                            controller.isLocked = true;
+                                            controller.setChanged();
+                                            world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                                        } else if (spawner.getRespawnCooldownSeconds() > 0) {
+                                            int cooldownSeconds = spawner.getRespawnCooldownSeconds();
+                                            context.player().sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_cooldown", formatSeconds(cooldownSeconds)));
+                                        }
+                                    }
+                                }
+                            }
+                            break;
+                        case 1: // Join Party
+                            if (!controller.isLocked) {
+                                controller.partyMembers.add(player.getUUID());
+                                controller.setChanged();
+                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                            }
+                            break;
+                        case 2: // Leave Party
+                            if (!controller.isLocked) {
+                                controller.partyMembers.remove(player.getUUID());
+                                controller.setChanged();
+                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                            }
+                            break;
+                    }
+                }
+            });
+        });
+    }
+
+    private static String formatSeconds(int totalSeconds) {
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return String.format("%02d:%02d", minutes, seconds);
     }
 }

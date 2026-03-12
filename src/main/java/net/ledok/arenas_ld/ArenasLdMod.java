@@ -46,6 +46,7 @@ public class ArenasLdMod implements ModInitializer {
             for (var player : server.getPlayerList().getPlayers()) {
                 PlayerTickHandler.onPlayerTick(player);
             }
+            DUNGEON_BOSS_MANAGER.tick(server);
         });
     }
 }

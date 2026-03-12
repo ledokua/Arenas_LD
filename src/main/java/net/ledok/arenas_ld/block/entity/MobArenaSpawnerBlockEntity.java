@@ -332,6 +332,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     }
 
     private void endArena(ServerLevel world) {
+        int lostWave = currentWave;
         updateLeaderboard(world);
         isArenaActive = false;
         currentWave = 0;
@@ -354,6 +355,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         for (UUID playerId : participatingPlayers) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
             if (player != null) {
+                sendLossMessage(player, lostWave);
                 ArenasLdMod.MOB_ARENA_MANAGER.removePlayer(player);
                 player.setGameMode(GameType.SURVIVAL);
                 BlockPos absoluteExitDest = this.worldPosition.offset(this.exitPosition);
@@ -376,6 +378,14 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void updateLeaderboardOnDisconnect(ServerPlayer player) {
         updateLeaderboard(player, currentWave);
+    }
+
+    public void sendLossMessage(ServerPlayer player) {
+        sendLossMessage(player, currentWave);
+    }
+
+    private void sendLossMessage(ServerPlayer player, int wave) {
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.arena_lost", wave).withStyle(net.minecraft.ChatFormatting.RED));
     }
 
     private void updateLeaderboard(ServerLevel world) {
