@@ -166,7 +166,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (exitPositionCoords != null && !exitPositionCoords.equals(BlockPos.ZERO)) {
             ServerLevel exitWorld = Objects.requireNonNull(player.getServer()).getLevel(exitPositionDimension);
             if (exitWorld != null) {
-                player.teleportTo(exitWorld, this.worldPosition.offset(exitPositionCoords).getX() + 0.5, this.worldPosition.offset(exitPositionCoords).getY(), this.worldPosition.offset(exitPositionCoords).getZ() + 0.5, player.getYRot(), player.getXRot());
+                BlockPos absoluteExitPos = this.worldPosition.offset(exitPositionCoords);
+                teleportPlayerToExit(player, exitWorld, absoluteExitPos);
             }
         }
         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_left", reason).withStyle(net.minecraft.ChatFormatting.RED));
@@ -230,6 +231,10 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                         }
                     }
                 }
+                if (be.isDungeonActive && be.dungeonTimeTicksRemaining > 0) {
+                    be.dungeonTimeTicksRemaining = Math.max(0, be.dungeonTimeTicksRemaining - (int) timeDiff);
+                    be.lastPublishedDungeonSeconds = -1;
+                }
             }
         }
         be.lastTickTime = currentTime;
@@ -247,6 +252,11 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             }
             
             be.firstTick = false;
+        }
+
+        if ((be.isDungeonActive || be.isBattleActive) && be.trackedPlayers.isEmpty()) {
+            be.handleBattleLoss(serverLevel, "No tracked players.");
+            return;
         }
 
         if (be.isDungeonActive) {
@@ -826,7 +836,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 if (exitWorld != null) {
                     BlockPos absoluteExitPos = this.worldPosition.offset(exitPositionCoords);
                     revivePlayerForExit(player);
-                    player.teleportTo(exitWorld, absoluteExitPos.getX() + 0.5, absoluteExitPos.getY(), absoluteExitPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+                    teleportPlayerToExit(player, exitWorld, absoluteExitPos);
                     player.setPortalCooldown();
                 }
             }
@@ -863,7 +873,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                     if (exitWorld != null) {
                         BlockPos absoluteExitPos = this.worldPosition.offset(exitPositionCoords);
                         revivePlayerForExit(player);
-                        player.teleportTo(exitWorld, absoluteExitPos.getX() + 0.5, absoluteExitPos.getY(), absoluteExitPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+                        teleportPlayerToExit(player, exitWorld, absoluteExitPos);
                         player.setPortalCooldown();
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_failed").withStyle(net.minecraft.ChatFormatting.RED));
                     }
@@ -909,6 +919,13 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             player.setGameMode(GameType.SURVIVAL);
         }
         player.setHealth(player.getMaxHealth() * 0.5f);
+    }
+
+    private void teleportPlayerToExit(ServerPlayer player, ServerLevel exitWorld, BlockPos absoluteExitPos) {
+        ChunkPos chunkPos = new ChunkPos(absoluteExitPos);
+        exitWorld.setChunkForced(chunkPos.x, chunkPos.z, true);
+        player.teleportTo(exitWorld, absoluteExitPos.getX() + 0.5, absoluteExitPos.getY(), absoluteExitPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+        exitWorld.setChunkForced(chunkPos.x, chunkPos.z, false);
     }
 
     private static String formatTime(int totalSeconds) {

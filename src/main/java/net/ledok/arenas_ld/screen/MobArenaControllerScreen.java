@@ -3,6 +3,7 @@ package net.ledok.arenas_ld.screen;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.networking.ModPackets;
+import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.util.LeaderboardEntry;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -70,22 +71,19 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
     }
 
     private void updateInfo() {
-        if (minecraft != null && minecraft.level != null) {
-            minecraft.execute(() -> {
-                if (minecraft.level.getBlockEntity(menu.getPos()) instanceof net.ledok.arenas_ld.block.entity.MobArenaControllerBlockEntity controller) {
-                    List<Component> newPlayerList = new ArrayList<>();
-                    for (UUID uuid : controller.partyMembers) {
-                        Player player = minecraft.level.getPlayerByUUID(uuid);
-                        if (player != null) {
-                            newPlayerList.add(player.getDisplayName());
-                        }
-                    }
-                    this.playerList = newPlayerList;
-                    this.currentWave = controller.currentWave;
-                    this.leaderboard = controller.leaderboard;
-                }
-            });
+        if (minecraft == null || minecraft.level == null) return;
+        ClientPlayNetworking.send(new ModPackets.RequestMobArenaControllerInfoPayload(menu.getPos()));
+    }
+
+    public void applyServerInfo(ModPackets.MobArenaControllerInfoPayload payload) {
+        if (!payload.pos().equals(menu.getPos())) return;
+        List<Component> newPlayerList = new ArrayList<>();
+        for (String name : payload.players()) {
+            newPlayerList.add(Component.literal(name));
         }
+        this.playerList = newPlayerList;
+        this.currentWave = payload.currentWave();
+        this.leaderboard = payload.leaderboard();
     }
 
     @Override
@@ -119,7 +117,7 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
         int playerListX = x + 135;
         int playerListY = y + 70;
         int playerListWidth = 90;
-        int playerListHeight = 55;
+        int playerListHeight = 90;
         guiGraphics.enableScissor(playerListX, playerListY, playerListX + playerListWidth, playerListY + playerListHeight);
         for (int i = 0; i < playerList.size(); i++) {
             guiGraphics.drawString(this.font, (i + 1) + ". " + playerList.get(i).getString(), playerListX, playerListY + i * 10, 0xFFFFFF);

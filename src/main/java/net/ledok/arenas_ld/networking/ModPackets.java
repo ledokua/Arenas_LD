@@ -396,6 +396,125 @@ public class ModPackets {
         }
     }
 
+    public record RequestDungeonControllerInfoPayload(BlockPos pos) implements CustomPacketPayload {
+        public static final Type<RequestDungeonControllerInfoPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "request_dungeon_controller_info"));
+        public static final StreamCodec<FriendlyByteBuf, RequestDungeonControllerInfoPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> buf.writeBlockPos(payload.pos),
+                buf -> new RequestDungeonControllerInfoPayload(buf.readBlockPos())
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record RequestMobArenaControllerInfoPayload(BlockPos pos) implements CustomPacketPayload {
+        public static final Type<RequestMobArenaControllerInfoPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "request_mob_arena_controller_info"));
+        public static final StreamCodec<FriendlyByteBuf, RequestMobArenaControllerInfoPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> buf.writeBlockPos(payload.pos),
+                buf -> new RequestMobArenaControllerInfoPayload(buf.readBlockPos())
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record DungeonControllerInfoPayload(
+            BlockPos pos,
+            int remainingDungeonTimeSeconds,
+            int dungeonCooldownSeconds,
+            List<String> players,
+            List<DungeonLeaderboardEntry> leaderboard
+    ) implements CustomPacketPayload {
+        public static final Type<DungeonControllerInfoPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "dungeon_controller_info"));
+
+        public static final StreamCodec<FriendlyByteBuf, DungeonControllerInfoPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> {
+                    buf.writeBlockPos(payload.pos);
+                    buf.writeVarInt(payload.remainingDungeonTimeSeconds);
+                    buf.writeVarInt(payload.dungeonCooldownSeconds);
+                    buf.writeVarInt(payload.players.size());
+                    for (String name : payload.players) {
+                        buf.writeUtf(name);
+                    }
+                    buf.writeVarInt(payload.leaderboard.size());
+                    for (DungeonLeaderboardEntry entry : payload.leaderboard) {
+                        buf.writeUtf(entry.playerName);
+                        buf.writeVarInt(entry.timeSeconds);
+                    }
+                },
+                buf -> {
+                    BlockPos pos = buf.readBlockPos();
+                    int remaining = buf.readVarInt();
+                    int cooldown = buf.readVarInt();
+                    int playerCount = buf.readVarInt();
+                    List<String> players = new ArrayList<>();
+                    for (int i = 0; i < playerCount; i++) {
+                        players.add(buf.readUtf());
+                    }
+                    int leaderboardCount = buf.readVarInt();
+                    List<DungeonLeaderboardEntry> leaderboard = new ArrayList<>();
+                    for (int i = 0; i < leaderboardCount; i++) {
+                        leaderboard.add(new DungeonLeaderboardEntry(buf.readUtf(), buf.readVarInt()));
+                    }
+                    return new DungeonControllerInfoPayload(pos, remaining, cooldown, players, leaderboard);
+                }
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record MobArenaControllerInfoPayload(
+            BlockPos pos,
+            int currentWave,
+            List<String> players,
+            List<LeaderboardEntry> leaderboard
+    ) implements CustomPacketPayload {
+        public static final Type<MobArenaControllerInfoPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "mob_arena_controller_info"));
+
+        public static final StreamCodec<FriendlyByteBuf, MobArenaControllerInfoPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> {
+                    buf.writeBlockPos(payload.pos);
+                    buf.writeVarInt(payload.currentWave);
+                    buf.writeVarInt(payload.players.size());
+                    for (String name : payload.players) {
+                        buf.writeUtf(name);
+                    }
+                    buf.writeVarInt(payload.leaderboard.size());
+                    for (LeaderboardEntry entry : payload.leaderboard) {
+                        buf.writeUtf(entry.playerName);
+                        buf.writeVarInt(entry.wave);
+                    }
+                },
+                buf -> {
+                    BlockPos pos = buf.readBlockPos();
+                    int currentWave = buf.readVarInt();
+                    int playerCount = buf.readVarInt();
+                    List<String> players = new ArrayList<>();
+                    for (int i = 0; i < playerCount; i++) {
+                        players.add(buf.readUtf());
+                    }
+                    int leaderboardCount = buf.readVarInt();
+                    List<LeaderboardEntry> leaderboard = new ArrayList<>();
+                    for (int i = 0; i < leaderboardCount; i++) {
+                        leaderboard.add(new LeaderboardEntry(buf.readUtf(), buf.readVarInt()));
+                    }
+                    return new MobArenaControllerInfoPayload(pos, currentWave, players, leaderboard);
+                }
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     public static void registerC2SPackets() {
         PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateDungeonBossSpawnerPayload.TYPE, UpdateDungeonBossSpawnerPayload.STREAM_CODEC);
@@ -409,6 +528,8 @@ public class ModPackets {
         PayloadTypeRegistry.playC2S().register(CycleConfiguratorModePayload.TYPE, CycleConfiguratorModePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(MobArenaControllerActionPayload.TYPE, MobArenaControllerActionPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(DungeonControllerActionPayload.TYPE, DungeonControllerActionPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RequestDungeonControllerInfoPayload.TYPE, RequestDungeonControllerInfoPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RequestMobArenaControllerInfoPayload.TYPE, RequestMobArenaControllerInfoPayload.STREAM_CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -591,7 +712,18 @@ public class ModPackets {
                                 if (controller.arenaSpawnerPos != BlockPos.ZERO) {
                                     ServerLevel spawnerLevel = world.getServer().getLevel(controller.arenaSpawnerDimension);
                                     if (spawnerLevel != null && spawnerLevel.getBlockEntity(controller.arenaSpawnerPos) instanceof MobArenaSpawnerBlockEntity spawner) {
-                                        spawner.startArena(controller.partyMembers, payload.pos(), world.dimension());
+                                        java.util.Set<java.util.UUID> onlinePlayers = new java.util.HashSet<>();
+                                        for (java.util.UUID uuid : controller.partyMembers) {
+                                            if (world.getServer().getPlayerList().getPlayer(uuid) != null) {
+                                                onlinePlayers.add(uuid);
+                                            }
+                                        }
+                                        if (onlinePlayers.isEmpty()) {
+                                            return;
+                                        }
+                                        controller.partyMembers.clear();
+                                        controller.partyMembers.addAll(onlinePlayers);
+                                        spawner.startArena(onlinePlayers, payload.pos(), world.dimension());
                                         controller.isLocked = true;
                                         controller.setChanged();
                                         world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
@@ -601,6 +733,11 @@ public class ModPackets {
                             break;
                         case 1: // Join Party
                             if (!controller.isLocked) {
+                                if (isPlayerInActiveGame(player)) {
+                                    player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(net.minecraft.ChatFormatting.RED));
+                                    return;
+                                }
+                                removePlayerFromOtherLobbies(player, controller.getBlockPos(), world.dimension());
                                 controller.partyMembers.add(player.getUUID());
                                 controller.setChanged();
                                 world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
@@ -630,7 +767,18 @@ public class ModPackets {
                                 if (controller.dungeonSpawnerPos != BlockPos.ZERO) {
                                     ServerLevel spawnerLevel = world.getServer().getLevel(controller.dungeonSpawnerDimension);
                                     if (spawnerLevel != null && spawnerLevel.getBlockEntity(controller.dungeonSpawnerPos) instanceof DungeonBossSpawnerBlockEntity spawner) {
-                                        if (spawner.startDungeon(controller.partyMembers, payload.pos(), world.dimension())) {
+                                        java.util.Set<java.util.UUID> onlinePlayers = new java.util.HashSet<>();
+                                        for (java.util.UUID uuid : controller.partyMembers) {
+                                            if (world.getServer().getPlayerList().getPlayer(uuid) != null) {
+                                                onlinePlayers.add(uuid);
+                                            }
+                                        }
+                                        if (onlinePlayers.isEmpty()) {
+                                            return;
+                                        }
+                                        controller.partyMembers.clear();
+                                        controller.partyMembers.addAll(onlinePlayers);
+                                        if (spawner.startDungeon(onlinePlayers, payload.pos(), world.dimension())) {
                                             controller.isLocked = true;
                                             controller.setChanged();
                                             world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
@@ -644,6 +792,11 @@ public class ModPackets {
                             break;
                         case 1: // Join Party
                             if (!controller.isLocked) {
+                                if (isPlayerInActiveGame(player)) {
+                                    player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(net.minecraft.ChatFormatting.RED));
+                                    return;
+                                }
+                                removePlayerFromOtherLobbies(player, controller.getBlockPos(), world.dimension());
                                 controller.partyMembers.add(player.getUUID());
                                 controller.setChanged();
                                 world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
@@ -660,6 +813,97 @@ public class ModPackets {
                 }
             });
         });
+
+        ServerPlayNetworking.registerGlobalReceiver(RequestDungeonControllerInfoPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.pos());
+                if (be instanceof DungeonControllerBlockEntity controller) {
+                    List<String> players = new ArrayList<>();
+                    for (java.util.UUID uuid : controller.partyMembers) {
+                        ServerPlayer partyPlayer = player.server.getPlayerList().getPlayer(uuid);
+                        players.add(partyPlayer != null ? partyPlayer.getGameProfile().getName() : "Unknown");
+                    }
+                    ServerPlayNetworking.send(player, new DungeonControllerInfoPayload(
+                            payload.pos(),
+                            controller.remainingDungeonTimeSeconds,
+                            controller.dungeonCooldownSeconds,
+                            players,
+                            new ArrayList<>(controller.leaderboard)
+                    ));
+                } else {
+                    ServerPlayNetworking.send(player, new DungeonControllerInfoPayload(payload.pos(), 0, 0, List.of(), List.of()));
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(RequestMobArenaControllerInfoPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.pos());
+                if (be instanceof MobArenaControllerBlockEntity controller) {
+                    List<String> players = new ArrayList<>();
+                    for (java.util.UUID uuid : controller.partyMembers) {
+                        ServerPlayer partyPlayer = player.server.getPlayerList().getPlayer(uuid);
+                        players.add(partyPlayer != null ? partyPlayer.getGameProfile().getName() : "Unknown");
+                    }
+                    ServerPlayNetworking.send(player, new MobArenaControllerInfoPayload(
+                            payload.pos(),
+                            controller.currentWave,
+                            players,
+                            new ArrayList<>(controller.leaderboard)
+                    ));
+                } else {
+                    ServerPlayNetworking.send(player, new MobArenaControllerInfoPayload(payload.pos(), 0, List.of(), List.of()));
+                }
+            });
+        });
+    }
+
+    private static boolean isPlayerInActiveGame(ServerPlayer player) {
+        if (ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) return true;
+        if (ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player) != null) return true;
+        return false;
+    }
+
+    private static void removePlayerFromOtherLobbies(ServerPlayer player, BlockPos currentControllerPos, ResourceKey<Level> currentControllerDim) {
+        var server = player.server;
+        if (server == null) return;
+        for (MobArenaControllerBlockEntity.ControllerKey key : MobArenaControllerBlockEntity.getControllers()) {
+            ServerLevel level = server.getLevel(key.dimension());
+            if (level == null) continue;
+            BlockEntity be = level.getBlockEntity(key.pos());
+            if (be instanceof MobArenaControllerBlockEntity controller) {
+                if (controller.partyMembers.contains(player.getUUID())) {
+                    if (!(level.dimension().equals(currentControllerDim) && controller.getBlockPos().equals(currentControllerPos))) {
+                        controller.partyMembers.remove(player.getUUID());
+                        controller.setChanged();
+                        level.sendBlockUpdated(controller.getBlockPos(), controller.getBlockState(), controller.getBlockState(), 3);
+                    }
+                }
+            }
+        }
+        for (DungeonControllerBlockEntity.ControllerKey key : DungeonControllerBlockEntity.getControllers()) {
+            ServerLevel level = server.getLevel(key.dimension());
+            if (level == null) continue;
+            BlockEntity be = level.getBlockEntity(key.pos());
+            if (be instanceof DungeonControllerBlockEntity controller) {
+                if (controller.partyMembers.contains(player.getUUID())) {
+                    if (!(level.dimension().equals(currentControllerDim) && controller.getBlockPos().equals(currentControllerPos))) {
+                        controller.partyMembers.remove(player.getUUID());
+                        controller.setChanged();
+                        level.sendBlockUpdated(controller.getBlockPos(), controller.getBlockState(), controller.getBlockState(), 3);
+                    }
+                }
+            }
+        }
+    }
+
+    public static void registerS2CPackets() {
+        PayloadTypeRegistry.playS2C().register(DungeonControllerInfoPayload.TYPE, DungeonControllerInfoPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(MobArenaControllerInfoPayload.TYPE, MobArenaControllerInfoPayload.STREAM_CODEC);
     }
 
     private static String formatSeconds(int totalSeconds) {

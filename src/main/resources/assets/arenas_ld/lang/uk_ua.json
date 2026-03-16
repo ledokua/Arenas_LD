@@ -148,6 +148,8 @@
   "message.arenas_ld.dungeon_cleared": "Підземелля пройдено. Загальний час %s",
   "message.arenas_ld.arena_lost": "Ви програли на хвилі %s",
   "message.arenas_ld.dungeon_cooldown": "Підземелля на перезарядці, поверніться через %s",
+  "message.arenas_ld.dungeon_ready": "Підземелля %s готове.",
+  "message.arenas_ld.already_in_party": "Ви вже в іншому лобі або грі.",
   "message.arenas_ld.config_reloaded": "Конфігурацію Arenas LD перезавантажено!",
   "creativetab.arenas_ld_tab": "Arenas LD"
 }

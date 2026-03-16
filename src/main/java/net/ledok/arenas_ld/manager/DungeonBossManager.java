@@ -5,8 +5,10 @@ import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -19,10 +21,14 @@ import java.util.Set;
 import java.util.WeakHashMap;
 
 public class DungeonBossManager {
+    public record DungeonExitInfo(ResourceKey<Level> dimension, BlockPos pos) {}
+
     private final Set<DungeonBossSpawnerBlockEntity> activeSpawners = Collections.newSetFromMap(new WeakHashMap<>());
     private final Map<String, DungeonKey> registeredDungeons = new HashMap<>();
     private final Map<java.util.UUID, Set<String>> subscriptions = new HashMap<>();
     private final Map<String, Integer> lastCooldownSeconds = new HashMap<>();
+    private final Set<DungeonKey> forcedDungeons = new HashSet<>();
+    private final Map<java.util.UUID, DungeonExitInfo> disconnectedDungeonPlayers = new HashMap<>();
     private boolean loaded = false;
 
     public void registerSpawner(DungeonBossSpawnerBlockEntity spawner) {
@@ -54,7 +60,10 @@ public class DungeonBossManager {
 
     public boolean unregisterDungeon(MinecraftServer server, String name) {
         ensureLoaded(server);
-        if (registeredDungeons.remove(name) != null) {
+        DungeonKey key = registeredDungeons.get(name);
+        if (key != null) {
+            registeredDungeons.remove(name);
+            unforceDungeonChunk(server, key);
             for (Set<String> sub : subscriptions.values()) {
                 sub.remove(name);
             }
@@ -113,6 +122,10 @@ public class DungeonBossManager {
             ServerPlayer player = handler.getPlayer();
             for (DungeonBossSpawnerBlockEntity spawner : new java.util.ArrayList<>(activeSpawners)) {
                 if (spawner.isTracked(player.getUUID())) {
+                    if (spawner.exitPositionCoords != null && !spawner.exitPositionCoords.equals(BlockPos.ZERO)) {
+                        BlockPos absoluteExitPos = spawner.getBlockPos().offset(spawner.exitPositionCoords);
+                        disconnectedDungeonPlayers.put(player.getUUID(), new DungeonExitInfo(spawner.exitPositionDimension, absoluteExitPos));
+                    }
                     spawner.handlePlayerDisconnect(player, net.minecraft.network.chat.Component.translatable("message.arenas_ld.dungeon_left.reason.disconnected"));
                 }
             }
@@ -121,10 +134,22 @@ public class DungeonBossManager {
 
     public record DungeonKey(BlockPos pos, ResourceKey<Level> dimension) { }
 
+    public DungeonExitInfo getDisconnectedDungeonInfo(java.util.UUID playerId) {
+        return disconnectedDungeonPlayers.get(playerId);
+    }
+
+    public void removeDisconnectedDungeonPlayer(java.util.UUID playerId) {
+        disconnectedDungeonPlayers.remove(playerId);
+    }
+
     public void tick(MinecraftServer server) {
         ensureLoaded(server);
-        if (registeredDungeons.isEmpty()) return;
+        if (registeredDungeons.isEmpty()) {
+            clearForcedChunks(server);
+            return;
+        }
 
+        syncForcedChunks(server);
         for (Map.Entry<String, DungeonKey> entry : registeredDungeons.entrySet()) {
             String name = entry.getKey();
             DungeonKey key = entry.getValue();
@@ -143,12 +168,54 @@ public class DungeonBossManager {
         }
     }
 
+    private void syncForcedChunks(MinecraftServer server) {
+        Set<DungeonKey> current = new HashSet<>(registeredDungeons.values());
+        for (DungeonKey key : new HashSet<>(forcedDungeons)) {
+            if (!current.contains(key)) {
+                ServerLevel level = server.getLevel(key.dimension());
+                if (level != null) {
+                    ChunkPos chunkPos = new ChunkPos(key.pos());
+                    level.setChunkForced(chunkPos.x, chunkPos.z, false);
+                }
+                forcedDungeons.remove(key);
+            }
+        }
+        for (DungeonKey key : current) {
+            ServerLevel level = server.getLevel(key.dimension());
+            if (level != null) {
+                ChunkPos chunkPos = new ChunkPos(key.pos());
+                level.setChunkForced(chunkPos.x, chunkPos.z, true);
+                forcedDungeons.add(key);
+            }
+        }
+    }
+
+    private void clearForcedChunks(MinecraftServer server) {
+        for (DungeonKey key : new HashSet<>(forcedDungeons)) {
+            ServerLevel level = server.getLevel(key.dimension());
+            if (level != null) {
+                ChunkPos chunkPos = new ChunkPos(key.pos());
+                level.setChunkForced(chunkPos.x, chunkPos.z, false);
+            }
+        }
+        forcedDungeons.clear();
+    }
+
+    private void unforceDungeonChunk(MinecraftServer server, DungeonKey key) {
+        ServerLevel level = server.getLevel(key.dimension());
+        if (level != null) {
+            ChunkPos chunkPos = new ChunkPos(key.pos());
+            level.setChunkForced(chunkPos.x, chunkPos.z, false);
+        }
+        forcedDungeons.remove(key);
+    }
+
     private void notifySubscribers(MinecraftServer server, String name) {
         for (Map.Entry<java.util.UUID, Set<String>> entry : subscriptions.entrySet()) {
             if (!entry.getValue().contains(name)) continue;
             ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
             if (player != null) {
-                player.sendSystemMessage(Component.literal("Dungeon " + name + " is ready.")
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_ready", name)
                         .withStyle(ChatFormatting.GREEN));
             }
         }

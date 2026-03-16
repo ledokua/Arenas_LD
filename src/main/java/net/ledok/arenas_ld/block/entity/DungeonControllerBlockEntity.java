@@ -27,12 +27,17 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class DungeonControllerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<DungeonControllerData> {
+    public record ControllerKey(BlockPos pos, ResourceKey<Level> dimension) {}
+    private static final Set<ControllerKey> CONTROLLERS = Collections.newSetFromMap(new ConcurrentHashMap<>());
+
     public BlockPos dungeonSpawnerPos = BlockPos.ZERO;
     public ResourceKey<Level> dungeonSpawnerDimension = Level.OVERWORLD;
     public Set<UUID> partyMembers = new HashSet<>();
@@ -43,6 +48,26 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     public DungeonControllerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.DUNGEON_CONTROLLER_BLOCK_ENTITY, pos, state);
+    }
+
+    public static Set<ControllerKey> getControllers() {
+        return CONTROLLERS;
+    }
+
+    @Override
+    public void setLevel(Level level) {
+        super.setLevel(level);
+        if (level != null && !level.isClientSide) {
+            CONTROLLERS.add(new ControllerKey(worldPosition, level.dimension()));
+        }
+    }
+
+    @Override
+    public void setRemoved() {
+        if (level != null && !level.isClientSide) {
+            CONTROLLERS.remove(new ControllerKey(worldPosition, level.dimension()));
+        }
+        super.setRemoved();
     }
 
     public void reset() {

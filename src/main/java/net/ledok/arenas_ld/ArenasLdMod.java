@@ -34,6 +34,7 @@ public class ArenasLdMod implements ModInitializer {
         ModCreativeModeTabs.initialize();
         ModScreenHandlers.initialize();
         ModPackets.registerC2SPackets();
+        ModPackets.registerS2CPackets();
         BossDataComponent.initialize();
         CommandRegistry.initialize();
         DUNGEON_BOSS_MANAGER.initialize();

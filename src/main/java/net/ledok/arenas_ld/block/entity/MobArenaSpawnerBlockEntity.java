@@ -361,7 +361,10 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
                 BlockPos absoluteExitDest = this.worldPosition.offset(this.exitPosition);
                 ServerLevel destLevel = world.getServer().getLevel(exitDimension);
                 if (destLevel != null) {
+                    ChunkPos chunkPos = new ChunkPos(absoluteExitDest);
+                    destLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
                     player.teleportTo(destLevel, absoluteExitDest.getX() + 0.5, absoluteExitDest.getY(), absoluteExitDest.getZ() + 0.5, player.getYRot(), player.getXRot());
+                    destLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
                 }
             }
         }
