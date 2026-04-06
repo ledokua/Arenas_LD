@@ -145,11 +145,14 @@
   "message.arenas_ld.dungeon_left": "You left the dungeon \"%s\"",
   "message.arenas_ld.dungeon_left.reason.disconnected": "Disconnected",
   "message.arenas_ld.dungeon_left.reason.dimension": "Changed dimension",
+  "message.arenas_ld.dungeon_left.reason.died": "Died",
   "message.arenas_ld.dungeon_cleared": "Dungeon cleared. Total time %s",
   "message.arenas_ld.arena_lost": "You lost at wave %s",
   "message.arenas_ld.dungeon_cooldown": "Dungeon on cooldown please return in %s",
   "message.arenas_ld.dungeon_ready": "Dungeon %s is ready.",
   "message.arenas_ld.already_in_party": "You are already in another lobby or game.",
   "message.arenas_ld.config_reloaded": "Arenas LD config reloaded!",
+  "gui.arenas_ld.hardcore": "Hardcore",
+  "gui.arenas_ld.hardcore_desc": "Hardcore: 1 life, 2x rewards.",
   "creativetab.arenas_ld_tab": "Arenas LD"
 }

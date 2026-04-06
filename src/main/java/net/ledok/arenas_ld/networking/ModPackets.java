@@ -422,10 +422,43 @@ public class ModPackets {
         }
     }
 
+    public record UpdateDungeonControllerSettingsPayload(BlockPos pos, boolean hardcoreEnabled) implements CustomPacketPayload {
+        public static final Type<UpdateDungeonControllerSettingsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_dungeon_controller_settings"));
+        public static final StreamCodec<FriendlyByteBuf, UpdateDungeonControllerSettingsPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> {
+                    buf.writeBlockPos(payload.pos);
+                    buf.writeBoolean(payload.hardcoreEnabled);
+                },
+                buf -> new UpdateDungeonControllerSettingsPayload(buf.readBlockPos(), buf.readBoolean())
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record UpdateMobArenaControllerSettingsPayload(BlockPos pos, boolean hardcoreEnabled) implements CustomPacketPayload {
+        public static final Type<UpdateMobArenaControllerSettingsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_controller_settings"));
+        public static final StreamCodec<FriendlyByteBuf, UpdateMobArenaControllerSettingsPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> {
+                    buf.writeBlockPos(payload.pos);
+                    buf.writeBoolean(payload.hardcoreEnabled);
+                },
+                buf -> new UpdateMobArenaControllerSettingsPayload(buf.readBlockPos(), buf.readBoolean())
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     public record DungeonControllerInfoPayload(
             BlockPos pos,
             int remainingDungeonTimeSeconds,
             int dungeonCooldownSeconds,
+            boolean hardcoreEnabled,
             List<String> players,
             List<DungeonLeaderboardEntry> leaderboard
     ) implements CustomPacketPayload {
@@ -436,6 +469,7 @@ public class ModPackets {
                     buf.writeBlockPos(payload.pos);
                     buf.writeVarInt(payload.remainingDungeonTimeSeconds);
                     buf.writeVarInt(payload.dungeonCooldownSeconds);
+                    buf.writeBoolean(payload.hardcoreEnabled);
                     buf.writeVarInt(payload.players.size());
                     for (String name : payload.players) {
                         buf.writeUtf(name);
@@ -450,6 +484,7 @@ public class ModPackets {
                     BlockPos pos = buf.readBlockPos();
                     int remaining = buf.readVarInt();
                     int cooldown = buf.readVarInt();
+                    boolean hardcoreEnabled = buf.readBoolean();
                     int playerCount = buf.readVarInt();
                     List<String> players = new ArrayList<>();
                     for (int i = 0; i < playerCount; i++) {
@@ -460,7 +495,7 @@ public class ModPackets {
                     for (int i = 0; i < leaderboardCount; i++) {
                         leaderboard.add(new DungeonLeaderboardEntry(buf.readUtf(), buf.readVarInt()));
                     }
-                    return new DungeonControllerInfoPayload(pos, remaining, cooldown, players, leaderboard);
+                    return new DungeonControllerInfoPayload(pos, remaining, cooldown, hardcoreEnabled, players, leaderboard);
                 }
         );
 
@@ -473,6 +508,7 @@ public class ModPackets {
     public record MobArenaControllerInfoPayload(
             BlockPos pos,
             int currentWave,
+            boolean hardcoreEnabled,
             List<String> players,
             List<LeaderboardEntry> leaderboard
     ) implements CustomPacketPayload {
@@ -482,6 +518,7 @@ public class ModPackets {
                 (buf, payload) -> {
                     buf.writeBlockPos(payload.pos);
                     buf.writeVarInt(payload.currentWave);
+                    buf.writeBoolean(payload.hardcoreEnabled);
                     buf.writeVarInt(payload.players.size());
                     for (String name : payload.players) {
                         buf.writeUtf(name);
@@ -495,6 +532,7 @@ public class ModPackets {
                 buf -> {
                     BlockPos pos = buf.readBlockPos();
                     int currentWave = buf.readVarInt();
+                    boolean hardcoreEnabled = buf.readBoolean();
                     int playerCount = buf.readVarInt();
                     List<String> players = new ArrayList<>();
                     for (int i = 0; i < playerCount; i++) {
@@ -505,7 +543,7 @@ public class ModPackets {
                     for (int i = 0; i < leaderboardCount; i++) {
                         leaderboard.add(new LeaderboardEntry(buf.readUtf(), buf.readVarInt()));
                     }
-                    return new MobArenaControllerInfoPayload(pos, currentWave, players, leaderboard);
+                    return new MobArenaControllerInfoPayload(pos, currentWave, hardcoreEnabled, players, leaderboard);
                 }
         );
 
@@ -530,6 +568,8 @@ public class ModPackets {
         PayloadTypeRegistry.playC2S().register(DungeonControllerActionPayload.TYPE, DungeonControllerActionPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RequestDungeonControllerInfoPayload.TYPE, RequestDungeonControllerInfoPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RequestMobArenaControllerInfoPayload.TYPE, RequestMobArenaControllerInfoPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateDungeonControllerSettingsPayload.TYPE, UpdateDungeonControllerSettingsPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateMobArenaControllerSettingsPayload.TYPE, UpdateMobArenaControllerSettingsPayload.STREAM_CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -723,6 +763,7 @@ public class ModPackets {
                                         }
                                         controller.partyMembers.clear();
                                         controller.partyMembers.addAll(onlinePlayers);
+                                        spawner.setHardcoreEnabled(controller.hardcoreEnabled);
                                         spawner.startArena(onlinePlayers, payload.pos(), world.dimension());
                                         controller.isLocked = true;
                                         controller.setChanged();
@@ -778,6 +819,7 @@ public class ModPackets {
                                         }
                                         controller.partyMembers.clear();
                                         controller.partyMembers.addAll(onlinePlayers);
+                                        spawner.setHardcoreEnabled(controller.hardcoreEnabled);
                                         if (spawner.startDungeon(onlinePlayers, payload.pos(), world.dimension())) {
                                             controller.isLocked = true;
                                             controller.setChanged();
@@ -829,11 +871,12 @@ public class ModPackets {
                             payload.pos(),
                             controller.remainingDungeonTimeSeconds,
                             controller.dungeonCooldownSeconds,
+                            controller.hardcoreEnabled,
                             players,
                             new ArrayList<>(controller.leaderboard)
                     ));
                 } else {
-                    ServerPlayNetworking.send(player, new DungeonControllerInfoPayload(payload.pos(), 0, 0, List.of(), List.of()));
+                    ServerPlayNetworking.send(player, new DungeonControllerInfoPayload(payload.pos(), 0, 0, false, List.of(), List.of()));
                 }
             });
         });
@@ -852,11 +895,40 @@ public class ModPackets {
                     ServerPlayNetworking.send(player, new MobArenaControllerInfoPayload(
                             payload.pos(),
                             controller.currentWave,
+                            controller.hardcoreEnabled,
                             players,
                             new ArrayList<>(controller.leaderboard)
                     ));
                 } else {
-                    ServerPlayNetworking.send(player, new MobArenaControllerInfoPayload(payload.pos(), 0, List.of(), List.of()));
+                    ServerPlayNetworking.send(player, new MobArenaControllerInfoPayload(payload.pos(), 0, false, List.of(), List.of()));
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(UpdateDungeonControllerSettingsPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.pos());
+                if (be instanceof DungeonControllerBlockEntity controller) {
+                    if (controller.isLocked) return;
+                    controller.hardcoreEnabled = payload.hardcoreEnabled();
+                    controller.setChanged();
+                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(UpdateMobArenaControllerSettingsPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.pos());
+                if (be instanceof MobArenaControllerBlockEntity controller) {
+                    if (controller.isLocked) return;
+                    controller.hardcoreEnabled = payload.hardcoreEnabled();
+                    controller.setChanged();
+                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
                 }
             });
         });

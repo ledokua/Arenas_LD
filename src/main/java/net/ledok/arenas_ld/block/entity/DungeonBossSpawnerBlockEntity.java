@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.block.entity;
 
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.fabricmc.loader.api.FabricLoader;
+import net.ledok.busylib.BusyState;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
@@ -74,7 +75,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     public int skillExperiencePerWin = 100;
     public String groupId = "";
     public List<DungeonLeaderboardEntry> leaderboard = new ArrayList<>();
-    
+    private static final String BUSY_REASON = "arenas_ld";
+
     private final List<AttributeData> attributes = new ArrayList<>();
     private EquipmentData equipment = new EquipmentData();
     private final List<BlockPos> linkedSpawners = new ArrayList<>();
@@ -97,6 +99,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     private int dungeonTimeTicksRemaining = 0;
     private int lastPublishedDungeonSeconds = -1;
     private final Map<UUID, DownedPlayer> downedPlayers = new HashMap<>();
+    private boolean hardcoreEnabled = false;
     
     private final ServerBossEvent dungeonCloseBossBar = (ServerBossEvent) new ServerBossEvent(
             Component.translatable("bossbar.arenas_ld.dungeon_closing"), 
@@ -142,12 +145,33 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     }
     
     public void trackPlayer(UUID playerUuid) {
-        this.trackedPlayers.add(playerUuid);
-        this.setChanged();
+        addTrackedPlayer(playerUuid);
     }
     
     public boolean isTracked(UUID playerUuid) {
         return this.trackedPlayers.contains(playerUuid);
+    }
+
+    private void addTrackedPlayer(UUID playerUuid) {
+        if (this.trackedPlayers.add(playerUuid)) {
+            BusyState.setBusy(playerUuid, BUSY_REASON);
+            this.setChanged();
+        }
+    }
+
+    private void removeTrackedPlayer(UUID playerUuid) {
+        if (this.trackedPlayers.remove(playerUuid)) {
+            BusyState.clearBusy(playerUuid, BUSY_REASON);
+            this.setChanged();
+        }
+    }
+
+    private void clearTrackedPlayers() {
+        for (UUID playerId : this.trackedPlayers) {
+            BusyState.clearBusy(playerId, BUSY_REASON);
+        }
+        clearTrackedPlayers();
+        this.setChanged();
     }
 
     public boolean isDungeonRunning() {
@@ -171,7 +195,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             }
         }
         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_left", reason).withStyle(net.minecraft.ChatFormatting.RED));
-        this.trackedPlayers.remove(player.getUUID());
+        removeTrackedPlayer(player.getUUID());
         if (removeFromDowned) {
             this.downedPlayers.remove(player.getUUID());
         }
@@ -297,9 +321,10 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             for (UUID uuid : trackedSnapshot) {
                 ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(uuid);
                 if (player == null) {
-                    be.trackedPlayers.remove(uuid);
+                    be.removeTrackedPlayer(uuid);
                     continue;
                 }
+                BusyState.setBusy(uuid, BUSY_REASON);
                 if (player.level() != world) {
                     be.handlePlayerDisconnect(player, Component.translatable("message.arenas_ld.dungeon_left.reason.dimension"));
                     continue;
@@ -307,7 +332,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 if (player.isDeadOrDying()) {
                     be.dungeonCloseBossBar.removePlayer(player);
                     be.dungeonTimeBossBar.removePlayer(player);
-                    be.trackedPlayers.remove(uuid);
+                    be.removeTrackedPlayer(uuid);
                 }
             }
         }
@@ -475,7 +500,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
         this.controllerPos = controllerPos;
         this.controllerDimension = controllerDimension;
-        this.trackedPlayers.clear();
+        clearTrackedPlayers();
         this.downedPlayers.clear();
         this.dungeonCloseBossBar.removeAllPlayers();
         this.dungeonCloseBossBar.setVisible(false);
@@ -522,6 +547,21 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         setChanged();
         updateControllerCooldown(serverLevel, 0);
         return true;
+    }
+
+    public void setHardcoreEnabled(boolean hardcoreEnabled) {
+        this.hardcoreEnabled = hardcoreEnabled;
+        setChanged();
+    }
+
+    public boolean isHardcoreEnabled() {
+        return hardcoreEnabled;
+    }
+
+    public void handlePlayerHardcoreDeath(ServerPlayer player) {
+        if (!isDungeonRunning() || !isTracked(player.getUUID())) return;
+        revivePlayerForExit(player);
+        handlePlayerExit(player, Component.translatable("message.arenas_ld.dungeon_left.reason.died"), true);
     }
 
     private void handleDungeonActive(ServerLevel world, BlockPos pos) {
@@ -771,6 +811,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             }
         }
 
+        int rewardMultiplier = hardcoreEnabled ? 2 : 1;
+
         ResourceLocation lootTableIdentifier = ResourceLocation.tryParse(this.lootTableId);
         if (lootTableIdentifier != null) {
             LootTable lootTable = Objects.requireNonNull(world.getServer()).reloadableRegistries().getLootTable(ResourceKey.create(Registries.LOOT_TABLE, lootTableIdentifier));
@@ -780,26 +822,29 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                     .withParameter(LootContextParams.THIS_ENTITY, defeatedBoss);
 
             LootParams lootParams = builder.create(net.minecraft.world.level.storage.loot.parameters.LootContextParamSets.GIFT);
-            lootTable.getRandomItems(lootParams).forEach(stack -> {
+            for (int i = 0; i < rewardMultiplier; i++) {
+                lootTable.getRandomItems(lootParams).forEach(stack -> {
+                    double x = worldPosition.getX() + 0.5 + (world.random.nextDouble() * 8.0) - 4.0;
+                    double y = worldPosition.getY() + 3.5;
+                    double z = worldPosition.getZ() + 0.5 + (world.random.nextDouble() * 8.0) - 4.0;
 
-                double x = worldPosition.getX() + 0.5 + (world.random.nextDouble() * 8.0) - 4.0;
-                double y = worldPosition.getY() + 3.5;
-                double z = worldPosition.getZ() + 0.5 + (world.random.nextDouble() * 8.0) - 4.0;
-
-                ItemEntity itemEntity = new ItemEntity(world, x, y, z, stack);
-                itemEntity.setDeltaMovement(world.random.nextDouble() * 0.2 - 0.1, 0.4, world.random.nextDouble() * 0.2 - 0.1);
-                world.addFreshEntity(itemEntity);
-            });
+                    ItemEntity itemEntity = new ItemEntity(world, x, y, z, stack);
+                    itemEntity.setDeltaMovement(world.random.nextDouble() * 0.2 - 0.1, 0.4, world.random.nextDouble() * 0.2 - 0.1);
+                    world.addFreshEntity(itemEntity);
+                });
+            }
         }
 
         if (this.perPlayerLootTableId != null && !this.perPlayerLootTableId.isEmpty()) {
             AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
             List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
             for (ServerPlayer player : playersInBattle) {
-                ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
-                bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(this.perPlayerLootTableId));
-                if (!player.getInventory().add(bundle)) {
-                    player.drop(bundle, false);
+                for (int i = 0; i < rewardMultiplier; i++) {
+                    ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
+                    bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(this.perPlayerLootTableId));
+                    if (!player.getInventory().add(bundle)) {
+                        player.drop(bundle, false);
+                    }
                 }
             }
         }
@@ -841,7 +886,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 }
             }
         }
-        trackedPlayers.clear();
+        clearTrackedPlayers();
     }
 
     private void handleBattleLoss(ServerLevel world, String reason) {
@@ -880,7 +925,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 }
             }
         }
-        trackedPlayers.clear();
+        clearTrackedPlayers();
 
         // No cooldown on loss, reset immediately
         resetSpawner(world, false);
@@ -900,7 +945,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         this.dungeonTimeTicksRemaining = 0;
         this.lastPublishedDungeonSeconds = -1;
         this.downedPlayers.clear();
-        this.trackedPlayers.clear();
+        clearTrackedPlayers();
         this.dungeonCloseBossBar.removeAllPlayers();
         this.dungeonCloseBossBar.setVisible(false);
         this.dungeonTimeBossBar.removeAllPlayers();
@@ -961,6 +1006,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         nbt.putLong("DungeonStartTick", dungeonStartTick);
         nbt.putInt("DungeonTimeTicksRemaining", dungeonTimeTicksRemaining);
         nbt.putLong("LastTickTime", lastTickTime);
+        nbt.putBoolean("HardcoreEnabled", hardcoreEnabled);
         if (controllerPos != null && controllerDimension != null) {
             nbt.putLong("ControllerPos", controllerPos.asLong());
             nbt.putString("ControllerDimension", controllerDimension.location().toString());
@@ -1035,6 +1081,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (nbt.contains("LastTickTime")) {
             lastTickTime = nbt.getLong("LastTickTime");
         }
+        hardcoreEnabled = nbt.getBoolean("HardcoreEnabled");
         if (nbt.contains("ControllerPos") && nbt.contains("ControllerDimension")) {
             controllerPos = BlockPos.of(nbt.getLong("ControllerPos"));
             controllerDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ControllerDimension")));
@@ -1053,7 +1100,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             equipment = EquipmentData.fromNbt(nbt.getCompound("Equipment"));
         }
         if (nbt.contains("TrackedPlayers")) {
-            trackedPlayers.clear();
+            clearTrackedPlayers();
             ListTag trackedList = nbt.getList("TrackedPlayers", CompoundTag.TAG_COMPOUND);
             for (Tag tag : trackedList) {
                 trackedPlayers.add(((CompoundTag) tag).getUUID("uuid"));

@@ -44,6 +44,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     public boolean isLocked = false;
     public int remainingDungeonTimeSeconds = 0;
     public int dungeonCooldownSeconds = 0;
+    public boolean hardcoreEnabled = false;
     public List<DungeonLeaderboardEntry> leaderboard = new ArrayList<>();
 
     public DungeonControllerBlockEntity(BlockPos pos, BlockState state) {
@@ -87,6 +88,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         nbt.putBoolean("IsLocked", isLocked);
         nbt.putInt("RemainingDungeonTimeSeconds", remainingDungeonTimeSeconds);
         nbt.putInt("DungeonCooldownSeconds", dungeonCooldownSeconds);
+        nbt.putBoolean("HardcoreEnabled", hardcoreEnabled);
 
         ListTag membersList = new ListTag();
         for (UUID uuid : partyMembers) {
@@ -111,6 +113,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         isLocked = nbt.getBoolean("IsLocked");
         remainingDungeonTimeSeconds = nbt.getInt("RemainingDungeonTimeSeconds");
         dungeonCooldownSeconds = nbt.getInt("DungeonCooldownSeconds");
+        hardcoreEnabled = nbt.getBoolean("HardcoreEnabled");
 
         partyMembers.clear();
         if (nbt.contains("PartyMembers")) {

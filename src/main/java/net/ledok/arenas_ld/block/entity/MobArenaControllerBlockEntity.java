@@ -43,6 +43,7 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
     public Set<UUID> partyMembers = new HashSet<>();
     public boolean isLocked = false;
     public int currentWave = 0;
+    public boolean hardcoreEnabled = false;
     public List<LeaderboardEntry> leaderboard = new ArrayList<>();
 
     public MobArenaControllerBlockEntity(BlockPos pos, BlockState state) {
@@ -84,6 +85,7 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
         nbt.putString("ArenaSpawnerDimension", arenaSpawnerDimension.location().toString());
         nbt.putBoolean("IsLocked", isLocked);
         nbt.putInt("CurrentWave", currentWave);
+        nbt.putBoolean("HardcoreEnabled", hardcoreEnabled);
 
         ListTag membersList = new ListTag();
         for (UUID uuid : partyMembers) {
@@ -107,6 +109,7 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
         arenaSpawnerDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ArenaSpawnerDimension")));
         isLocked = nbt.getBoolean("IsLocked");
         currentWave = nbt.getInt("CurrentWave");
+        hardcoreEnabled = nbt.getBoolean("HardcoreEnabled");
 
         partyMembers.clear();
         if (nbt.contains("PartyMembers")) {

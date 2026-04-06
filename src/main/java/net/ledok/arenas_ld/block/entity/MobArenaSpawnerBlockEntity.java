@@ -100,6 +100,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private BlockPos controllerPos;
     private ResourceKey<Level> controllerDimension;
     private boolean highlighting = false;
+    private boolean hardcoreEnabled = false;
 
     public MobArenaSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.MOB_ARENA_SPAWNER_BLOCK_ENTITY, pos, state);
@@ -253,12 +254,45 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             }
 
             isArenaActive = true;
-            currentWave = 0;
+            int quickStartWave = computeQuickStartWave(serverLevel);
+            currentWave = Math.max(0, quickStartWave - 1);
             aliveMobs.clear();
             bossBar.setVisible(true);
             prepareTicksRemaining = prepareTime * 20;
             setChanged();
         }
+    }
+
+    public void setHardcoreEnabled(boolean hardcoreEnabled) {
+        this.hardcoreEnabled = hardcoreEnabled;
+        setChanged();
+    }
+
+    public boolean isHardcoreEnabled() {
+        return hardcoreEnabled;
+    }
+
+    private int computeQuickStartWave(ServerLevel world) {
+        if (participatingPlayers.isEmpty()) return 0;
+        int lowestMaxWave = Integer.MAX_VALUE;
+        for (UUID playerId : participatingPlayers) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
+            String playerName = player != null ? player.getGameProfile().getName() : null;
+            int maxWave = 0;
+            if (playerName != null) {
+                for (LeaderboardEntry entry : leaderboard) {
+                    if (entry.playerName.equals(playerName)) {
+                        maxWave = entry.wave;
+                        break;
+                    }
+                }
+            }
+            lowestMaxWave = Math.min(lowestMaxWave, maxWave);
+        }
+        if (lowestMaxWave == Integer.MAX_VALUE) {
+            lowestMaxWave = 0;
+        }
+        return lowestMaxWave / 2;
     }
 
     private void startWave(ServerLevel world) {
@@ -389,6 +423,27 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     private void sendLossMessage(ServerPlayer player, int wave) {
         player.sendSystemMessage(Component.translatable("message.arenas_ld.arena_lost", wave).withStyle(net.minecraft.ChatFormatting.RED));
+    }
+
+    public void handlePlayerHardcoreDeath(ServerPlayer player) {
+        if (!participatingPlayers.contains(player.getUUID())) return;
+        updateLeaderboardOnDisconnect(player);
+        sendLossMessage(player);
+        bossBar.removePlayer(player);
+        participatingPlayers.remove(player.getUUID());
+        ArenasLdMod.MOB_ARENA_MANAGER.removePlayer(player);
+        player.setGameMode(GameType.SURVIVAL);
+        BlockPos absoluteExitDest = this.worldPosition.offset(this.exitPosition);
+        ServerLevel destLevel = player.server.getLevel(exitDimension);
+        if (destLevel != null) {
+            ChunkPos chunkPos = new ChunkPos(absoluteExitDest);
+            destLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
+            player.teleportTo(destLevel, absoluteExitDest.getX() + 0.5, absoluteExitDest.getY(), absoluteExitDest.getZ() + 0.5, player.getYRot(), player.getXRot());
+            destLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
+        }
+        if (participatingPlayers.isEmpty()) {
+            endArena(player.serverLevel());
+        }
     }
 
     private void updateLeaderboard(ServerLevel world) {
@@ -618,6 +673,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
 
         if (validRewards.isEmpty()) return;
+        int rewardMultiplier = hardcoreEnabled ? 2 : 1;
 
         // Distribute rewards to participating players
         List<ServerPlayer> players = new ArrayList<>();
@@ -629,7 +685,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
 
         for (MobArenaRewardData reward : validRewards) {
-            for (int i = 0; i < reward.rolls; i++) {
+            for (int i = 0; i < reward.rolls * rewardMultiplier; i++) {
                 if (reward.perPlayer) {
                     for (ServerPlayer player : players) {
                         ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
@@ -667,6 +723,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         super.saveAdditional(nbt, registryLookup);
         nbt.putInt("TriggerRadius", triggerRadius);
         nbt.putInt("BattleRadius", battleRadius);
+        nbt.putBoolean("HardcoreEnabled", hardcoreEnabled);
         nbt.putInt("SpawnDistance", spawnDistance);
         nbt.putInt("WaveTimer", waveTimer);
         nbt.putInt("AdditionalTime", additionalTime);
@@ -733,6 +790,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         super.loadAdditional(nbt, registryLookup);
         triggerRadius = nbt.getInt("TriggerRadius");
         battleRadius = nbt.getInt("BattleRadius");
+        hardcoreEnabled = nbt.getBoolean("HardcoreEnabled");
         spawnDistance = nbt.getInt("SpawnDistance");
         waveTimer = nbt.getInt("WaveTimer");
         additionalTime = nbt.getInt("AdditionalTime");

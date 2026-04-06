@@ -20,13 +20,28 @@ public abstract class LivingEntityMixin {
             DungeonBossSpawnerBlockEntity dungeonSpawner = ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player);
             if (health <= 0.0F && dungeonSpawner != null) {
                 if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
-                    dungeonSpawner.handlePlayerDown(player);
+                    if (dungeonSpawner.isHardcoreEnabled()) {
+                        dungeonSpawner.handlePlayerHardcoreDeath(player);
+                    } else {
+                        dungeonSpawner.handlePlayerDown(player);
+                    }
                     ci.cancel();
                     return;
                 }
             }
             if (health <= 0.0F && ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) {
                 if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
+                    var arenaInfo = ArenasLdMod.MOB_ARENA_MANAGER.getArenaInfo(player);
+                    if (arenaInfo != null) {
+                        var world = player.server.getLevel(arenaInfo.dimension());
+                        if (world != null && world.getBlockEntity(arenaInfo.pos()) instanceof net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity spawner) {
+                            if (spawner.isHardcoreEnabled()) {
+                                spawner.handlePlayerHardcoreDeath(player);
+                                ci.cancel();
+                                return;
+                            }
+                        }
+                    }
                     player.setGameMode(GameType.SPECTATOR);
                     float newHealth = player.getMaxHealth() * 0.5f;
                     player.setHealth(newHealth);
@@ -42,13 +57,28 @@ public abstract class LivingEntityMixin {
             DungeonBossSpawnerBlockEntity dungeonSpawner = ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player);
             if (dungeonSpawner != null) {
                 if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
-                    dungeonSpawner.handlePlayerDown(player);
+                    if (dungeonSpawner.isHardcoreEnabled()) {
+                        dungeonSpawner.handlePlayerHardcoreDeath(player);
+                    } else {
+                        dungeonSpawner.handlePlayerDown(player);
+                    }
                     ci.cancel();
                     return;
                 }
             }
             if (ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) {
                 if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
+                    var arenaInfo = ArenasLdMod.MOB_ARENA_MANAGER.getArenaInfo(player);
+                    if (arenaInfo != null) {
+                        var world = player.server.getLevel(arenaInfo.dimension());
+                        if (world != null && world.getBlockEntity(arenaInfo.pos()) instanceof net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity spawner) {
+                            if (spawner.isHardcoreEnabled()) {
+                                spawner.handlePlayerHardcoreDeath(player);
+                                ci.cancel();
+                                return;
+                            }
+                        }
+                    }
                     player.setGameMode(GameType.SPECTATOR);
                     player.setHealth(player.getMaxHealth() * 0.5f);
                     ci.cancel();

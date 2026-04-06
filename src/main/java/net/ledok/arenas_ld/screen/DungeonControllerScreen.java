@@ -7,6 +7,7 @@ import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.util.DungeonLeaderboardEntry;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -27,6 +28,9 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     private Button startButton;
     private Button joinButton;
     private Button leaveButton;
+    private Checkbox hardcoreCheckbox;
+    private boolean suppressHardcoreSync = false;
+    private double playerListScrollAmount = 0;
     private List<Component> playerList = new ArrayList<>();
     private List<DungeonLeaderboardEntry> leaderboard = new ArrayList<>();
     private int remainingDungeonTimeSeconds = 0;
@@ -61,6 +65,17 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             updateInfo();
         }).bounds(x + 10, y + 80, 100, 20).build());
 
+        hardcoreCheckbox = addRenderableWidget(Checkbox.builder(Component.translatable("gui.arenas_ld.hardcore"), this.font)
+                .pos(x + 130, y + 150)
+                .selected(false)
+                .onValueChange((checkbox, selected) -> {
+                    if (!suppressHardcoreSync) {
+                        ClientPlayNetworking.send(new ModPackets.UpdateDungeonControllerSettingsPayload(menu.getPos(), selected));
+                    }
+                })
+                .build());
+        hardcoreCheckbox.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.arenas_ld.hardcore_desc")));
+
         scheduler.scheduleAtFixedRate(this::updateInfo, 0, 1, TimeUnit.SECONDS);
     }
 
@@ -84,6 +99,11 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         this.playerList = newPlayerList;
         this.remainingDungeonTimeSeconds = payload.remainingDungeonTimeSeconds();
         this.dungeonCooldownSeconds = payload.dungeonCooldownSeconds();
+        if (hardcoreCheckbox != null && payload.hardcoreEnabled() != hardcoreCheckbox.selected()) {
+            suppressHardcoreSync = true;
+            hardcoreCheckbox.onPress();
+            suppressHardcoreSync = false;
+        }
         this.leaderboard = payload.leaderboard();
     }
 
@@ -130,12 +150,31 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         int playerListX = x + 135;
         int playerListY = y + 70;
         int playerListWidth = 90;
-        int playerListHeight = 90;
+        int playerListHeight = 80;
         guiGraphics.enableScissor(playerListX, playerListY, playerListX + playerListWidth, playerListY + playerListHeight);
+        int playerEntryStep = 10;
+        int playerTotalHeight = playerList.size() * playerEntryStep;
+        int playerMaxScroll = Math.max(0, playerTotalHeight - playerListHeight);
+        playerListScrollAmount = Mth.clamp(playerListScrollAmount, 0, playerMaxScroll);
         for (int i = 0; i < playerList.size(); i++) {
-            guiGraphics.drawString(this.font, (i + 1) + ". " + playerList.get(i).getString(), playerListX, playerListY + i * 10, 0xFFFFFF);
+            int entryY = (int) (playerListY + i * playerEntryStep - playerListScrollAmount);
+            guiGraphics.drawString(this.font, (i + 1) + ". " + playerList.get(i).getString(), playerListX, entryY, 0xFFFFFF);
         }
         guiGraphics.disableScissor();
+
+        if (playerList.size() > 4) {
+            int scrollbarX = playerListX + playerListWidth + 5;
+            int scrollbarHeight = playerListHeight;
+            int scrollbarHandleHeight = playerTotalHeight > 0
+                    ? Math.max(6, (int) ((float) scrollbarHeight * scrollbarHeight / playerTotalHeight))
+                    : scrollbarHeight;
+            scrollbarHandleHeight = Math.min(scrollbarHandleHeight, scrollbarHeight);
+            int scrollbarHandleY = playerListY + (playerMaxScroll == 0
+                    ? 0
+                    : (int) (playerListScrollAmount / playerMaxScroll * (scrollbarHeight - scrollbarHandleHeight)));
+            guiGraphics.fill(scrollbarX, playerListY, scrollbarX + 6, playerListY + scrollbarHeight, 0x80000000);
+            guiGraphics.fill(scrollbarX, scrollbarHandleY, scrollbarX + 6, scrollbarHandleY + scrollbarHandleHeight, 0x80FFFFFF);
+        }
 
         // Leaderboard
         int leaderboardX = x + 15;
@@ -180,6 +219,20 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        int x = (width - imageWidth) / 2;
+        int y = (height - imageHeight) / 2;
+        int playerListX = x + 135;
+        int playerListY = y + 70;
+        int playerListWidth = 90;
+        int playerListHeight = 55;
+        if (mouseX >= playerListX && mouseX <= playerListX + playerListWidth && mouseY >= playerListY && mouseY <= playerListY + playerListHeight) {
+            int playerEntryStep = 10;
+            int playerMaxScroll = Math.max(0, playerList.size() * playerEntryStep - playerListHeight);
+            if (playerMaxScroll > 0) {
+                playerListScrollAmount = Mth.clamp(playerListScrollAmount - verticalAmount * 10, 0, playerMaxScroll);
+            }
+            return true;
+        }
         float entryScale = 0.75f;
         int entryStep = Math.max(1, Math.round(10 * entryScale));
         int maxScroll = Math.max(0, leaderboard.size() * entryStep - LEADERBOARD_HEIGHT);
@@ -194,6 +247,8 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         int titleWidth = this.font.width(this.title);
         guiGraphics.drawString(this.font, this.title, 60 + (120 / 2) - (titleWidth / 2), 5 + (10 / 2) - (this.font.lineHeight / 2), 0x000000, false);
     }
+
+    // Checkbox handles its own input via onValueChange.
 
     private static String formatTime(int totalSeconds) {
         int minutes = totalSeconds / 60;

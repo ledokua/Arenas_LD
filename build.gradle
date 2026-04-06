@@ -40,6 +40,12 @@ dependencies {
 
     // Puffish
     modCompileOnly("net.puffish:skillsmod:0.16.5+1.21:fabric")
+
+    modImplementation fileTree(
+            dir: "${project.projectDir}/../../libs",
+            include: ["BusyLib-*.jar"],
+            exclude: ["*sources.jar"]
+    )
 }
 
 processResources {
