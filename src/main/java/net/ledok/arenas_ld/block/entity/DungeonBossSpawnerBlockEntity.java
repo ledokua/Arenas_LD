@@ -167,10 +167,10 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     }
 
     private void clearTrackedPlayers() {
-        for (UUID playerId : this.trackedPlayers) {
+        for (UUID playerId : new HashSet<>(this.trackedPlayers)) {
             BusyState.clearBusy(playerId, BUSY_REASON);
         }
-        clearTrackedPlayers();
+        this.trackedPlayers.clear();
         this.setChanged();
     }
 

@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.14-SNAPSHOT'
+    id 'fabric-loom' version '1.15-SNAPSHOT'
     id 'maven-publish'
 }
 
@@ -42,7 +42,7 @@ dependencies {
     modCompileOnly("net.puffish:skillsmod:0.16.5+1.21:fabric")
 
     modImplementation fileTree(
-            dir: "${project.projectDir}/../../libs",
+            dir: "${project.projectDir}/libs",
             include: ["BusyLib-*.jar"],
             exclude: ["*sources.jar"]
     )
