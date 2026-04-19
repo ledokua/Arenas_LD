@@ -326,8 +326,11 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 }
                 BusyState.setBusy(uuid, BUSY_REASON);
                 if (player.level() != world) {
-                    be.handlePlayerDisconnect(player, Component.translatable("message.arenas_ld.dungeon_left.reason.dimension"));
-                    continue;
+                    // Grace period of 20 ticks (1 second)
+                    if (be.dungeonStartTick != -1 && serverLevel.getGameTime() - be.dungeonStartTick > 20) {
+                        be.handlePlayerDisconnect(player, Component.translatable("message.arenas_ld.dungeon_left.reason.dimension"));
+                        continue;
+                    }
                 }
                 if (player.isDeadOrDying()) {
                     be.dungeonCloseBossBar.removePlayer(player);
@@ -498,6 +501,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (!(level instanceof ServerLevel serverLevel)) return false;
         if (isDungeonActive || isBattleActive || internalDungeonCloseTimer > 0 || respawnCooldown > 0) return false;
 
+        ArenasLdMod.LOGGER.info("Starting dungeon at spawner {}", worldPosition);
+
         this.controllerPos = controllerPos;
         this.controllerDimension = controllerDimension;
         clearTrackedPlayers();
@@ -513,11 +518,21 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 validPlayers.add(player);
                 trackPlayer(playerId);
                 if (entrancePosition != null && !entrancePosition.equals(BlockPos.ZERO)) {
+                    ArenasLdMod.LOGGER.info("Player {}: Teleporting to entrance: pos={}, dim={}", player.getName().getString(), entrancePosition, entranceDimension.location());
                     ServerLevel destLevel = serverLevel.getServer().getLevel(entranceDimension);
                     if (destLevel != null) {
                         BlockPos absoluteEntrance = this.worldPosition.offset(entrancePosition);
+                        ArenasLdMod.LOGGER.info("Player {}: Absolute entrance pos: {}", player.getName().getString(), absoluteEntrance);
+
+                        ArenasLdMod.LOGGER.info("Player {}: Calling teleportTo...", player.getName().getString());
                         player.teleportTo(destLevel, absoluteEntrance.getX() + 0.5, absoluteEntrance.getY(), absoluteEntrance.getZ() + 0.5, player.getYRot(), player.getXRot());
+                        ArenasLdMod.LOGGER.info("Player {}: Called teleportTo.", player.getName().getString());
+
+                    } else {
+                        ArenasLdMod.LOGGER.warn("Player {}: destLevel is null for dimension {}", player.getName().getString(), entranceDimension.location());
                     }
+                } else {
+                    ArenasLdMod.LOGGER.warn("Player {}: entrancePosition not set or is ZERO.", player.getName().getString());
                 }
             }
         }
