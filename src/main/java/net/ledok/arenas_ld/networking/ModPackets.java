@@ -24,6 +24,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -515,11 +516,14 @@ public class ModPackets {
         }
     }
 
-    public record RequestDungeonControllerInfoPayload(BlockPos pos) implements CustomPacketPayload {
+    public record RequestDungeonControllerInfoPayload(BlockPos pos, String leaderboardTier) implements CustomPacketPayload {
         public static final Type<RequestDungeonControllerInfoPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "request_dungeon_controller_info"));
         public static final StreamCodec<FriendlyByteBuf, RequestDungeonControllerInfoPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> buf.writeBlockPos(payload.pos),
-                buf -> new RequestDungeonControllerInfoPayload(buf.readBlockPos())
+                (buf, payload) -> {
+                    buf.writeBlockPos(payload.pos);
+                    buf.writeUtf(payload.leaderboardTier);
+                },
+                buf -> new RequestDungeonControllerInfoPayload(buf.readBlockPos(), buf.readUtf())
         );
 
         @Override
@@ -1323,6 +1327,7 @@ public class ModPackets {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
                 if (be instanceof DungeonControllerBlockEntity controller) {
+                    DifficultyTier requestedLeaderboardTier = DifficultyTier.fromNameOrDefault(payload.leaderboardTier(), DifficultyTier.NORMAL);
                     Lobby lobby = controller.getLobbyByMember(player.getUUID());
                     List<String> players = new ArrayList<>();
                     List<DungeonControllerInfoPayload.InstanceView> instances = new ArrayList<>();
@@ -1408,7 +1413,7 @@ public class ModPackets {
                             controllerRespawnTimeTicks,
                             controller.isLocked,
                             players,
-                            new ArrayList<>(controller.leaderboard),
+                            resolveLeaderboardForTier(controller, requestedLeaderboardTier, player.server),
                             instances,
                             lobbies
                     ));
@@ -1528,6 +1533,30 @@ public class ModPackets {
         if (ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) return true;
         if (ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player) != null) return true;
         return false;
+    }
+
+    private static List<DungeonLeaderboardEntry> resolveLeaderboardForTier(
+            DungeonControllerBlockEntity controller,
+            DifficultyTier tier,
+            MinecraftServer server
+    ) {
+        if (controller == null || tier == null || server == null) {
+            return List.of();
+        }
+        for (InstanceState instance : controller.instances) {
+            ServerLevel level = server.getLevel(instance.ref().dimension());
+            if (level == null) {
+                continue;
+            }
+            if (!level.isLoaded(instance.ref().spawnerPos())) {
+                continue;
+            }
+            BlockEntity be = level.getBlockEntity(instance.ref().spawnerPos());
+            if (be instanceof DungeonBossSpawnerBlockEntity dungeonSpawner) {
+                return new ArrayList<>(dungeonSpawner.getLeaderboardForTier(tier));
+            }
+        }
+        return new ArrayList<>(controller.leaderboard);
     }
 
     private static void removePlayerFromOtherLobbies(ServerPlayer player, BlockPos currentControllerPos, ResourceKey<Level> currentControllerDim) {

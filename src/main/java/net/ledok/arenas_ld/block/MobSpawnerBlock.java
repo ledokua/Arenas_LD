@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.block;
 
 import com.mojang.serialization.MapCodec;
 import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
+import net.ledok.arenas_ld.item.LinkerItem;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -43,6 +44,9 @@ public class MobSpawnerBlock extends BaseEntityBlock {
 
     @Override
     public InteractionResult useWithoutItem(BlockState blockState, Level world, BlockPos pos, Player player, BlockHitResult hit) {
+        if (isHoldingLinker(player)) {
+            return InteractionResult.PASS;
+        }
         if (!world.isClientSide) {
             if (!player.isCreative() && !player.hasPermissions(2)) {
                 player.sendSystemMessage(Component.literal("You don't have permission to configure this block.").withStyle(net.minecraft.ChatFormatting.RED));
@@ -56,6 +60,11 @@ public class MobSpawnerBlock extends BaseEntityBlock {
             }
         }
         return InteractionResult.SUCCESS;
+    }
+
+    private static boolean isHoldingLinker(Player player) {
+        return player.getMainHandItem().getItem() instanceof LinkerItem
+                || player.getOffhandItem().getItem() instanceof LinkerItem;
     }
 
     @Nullable

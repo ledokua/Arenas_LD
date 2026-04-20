@@ -55,6 +55,19 @@ public class PlayerListMixin {
     private void onPlayerDisconnect(ServerPlayer player, CallbackInfo ci) {
         var server = player.server;
         if (server != null) {
+            for (var key : net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity.getControllers()) {
+                ServerLevel level = server.getLevel(key.dimension());
+                if (level == null) continue;
+                var be = level.getBlockEntity(key.pos());
+                if (!(be instanceof net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity controller)) continue;
+                var lobby = controller.getLobbyByMember(player.getUUID());
+                if (lobby == null) continue;
+                if (lobby.ownerUuid.equals(player.getUUID())) {
+                    controller.disbandLobby(player.getUUID());
+                } else {
+                    controller.leaveLobby(player.getUUID());
+                }
+            }
             for (var key : net.ledok.arenas_ld.block.entity.MobArenaControllerBlockEntity.getControllers()) {
                 ServerLevel level = server.getLevel(key.dimension());
                 if (level == null) continue;

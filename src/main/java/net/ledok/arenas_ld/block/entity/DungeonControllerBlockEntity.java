@@ -50,7 +50,6 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     public record ControllerKey(BlockPos pos, ResourceKey<Level> dimension) {}
     private static final Set<ControllerKey> CONTROLLERS = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private static final long INVITE_EXPIRY_TICKS = 5L * 60L * 20L;
-    private static final long STALE_OFFLINE_TICKS = 5L * 60L * 20L;
     private static final long LOBBY_CLEANUP_INTERVAL_TICKS = 30L * 20L;
     private static final int INSTANCE_VALIDATION_INTERVAL_TICKS = 100;
     private static final int DEFAULT_RESPAWN_TIME_TICKS = 6000;
@@ -731,8 +730,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             offlineSinceTick.remove(playerUuid);
             return false;
         }
-        long offlineSince = offlineSinceTick.computeIfAbsent(playerUuid, ignored -> now);
-        return now - offlineSince >= STALE_OFFLINE_TICKS;
+        return true;
     }
 
     private boolean transferOrDissolveLobby(Lobby lobby, UUID leavingOwner) {
