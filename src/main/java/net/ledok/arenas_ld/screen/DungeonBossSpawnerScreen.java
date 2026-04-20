@@ -2,14 +2,20 @@ package net.ledok.arenas_ld.screen;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.networking.ModPackets;
+import net.ledok.arenas_ld.util.DifficultyTier;
+import net.ledok.arenas_ld.util.TierConfig;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
+
+import java.util.EnumMap;
+import java.util.Map;
 
 public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBossSpawnerScreenHandler> {
 
@@ -26,6 +32,14 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
     private EditBox regenerationField;
     private EditBox skillExperienceField;
     private EditBox groupIdField;
+    private Button selectedTierButton;
+    private EditBox tierHealthMultiplierField;
+    private EditBox tierDamageMultiplierField;
+    private EditBox tierLootTableField;
+    private EditBox tierPerPlayerLootTableField;
+    private EditBox tierHardcoreOverrideField;
+    private DifficultyTier selectedTier = DifficultyTier.NORMAL;
+    private final Map<DifficultyTier, TierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
 
     public DungeonBossSpawnerScreen(DungeonBossSpawnerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
@@ -147,24 +161,74 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
                 .bounds(this.leftPos + this.imageWidth / 2 - 50, this.height - 50, 100, 20)
                 .build());
 
+        int tierY = this.topPos + 165;
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, tierY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.tier_selected"), (button) -> {}, this.font));
+        selectedTierButton = this.addRenderableWidget(Button.builder(Component.empty(), button -> {
+            saveCurrentTierConfigFromFields();
+            DifficultyTier[] tiers = DifficultyTier.values();
+            selectedTier = tiers[(selectedTier.ordinal() + 1) % tiers.length];
+            refreshTierControls();
+        }).bounds(col3X, tierY, fieldWidth, fieldHeight).build());
+
+        tierY += (int) (yOffset * 1.7);
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, tierY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.tier_health_mult"), (button) -> {}, this.font));
+        tierHealthMultiplierField = new EditBox(this.font, col3X, tierY, fieldWidth, fieldHeight, Component.literal(""));
+        this.addRenderableWidget(tierHealthMultiplierField);
+
+        tierY += (int) (yOffset * 1.7);
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, tierY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.tier_damage_mult"), (button) -> {}, this.font));
+        tierDamageMultiplierField = new EditBox(this.font, col3X, tierY, fieldWidth, fieldHeight, Component.literal(""));
+        this.addRenderableWidget(tierDamageMultiplierField);
+
+        tierY += (int) (yOffset * 1.7);
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, tierY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.tier_loot_table"), (button) -> {}, this.font));
+        tierLootTableField = new EditBox(this.font, col3X, tierY, fieldWidth, fieldHeight, Component.literal(""));
+        this.addRenderableWidget(tierLootTableField);
+
+        tierY += (int) (yOffset * 1.7);
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, tierY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.tier_per_player_loot_table"), (button) -> {}, this.font));
+        tierPerPlayerLootTableField = new EditBox(this.font, col3X, tierY, fieldWidth, fieldHeight, Component.literal(""));
+        this.addRenderableWidget(tierPerPlayerLootTableField);
+
+        tierY += (int) (yOffset * 1.7);
+        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, tierY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.tier_hardcore_override"), (button) -> {}, this.font));
+        tierHardcoreOverrideField = new EditBox(this.font, col3X, tierY, fieldWidth, fieldHeight, Component.literal(""));
+        tierHardcoreOverrideField.setMaxLength(16);
+        this.addRenderableWidget(tierHardcoreOverrideField);
+
         loadBlockEntityData();
     }
 
     private void loadBlockEntityData() {
         if (menu.blockEntity != null) {
-            mobIdField.setValue(menu.blockEntity.mobId);
-            respawnTimeField.setValue(String.valueOf(menu.blockEntity.respawnTime));
-            dungeonCloseTimerField.setValue(String.valueOf(menu.blockEntity.dungeonCloseTimer));
-            dungeonTimeField.setValue(String.valueOf(menu.blockEntity.dungeonTime));
-            lootTableIdField.setValue(menu.blockEntity.lootTableId);
-            perPlayerLootTableIdField.setValue(menu.blockEntity.perPlayerLootTableId);
-            exitPositionCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.exitPositionCoords.getX(), menu.blockEntity.exitPositionCoords.getY(), menu.blockEntity.exitPositionCoords.getZ()));
-            exitPositionDimensionField.setValue(menu.blockEntity.exitPositionDimension.location().toString());
-            triggerRadiusField.setValue(String.valueOf(menu.blockEntity.triggerRadius));
-            battleRadiusField.setValue(String.valueOf(menu.blockEntity.battleRadius));
-            regenerationField.setValue(String.valueOf(menu.blockEntity.regeneration));
-            skillExperienceField.setValue(String.valueOf(menu.blockEntity.skillExperiencePerWin));
-            groupIdField.setValue(menu.blockEntity.groupId);
+            mobIdField.setValue(menu.blockEntity.getMobId());
+            respawnTimeField.setValue(String.valueOf(menu.blockEntity.getRespawnTime()));
+            dungeonCloseTimerField.setValue(String.valueOf(menu.blockEntity.getDungeonCloseTimer()));
+            dungeonTimeField.setValue(String.valueOf(menu.blockEntity.getDungeonTime()));
+            lootTableIdField.setValue(menu.blockEntity.getLootTableId());
+            perPlayerLootTableIdField.setValue(menu.blockEntity.getPerPlayerLootTableId());
+            exitPositionCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.getExitPositionCoords().getX(), menu.blockEntity.getExitPositionCoords().getY(), menu.blockEntity.getExitPositionCoords().getZ()));
+            exitPositionDimensionField.setValue(menu.blockEntity.getExitPositionDimension().location().toString());
+            triggerRadiusField.setValue(String.valueOf(menu.blockEntity.getTriggerRadius()));
+            battleRadiusField.setValue(String.valueOf(menu.blockEntity.getBattleRadius()));
+            regenerationField.setValue(String.valueOf(menu.blockEntity.getRegeneration()));
+            skillExperienceField.setValue(String.valueOf(menu.blockEntity.getSkillExperiencePerWin()));
+            groupIdField.setValue(menu.blockEntity.getGroupId());
+            tierConfigs.clear();
+            for (DifficultyTier tier : DifficultyTier.values()) {
+                TierConfig source = menu.blockEntity.getTierConfigs().get(tier);
+                TierConfig copy = new TierConfig();
+                if (source != null) {
+                    copy.healthMultiplierOverride = source.healthMultiplierOverride;
+                    copy.damageMultiplierOverride = source.damageMultiplierOverride;
+                    copy.lootTableIdOverride = source.lootTableIdOverride;
+                    copy.perPlayerLootTableIdOverride = source.perPlayerLootTableIdOverride;
+                    copy.hardcoreOverride = source.hardcoreOverride;
+                }
+                tierConfigs.put(tier, copy);
+            }
+            selectedTier = menu.blockEntity.getActiveTier();
+            refreshTierControls();
         }
     }
 
@@ -189,6 +253,7 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
 
     private void onSave() {
         try {
+            saveCurrentTierConfigFromFields();
             ClientPlayNetworking.send(new ModPackets.UpdateDungeonBossSpawnerPayload(
                     menu.blockEntity.getBlockPos(),
                     mobIdField.getValue(),
@@ -205,10 +270,60 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
                     Integer.parseInt(skillExperienceField.getValue()),
                     groupIdField.getValue()
             ));
+            CompoundTag tierConfigsTag = new CompoundTag();
+            for (DifficultyTier tier : DifficultyTier.values()) {
+                TierConfig config = tierConfigs.getOrDefault(tier, new TierConfig());
+                tierConfigsTag.put(tier.name(), config.toNbt());
+            }
+            ClientPlayNetworking.send(new ModPackets.UpdateDungeonTierConfigsPayload(menu.blockEntity.getBlockPos(), tierConfigsTag));
             this.onClose();
         } catch (NumberFormatException e) {
             System.err.println("Invalid number format in one of the fields.");
         }
+    }
+
+    private void saveCurrentTierConfigFromFields() {
+        TierConfig config = tierConfigs.computeIfAbsent(selectedTier, unused -> new TierConfig());
+        config.healthMultiplierOverride = parseNullableDouble(tierHealthMultiplierField.getValue());
+        config.damageMultiplierOverride = parseNullableDouble(tierDamageMultiplierField.getValue());
+        config.lootTableIdOverride = tierLootTableField.getValue().trim();
+        config.perPlayerLootTableIdOverride = tierPerPlayerLootTableField.getValue().trim();
+        config.hardcoreOverride = parseNullableBoolean(tierHardcoreOverrideField.getValue());
+    }
+
+    private void refreshTierControls() {
+        if (selectedTierButton != null) {
+            selectedTierButton.setMessage(Component.translatable(selectedTier.translationKey()));
+        }
+        TierConfig config = tierConfigs.getOrDefault(selectedTier, new TierConfig());
+        tierHealthMultiplierField.setValue(config.healthMultiplierOverride != null ? String.valueOf(config.healthMultiplierOverride) : "");
+        tierDamageMultiplierField.setValue(config.damageMultiplierOverride != null ? String.valueOf(config.damageMultiplierOverride) : "");
+        tierLootTableField.setValue(config.lootTableIdOverride != null ? config.lootTableIdOverride : "");
+        tierPerPlayerLootTableField.setValue(config.perPlayerLootTableIdOverride != null ? config.perPlayerLootTableIdOverride : "");
+        tierHardcoreOverrideField.setValue(config.hardcoreOverride != null ? config.hardcoreOverride.toString() : "");
+    }
+
+    private Double parseNullableDouble(String raw) {
+        String trimmed = raw == null ? "" : raw.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(trimmed);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private Boolean parseNullableBoolean(String raw) {
+        String trimmed = raw == null ? "" : raw.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if ("true".equalsIgnoreCase(trimmed) || "false".equalsIgnoreCase(trimmed)) {
+            return Boolean.parseBoolean(trimmed);
+        }
+        return null;
     }
 
     @Override

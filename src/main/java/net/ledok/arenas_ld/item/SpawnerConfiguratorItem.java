@@ -110,11 +110,9 @@ public class SpawnerConfiguratorItem extends Item {
                     bossSpawner.exitPortalCoords = relativePos;
                     bossSpawner.exitDimension = clickedDimension;
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
-                    dungeonBossSpawner.exitPositionCoords = relativePos;
-                    dungeonBossSpawner.exitPositionDimension = clickedDimension;
+                    dungeonBossSpawner.setExitPositionCoords(relativePos, clickedDimension);
                 } else if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
-                    mobArenaSpawner.exitPosition = relativePos;
-                    mobArenaSpawner.exitDimension = clickedDimension;
+                    mobArenaSpawner.setExitPosition(relativePos, clickedDimension);
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.exit_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
@@ -134,8 +132,7 @@ public class SpawnerConfiguratorItem extends Item {
                 break;
             case ENTRANCE_POSITION:
                 if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
-                    mobArenaSpawner.arenaEntrancePosition = relativePos;
-                    mobArenaSpawner.arenaEntranceDimension = clickedDimension;
+                    mobArenaSpawner.setArenaEntrancePosition(relativePos, clickedDimension);
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
                     dungeonBossSpawner.setEntrancePosition(relativePos, clickedDimension);
                 }

@@ -17,6 +17,7 @@ public class ArenasLdConfig {
 
     // Config fields with default values
     public String puffish_skills_tree_id = "puffish_skills:combat";
+    public String dungeon_damage_source_filter = "ALL";
 
     public static ArenasLdConfig getInstance() {
         if (instance == null) {

@@ -38,8 +38,8 @@ public class PlayerListMixin {
             ServerLevel world = player.server.getLevel(arenaInfo.dimension());
             if (world != null && world.getBlockEntity(arenaInfo.pos()) instanceof MobArenaSpawnerBlockEntity spawner) {
                 player.setGameMode(GameType.SURVIVAL);
-                BlockPos exitPos = arenaInfo.pos().offset(spawner.exitPosition);
-                ServerLevel exitLevel = player.server.getLevel(spawner.exitDimension);
+                BlockPos exitPos = arenaInfo.pos().offset(spawner.getExitPosition());
+                ServerLevel exitLevel = player.server.getLevel(spawner.getExitDimension());
                 if (exitLevel != null) {
                     var chunkPos = new net.minecraft.world.level.ChunkPos(exitPos);
                     exitLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
@@ -60,17 +60,6 @@ public class PlayerListMixin {
                 if (level == null) continue;
                 var be = level.getBlockEntity(key.pos());
                 if (be instanceof net.ledok.arenas_ld.block.entity.MobArenaControllerBlockEntity controller) {
-                    if (controller.partyMembers.remove(player.getUUID())) {
-                        controller.setChanged();
-                        level.sendBlockUpdated(controller.getBlockPos(), controller.getBlockState(), controller.getBlockState(), 3);
-                    }
-                }
-            }
-            for (var key : net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity.getControllers()) {
-                ServerLevel level = server.getLevel(key.dimension());
-                if (level == null) continue;
-                var be = level.getBlockEntity(key.pos());
-                if (be instanceof net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity controller) {
                     if (controller.partyMembers.remove(player.getUUID())) {
                         controller.setChanged();
                         level.sendBlockUpdated(controller.getBlockPos(), controller.getBlockState(), controller.getBlockState(), 3);

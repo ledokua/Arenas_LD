@@ -14,9 +14,9 @@ public class PlayerTickHandler {
             if (arenaInfo != null) {
                 ServerLevel world = player.server.getLevel(arenaInfo.dimension());
                 if (world != null && world.getBlockEntity(arenaInfo.pos()) instanceof MobArenaSpawnerBlockEntity spawner) {
-                    if (player.distanceToSqr(arenaInfo.pos().getX(), arenaInfo.pos().getY(), arenaInfo.pos().getZ()) > spawner.battleRadius * spawner.battleRadius) {
-                        BlockPos enterPos = arenaInfo.pos().offset(spawner.arenaEntrancePosition);
-                        ServerLevel entranceLevel = player.server.getLevel(spawner.arenaEntranceDimension);
+                    if (player.distanceToSqr(arenaInfo.pos().getX(), arenaInfo.pos().getY(), arenaInfo.pos().getZ()) > spawner.getBattleRadius() * spawner.getBattleRadius()) {
+                        BlockPos enterPos = arenaInfo.pos().offset(spawner.getArenaEntrancePosition());
+                        ServerLevel entranceLevel = player.server.getLevel(spawner.getArenaEntranceDimension());
                         if (entranceLevel != null) {
                             player.teleportTo(entranceLevel, enterPos.getX() + 0.5, enterPos.getY(), enterPos.getZ() + 0.5, player.getYRot(), player.getXRot());
                         }

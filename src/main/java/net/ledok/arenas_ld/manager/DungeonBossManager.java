@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.manager;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
@@ -122,9 +123,9 @@ public class DungeonBossManager {
             ServerPlayer player = handler.getPlayer();
             for (DungeonBossSpawnerBlockEntity spawner : new java.util.ArrayList<>(activeSpawners)) {
                 if (spawner.isTracked(player.getUUID())) {
-                    if (spawner.exitPositionCoords != null && !spawner.exitPositionCoords.equals(BlockPos.ZERO)) {
-                        BlockPos absoluteExitPos = spawner.getBlockPos().offset(spawner.exitPositionCoords);
-                        disconnectedDungeonPlayers.put(player.getUUID(), new DungeonExitInfo(spawner.exitPositionDimension, absoluteExitPos));
+                    if (spawner.getExitPositionCoords() != null && !spawner.getExitPositionCoords().equals(BlockPos.ZERO)) {
+                        BlockPos absoluteExitPos = spawner.getBlockPos().offset(spawner.getExitPositionCoords());
+                        disconnectedDungeonPlayers.put(player.getUUID(), new DungeonExitInfo(spawner.getExitPositionDimension(), absoluteExitPos));
                     }
                     spawner.handlePlayerDisconnect(player, net.minecraft.network.chat.Component.translatable("message.arenas_ld.dungeon_left.reason.disconnected"));
                 }
@@ -155,8 +156,10 @@ public class DungeonBossManager {
             DungeonKey key = entry.getValue();
             int cooldownSeconds = -1;
             var level = server.getLevel(key.dimension());
-            if (level != null && level.getBlockEntity(key.pos()) instanceof DungeonBossSpawnerBlockEntity spawner) {
-                cooldownSeconds = spawner.getRespawnCooldownSeconds();
+            if (level != null) {
+                if (level.getBlockEntity(key.pos()) instanceof DungeonControllerBlockEntity controller) {
+                    cooldownSeconds = controller.getNextAvailableCooldownSeconds();
+                }
             }
 
             int last = lastCooldownSeconds.getOrDefault(name, -1);
@@ -164,6 +167,20 @@ public class DungeonBossManager {
 
             if (cooldownSeconds == 0 && last != 0) {
                 notifySubscribers(server, name);
+            }
+        }
+    }
+
+    public void onControllerInstanceFreed(MinecraftServer server, BlockPos controllerPos, ResourceKey<Level> dimension) {
+        ensureLoaded(server);
+        for (Map.Entry<String, DungeonKey> entry : registeredDungeons.entrySet()) {
+            DungeonKey key = entry.getValue();
+            if (key.pos().equals(controllerPos) && key.dimension().equals(dimension)) {
+                int last = lastCooldownSeconds.getOrDefault(entry.getKey(), -1);
+                lastCooldownSeconds.put(entry.getKey(), 0);
+                if (last != 0) {
+                    notifySubscribers(server, entry.getKey());
+                }
             }
         }
     }

@@ -8,13 +8,13 @@ import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.screen.MobArenaSpawnerData;
 import net.ledok.arenas_ld.screen.MobArenaSpawnerScreenHandler;
 import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.EntityEquipmentHelper;
 import net.ledok.arenas_ld.util.LeaderboardEntry;
 import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.ledok.arenas_ld.util.MobArenaMobData;
 import net.ledok.arenas_ld.util.MobArenaRewardData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -33,14 +33,12 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
@@ -57,31 +55,30 @@ import net.minecraft.world.scores.Scoreboard;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<MobArenaSpawnerData> {
 
     // --- Configuration Fields ---
-    public int triggerRadius = 16;
-    public int battleRadius = 64;
-    public int spawnDistance = 8;
-    public int waveTimer = 120;
-    public int additionalTime = 5;
-    public int timeBetweenWaves = 10;
-    public double attributeScale = 0.1;
-    public int prepareTime = 10;
-    public String groupId = "";
-    public int bossWaveAdditionalTime = 60;
-    public int entityHighlightTime = 0;
+    private int triggerRadius = 16;
+    private int battleRadius = 64;
+    private int spawnDistance = 8;
+    private int waveTimer = 120;
+    private int additionalTime = 5;
+    private int timeBetweenWaves = 10;
+    private double attributeScale = 0.1;
+    private int prepareTime = 10;
+    private String groupId = "";
+    private int bossWaveAdditionalTime = 60;
+    private int entityHighlightTime = 0;
 
-    public BlockPos exitPosition = BlockPos.ZERO;
-    public ResourceKey<Level> exitDimension = Level.OVERWORLD;
-    public BlockPos arenaEntrancePosition = BlockPos.ZERO;
-    public ResourceKey<Level> arenaEntranceDimension = Level.OVERWORLD;
+    private BlockPos exitPosition = BlockPos.ZERO;
+    private ResourceKey<Level> exitDimension = Level.OVERWORLD;
+    private BlockPos arenaEntrancePosition = BlockPos.ZERO;
+    private ResourceKey<Level> arenaEntranceDimension = Level.OVERWORLD;
 
-    public List<MobArenaMobData> mobs = new ArrayList<>();
-    public List<MobArenaRewardData> rewards = new ArrayList<>();
-    public List<LeaderboardEntry> leaderboard = new ArrayList<>();
+    private List<MobArenaMobData> mobs = new ArrayList<>();
+    private List<MobArenaRewardData> rewards = new ArrayList<>();
+    private List<LeaderboardEntry> leaderboard = new ArrayList<>();
 
     // --- State Machine Fields ---
     private boolean isArenaActive = false;
@@ -101,9 +98,164 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private ResourceKey<Level> controllerDimension;
     private boolean highlighting = false;
     private boolean hardcoreEnabled = false;
+    private long arenaStartTick = -1;
 
     public MobArenaSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.MOB_ARENA_SPAWNER_BLOCK_ENTITY, pos, state);
+    }
+
+    public int getTriggerRadius() {
+        return triggerRadius;
+    }
+
+    public void setTriggerRadius(int triggerRadius) {
+        this.triggerRadius = triggerRadius;
+        setChanged();
+    }
+
+    public int getBattleRadius() {
+        return battleRadius;
+    }
+
+    public void setBattleRadius(int battleRadius) {
+        this.battleRadius = battleRadius;
+        setChanged();
+    }
+
+    public int getSpawnDistance() {
+        return spawnDistance;
+    }
+
+    public void setSpawnDistance(int spawnDistance) {
+        this.spawnDistance = spawnDistance;
+        setChanged();
+    }
+
+    public int getWaveTimer() {
+        return waveTimer;
+    }
+
+    public void setWaveTimer(int waveTimer) {
+        this.waveTimer = waveTimer;
+        setChanged();
+    }
+
+    public int getAdditionalTime() {
+        return additionalTime;
+    }
+
+    public void setAdditionalTime(int additionalTime) {
+        this.additionalTime = additionalTime;
+        setChanged();
+    }
+
+    public int getTimeBetweenWaves() {
+        return timeBetweenWaves;
+    }
+
+    public void setTimeBetweenWaves(int timeBetweenWaves) {
+        this.timeBetweenWaves = timeBetweenWaves;
+        setChanged();
+    }
+
+    public double getAttributeScale() {
+        return attributeScale;
+    }
+
+    public void setAttributeScale(double attributeScale) {
+        this.attributeScale = attributeScale;
+        setChanged();
+    }
+
+    public int getPrepareTime() {
+        return prepareTime;
+    }
+
+    public void setPrepareTime(int prepareTime) {
+        this.prepareTime = prepareTime;
+        setChanged();
+    }
+
+    public String getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(String groupId) {
+        this.groupId = groupId;
+        setChanged();
+    }
+
+    public int getBossWaveAdditionalTime() {
+        return bossWaveAdditionalTime;
+    }
+
+    public void setBossWaveAdditionalTime(int bossWaveAdditionalTime) {
+        this.bossWaveAdditionalTime = bossWaveAdditionalTime;
+        setChanged();
+    }
+
+    public int getEntityHighlightTime() {
+        return entityHighlightTime;
+    }
+
+    public void setEntityHighlightTime(int entityHighlightTime) {
+        this.entityHighlightTime = entityHighlightTime;
+        setChanged();
+    }
+
+    public BlockPos getExitPosition() {
+        return exitPosition;
+    }
+
+    public ResourceKey<Level> getExitDimension() {
+        return exitDimension;
+    }
+
+    public void setExitPosition(BlockPos exitPosition, ResourceKey<Level> exitDimension) {
+        this.exitPosition = exitPosition;
+        this.exitDimension = exitDimension;
+        setChanged();
+    }
+
+    public BlockPos getArenaEntrancePosition() {
+        return arenaEntrancePosition;
+    }
+
+    public ResourceKey<Level> getArenaEntranceDimension() {
+        return arenaEntranceDimension;
+    }
+
+    public void setArenaEntrancePosition(BlockPos arenaEntrancePosition, ResourceKey<Level> arenaEntranceDimension) {
+        this.arenaEntrancePosition = arenaEntrancePosition;
+        this.arenaEntranceDimension = arenaEntranceDimension;
+        setChanged();
+    }
+
+    public List<MobArenaMobData> getMobs() {
+        return mobs;
+    }
+
+    public void setMobs(List<MobArenaMobData> mobs) {
+        this.mobs = new ArrayList<>(mobs);
+        setChanged();
+    }
+
+    public List<MobArenaRewardData> getRewards() {
+        return rewards;
+    }
+
+    public void setRewards(List<MobArenaRewardData> rewards) {
+        this.rewards = new ArrayList<>(rewards);
+        setChanged();
+    }
+
+    public List<LeaderboardEntry> getLeaderboard() {
+        return leaderboard;
+    }
+
+    public void setLeaderboard(List<LeaderboardEntry> leaderboard) {
+        this.leaderboard = new ArrayList<>(leaderboard);
+        setChanged();
     }
 
     public void removeParticipatingPlayer(UUID playerUUID) {
@@ -239,6 +391,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             this.participatingPlayers = new HashSet<>(players);
             this.controllerPos = controllerPos;
             this.controllerDimension = controllerDimension;
+            this.arenaStartTick = serverLevel.getGameTime();
             
             // Teleport players to arena
             for (UUID playerId : participatingPlayers) {
@@ -324,6 +477,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     }
 
     private void completeWave(ServerLevel world) {
+        broadcastArenaSummary(world, true, currentWave);
         distributeRewards(world);
         timeBetweenWavesTicks = timeBetweenWaves * 20;
         reviveSpectators(world);
@@ -362,6 +516,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     }
 
     private void failArena(ServerLevel world) {
+        broadcastArenaSummary(world, false, currentWave);
         endArena(world);
     }
 
@@ -409,6 +564,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
                 controller.reset();
             }
         }
+        arenaStartTick = -1;
         
         setChanged();
     }
@@ -457,23 +613,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     private void updateLeaderboard(Player player, int wave) {
         String playerName = player.getGameProfile().getName();
-        Optional<LeaderboardEntry> existingEntry = leaderboard.stream()
-                .filter(entry -> entry.playerName.equals(playerName))
-                .findFirst();
-
-        if (existingEntry.isPresent()) {
-            if (wave > existingEntry.get().wave) {
-                leaderboard.remove(existingEntry.get());
-                leaderboard.add(new LeaderboardEntry(playerName, wave));
-            }
-        } else {
-            leaderboard.add(new LeaderboardEntry(playerName, wave));
-        }
-
-        leaderboard = leaderboard.stream()
-                .sorted(Comparator.comparingInt(e -> -e.wave))
-                .limit(20)
-                .collect(Collectors.toList());
+        upsertLeaderboardEntry(playerName, wave);
         
         if (controllerPos != null && controllerDimension != null) {
             ServerLevel controllerWorld = player.getServer().getLevel(controllerDimension);
@@ -483,6 +623,59 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
                 controllerWorld.sendBlockUpdated(controllerPos, controller.getBlockState(), controller.getBlockState(), 3);
             }
         }
+    }
+
+    private void upsertLeaderboardEntry(String playerName, int wave) {
+        LeaderboardEntry toInsert = new LeaderboardEntry(playerName, wave);
+        int existingIndex = -1;
+        for (int i = 0; i < leaderboard.size(); i++) {
+            if (leaderboard.get(i).playerName.equals(playerName)) {
+                existingIndex = i;
+                break;
+            }
+        }
+        if (existingIndex >= 0) {
+            if (wave <= leaderboard.get(existingIndex).wave) {
+                return;
+            }
+            leaderboard.remove(existingIndex);
+        }
+
+        int insertIndex = 0;
+        while (insertIndex < leaderboard.size() && leaderboard.get(insertIndex).wave >= wave) {
+            insertIndex++;
+        }
+        leaderboard.add(insertIndex, toInsert);
+        if (leaderboard.size() > 20) {
+            leaderboard.remove(leaderboard.size() - 1);
+        }
+    }
+
+    private void broadcastArenaSummary(ServerLevel world, boolean won, int waveReached) {
+        int durationSeconds = getRunDurationSeconds(world);
+        Component message = won
+                ? Component.translatable("message.arenas_ld.arena_summary_win", waveReached, formatDuration(durationSeconds))
+                : Component.translatable("message.arenas_ld.arena_summary_fail", waveReached, formatDuration(durationSeconds));
+        net.minecraft.ChatFormatting color = won ? net.minecraft.ChatFormatting.GREEN : net.minecraft.ChatFormatting.RED;
+        for (UUID playerId : participatingPlayers) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
+            if (player != null) {
+                player.sendSystemMessage(message.copy().withStyle(color));
+            }
+        }
+    }
+
+    private int getRunDurationSeconds(ServerLevel world) {
+        if (arenaStartTick < 0) {
+            return 0;
+        }
+        return (int) Math.max(0, (world.getGameTime() - arenaStartTick) / 20);
+    }
+
+    private static String formatDuration(int totalSeconds) {
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return String.format("%d:%02d", minutes, seconds);
     }
 
     private void reviveSpectators(ServerLevel world) {
@@ -581,12 +774,12 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
                 }
             }
             
-            applyEquipment(livingEntity, EquipmentSlot.HEAD, mobData.equipment.head);
-            applyEquipment(livingEntity, EquipmentSlot.CHEST, mobData.equipment.chest);
-            applyEquipment(livingEntity, EquipmentSlot.LEGS, mobData.equipment.legs);
-            applyEquipment(livingEntity, EquipmentSlot.FEET, mobData.equipment.feet);
-            applyEquipment(livingEntity, EquipmentSlot.MAINHAND, mobData.equipment.mainHand);
-            applyEquipment(livingEntity, EquipmentSlot.OFFHAND, mobData.equipment.offHand, mobData.equipment.dropChance);
+            EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.HEAD, mobData.equipment.head);
+            EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.CHEST, mobData.equipment.chest);
+            EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.LEGS, mobData.equipment.legs);
+            EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.FEET, mobData.equipment.feet);
+            EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.MAINHAND, mobData.equipment.mainHand);
+            EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.OFFHAND, mobData.equipment.offHand, mobData.equipment.dropChance);
 
             livingEntity.heal(livingEntity.getMaxHealth());
             
@@ -645,25 +838,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
     }
     
-    private void applyEquipment(LivingEntity entity, EquipmentSlot slot, String itemId) {
-        applyEquipment(entity, slot, itemId, false);
-    }
-
-    private void applyEquipment(LivingEntity entity, EquipmentSlot slot, String itemId, boolean dropChance) {
-        if (itemId != null && !itemId.isEmpty()) {
-            ResourceLocation id = ResourceLocation.tryParse(itemId);
-            if (id != null) {
-                Item item = BuiltInRegistries.ITEM.get(id);
-                if (item != null) {
-                    entity.setItemSlot(slot, new ItemStack(item));
-                    if (entity instanceof Mob mob) {
-                        mob.setDropChance(slot, dropChance ? 1.0F : 0.0F);
-                    }
-                }
-            }
-        }
-    }
-
     private void distributeRewards(ServerLevel world) {
         List<MobArenaRewardData> validRewards = new ArrayList<>();
         for (MobArenaRewardData reward : rewards) {

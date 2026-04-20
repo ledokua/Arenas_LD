@@ -1,26 +1,27 @@
 package net.ledok.arenas_ld.block.entity;
 
+import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.PhaseBlock;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class PhaseBlockEntity extends BlockEntity {
+    private static final String LEGACY_GROUP_ID_TAG = "GroupId";
+    private static final String LEGACY_GROUP_WARNING_SHOWN_TAG = "LegacyGroupWarningShown";
     private boolean isMain = false;
-    private final List<BlockPos> linkedSpawners = new ArrayList<>();
-    private boolean lastKnownState = true; // Default to solid
+    private boolean legacyGroupWarningShown = false;
+    private final List<BlockPos> watchedSpawnerOffsets = new ArrayList<>();
 
     public PhaseBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.PHASE_BLOCK_ENTITY, pos, state);
@@ -41,22 +42,32 @@ public class PhaseBlockEntity extends BlockEntity {
     }
 
     private boolean checkSpawnerConditions() {
-        if (linkedSpawners.isEmpty()) {
+        if (watchedSpawnerOffsets.isEmpty()) {
             return false; // If no spawners are linked, it can never be "won"
         }
-        for (BlockPos relativePos : linkedSpawners) {
+        for (BlockPos relativePos : watchedSpawnerOffsets) {
             BlockPos spawnerPos = getBlockPos().offset(relativePos);
-            if (level.isLoaded(spawnerPos) && level.getBlockEntity(spawnerPos) instanceof MobSpawnerBlockEntity spawner) {
-                // If the battle is active OR the spawner is ready to spawn (cooldown <= 0), then the condition is not met.
-                if (spawner.isBattleActive() || spawner.getRespawnCooldown() <= 0) {
-                    return false; // At least one spawner is active or ready, so the group is not "won"
-                }
-            } else {
+            if (!level.isLoaded(spawnerPos)) {
                 // If a spawner is missing or not a spawner, treat it as not won
                 return false;
             }
+            if (level.getBlockEntity(spawnerPos) instanceof MobSpawnerBlockEntity mobSpawner) {
+                if (mobSpawner.isBattleActive()) {
+                    return false;
+                }
+            } else if (level.getBlockEntity(spawnerPos) instanceof BossSpawnerBlockEntity bossSpawner) {
+                if (bossSpawner.isBattleActive) {
+                    return false;
+                }
+            } else if (level.getBlockEntity(spawnerPos) instanceof DungeonBossSpawnerBlockEntity dungeonSpawner) {
+                if (dungeonSpawner.isDungeonRunning()) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
         }
-        return true; // All spawners are on cooldown and not active
+        return true; // All watched spawners are cleared.
     }
 
     public void propagateState(boolean solid, List<BlockPos> visited) {
@@ -81,11 +92,29 @@ public class PhaseBlockEntity extends BlockEntity {
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         this.isMain = tag.getBoolean("IsMain");
-        this.linkedSpawners.clear();
-        if (tag.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
+        this.legacyGroupWarningShown = tag.getBoolean(LEGACY_GROUP_WARNING_SHOWN_TAG);
+        this.watchedSpawnerOffsets.clear();
+        if (tag.contains("WatchedSpawnerOffsets", Tag.TAG_LONG_ARRAY)) {
+            long[] offsetsArray = tag.getLongArray("WatchedSpawnerOffsets");
+            for (long posLong : offsetsArray) {
+                watchedSpawnerOffsets.add(BlockPos.of(posLong));
+            }
+        } else if (tag.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
+            // Migration from previous field name.
             long[] linkedSpawnersArray = tag.getLongArray("LinkedSpawners");
             for (long posLong : linkedSpawnersArray) {
-                linkedSpawners.add(BlockPos.of(posLong));
+                watchedSpawnerOffsets.add(BlockPos.of(posLong));
+            }
+        }
+        if (!legacyGroupWarningShown && tag.contains(LEGACY_GROUP_ID_TAG, Tag.TAG_STRING)) {
+            String legacyGroupId = tag.getString(LEGACY_GROUP_ID_TAG);
+            if (legacyGroupId != null && !legacyGroupId.isBlank()) {
+                ArenasLdMod.LOGGER.warn(
+                        "Phase block at {} still has legacy GroupId='{}'. Re-link watched spawners via linker (Phase Block Linking mode).",
+                        getBlockPos(), legacyGroupId
+                );
+                legacyGroupWarningShown = true;
+                setChanged();
             }
         }
     }
@@ -94,7 +123,8 @@ public class PhaseBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putBoolean("IsMain", this.isMain);
-        tag.putLongArray("LinkedSpawners", linkedSpawners.stream().mapToLong(BlockPos::asLong).toArray());
+        tag.putBoolean(LEGACY_GROUP_WARNING_SHOWN_TAG, this.legacyGroupWarningShown);
+        tag.putLongArray("WatchedSpawnerOffsets", watchedSpawnerOffsets.stream().mapToLong(BlockPos::asLong).toArray());
     }
 
     public void setIsMain(boolean isMain) {
@@ -102,10 +132,22 @@ public class PhaseBlockEntity extends BlockEntity {
         setChanged();
     }
 
-    public void addLinkedSpawner(BlockPos relativePos) {
-        if (!this.linkedSpawners.contains(relativePos)) {
-            this.linkedSpawners.add(relativePos);
+    public void addWatchedSpawnerOffset(BlockPos relativePos) {
+        if (!this.watchedSpawnerOffsets.contains(relativePos)) {
+            this.watchedSpawnerOffsets.add(relativePos);
             setChanged();
         }
+    }
+
+    public boolean removeWatchedSpawnerOffset(BlockPos relativePos) {
+        if (this.watchedSpawnerOffsets.remove(relativePos)) {
+            setChanged();
+            return true;
+        }
+        return false;
+    }
+
+    public List<BlockPos> getWatchedSpawnerOffsets() {
+        return Collections.unmodifiableList(watchedSpawnerOffsets);
     }
 }

@@ -143,11 +143,11 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
         this.addRenderableWidget(exitDimensionField);
 
         this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.mobs"), button -> {
-            this.minecraft.setScreen(new MobArenaMobsScreen(menu.blockEntity.getBlockPos(), menu.blockEntity.mobs, this));
+            this.minecraft.setScreen(new MobArenaMobsScreen(menu.blockEntity.getBlockPos(), menu.blockEntity.getMobs(), this));
         }).bounds(this.width / 2 - 105, this.height - 30, 100, 20).build());
 
         this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.rewards"), button -> {
-            this.minecraft.setScreen(new MobArenaRewardsScreen(menu.blockEntity.getBlockPos(), menu.blockEntity.rewards, this));
+            this.minecraft.setScreen(new MobArenaRewardsScreen(menu.blockEntity.getBlockPos(), menu.blockEntity.getRewards(), this));
         }).bounds(this.width / 2 - 105, this.height - 54, 100, 20).build());
 
         this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.save"), button -> onSave())
@@ -159,21 +159,21 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
 
     private void loadBlockEntityData() {
         if (menu.blockEntity != null) {
-            triggerRadiusField.setValue(String.valueOf(menu.blockEntity.triggerRadius));
-            battleRadiusField.setValue(String.valueOf(menu.blockEntity.battleRadius));
-            spawnDistanceField.setValue(String.valueOf(menu.blockEntity.spawnDistance));
-            waveTimerField.setValue(String.valueOf(menu.blockEntity.waveTimer));
-            additionalTimeField.setValue(String.valueOf(menu.blockEntity.additionalTime));
-            timeBetweenWavesField.setValue(String.valueOf(menu.blockEntity.timeBetweenWaves));
-            attributeScaleField.setValue(String.valueOf(menu.blockEntity.attributeScale));
-            prepareTimeField.setValue(String.valueOf(menu.blockEntity.prepareTime));
-            groupIdField.setValue(menu.blockEntity.groupId);
-            bossWaveAdditionalTimeField.setValue(String.valueOf(menu.blockEntity.bossWaveAdditionalTime));
-            entityHighlightTimeField.setValue(String.valueOf(menu.blockEntity.entityHighlightTime));
-            exitPositionField.setValue(String.format("%d %d %d", menu.blockEntity.exitPosition.getX(), menu.blockEntity.exitPosition.getY(), menu.blockEntity.exitPosition.getZ()));
-            exitDimensionField.setValue(menu.blockEntity.exitDimension.location().toString());
-            arenaEntrancePositionField.setValue(String.format("%d %d %d", menu.blockEntity.arenaEntrancePosition.getX(), menu.blockEntity.arenaEntrancePosition.getY(), menu.blockEntity.arenaEntrancePosition.getZ()));
-            arenaEntranceDimensionField.setValue(menu.blockEntity.arenaEntranceDimension.location().toString());
+            triggerRadiusField.setValue(String.valueOf(menu.blockEntity.getTriggerRadius()));
+            battleRadiusField.setValue(String.valueOf(menu.blockEntity.getBattleRadius()));
+            spawnDistanceField.setValue(String.valueOf(menu.blockEntity.getSpawnDistance()));
+            waveTimerField.setValue(String.valueOf(menu.blockEntity.getWaveTimer()));
+            additionalTimeField.setValue(String.valueOf(menu.blockEntity.getAdditionalTime()));
+            timeBetweenWavesField.setValue(String.valueOf(menu.blockEntity.getTimeBetweenWaves()));
+            attributeScaleField.setValue(String.valueOf(menu.blockEntity.getAttributeScale()));
+            prepareTimeField.setValue(String.valueOf(menu.blockEntity.getPrepareTime()));
+            groupIdField.setValue(menu.blockEntity.getGroupId());
+            bossWaveAdditionalTimeField.setValue(String.valueOf(menu.blockEntity.getBossWaveAdditionalTime()));
+            entityHighlightTimeField.setValue(String.valueOf(menu.blockEntity.getEntityHighlightTime()));
+            exitPositionField.setValue(String.format("%d %d %d", menu.blockEntity.getExitPosition().getX(), menu.blockEntity.getExitPosition().getY(), menu.blockEntity.getExitPosition().getZ()));
+            exitDimensionField.setValue(menu.blockEntity.getExitDimension().location().toString());
+            arenaEntrancePositionField.setValue(String.format("%d %d %d", menu.blockEntity.getArenaEntrancePosition().getX(), menu.blockEntity.getArenaEntrancePosition().getY(), menu.blockEntity.getArenaEntrancePosition().getZ()));
+            arenaEntranceDimensionField.setValue(menu.blockEntity.getArenaEntranceDimension().location().toString());
         }
     }
 

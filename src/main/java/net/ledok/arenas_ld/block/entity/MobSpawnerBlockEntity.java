@@ -149,7 +149,6 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
 
         if (be.firstTick) {
-            // The old PhaseBlockManager logic is no longer needed here
             be.firstTick = false;
         }
 
@@ -162,7 +161,6 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
 
     @Override
     public void setRemoved() {
-        // The old PhaseBlockManager logic is no longer needed here
         super.setRemoved();
     }
 

@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.block;
 
 import com.mojang.serialization.MapCodec;
+import net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
@@ -15,6 +16,8 @@ import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.server.level.ServerLevel;
+import net.ledok.arenas_ld.util.DungeonInstanceRef;
 import org.jetbrains.annotations.Nullable;
 
 public class DungeonBossSpawnerBlock extends BaseEntityBlock {
@@ -62,5 +65,16 @@ public class DungeonBossSpawnerBlock extends BaseEntityBlock {
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level world, BlockState state, BlockEntityType<T> type) {
         return createTickerHelper(type, BlockEntitiesRegistry.DUNGEON_BOSS_SPAWNER_BLOCK_ENTITY, DungeonBossSpawnerBlockEntity::tick);
+    }
+
+    @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
+        if (!state.is(newState.getBlock()) && level instanceof ServerLevel serverLevel) {
+            DungeonControllerBlockEntity.unlinkSpawnerFromAllControllers(
+                    serverLevel.getServer(),
+                    new DungeonInstanceRef(pos, serverLevel.dimension())
+            );
+        }
+        super.onRemove(state, level, pos, newState, movedByPiston);
     }
 }

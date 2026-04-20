@@ -13,7 +13,6 @@ import net.ledok.arenas_ld.screen.BossSpawnerScreenHandler;
 import net.ledok.arenas_ld.util.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -31,14 +30,12 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -321,12 +318,12 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             }
             
             // Apply Equipment
-            applyEquipment(livingBoss, EquipmentSlot.HEAD, equipment.head);
-            applyEquipment(livingBoss, EquipmentSlot.CHEST, equipment.chest);
-            applyEquipment(livingBoss, EquipmentSlot.LEGS, equipment.legs);
-            applyEquipment(livingBoss, EquipmentSlot.FEET, equipment.feet);
-            applyEquipment(livingBoss, EquipmentSlot.MAINHAND, equipment.mainHand);
-            applyEquipment(livingBoss, EquipmentSlot.OFFHAND, equipment.offHand);
+            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.HEAD, equipment.head, equipment.dropChance);
+            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.CHEST, equipment.chest, equipment.dropChance);
+            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.LEGS, equipment.legs, equipment.dropChance);
+            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.FEET, equipment.feet, equipment.dropChance);
+            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.MAINHAND, equipment.mainHand, equipment.dropChance);
+            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.OFFHAND, equipment.offHand, equipment.dropChance);
 
             livingBoss.heal(livingBoss.getMaxHealth());
         }
@@ -341,25 +338,6 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         this.bossDimension = world.dimension();
         this.setChanged();
         ArenasLdMod.LOGGER.info("Battle started at spawner {} with boss {}", this.worldPosition, this.mobId);
-    }
-
-    protected void applyEquipment(LivingEntity entity, EquipmentSlot slot, String itemId) {
-        if (itemId != null && !itemId.isEmpty()) {
-            ResourceLocation id = ResourceLocation.tryParse(itemId);
-            if (id != null) {
-                Item item = BuiltInRegistries.ITEM.get(id);
-                if (item != null) {
-                    entity.setItemSlot(slot, new ItemStack(item));
-                    if (entity instanceof Mob mob) {
-                        if (equipment.dropChance) {
-                            mob.setDropChance(slot, 1.0F);
-                        } else {
-                            mob.setDropChance(slot, 0.0F);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     protected void handleBattleWin(ServerLevel world, Entity defeatedBoss) {
