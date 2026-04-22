@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.block.entity;
 
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.fabricmc.loader.api.FabricLoader;
-import net.ledok.busylib.BusyState;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
@@ -164,21 +163,21 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     private void addTrackedPlayer(UUID playerUuid) {
         if (this.trackedPlayers.add(playerUuid)) {
-            BusyState.setBusy(playerUuid, BUSY_REASON);
+            BusyStateCompat.setBusy(playerUuid, BUSY_REASON);
             this.setChanged();
         }
     }
 
     private void removeTrackedPlayer(UUID playerUuid) {
         if (this.trackedPlayers.remove(playerUuid)) {
-            BusyState.clearBusy(playerUuid, BUSY_REASON);
+            BusyStateCompat.clearBusy(playerUuid, BUSY_REASON);
             this.setChanged();
         }
     }
 
     private void clearTrackedPlayers() {
         for (UUID playerId : new HashSet<>(this.trackedPlayers)) {
-            BusyState.clearBusy(playerId, BUSY_REASON);
+            BusyStateCompat.clearBusy(playerId, BUSY_REASON);
         }
         this.trackedPlayers.clear();
         this.setChanged();
@@ -491,7 +490,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 removeTrackedPlayer(uuid);
                 continue;
             }
-            BusyState.setBusy(uuid, BUSY_REASON);
+            BusyStateCompat.setBusy(uuid, BUSY_REASON);
             if (player.level() != world) {
                 if (dungeonStartTick != -1 && serverLevel.getGameTime() - dungeonStartTick > DIMENSION_GRACE_PERIOD_TICKS) {
                     handlePlayerDisconnect(player, Component.translatable("message.arenas_ld.dungeon_left.reason.dimension"));
@@ -1303,7 +1302,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             for (Tag tag : trackedList) {
                 UUID trackedPlayerId = ((CompoundTag) tag).getUUID("uuid");
                 trackedPlayers.add(trackedPlayerId);
-                BusyState.setBusy(trackedPlayerId, BUSY_REASON);
+                BusyStateCompat.setBusy(trackedPlayerId, BUSY_REASON);
             }
         }
         

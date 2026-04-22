@@ -248,6 +248,22 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         return Math.max(0, respawnTimeTicks);
     }
 
+    public int getMaxPartySize() {
+        return Math.max(1, maxPartySize);
+    }
+
+    public void setMaxPartySize(int maxPartySize) {
+        int clamped = Math.max(1, Math.min(16, maxPartySize));
+        if (this.maxPartySize == clamped) {
+            return;
+        }
+        this.maxPartySize = clamped;
+        setChanged();
+        if (level instanceof ServerLevel serverLevel) {
+            serverLevel.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
     public void setRespawnTimeTicks(int respawnTimeTicks) {
         int clampedTicks = Math.max(0, respawnTimeTicks);
         if (this.respawnTimeTicks == clampedTicks) {

@@ -578,14 +578,15 @@ public class ModPackets {
         }
     }
 
-    public record UpdateDungeonControllerAdminSettingsPayload(BlockPos pos, int respawnTimeTicks) implements CustomPacketPayload {
+    public record UpdateDungeonControllerAdminSettingsPayload(BlockPos pos, int respawnTimeTicks, int maxPartySize) implements CustomPacketPayload {
         public static final Type<UpdateDungeonControllerAdminSettingsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_dungeon_controller_admin_settings"));
         public static final StreamCodec<FriendlyByteBuf, UpdateDungeonControllerAdminSettingsPayload> STREAM_CODEC = StreamCodec.of(
                 (buf, payload) -> {
                     buf.writeBlockPos(payload.pos);
                     buf.writeVarInt(payload.respawnTimeTicks);
+                    buf.writeVarInt(payload.maxPartySize);
                 },
-                buf -> new UpdateDungeonControllerAdminSettingsPayload(buf.readBlockPos(), buf.readVarInt())
+                buf -> new UpdateDungeonControllerAdminSettingsPayload(buf.readBlockPos(), buf.readVarInt(), buf.readVarInt())
         );
 
         @Override
@@ -623,6 +624,7 @@ public class ModPackets {
             String currentLobbyVisibility,
             boolean canManageAdmin,
             int controllerRespawnTimeTicks,
+            int controllerMaxPartySize,
             boolean controllerLocked,
             List<String> players,
             List<DungeonLeaderboardEntry> leaderboard,
@@ -663,6 +665,7 @@ public class ModPackets {
                     buf.writeUtf(payload.currentLobbyVisibility);
                     buf.writeBoolean(payload.canManageAdmin);
                     buf.writeVarInt(payload.controllerRespawnTimeTicks);
+                    buf.writeVarInt(payload.controllerMaxPartySize);
                     buf.writeBoolean(payload.controllerLocked);
                     buf.writeVarInt(payload.players.size());
                     for (String name : payload.players) {
@@ -705,6 +708,7 @@ public class ModPackets {
                     String currentLobbyVisibility = buf.readUtf();
                     boolean canManageAdmin = buf.readBoolean();
                     int controllerRespawnTimeTicks = buf.readVarInt();
+                    int controllerMaxPartySize = buf.readVarInt();
                     boolean controllerLocked = buf.readBoolean();
                     int playerCount = buf.readVarInt();
                     List<String> players = new ArrayList<>();
@@ -740,7 +744,7 @@ public class ModPackets {
                     return new DungeonControllerInfoPayload(
                             pos, remaining, cooldown, hardcoreEnabled, selectedTier,
                             inLobby, isLobbyOwner, lobbyStatus, queuePosition, currentLobbyVisibility,
-                            canManageAdmin, controllerRespawnTimeTicks, controllerLocked,
+                            canManageAdmin, controllerRespawnTimeTicks, controllerMaxPartySize, controllerLocked,
                             players, leaderboard, instances, lobbies
                     );
                 }
@@ -1156,7 +1160,7 @@ public class ModPackets {
                                 for (Lobby candidate : controller.lobbies) {
                                     if (candidate.status == LobbyStatus.OPEN
                                             && candidate.visibility == LobbyVisibility.OPEN
-                                            && (1 + candidate.members.size()) < Math.max(1, controller.maxPartySize)) {
+                                            && (1 + candidate.members.size()) < controller.getMaxPartySize()) {
                                         openLobby = candidate;
                                         break;
                                     }
@@ -1219,7 +1223,7 @@ public class ModPackets {
                     return;
                 }
                 int currentSize = 1 + lobby.members.size();
-                if (currentSize >= Math.max(1, controller.maxPartySize)) {
+                if (currentSize >= controller.getMaxPartySize()) {
                     return;
                 }
                 lobby.members.add(player.getUUID());
@@ -1348,6 +1352,7 @@ public class ModPackets {
                     String currentLobbyVisibility = LobbyVisibility.OPEN.name();
                     boolean canManageAdmin = player.hasPermissions(2);
                     int controllerRespawnTimeTicks = controller.getRespawnTimeTicks();
+                    int controllerMaxPartySize = controller.getMaxPartySize();
                     if (lobby != null) {
                         isLobbyOwner = lobby.ownerUuid.equals(player.getUUID());
                         lobbyStatus = lobby.status.name();
@@ -1390,7 +1395,7 @@ public class ModPackets {
                                 candidate.id.toString(),
                                 ownerName,
                                 1 + candidate.members.size(),
-                                Math.max(1, controller.maxPartySize),
+                                controller.getMaxPartySize(),
                                 candidate.visibility.name(),
                                 candidate.status.name(),
                                 candidateQueuePosition,
@@ -1416,18 +1421,19 @@ public class ModPackets {
                             lobbyStatus,
                             queuePosition,
                             currentLobbyVisibility,
-                            canManageAdmin,
-                            controllerRespawnTimeTicks,
-                            controller.isLocked,
-                            players,
-                            resolveLeaderboardForTier(controller, requestedLeaderboardTier, player.server),
-                            instances,
-                            lobbies
+                                canManageAdmin,
+                                controllerRespawnTimeTicks,
+                                controllerMaxPartySize,
+                                controller.isLocked,
+                                players,
+                                resolveLeaderboardForTier(controller, requestedLeaderboardTier, player.server),
+                                instances,
+                                lobbies
                     ));
                 } else {
                     ServerPlayNetworking.send(player, new DungeonControllerInfoPayload(
                             payload.pos(), 0, 0, false, DifficultyTier.NORMAL.name(),
-                            false, false, LobbyStatus.OPEN.name(), 0, LobbyVisibility.OPEN.name(), false, 6000, false,
+                            false, false, LobbyStatus.OPEN.name(), 0, LobbyVisibility.OPEN.name(), false, 6000, 4, false,
                             List.of(), List.of(), List.of(), List.of()
                     ));
                 }
@@ -1518,6 +1524,7 @@ public class ModPackets {
                     return;
                 }
                 controller.setRespawnTimeTicks(payload.respawnTimeTicks());
+                controller.setMaxPartySize(payload.maxPartySize());
             });
         });
 

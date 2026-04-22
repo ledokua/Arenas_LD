@@ -31,13 +31,15 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     // [0  – 14 ] Title bar
     // [14 – 52 ] Instances panel
     // [56 – 224] State content zone  (168 px)
-    // [228– 284] Leaderboard zone    ( 56 px: 14 tabs + 42 entries)
+    // [228– 284] Leaderboard zone    ( 56 px)
     // [286– 310] Admin bar (ops only)
     private static final int Y_INST     = 16;
     private static final int Y_CONTENT  = 62;
-    private static final int Y_ACTIONS  = Y_CONTENT + 148; // 204  action buttons
+    private static final int Y_ACTIONS  = Y_CONTENT + 148; // 204  action buttons (browsing)
+    private static final int Y_ACTIONS_EXPANDED = Y_ACTIONS + 56; // non-browsing: use freed leaderboard space
     private static final int Y_LB       = 228;
-    private static final int Y_LB_ENTRY = Y_LB + 16;      // 244
+    private static final int Y_LB_TABS  = Y_LB + 7;
+    private static final int Y_LB_ENTRY = Y_LB_TABS + 16;
     private static final int Y_ADMIN    = 286;
 
     // Within OWNER content zone:
@@ -108,6 +110,8 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     private boolean canAdmin;
     private int serverRespawnTicks = 6000;
     private int draftRespawnTicks  = 6000;
+    private int serverMaxPartySize = 4;
+    private int draftMaxPartySize  = 4;
     private List<String>                                               memberNames    = new ArrayList<>();
     private List<DungeonLeaderboardEntry>                              leaderboard    = new ArrayList<>();
     private List<ModPackets.DungeonControllerInfoPayload.InstanceView> instanceViews  = new ArrayList<>();
@@ -123,10 +127,13 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     private double memberScroll         = 0;
     private double lbScroll             = 0;
     private boolean suppressHcSync      = false;
+    private boolean suppressAdminPartySync = false;
     private int refreshTick             = 0;
 
     private static final int ADMIN_STEP = 30 * 20;
     private static final int ADMIN_MAX  = 60 * 60 * 20;
+    private static final int PARTY_MIN  = 1;
+    private static final int PARTY_MAX  = 16;
     private static final int ROW_H      = 19; // height of each lobby / member row
     private static final int INST_PANEL_H = 42;
     private static final int INST_PILL_GAP_X = 3;
@@ -151,6 +158,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     private final Button[] lbTabBtns = new Button[4];
     // Admin
     private Button adminMinusBtn, adminApplyBtn, adminPlusBtn;
+    private EditBox adminPartySizeBox;
 
     // ── Constructor ───────────────────────────────────────────────────────────
     public DungeonControllerScreen(DungeonControllerScreenHandler handler, Inventory inventory, Component title) {
@@ -185,7 +193,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         leaveLobbyBtn = addRenderableWidget(Button.builder(
                 Component.translatable("gui.arenas_ld.leave_party"),
                 b -> { ClientPlayNetworking.send(new ModPackets.DungeonControllerActionPayload(menu.getPos(), 2)); updateInfo(); }
-        ).bounds(x + P + BUTTON_SHIFT_X, y + Y_ACTIONS, IW, BTN_H).build());
+        ).bounds(x + P + BUTTON_SHIFT_X, y + Y_ACTIONS + 2, IW - 4, BTN_H - 6).build());
 
         // ── OWNER: tier buttons ──
         DifficultyTier[] tiers = DifficultyTier.values();
@@ -228,7 +236,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         ).bounds(x + W - P - 46 + BUTTON_SHIFT_X, y + YO_LIST + (selMember * ROW_H) + 2, 44, 14).build());
 
         // ── OWNER: invite ──
-        inviteBox = new EditBox(font, x + P, y + YO_INVITE, 186, 16, Component.translatable("gui.arenas_ld.invite_player"));
+        inviteBox = new EditBox(font, x + P + 3, y + YO_INVITE, 181, 16, Component.translatable("gui.arenas_ld.invite_player"));
         inviteBox.setMaxLength(32);
         addRenderableWidget(inviteBox);
 
@@ -242,7 +250,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
                         updateInfo();
                     }
                 }
-        ).bounds(x + P + 190 + BUTTON_SHIFT_X, y + YO_INVITE, IW - 190, 16).build());
+        ).bounds(x + P + 185 + BUTTON_SHIFT_X, y + YO_INVITE, IW - 190, 16).build());
 
         // ── OWNER: start / disband ──
         startBtn = addRenderableWidget(Button.builder(
@@ -267,7 +275,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             lbTabBtns[i] = addRenderableWidget(Button.builder(
                     Component.translatable(t.translationKey()),
                     b -> { lbTab = t; lbScroll = 0; updateInfo(); }
-            ).bounds(x + P + i * (TIER_W + 3) + BUTTON_SHIFT_X, y + Y_LB, TIER_W, 14).build());
+            ).bounds(x + P + i * (TIER_W + 3) + BUTTON_SHIFT_X, y + Y_LB_TABS, TIER_W, 14).build());
         }
 
         // ── Admin bar ──
@@ -276,13 +284,44 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         }).bounds(x + P + BUTTON_SHIFT_X, y + Y_ADMIN + 1, 16, 12).build());
 
         adminApplyBtn = addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.apply"), b -> {
-            ClientPlayNetworking.send(new ModPackets.UpdateDungeonControllerAdminSettingsPayload(menu.getPos(), draftRespawnTicks));
+            ClientPlayNetworking.send(new ModPackets.UpdateDungeonControllerAdminSettingsPayload(
+                    menu.getPos(),
+                    draftRespawnTicks,
+                    draftMaxPartySize
+            ));
             updateInfo();
         }).bounds(x + P + 20 + BUTTON_SHIFT_X, y + Y_ADMIN + 1, 40, 12).build());
 
         adminPlusBtn = addRenderableWidget(Button.builder(Component.literal("+"), b -> {
             draftRespawnTicks = Mth.clamp(draftRespawnTicks + ADMIN_STEP, 0, ADMIN_MAX);
         }).bounds(x + P + 64 + BUTTON_SHIFT_X, y + Y_ADMIN + 1, 16, 12).build());
+
+        adminPartySizeBox = new EditBox(
+                font,
+                x + P + 86 + BUTTON_SHIFT_X,
+                y + Y_ADMIN,
+                24,
+                14,
+                Component.translatable("gui.arenas_ld.admin_party_size")
+        );
+        adminPartySizeBox.setFilter(s -> s.length() <= 2 && s.chars().allMatch(Character::isDigit));
+        adminPartySizeBox.setValue(Integer.toString(draftMaxPartySize));
+        adminPartySizeBox.setResponder(s -> {
+            if (suppressAdminPartySync) {
+                return;
+            }
+            if (s == null || s.isBlank()) {
+                return;
+            }
+            try {
+                draftMaxPartySize = Mth.clamp(Integer.parseInt(s), PARTY_MIN, PARTY_MAX);
+            } catch (NumberFormatException ignored) {
+            }
+            if (adminApplyBtn != null) {
+                adminApplyBtn.active = draftRespawnTicks != serverRespawnTicks || draftMaxPartySize != serverMaxPartySize;
+            }
+        });
+        addRenderableWidget(adminPartySizeBox);
 
         updateButtons();
         updateInfo();
@@ -322,6 +361,17 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         int prevRespawn   = serverRespawnTicks;
         serverRespawnTicks = Math.max(0, p.controllerRespawnTimeTicks());
         if (draftRespawnTicks == prevRespawn) draftRespawnTicks = serverRespawnTicks;
+        int prevMaxParty = serverMaxPartySize;
+        serverMaxPartySize = Mth.clamp(p.controllerMaxPartySize(), PARTY_MIN, PARTY_MAX);
+        if (draftMaxPartySize == prevMaxParty) draftMaxPartySize = serverMaxPartySize;
+        if (adminPartySizeBox != null && !adminPartySizeBox.isFocused()) {
+            String target = Integer.toString(draftMaxPartySize);
+            if (!target.equals(adminPartySizeBox.getValue())) {
+                suppressAdminPartySync = true;
+                adminPartySizeBox.setValue(target);
+                suppressAdminPartySync = false;
+            }
+        }
 
         memberNames  = new ArrayList<>(p.players());
         leaderboard  = new ArrayList<>(p.leaderboard());
@@ -353,10 +403,13 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     private void updateButtons() {
         if (createLobbyBtn == null) return;
         UiState s = uiState();
+        int actionsY = actionRowY(s);
 
         // BROWSING
         show(createLobbyBtn, s == UiState.BROWSING);
         show(joinLobbyBtn,   s == UiState.BROWSING);
+        createLobbyBtn.setY(topPos + Y_ACTIONS - 5);
+        joinLobbyBtn.setY(topPos + Y_ACTIONS - 5);
         boolean canJoin = s == UiState.BROWSING && canJoinSelected();
         joinLobbyBtn.active = canJoin;
         if (visLobbies.isEmpty()) {
@@ -369,6 +422,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
         // MEMBER
         show(leaveLobbyBtn, s == UiState.MEMBER);
+        leaveLobbyBtn.setY(topPos + actionsY + 2);
 
         // OWNER
         boolean ownerActive = s == UiState.OWNER;
@@ -382,17 +436,32 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         visInviteBtn.active = ownerActive && lobbyVis != LobbyVisibility.INVITE_ONLY;
         show(hcBox, ownerActive);
         hcBox.active = ownerActive;
-        show(kickBtn, ownerActive && selMember > 0);
-        kickBtn.active = ownerActive && selMember > 0 && selMember < memberNames.size();
+        int ownerListStart = topPos + YO_LIST;
+        int ownerListBottom = topPos + Y_ACTIONS_EXPANDED - 20;
+        int ownerListH = Math.max(ROW_H, ownerListBottom - ownerListStart);
+        int ownerVisibleRows = Math.max(1, ownerListH / ROW_H);
+        int ownerMaxScroll = Math.max(0, memberNames.size() * ROW_H - ownerListH);
+        memberScroll = Mth.clamp(memberScroll, 0, ownerMaxScroll);
+        int ownerFirstRow = (int) (memberScroll / ROW_H);
+        int ownerVisibleCount = Math.min(Math.max(0, memberNames.size() - ownerFirstRow), ownerVisibleRows);
+        boolean selectedVisible = selMember >= ownerFirstRow && selMember < ownerFirstRow + ownerVisibleCount;
+        show(kickBtn, ownerActive && selMember > 0 && selectedVisible);
+        kickBtn.active = ownerActive && selMember > 0 && selectedVisible && selMember < memberNames.size();
         // Reposition kick button next to selected member
-        if (kickBtn.visible) kickBtn.setY(topPos + YO_LIST + selMember * ROW_H + 2);
-        boolean inviteOnly = ownerActive && lobbyVis == LobbyVisibility.INVITE_ONLY;
-        show(inviteBox,    inviteOnly);
-        inviteBox.setEditable(inviteOnly);
-        show(sendInviteBtn, inviteOnly);
-        sendInviteBtn.active = inviteOnly && !inviteBox.getValue().trim().isEmpty();
+        if (kickBtn.visible) kickBtn.setY(topPos + YO_LIST + (selMember - ownerFirstRow) * ROW_H + 2);
+        boolean inviteVisible = ownerActive
+                && (lobbyVis == LobbyVisibility.OPEN || lobbyVis == LobbyVisibility.INVITE_ONLY);
+        show(inviteBox, inviteVisible);
+        inviteBox.setEditable(inviteVisible);
+        show(sendInviteBtn, inviteVisible);
+        sendInviteBtn.active = inviteVisible && !inviteBox.getValue().trim().isEmpty();
+        int inviteY = topPos + actionsY - 18;
+        inviteBox.setY(inviteY);
+        sendInviteBtn.setY(inviteY);
         show(startBtn,   ownerActive);
         show(disbandBtn, ownerActive);
+        startBtn.setY(topPos + actionsY);
+        disbandBtn.setY(topPos + actionsY);
         if (ownerActive) {
             boolean freeExists = instanceViews.stream().anyMatch(iv -> "FREE".equalsIgnoreCase(iv.status()));
             startBtn.setMessage(Component.translatable(
@@ -401,20 +470,30 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
         // QUEUED
         show(leaveQueueBtn, s == UiState.QUEUED);
+        leaveQueueBtn.setY(topPos + actionsY);
 
-        // Leaderboard tabs — always visible
+        // Leaderboard tabs (browsing only)
         for (int i = 0; i < 4; i++) {
-            lbTabBtns[i].visible = true;
-            lbTabBtns[i].active  = DifficultyTier.values()[i] != lbTab;
+            lbTabBtns[i].visible = s == UiState.BROWSING;
+            lbTabBtns[i].active  = s == UiState.BROWSING && DifficultyTier.values()[i] != lbTab;
         }
 
         // Admin
         show(adminMinusBtn, canAdmin);
         show(adminApplyBtn, canAdmin);
         show(adminPlusBtn,  canAdmin);
-        if (adminApplyBtn.visible) adminApplyBtn.active = draftRespawnTicks != serverRespawnTicks;
+        show(adminPartySizeBox, canAdmin);
+        if (adminApplyBtn.visible) adminApplyBtn.active = draftRespawnTicks != serverRespawnTicks || draftMaxPartySize != serverMaxPartySize;
         if (adminMinusBtn.visible) adminMinusBtn.active = draftRespawnTicks > 0;
         if (adminPlusBtn.visible)  adminPlusBtn.active  = draftRespawnTicks < ADMIN_MAX;
+        if (adminPartySizeBox.visible && !adminPartySizeBox.isFocused()) {
+            String target = Integer.toString(draftMaxPartySize);
+            if (!target.equals(adminPartySizeBox.getValue())) {
+                suppressAdminPartySync = true;
+                adminPartySizeBox.setValue(target);
+                suppressAdminPartySync = false;
+            }
+        }
     }
 
     private static void show(net.minecraft.client.gui.components.AbstractWidget w, boolean v) {
@@ -422,10 +501,15 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         w.active  = v;
     }
 
+    private static int actionRowY(UiState s) {
+        return s == UiState.BROWSING ? Y_ACTIONS : Y_ACTIONS_EXPANDED;
+    }
+
     // ── Background ────────────────────────────────────────────────────────────
     @Override
     protected void renderBg(GuiGraphics g, float partialTick, int mx, int my) {
         int x = leftPos, y = topPos;
+        UiState s = uiState();
 
         // Full screen background
         g.fill(x, y, x + W, y + H, C_BG);
@@ -441,10 +525,13 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         drawPanel(g, x + P, y + Y_INST, IW, INST_PANEL_H);
 
         // State content panel
-        drawPanel(g, x + P, y + Y_CONTENT - 2, IW, 170);
+        int contentPanelHeight = s == UiState.BROWSING ? 170 : 226;
+        drawPanel(g, x + P, y + Y_CONTENT - 2, IW, contentPanelHeight);
 
-        // Leaderboard panel
-        drawPanel(g, x + P, y + Y_LB - 2, IW, 58);
+        // Leaderboard panel (browsing only)
+        if (s == UiState.BROWSING) {
+            drawPanel(g, x + P, y + Y_LB - 2, IW, 58);
+        }
 
         // Admin bar (subtle divider only)
         if (canAdmin) {
@@ -470,7 +557,9 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             case QUEUED   -> renderQueued(g, x, y);
         }
 
-        renderLeaderboard(g, x, y);
+        if (s == UiState.BROWSING) {
+            renderLeaderboard(g, x, y);
+        }
         if (canAdmin) renderAdminBar(g, x, y);
     }
 
@@ -539,13 +628,16 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             if (invitedLobbies.size() > 1) {
                 small(g, Component.translatable("gui.arenas_ld.more_count", invitedLobbies.size() - 1), bx + 4, by + 14, C_MUTED);
             }
-            int axBtn = bx + IW - 6 - 80;
-            g.fill(axBtn, by + 4, axBtn + 36, by + 16, 0xFF0a2a0a);
-            drawBorder(g, axBtn, by + 4, 36, 12, 0xFF1a5a1a);
+            int btnW = 39;
+            int btnGap = 4;
+            int axBtn = bx + IW - 6 - (btnW * 2 + btnGap);
+            g.fill(axBtn, by + 4, axBtn + btnW, by + 16, 0xFF0a2a0a);
+            drawBorder(g, axBtn, by + 4, btnW, 12, 0xFF1a5a1a);
             g.drawString(font, Component.translatable("gui.arenas_ld.accept"), axBtn + 4, by + 6, C_GREEN, false);
-            g.fill(axBtn + 40, by + 4, axBtn + 76, by + 16, 0xFF2a0a0a);
-            drawBorder(g, axBtn + 40, by + 4, 36, 12, 0xFF5a1a1a);
-            g.drawString(font, Component.translatable("gui.arenas_ld.decline"), axBtn + 44, by + 6, C_RED, false);
+            int declineX = axBtn + btnW + btnGap;
+            g.fill(declineX, by + 4, declineX + btnW, by + 16, 0xFF2a0a0a);
+            drawBorder(g, declineX, by + 4, btnW, 12, 0xFF5a1a1a);
+            g.drawString(font, Component.translatable("gui.arenas_ld.decline"), declineX + 4, by + 6, C_RED, false);
             contentY += 24; // banner height + gap
         }
 
@@ -612,7 +704,8 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         // Lobby info row
         g.drawString(font, Component.translatable("gui.arenas_ld.lobby"), x + P + 3, cy + 3, C_MUTED, false);
         // Tier badge from selectedTier
-        drawTierPill(g, selectedTier.name(), x + W - P - 3 - 30, cy + 1);
+        int tierPillW = tierPillWidth(selectedTier.name());
+        drawTierPill(g, selectedTier.name(), x + W - P - 3 - tierPillW, cy + 1);
         cy += 16;
 
         // Status
@@ -623,7 +716,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         smallLabel(g, Component.translatable("gui.arenas_ld.members"), x + P + 3, cy);
         cy += 12;
 
-        renderMemberList(g, x, y, cy, false);
+        renderMemberList(g, x, y, cy, false, y + Y_ACTIONS_EXPANDED - 4);
     }
 
     private void renderOwner(GuiGraphics g, int x, int y, int mx, int my) {
@@ -632,39 +725,59 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
         // Hardcore suffix next to checkbox label is handled by the Checkbox widget itself
         // "1 life, 2× rewards" — draw muted text next to the checkbox
-        int hcTextX = x + P + 3 + 14 + font.width(Component.translatable("gui.arenas_ld.hardcore")) + 4;
+        int hcTextX = x + P + 28 + font.width(Component.translatable("gui.arenas_ld.hardcore")) + 4;
         g.drawString(font, Component.translatable("gui.arenas_ld.hardcore_suffix"), hcTextX + 2, y + YO_HC + 5, C_MUTED, false);
 
         // Members label
         smallLabel(g, Component.translatable("gui.arenas_ld.members"), x + P + 3, y + YO_MEMBERS);
 
-        renderMemberList(g, x, y, y + YO_LIST, true);
+        renderMemberList(g, x, y, y + YO_LIST, true, y + Y_ACTIONS_EXPANDED - 20);
     }
 
-    private void renderMemberList(GuiGraphics g, int x, int y, int listStartY, boolean ownerMode) {
+    private void renderMemberList(GuiGraphics g, int x, int y, int listStartY, boolean ownerMode, int listBottomY) {
         if (memberNames.isEmpty()) {
             g.drawString(font, Component.translatable("gui.arenas_ld.no_members"), x + P + 3, listStartY + 3, C_MUTED, false);
             return;
         }
-        for (int i = 0; i < memberNames.size(); i++) {
+        int availableH = Math.max(ROW_H, listBottomY - listStartY);
+        int maxVisibleRows = Math.max(1, availableH / ROW_H);
+        int maxScroll = Math.max(0, memberNames.size() * ROW_H - availableH);
+        memberScroll = Mth.clamp(memberScroll, 0, maxScroll);
+        int firstRow = (int) (memberScroll / ROW_H);
+        int visibleCount = Math.min(Math.max(0, memberNames.size() - firstRow), maxVisibleRows);
+        for (int i = 0; i < visibleCount; i++) {
+            int memberIndex = firstRow + i;
             int ry = listStartY + i * ROW_H;
-            boolean sel = ownerMode && i == selMember;
+            boolean sel = ownerMode && memberIndex == selMember;
             if (sel) g.fill(x + P, ry, x + W - P, ry + ROW_H - 1, C_ROW_SEL);
 
             // Star for owner (index 0)
-            if (i == 0) g.drawString(font, "\u2605", x + P + 3, ry + 4, C_YELLOW, false);
+            if (memberIndex == 0) g.drawString(font, "\u2605", x + P + 3, ry + 4, C_YELLOW, false);
             // Name — highlight current player
             int nameColor = C_TEXT;
-            g.drawString(font, memberNames.get(i), x + P + 14, ry + 4, nameColor, false);
+            g.drawString(font, memberNames.get(memberIndex), x + P + 14, ry + 4, nameColor, false);
             // "owner" tag
-            if (i == 0) {
+            if (memberIndex == 0) {
                 Component ownerTag = Component.translatable("gui.arenas_ld.owner");
                 small(g, ownerTag, x + W - P - 3 - font.width(ownerTag), ry + 6, C_MUTED);
             }
         }
         // Player count
-        small(g, Component.translatable("gui.arenas_ld.players_count", memberNames.size(), 4),
-              x + P + 3, listStartY + memberNames.size() * ROW_H + 2, C_MUTED);
+        int countY = Math.min(listBottomY - 8, listStartY + visibleCount * ROW_H + 10);
+        small(
+                g,
+                Component.translatable("gui.arenas_ld.players_count", memberNames.size(), Math.max(PARTY_MIN, serverMaxPartySize)),
+                x + P + 3,
+                countY,
+                C_MUTED
+        );
+        if (maxScroll > 0) {
+            int sbX = x + W - P - 3;
+            int knobH = Math.max(8, availableH * availableH / Math.max(1, memberNames.size() * ROW_H));
+            int knobY = listStartY + (int) (memberScroll / maxScroll * (availableH - knobH));
+            g.fill(sbX, listStartY, sbX + 2, listStartY + availableH, 0x33FFFFFF);
+            g.fill(sbX, knobY, sbX + 2, knobY + knobH, 0x88FFFFFF);
+        }
     }
 
     private void renderQueued(GuiGraphics g, int x, int y) {
@@ -703,10 +816,11 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         // Your party
         smallLabel(g, Component.translatable("gui.arenas_ld.your_party"), lx, cy);
         cy += 12;
-        renderMemberList(g, x, y, cy, false);
+        renderMemberList(g, x, y, cy, false, y + Y_ACTIONS_EXPANDED - 4);
     }
 
     private void renderLeaderboard(GuiGraphics g, int x, int y) {
+        smallLabel(g, Component.translatable("gui.arenas_ld.leaderboard_tiers"), x + P + 3, y + Y_LB + 1);
         int lx = x + P + 3;
         int ey = y + Y_LB_ENTRY + 2;
         int rowH = 10;
@@ -748,7 +862,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     }
 
     private void renderAdminBar(GuiGraphics g, int x, int y) {
-        int lx = x + P + 88; // after the three buttons
+        int lx = x + P + 116; // after cooldown buttons + party-size field
         small(g, Component.translatable("gui.arenas_ld.admin_cd", formatTime(serverRespawnTicks / 20)), lx, y + Y_ADMIN + 3, C_LABEL);
         small(g, Component.translatable("gui.arenas_ld.admin_draft", formatTime(draftRespawnTicks / 20)), lx + 50, y + Y_ADMIN + 3, C_MUTED);
     }
@@ -775,13 +889,16 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             // Invite banner accept/decline
             if (!invitedLobbies.isEmpty()) {
                 int bx = x + P + 3, by = y + Y_CONTENT + 4;
-                int axBtn = bx + IW - 6 - 80;
-                if (my >= by + 4 && my <= by + 16) {
-                    if (mx >= axBtn && mx < axBtn + 36) {
+            int btnW = 39;
+            int btnGap = 4;
+            int axBtn = bx + IW - 6 - (btnW * 2 + btnGap);
+            int declineX = axBtn + btnW + btnGap;
+            if (my >= by + 4 && my <= by + 16) {
+                    if (mx >= axBtn && mx < axBtn + btnW) {
                         respondInvite(invitedLobbies.get(0), true);
                         return true;
                     }
-                    if (mx >= axBtn + 40 && mx < axBtn + 76) {
+                    if (mx >= declineX && mx < declineX + btnW) {
                         respondInvite(invitedLobbies.get(0), false);
                         return true;
                     }
@@ -792,10 +909,17 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         // Member list click (OWNER/MEMBER)
         if (s == UiState.OWNER || s == UiState.MEMBER) {
             int listStartY = (s == UiState.OWNER) ? y + YO_LIST : y + Y_CONTENT + 56;
+            int listBottomY = (s == UiState.OWNER) ? y + Y_ACTIONS_EXPANDED - 20 : y + Y_ACTIONS_EXPANDED - 4;
+            int listH = Math.max(0, listBottomY - listStartY);
+            int visibleRows = Math.max(1, listH / ROW_H);
+            int maxScroll = Math.max(0, memberNames.size() * ROW_H - Math.max(ROW_H, listH));
+            memberScroll = Mth.clamp(memberScroll, 0, maxScroll);
+            int firstRow = (int) (memberScroll / ROW_H);
+            int visibleCount = Math.min(Math.max(0, memberNames.size() - firstRow), visibleRows);
             int listX = x + P;
-            if (mx >= listX && mx < listX + IW && my >= listStartY) {
-                int clicked = (int)((my - listStartY) / ROW_H);
-                if (clicked >= 0 && clicked < memberNames.size()) {
+            if (mx >= listX && mx < listX + IW && my >= listStartY && my < listStartY + listH) {
+                int clicked = firstRow + (int)((my - listStartY) / ROW_H);
+                if (clicked >= firstRow && clicked < firstRow + visibleCount) {
                     selMember = clicked;
                     updateButtons();
                     return true;
@@ -821,19 +945,53 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             }
         }
 
-        int lbX = x + P + 3;
-        int lbY = y + Y_LB_ENTRY + 2;
-        int lbW = IW - 6;
-        int lbH = Math.max(1, (y + Y_LB + 56 - 3) - lbY);
-        if (mx >= lbX && mx < lbX + lbW && my >= lbY && my < lbY + lbH) {
-            int rowH = 10;
-            int maxScroll = Math.max(0, leaderboard.size() * rowH - lbH);
-            if (maxScroll > 0) {
-                lbScroll = Mth.clamp(lbScroll - dy * rowH, 0, maxScroll);
-                return true;
+        if (s == UiState.OWNER || s == UiState.MEMBER || s == UiState.QUEUED) {
+            int listStartY = switch (s) {
+                case OWNER -> y + YO_LIST;
+                case MEMBER -> y + Y_CONTENT + 56;
+                case QUEUED -> queuedMemberListStartY(y);
+                default -> y + Y_CONTENT;
+            };
+            int listBottomY = (s == UiState.OWNER) ? y + Y_ACTIONS_EXPANDED - 20 : y + Y_ACTIONS_EXPANDED - 4;
+            int listH = Math.max(ROW_H, listBottomY - listStartY);
+            if (mx >= x + P && mx < x + P + IW && my >= listStartY && my < listStartY + listH) {
+                int maxScroll = Math.max(0, memberNames.size() * ROW_H - listH);
+                if (maxScroll > 0) {
+                    memberScroll = Mth.clamp(memberScroll - dy * ROW_H, 0, maxScroll);
+                    updateButtons();
+                    return true;
+                }
+            }
+        }
+
+        if (s == UiState.BROWSING) {
+            int lbX = x + P + 3;
+            int lbY = y + Y_LB_ENTRY + 2;
+            int lbW = IW - 6;
+            int lbH = Math.max(1, (y + Y_LB + 56 - 3) - lbY);
+            if (mx >= lbX && mx < lbX + lbW && my >= lbY && my < lbY + lbH) {
+                int rowH = 10;
+                int maxScroll = Math.max(0, leaderboard.size() * rowH - lbH);
+                if (maxScroll > 0) {
+                    lbScroll = Mth.clamp(lbScroll - dy * rowH, 0, maxScroll);
+                    return true;
+                }
             }
         }
         return super.mouseScrolled(mx, my, dx, dy);
+    }
+
+    private int queuedMemberListStartY(int y) {
+        int cy = y + Y_CONTENT + 4;
+        cy += 18; // queue row
+        cy += 13; // est wait
+        if (cooldownSecs > 0) {
+            cy += 13; // next slot
+        }
+        cy += 4;   // spacer
+        cy += 16;  // notify
+        cy += 12;  // your party label/spacer
+        return cy;
     }
 
     private void respondInvite(ModPackets.DungeonControllerInfoPayload.LobbyView lv, boolean accept) {
@@ -875,10 +1033,16 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         int i = t.ordinal();
         String label = t.name().charAt(0) + t.name().substring(1).toLowerCase();
         int pw = font.width(label) + 6;
-        g.fill(x, y, x + pw, y + 10, TIER_BG[i]);
-        drawBorder(g, x, y, pw, 10, TIER_BDR[i]);
+        g.fill(x, y, x + pw, y + 12, TIER_BG[i]);
+        drawBorder(g, x, y, pw, 12, TIER_BDR[i]);
         g.drawString(font, label, x + 3, y + 2, TIER_TXT[i], false);
         return x + pw + 3;
+    }
+
+    private int tierPillWidth(String tierName) {
+        DifficultyTier t = DifficultyTier.fromNameOrDefault(tierName, DifficultyTier.NORMAL);
+        String label = t.name().charAt(0) + t.name().substring(1).toLowerCase();
+        return font.width(label) + 6;
     }
 
     private void smallLabel(GuiGraphics g, Component text, int x, int y) {
