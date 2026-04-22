@@ -1092,95 +1092,89 @@ public class ModPackets {
                 if (be instanceof DungeonControllerBlockEntity controller) {
                     switch (payload.action()) {
                         case 0: // Start Dungeon
-                            if (!controller.isLocked) {
-                                Lobby lobby = controller.getLobbyByMember(player.getUUID());
-                                if (lobby == null) {
-                                    player.sendSystemMessage(Component.translatable("message.arenas_ld.not_in_lobby"));
-                                    return;
+                            Lobby lobby = controller.getLobbyByMember(player.getUUID());
+                            if (lobby == null) {
+                                player.sendSystemMessage(Component.translatable("message.arenas_ld.not_in_lobby"));
+                                return;
+                            }
+                            if (!lobby.ownerUuid.equals(player.getUUID())) {
+                                player.sendSystemMessage(Component.translatable("message.arenas_ld.only_owner_can_start_dungeon"));
+                                return;
+                            }
+                            DungeonInstanceRef instanceRef = controller.reserveFreeInstance();
+                            if (instanceRef == null) {
+                                int cooldownSeconds = controller.getNextAvailableCooldownSeconds();
+                                if (cooldownSeconds > 0) {
+                                    context.player().sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_cooldown", formatSeconds(cooldownSeconds)));
                                 }
-                                if (!lobby.ownerUuid.equals(player.getUUID())) {
-                                    player.sendSystemMessage(Component.translatable("message.arenas_ld.only_owner_can_start_dungeon"));
-                                    return;
+                                lobby.status = LobbyStatus.QUEUED;
+                                controller.setChanged();
+                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                                return;
+                            }
+                            ServerLevel spawnerLevel = world.getServer().getLevel(instanceRef.dimension());
+                            if (spawnerLevel == null || !(spawnerLevel.getBlockEntity(instanceRef.spawnerPos()) instanceof DungeonBossSpawnerBlockEntity spawner)) {
+                                controller.releaseReservedInstance(instanceRef);
+                                return;
+                            }
+                            HashSet<UUID> onlinePlayers = new HashSet<>();
+                            if (world.getServer().getPlayerList().getPlayer(lobby.ownerUuid) != null) {
+                                onlinePlayers.add(lobby.ownerUuid);
+                            }
+                            for (UUID uuid : lobby.members) {
+                                if (world.getServer().getPlayerList().getPlayer(uuid) != null) {
+                                    onlinePlayers.add(uuid);
                                 }
-                                DungeonInstanceRef instanceRef = controller.reserveFreeInstance();
-                                if (instanceRef == null) {
-                                    int cooldownSeconds = controller.getNextAvailableCooldownSeconds();
-                                    if (cooldownSeconds > 0) {
-                                        context.player().sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_cooldown", formatSeconds(cooldownSeconds)));
-                                    }
-                                    lobby.status = LobbyStatus.QUEUED;
-                                    controller.setChanged();
-                                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                                    return;
-                                }
-                                ServerLevel spawnerLevel = world.getServer().getLevel(instanceRef.dimension());
-                                if (spawnerLevel == null || !(spawnerLevel.getBlockEntity(instanceRef.spawnerPos()) instanceof DungeonBossSpawnerBlockEntity spawner)) {
-                                    controller.releaseReservedInstance(instanceRef);
-                                    return;
-                                }
-                                HashSet<UUID> onlinePlayers = new HashSet<>();
-                                if (world.getServer().getPlayerList().getPlayer(lobby.ownerUuid) != null) {
-                                    onlinePlayers.add(lobby.ownerUuid);
-                                }
-                                for (UUID uuid : lobby.members) {
-                                    if (world.getServer().getPlayerList().getPlayer(uuid) != null) {
-                                        onlinePlayers.add(uuid);
-                                    }
-                                }
-                                if (onlinePlayers.isEmpty()) {
-                                    controller.releaseReservedInstance(instanceRef);
-                                    return;
-                                }
-                                spawner.setHardcoreEnabled(lobby.hardcoreEnabled);
-                                if (spawner.startDungeon(onlinePlayers, payload.pos(), world.dimension(), lobby.selectedTier)) {
-                                    lobby.status = LobbyStatus.IN_DUNGEON;
-                                    controller.assignLobbyToInstance(lobby.id, instanceRef);
-                                    controller.isLocked = true;
-                                    controller.setChanged();
-                                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                                } else {
-                                    controller.releaseReservedInstance(instanceRef);
-                                    lobby.status = LobbyStatus.OPEN;
-                                    controller.setChanged();
-                                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                                }
+                            }
+                            if (onlinePlayers.isEmpty()) {
+                                controller.releaseReservedInstance(instanceRef);
+                                return;
+                            }
+                            spawner.setHardcoreEnabled(lobby.hardcoreEnabled);
+                            if (spawner.startDungeon(onlinePlayers, payload.pos(), world.dimension(), lobby.selectedTier)) {
+                                lobby.status = LobbyStatus.IN_DUNGEON;
+                                controller.assignLobbyToInstance(lobby.id, instanceRef);
+                                controller.isLocked = true;
+                                controller.setChanged();
+                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                            } else {
+                                controller.releaseReservedInstance(instanceRef);
+                                lobby.status = LobbyStatus.OPEN;
+                                controller.setChanged();
+                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
                             }
                             break;
                         case 1: // Join Party
-                            if (!controller.isLocked) {
-                                if (isPlayerInActiveGame(player)) {
-                                    player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(net.minecraft.ChatFormatting.RED));
+                            if (isPlayerInActiveGame(player)) {
+                                player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(net.minecraft.ChatFormatting.RED));
+                                return;
+                            }
+                            removePlayerFromOtherLobbies(player, controller.getBlockPos(), world.dimension());
+                            if (controller.getLobbyByMember(player.getUUID()) != null) {
+                                return;
+                            }
+                            Lobby openLobby = null;
+                            for (Lobby candidate : controller.lobbies) {
+                                if (candidate.status == LobbyStatus.OPEN
+                                        && candidate.visibility == LobbyVisibility.OPEN
+                                        && (1 + candidate.members.size()) < controller.getMaxPartySize()) {
+                                    openLobby = candidate;
+                                    break;
+                                }
+                            }
+                            if (openLobby == null) {
+                                Lobby created = controller.createLobby(player.getUUID(), player.getGameProfile().getName());
+                                if (created == null) {
                                     return;
                                 }
-                                removePlayerFromOtherLobbies(player, controller.getBlockPos(), world.dimension());
-                                if (controller.getLobbyByMember(player.getUUID()) != null) {
-                                    return;
-                                }
-                                Lobby openLobby = null;
-                                for (Lobby candidate : controller.lobbies) {
-                                    if (candidate.status == LobbyStatus.OPEN
-                                            && candidate.visibility == LobbyVisibility.OPEN
-                                            && (1 + candidate.members.size()) < controller.getMaxPartySize()) {
-                                        openLobby = candidate;
-                                        break;
-                                    }
-                                }
-                                if (openLobby == null) {
-                                    Lobby created = controller.createLobby(player.getUUID(), player.getGameProfile().getName());
-                                    if (created == null) {
-                                        return;
-                                    }
-                                } else {
-                                    openLobby.members.add(player.getUUID());
-                                    controller.setChanged();
-                                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                                }
+                            } else {
+                                openLobby.members.add(player.getUUID());
+                                controller.setChanged();
+                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
                             }
                             break;
                         case 2: // Leave Party
-                            if (!controller.isLocked) {
-                                controller.leaveLobby(player.getUUID());
-                            }
+                            controller.leaveLobby(player.getUUID());
                             break;
                     }
                 }
@@ -1192,7 +1186,7 @@ public class ModPackets {
                 ServerPlayer player = context.player();
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof DungeonControllerBlockEntity controller) || controller.isLocked) {
+                if (!(be instanceof DungeonControllerBlockEntity controller)) {
                     return;
                 }
                 if (isPlayerInActiveGame(player)) {
@@ -1264,7 +1258,7 @@ public class ModPackets {
                 ServerPlayer player = context.player();
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof DungeonControllerBlockEntity controller) || controller.isLocked) {
+                if (!(be instanceof DungeonControllerBlockEntity controller)) {
                     return;
                 }
                 if (isPlayerInActiveGame(player)) {
@@ -1284,7 +1278,7 @@ public class ModPackets {
                 ServerPlayer player = context.player();
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof DungeonControllerBlockEntity controller) || controller.isLocked) {
+                if (!(be instanceof DungeonControllerBlockEntity controller)) {
                     return;
                 }
                 controller.disbandLobby(player.getUUID());
@@ -1296,7 +1290,7 @@ public class ModPackets {
                 ServerPlayer owner = context.player();
                 Level world = owner.level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof DungeonControllerBlockEntity controller) || controller.isLocked) {
+                if (!(be instanceof DungeonControllerBlockEntity controller)) {
                     return;
                 }
                 Lobby lobby = controller.getLobbyByMember(owner.getUUID());
@@ -1321,7 +1315,7 @@ public class ModPackets {
                 ServerPlayer owner = context.player();
                 Level world = owner.level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof DungeonControllerBlockEntity controller) || controller.isLocked) {
+                if (!(be instanceof DungeonControllerBlockEntity controller)) {
                     return;
                 }
                 ServerPlayer target = owner.server.getPlayerList().getPlayerByName(payload.playerName());
@@ -1470,7 +1464,6 @@ public class ModPackets {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
                 if (be instanceof DungeonControllerBlockEntity controller) {
-                    if (controller.isLocked) return;
                     DifficultyTier tier = DifficultyTier.fromNameOrDefault(payload.selectedTier(), DifficultyTier.NORMAL);
                     Lobby lobby = controller.getLobbyByMember(player.getUUID());
                     if (lobby != null && lobby.ownerUuid.equals(player.getUUID())) {
@@ -1493,7 +1486,7 @@ public class ModPackets {
                 ServerPlayer player = context.player();
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof DungeonControllerBlockEntity controller) || controller.isLocked) {
+                if (!(be instanceof DungeonControllerBlockEntity controller)) {
                     return;
                 }
                 Lobby lobby = controller.getLobbyByMember(player.getUUID());
@@ -1520,7 +1513,7 @@ public class ModPackets {
                 }
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof DungeonControllerBlockEntity controller) || controller.isLocked) {
+                if (!(be instanceof DungeonControllerBlockEntity controller)) {
                     return;
                 }
                 controller.setRespawnTimeTicks(payload.respawnTimeTicks());
