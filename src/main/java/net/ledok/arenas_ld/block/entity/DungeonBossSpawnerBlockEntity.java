@@ -52,7 +52,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-public class DungeonBossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<BossSpawnerData>, AttributeProvider, EquipmentProvider, LinkableSpawner {
+public class DungeonBossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<BossSpawnerData>, AttributeProvider, EquipmentProvider, LinkableSpawner, DungeonContext {
     private static final int DOWNED_RESPAWN_TICKS = 40;
     private static final int REGEN_INTERVAL_TICKS = 100;
     private static final int DEATH_TIME_PENALTY_TICKS = 10 * 20;
@@ -76,7 +76,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     private int regeneration = 0;
     private int skillExperiencePerWin = 100;
     private String groupId = "";
-    private final Map<DifficultyTier, List<DungeonLeaderboardEntry>> leaderboardByTier = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, TierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
     private DifficultyTier activeTier = DifficultyTier.NORMAL;
     private static final String BUSY_REASON = "arenas_ld";
@@ -120,7 +119,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     public DungeonBossSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.DUNGEON_BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
         initializeTierConfigs();
-        initializeLeaderboards();
         if (attributes.isEmpty()) {
             attributes.add(new AttributeData("minecraft:generic.max_health", 300.0));
             attributes.add(new AttributeData("minecraft:generic.attack_damage", 15.0));
@@ -130,12 +128,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     private void initializeTierConfigs() {
         for (DifficultyTier tier : DifficultyTier.values()) {
             tierConfigs.putIfAbsent(tier, new TierConfig());
-        }
-    }
-
-    private void initializeLeaderboards() {
-        for (DifficultyTier tier : DifficultyTier.values()) {
-            leaderboardByTier.putIfAbsent(tier, new ArrayList<>());
         }
     }
 
@@ -311,17 +303,35 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         setChanged();
     }
 
-    public List<DungeonLeaderboardEntry> getLeaderboard() {
-        return getLeaderboardForTier(activeTier);
-    }
-
-    public void setLeaderboard(List<DungeonLeaderboardEntry> leaderboard) {
-        leaderboardByTier.put(activeTier, new ArrayList<>(leaderboard));
+    public void applyConfig(
+            String mobId,
+            int respawnTime,
+            int dungeonCloseTimer,
+            int dungeonTime,
+            String lootTableId,
+            String perPlayerLootTableId,
+            BlockPos exitPositionCoords,
+            ResourceKey<Level> exitPositionDimension,
+            int triggerRadius,
+            int battleRadius,
+            int regeneration,
+            int skillExperiencePerWin,
+            String groupId
+    ) {
+        this.mobId = mobId;
+        this.respawnTime = respawnTime;
+        this.dungeonCloseTimer = dungeonCloseTimer;
+        this.dungeonTime = dungeonTime;
+        this.lootTableId = lootTableId;
+        this.perPlayerLootTableId = perPlayerLootTableId;
+        this.exitPositionCoords = exitPositionCoords;
+        this.exitPositionDimension = exitPositionDimension;
+        this.triggerRadius = triggerRadius;
+        this.battleRadius = battleRadius;
+        this.regeneration = regeneration;
+        this.skillExperiencePerWin = skillExperiencePerWin;
+        this.groupId = groupId;
         setChanged();
-    }
-
-    public List<DungeonLeaderboardEntry> getLeaderboardForTier(DifficultyTier tier) {
-        return leaderboardByTier.computeIfAbsent(tier, unused -> new ArrayList<>());
     }
 
     public Map<DifficultyTier, TierConfig> getTierConfigs() {
@@ -344,6 +354,16 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         }
         return activeTier.defaultDamageMultiplier();
     }
+
+    @Override
+    public double getHealthMultiplier() {
+        return resolveHealthMultiplierForTier(activeTier);
+    }
+
+    @Override
+    public double getDamageMultiplier() {
+        return getEffectiveDamageMultiplier();
+    }
     
     public void handlePlayerDisconnect(ServerPlayer player, Component reason) {
         handlePlayerExit(player, reason, true);
@@ -353,8 +373,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (exitPositionCoords != null && !exitPositionCoords.equals(BlockPos.ZERO)) {
             ServerLevel exitWorld = Objects.requireNonNull(player.getServer()).getLevel(exitPositionDimension);
             if (exitWorld != null) {
-                BlockPos absoluteExitPos = this.worldPosition.offset(exitPositionCoords);
-                teleportPlayerToExit(player, exitWorld, absoluteExitPos);
+                teleportPlayerToExit(player, exitWorld, exitPositionCoords);
             }
         }
         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_left", reason).withStyle(net.minecraft.ChatFormatting.RED));
@@ -377,6 +396,15 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             linkedSpawners.add(pos);
             setChanged();
         }
+    }
+
+    @Override
+    public boolean removeLinkedSpawner(BlockPos pos) {
+        if (linkedSpawners.remove(pos)) {
+            setChanged();
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -671,7 +699,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             BlockPos absolutePos = this.worldPosition.offset(relativePos);
             BlockEntity linkedBe = serverLevel.getBlockEntity(absolutePos);
             if (linkedBe instanceof LinkableSpawner linkedSpawner) {
-                linkedSpawner.forceReset();
+                linkedSpawner.startForDungeon(this);
             }
         }
 
@@ -731,7 +759,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             }
             BlockEntity be = world.getBlockEntity(absolutePos);
             if (be instanceof MobSpawnerBlockEntity mobSpawner) {
-                if (mobSpawner.isBattleActive() || mobSpawner.getRespawnCooldown() > 0) {
+                if (!mobSpawner.isDungeonCleared()) {
                     return false;
                 }
             } else if (be instanceof BossSpawnerBlockEntity bossSpawner) {
@@ -773,59 +801,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                     controllerWorld.sendBlockUpdated(controllerPos, controller.getBlockState(), controller.getBlockState(), 3);
                 }
             }
-        }
-    }
-
-    private void syncLeaderboardToController(ServerLevel world) {
-        if (controllerPos != null && controllerDimension != null) {
-            ServerLevel controllerWorld = world.getServer().getLevel(controllerDimension);
-            if (controllerWorld != null && controllerWorld.getBlockEntity(controllerPos) instanceof DungeonControllerBlockEntity controller) {
-                controller.leaderboard = new ArrayList<>(getLeaderboardForTier(controller.selectedTier));
-                controller.setChanged();
-                controllerWorld.sendBlockUpdated(controllerPos, controller.getBlockState(), controller.getBlockState(), 3);
-            }
-        }
-    }
-
-    private void updateLeaderboardForPlayers(ServerLevel world, Collection<UUID> players, int timeSeconds) {
-        List<DungeonLeaderboardEntry> leaderboard = getLeaderboardForTier(activeTier);
-        for (UUID playerId : players) {
-            ServerPlayer player = world.getServer().getPlayerList().getPlayer(playerId);
-            if (player == null) {
-                continue;
-            }
-            String playerName = player.getGameProfile().getName();
-            upsertLeaderboardEntry(leaderboard, playerName, timeSeconds);
-        }
-
-        setChanged();
-        syncLeaderboardToController(world);
-    }
-
-    private void upsertLeaderboardEntry(List<DungeonLeaderboardEntry> leaderboard, String playerName, int timeSeconds) {
-        DungeonLeaderboardEntry toInsert = new DungeonLeaderboardEntry(playerName, timeSeconds);
-        int existingIndex = -1;
-        for (int i = 0; i < leaderboard.size(); i++) {
-            if (leaderboard.get(i).playerName.equals(playerName)) {
-                existingIndex = i;
-                break;
-            }
-        }
-        if (existingIndex >= 0) {
-            if (timeSeconds >= leaderboard.get(existingIndex).timeSeconds) {
-                return;
-            }
-            leaderboard.remove(existingIndex);
-        }
-
-        int insertIndex = 0;
-        while (insertIndex < leaderboard.size() && leaderboard.get(insertIndex).timeSeconds <= timeSeconds) {
-            insertIndex++;
-        }
-        leaderboard.add(insertIndex, toInsert);
-
-        if (leaderboard.size() > 20) {
-            leaderboard.remove(leaderboard.size() - 1);
         }
     }
 
@@ -925,7 +900,22 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (dungeonStartTick >= 0) {
             durationSeconds = (int) Math.max(0, (world.getGameTime() - dungeonStartTick) / 20);
         }
-        updateLeaderboardForPlayers(world, trackedPlayers, durationSeconds);
+        if (controllerPos != null && controllerDimension != null) {
+            ServerLevel controllerWorld = world.getServer().getLevel(controllerDimension);
+            if (controllerWorld != null
+                    && controllerWorld.getBlockEntity(controllerPos)
+                    instanceof DungeonControllerBlockEntity controller) {
+                for (UUID playerId : trackedPlayers) {
+                    ServerPlayer p = world.getServer().getPlayerList().getPlayer(playerId);
+                    if (p != null) {
+                        controller.upsertLeaderboardEntry(
+                                activeTier,
+                                p.getGameProfile().getName(),
+                                durationSeconds);
+                    }
+                }
+            }
+        }
         String totalTime = formatTime(durationSeconds);
         for (UUID uuid : trackedPlayers) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
@@ -1045,9 +1035,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             if (player != null && player.level() == world && !player.isDeadOrDying()) {
                 ServerLevel exitWorld = Objects.requireNonNull(player.getServer()).getLevel(exitPositionDimension);
                 if (exitWorld != null) {
-                    BlockPos absoluteExitPos = this.worldPosition.offset(exitPositionCoords);
                     revivePlayerForExit(player);
-                    teleportPlayerToExit(player, exitWorld, absoluteExitPos);
+                    teleportPlayerToExit(player, exitWorld, exitPositionCoords);
                     player.setPortalCooldown();
                 }
             }
@@ -1082,9 +1071,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 if (player != null && player.level() == world && !player.isDeadOrDying()) {
                     ServerLevel exitWorld = Objects.requireNonNull(player.getServer()).getLevel(exitPositionDimension);
                     if (exitWorld != null) {
-                        BlockPos absoluteExitPos = this.worldPosition.offset(exitPositionCoords);
                         revivePlayerForExit(player);
-                        teleportPlayerToExit(player, exitWorld, absoluteExitPos);
+                        teleportPlayerToExit(player, exitWorld, exitPositionCoords);
                         player.setPortalCooldown();
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_failed").withStyle(net.minecraft.ChatFormatting.RED));
                     }
@@ -1178,7 +1166,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         nbt.putInt("DungeonTime", dungeonTime);
         nbt.putString("LootTableId", lootTableId);
         nbt.putString("PerPlayerLootTableId", perPlayerLootTableId);
-        nbt.putLong("ExitPositionCoords", exitPositionCoords.asLong()); // Save relative
+        nbt.putLong("ExitPositionCoords", exitPositionCoords.asLong());
         nbt.putString("ExitPositionDimension", exitPositionDimension.location().toString());
         nbt.putLong("EntrancePosition", entrancePosition.asLong());
         nbt.putString("EntranceDimension", entranceDimension.location().toString());
@@ -1224,16 +1212,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             trackedList.add(tag);
         }
         nbt.put("TrackedPlayers", trackedList);
-
-        CompoundTag leaderboardByTierTag = new CompoundTag();
-        for (DifficultyTier tier : DifficultyTier.values()) {
-            ListTag leaderboardList = new ListTag();
-            for (DungeonLeaderboardEntry entry : getLeaderboardForTier(tier)) {
-                leaderboardList.add(entry.toNbt());
-            }
-            leaderboardByTierTag.put(tier.name(), leaderboardList);
-        }
-        nbt.put("LeaderboardByTier", leaderboardByTierTag);
         
         nbt.putLongArray("LinkedSpawners", linkedSpawners.stream().mapToLong(BlockPos::asLong).toArray());
     }
@@ -1249,7 +1227,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         }
         lootTableId = nbt.getString("LootTableId");
         perPlayerLootTableId = nbt.getString("PerPlayerLootTableId");
-        exitPositionCoords = BlockPos.of(nbt.getLong("ExitPositionCoords")); // Load relative
+        exitPositionCoords = BlockPos.of(nbt.getLong("ExitPositionCoords"));
         if (nbt.contains("ExitPositionDimension")) {
             exitPositionDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitPositionDimension")));
         }
@@ -1326,30 +1304,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 UUID trackedPlayerId = ((CompoundTag) tag).getUUID("uuid");
                 trackedPlayers.add(trackedPlayerId);
                 BusyState.setBusy(trackedPlayerId, BUSY_REASON);
-            }
-        }
-
-        leaderboardByTier.clear();
-        initializeLeaderboards();
-        if (nbt.contains("LeaderboardByTier", Tag.TAG_COMPOUND)) {
-            CompoundTag leaderboardByTierTag = nbt.getCompound("LeaderboardByTier");
-            for (DifficultyTier tier : DifficultyTier.values()) {
-                if (leaderboardByTierTag.contains(tier.name(), Tag.TAG_LIST)) {
-                    ListTag leaderboardList = leaderboardByTierTag.getList(tier.name(), Tag.TAG_COMPOUND);
-                    List<DungeonLeaderboardEntry> entries = getLeaderboardForTier(tier);
-                    entries.clear();
-                    for (Tag tag : leaderboardList) {
-                        entries.add(DungeonLeaderboardEntry.fromNbt((CompoundTag) tag));
-                    }
-                }
-            }
-        } else if (nbt.contains("Leaderboard")) {
-            // Legacy migration: old single leaderboard becomes NORMAL tier.
-            ListTag leaderboardList = nbt.getList("Leaderboard", Tag.TAG_COMPOUND);
-            List<DungeonLeaderboardEntry> normalEntries = getLeaderboardForTier(DifficultyTier.NORMAL);
-            normalEntries.clear();
-            for (Tag tag : leaderboardList) {
-                normalEntries.add(DungeonLeaderboardEntry.fromNbt((CompoundTag) tag));
             }
         }
         

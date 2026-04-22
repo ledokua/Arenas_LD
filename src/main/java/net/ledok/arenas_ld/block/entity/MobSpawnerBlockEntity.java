@@ -77,6 +77,9 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
     private final Map<UUID, Float> playerDamageDealt = new HashMap<>();
     private int regenerationTickTimer = 0;
     private boolean firstTick = true;
+    private DungeonContext activeDungeonContext = null;
+    private boolean dungeonCleared = false;
+    private int triggerScanTick = 0;
 
 
     public MobSpawnerBlockEntity(BlockPos pos, BlockState state) {
@@ -94,6 +97,10 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
 
     public int getRespawnCooldown() {
         return respawnCooldown;
+    }
+
+    public boolean isDungeonCleared() {
+        return dungeonCleared;
     }
 
     @Override
@@ -128,6 +135,15 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
     }
 
     @Override
+    public boolean removeLinkedSpawner(BlockPos pos) {
+        if (linkedSpawners.remove(pos)) {
+            setChanged();
+            return true;
+        }
+        return false;
+    }
+
+    @Override
     public void clearLinkedSpawners() {
         linkedSpawners.clear();
         setChanged();
@@ -143,6 +159,12 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         if (this.level instanceof ServerLevel serverLevel) {
             resetSpawner(serverLevel, false);
         }
+    }
+
+    @Override
+    public void startForDungeon(DungeonContext ctx) {
+        this.activeDungeonContext = ctx;
+        forceReset();
     }
 
     public static void tick(Level world, BlockPos pos, BlockState state, MobSpawnerBlockEntity be) {
@@ -181,6 +203,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
             }
             return;
         }
+
+        if (++triggerScanTick < 5) {
+            return;
+        }
+        triggerScanTick = 0;
 
         AABB triggerBox = new AABB(pos).inflate(triggerRadius);
         List<ServerPlayer> playersInTriggerZone = world.getEntitiesOfClass(ServerPlayer.class, triggerBox, p -> !p.isSpectator());
@@ -236,6 +263,8 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         }
 
         isBattleActive = true;
+        dungeonCleared = false;
+        triggerScanTick = 0;
         playerDamageDealt.clear();
 
         for (int i = 0; i < mobCount; i++) {
@@ -249,7 +278,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
                         attributeRegistry.getHolder(key).ifPresent(holder -> {
                             AttributeInstance instance = livingMob.getAttribute(holder);
                             if (instance != null) {
-                                instance.setBaseValue(attr.value());
+                                double value = attr.value();
+                                if (activeDungeonContext != null && "minecraft:generic.max_health".equals(attr.id())) {
+                                    value *= activeDungeonContext.getHealthMultiplier();
+                                }
+                                instance.setBaseValue(value);
                             }
                         });
                     }
@@ -401,6 +434,9 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         activeMobUuids.clear();
         playerDamageDealt.clear();
         regenerationTickTimer = 0;
+        activeDungeonContext = null;
+        dungeonCleared = wasWin;
+        triggerScanTick = 0;
         respawnCooldown = wasWin ? respawnTime : 0;
         setChanged();
         world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
@@ -428,6 +464,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         nbt.putString("GroupId", groupId);
         nbt.putBoolean("IsBattleActive", isBattleActive);
         nbt.putInt("RespawnCooldown", respawnCooldown);
+        nbt.putBoolean("DungeonCleared", dungeonCleared);
 
         ListTag mobUuids = new ListTag();
         for (UUID uuid : activeMobUuids) {
@@ -461,6 +498,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         mobSpread = nbt.contains("MobSpread") ? nbt.getInt("MobSpread") : 5;
         isBattleActive = nbt.getBoolean("IsBattleActive");
         respawnCooldown = nbt.getInt("RespawnCooldown");
+        dungeonCleared = nbt.getBoolean("DungeonCleared");
         groupId = nbt.getString("GroupId");
 
         activeMobUuids.clear();

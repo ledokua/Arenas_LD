@@ -131,6 +131,15 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     }
 
     @Override
+    public boolean removeLinkedSpawner(BlockPos pos) {
+        if (linkedSpawners.remove(pos)) {
+            setChanged();
+            return true;
+        }
+        return false;
+    }
+
+    @Override
     public void clearLinkedSpawners() {
         linkedSpawners.clear();
         setChanged();

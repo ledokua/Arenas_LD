@@ -8,46 +8,53 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.GameType;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityMixin {
+    @Unique
+    private DamageSource arenasLd$currentDamageSource;
+
+    @Inject(method = "hurt", at = @At("HEAD"))
+    private void arenasLd$captureDamageSource(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
+        this.arenasLd$currentDamageSource = source;
+    }
+
+    @Inject(method = "hurt", at = @At("RETURN"))
+    private void arenasLd$clearDamageSource(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
+        this.arenasLd$currentDamageSource = null;
+    }
+
     @ModifyArg(
-            method = "actuallyHurt",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;setHealth(F)V"),
-            index = 0
+            method = "hurt",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;actuallyHurt(Lnet/minecraft/world/damagesource/DamageSource;F)V"),
+            index = 1
     )
-    private float arenasLd$applyDungeonTierDamageMultiplier(float newHealth) {
+    private float arenasLd$applyDungeonTierDamageMultiplier(float amount) {
         if (!((Object) this instanceof ServerPlayer player)) {
-            return newHealth;
+            return amount;
         }
 
         DungeonBossSpawnerBlockEntity dungeonSpawner = ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player);
         if (dungeonSpawner == null) {
-            return newHealth;
+            return amount;
         }
 
-        DamageSource source = ((LivingEntity) (Object) this).getLastDamageSource();
-        if (!arenasLd$matchesDungeonDamageFilter(source)) {
-            return newHealth;
+        if (!arenasLd$matchesDungeonDamageFilter(this.arenasLd$currentDamageSource)) {
+            return amount;
         }
 
         double damageMultiplier = dungeonSpawner.getEffectiveDamageMultiplier();
         if (damageMultiplier == 1.0) {
-            return newHealth;
+            return amount;
         }
 
-        float oldHealth = player.getHealth();
-        float appliedDamage = oldHealth - newHealth;
-        if (appliedDamage <= 0.0F) {
-            return newHealth;
-        }
-
-        float scaledDamage = (float) (appliedDamage * damageMultiplier);
-        return Math.max(0.0F, oldHealth - scaledDamage);
+        return (float) (amount * damageMultiplier);
     }
 
     private boolean arenasLd$matchesDungeonDamageFilter(DamageSource source) {
