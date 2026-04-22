@@ -14,7 +14,6 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.entity.player.Player;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -358,9 +357,15 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         // BROWSING
         show(createLobbyBtn, s == UiState.BROWSING);
         show(joinLobbyBtn,   s == UiState.BROWSING);
-        joinLobbyBtn.active = s == UiState.BROWSING && canJoinSelected();
-        joinLobbyBtn.setMessage(Component.translatable(
-                canJoinSelected() ? "gui.arenas_ld.join_selected" : "gui.arenas_ld.invite_only"));
+        boolean canJoin = s == UiState.BROWSING && canJoinSelected();
+        joinLobbyBtn.active = canJoin;
+        if (visLobbies.isEmpty()) {
+            joinLobbyBtn.setMessage(Component.translatable("gui.arenas_ld.join_selected"));
+        } else if (canJoin) {
+            joinLobbyBtn.setMessage(Component.translatable("gui.arenas_ld.join_selected"));
+        } else {
+            joinLobbyBtn.setMessage(Component.translatable("gui.arenas_ld.invite_only"));
+        }
 
         // MEMBER
         show(leaveLobbyBtn, s == UiState.MEMBER);
@@ -518,10 +523,12 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     }
 
     private void renderBrowsing(GuiGraphics g, int x, int y, int mx, int my) {
-        // Invite banner (first invite, if any)
+        int contentY = y + Y_CONTENT + 4;
+
+        // Invite banner (first invite, if any) — only occupies space when present
         if (!invitedLobbies.isEmpty()) {
             var inv = invitedLobbies.get(0);
-            int bx = x + P + 3, by = y + YB_BANNER;
+            int bx = x + P + 3, by = contentY;
             g.fill(bx, by, bx + IW - 6, by + 20, 0xFF1a1800);
             drawBorder(g, bx, by, IW - 6, 20, 0xFF4a4000);
             String ownerTrunc = truncate(inv.ownerName(), 12);
@@ -530,7 +537,6 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             if (invitedLobbies.size() > 1) {
                 small(g, "+" + (invitedLobbies.size() - 1) + " more", bx + 4, by + 14, C_MUTED);
             }
-            // Accept / Decline rendered as clickable text (handled in mouseClicked)
             int axBtn = bx + IW - 6 - 80;
             g.fill(axBtn, by + 4, axBtn + 36, by + 16, 0xFF0a2a0a);
             drawBorder(g, axBtn, by + 4, 36, 12, 0xFF1a5a1a);
@@ -538,14 +544,17 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             g.fill(axBtn + 40, by + 4, axBtn + 76, by + 16, 0xFF2a0a0a);
             drawBorder(g, axBtn + 40, by + 4, 36, 12, 0xFF5a1a1a);
             g.drawString(font, "Decline", axBtn + 44, by + 6, C_RED, false);
+            contentY += 24; // banner height + gap
         }
 
         // "OPEN LOBBIES" label
-        smallLabel(g, "OPEN LOBBIES", x + P + 3, y + YB_LBABEL);
+        smallLabel(g, "OPEN LOBBIES", x + P + 3, contentY);
+        contentY += 10;
 
-        // Lobby list
-        int listX = x + P + 3, listY = y + YB_LIST;
-        int listW = IW - 6, listH = YB_LIST_H;
+        // Lobby list — fills remaining content zone down to action buttons
+        int listX = x + P + 3, listY = contentY;
+        int listW = IW - 6;
+        int listH = Math.max(20, (y + Y_ACTIONS - 8) - listY);
 
         g.enableScissor(listX, listY, listX + listW, listY + listH);
         int maxScroll = Math.max(0, visLobbies.size() * ROW_H - listH);
@@ -761,7 +770,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
             // Invite banner accept/decline
             if (!invitedLobbies.isEmpty()) {
-                int bx = x + P + 3, by = y + YB_BANNER;
+                int bx = x + P + 3, by = y + Y_CONTENT + 4;
                 int axBtn = bx + IW - 6 - 80;
                 if (my >= by + 4 && my <= by + 16) {
                     if (mx >= axBtn && mx < axBtn + 36) {
@@ -798,8 +807,11 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         int x = leftPos, y = topPos;
         UiState s = uiState();
         if (s == UiState.BROWSING) {
-            int maxScroll = Math.max(0, visLobbies.size() * ROW_H - YB_LIST_H);
-            if (maxScroll > 0) {
+            int bannerOffset = invitedLobbies.isEmpty() ? 0 : 24;
+            int dynListY = y + Y_CONTENT + 4 + bannerOffset + 10;
+            int dynListH = Math.max(20, (y + Y_ACTIONS - 8) - dynListY);
+            int maxScroll = Math.max(0, visLobbies.size() * ROW_H - dynListH);
+            if (mx >= x + P + 3 && mx < x + P + IW - 3 && my >= dynListY && my < dynListY + dynListH && maxScroll > 0) {
                 lobbyScroll = Mth.clamp(lobbyScroll - dy * ROW_H, 0, maxScroll);
                 return true;
             }
