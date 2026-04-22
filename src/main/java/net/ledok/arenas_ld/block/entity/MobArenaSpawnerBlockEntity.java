@@ -203,6 +203,41 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         setChanged();
     }
 
+    public void applyConfig(
+            int triggerRadius,
+            int battleRadius,
+            int spawnDistance,
+            int waveTimer,
+            int additionalTime,
+            int timeBetweenWaves,
+            double attributeScale,
+            int prepareTime,
+            BlockPos exitPosition,
+            ResourceKey<Level> exitDimension,
+            BlockPos arenaEntrancePosition,
+            ResourceKey<Level> arenaEntranceDimension,
+            String groupId,
+            int bossWaveAdditionalTime,
+            int entityHighlightTime
+    ) {
+        this.triggerRadius = triggerRadius;
+        this.battleRadius = battleRadius;
+        this.spawnDistance = spawnDistance;
+        this.waveTimer = waveTimer;
+        this.additionalTime = additionalTime;
+        this.timeBetweenWaves = timeBetweenWaves;
+        this.attributeScale = attributeScale;
+        this.prepareTime = prepareTime;
+        this.exitPosition = exitPosition;
+        this.exitDimension = exitDimension;
+        this.arenaEntrancePosition = arenaEntrancePosition;
+        this.arenaEntranceDimension = arenaEntranceDimension;
+        this.groupId = groupId;
+        this.bossWaveAdditionalTime = bossWaveAdditionalTime;
+        this.entityHighlightTime = entityHighlightTime;
+        setChanged();
+    }
+
     public BlockPos getExitPosition() {
         return exitPosition;
     }

@@ -110,7 +110,7 @@ public class SpawnerConfiguratorItem extends Item {
                     bossSpawner.exitPortalCoords = relativePos;
                     bossSpawner.exitDimension = clickedDimension;
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
-                    dungeonBossSpawner.setExitPositionCoords(relativePos, clickedDimension);
+                    dungeonBossSpawner.setExitPositionCoords(clickedPos, clickedDimension);
                 } else if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
                     mobArenaSpawner.setExitPosition(relativePos, clickedDimension);
                 }

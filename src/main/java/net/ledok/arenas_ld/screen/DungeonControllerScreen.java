@@ -210,7 +210,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
         // ── OWNER: hardcore checkbox ──
         hcBox = addRenderableWidget(Checkbox.builder(
-                Component.literal("Hardcore"),
+                Component.translatable("gui.arenas_ld.hardcore"),
                 font
         ).pos(x + P + 2, y + YO_HC).selected(false).onValueChange((cb, sel) -> { if (!suppressHcSync) syncSettings(); }).build());
         hcBox.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
@@ -483,7 +483,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
     // ── Section renderers ─────────────────────────────────────────────────────
     private void renderInstances(GuiGraphics g, int x, int y) {
-        smallLabel(g, "INSTANCES", x + P + 3, y + Y_INST + 4);
+        smallLabel(g, Component.translatable("gui.arenas_ld.instances"), x + P + 3, y + Y_INST + 4);
         int panelX = x + P;
         int panelY = y + Y_INST;
         int panelInnerLeft = panelX + 3;
@@ -491,7 +491,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         int px = panelInnerLeft;
         int py = panelY + 14;
         if (instanceViews.isEmpty()) {
-            g.drawString(font, Component.literal("No instances registered"), px, py, C_MUTED, false);
+            g.drawString(font, Component.translatable("gui.arenas_ld.no_instances_registered"), px, py, C_MUTED, false);
             return;
         }
         int shown = 0;
@@ -508,7 +508,8 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
                 if (row >= maxRows) {
                     int hidden = instanceViews.size() - shown;
                     if (hidden > 0) {
-                        g.drawString(font, Component.literal("+" + hidden + " more"), panelInnerRight - font.width("+" + hidden + " more"), y + Y_INST + 4, C_MUTED, false);
+                        Component more = Component.translatable("gui.arenas_ld.more_count", hidden);
+                        g.drawString(font, more, panelInnerRight - font.width(more), y + Y_INST + 4, C_MUTED, false);
                     }
                     break;
                 }
@@ -532,23 +533,24 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             g.fill(bx, by, bx + IW - 6, by + 20, 0xFF1a1800);
             drawBorder(g, bx, by, IW - 6, 20, 0xFF4a4000);
             String ownerTrunc = truncate(inv.ownerName(), 12);
-            g.drawString(font, ownerTrunc + " invited you", bx + 4, by + 6, C_AMBER, false);
-            drawTierPill(g, inv.tier(), bx + 4 + font.width(ownerTrunc + " invited you") + 4, by + 4);
+            Component invitedText = Component.translatable("gui.arenas_ld.owner_invited_you", ownerTrunc);
+            g.drawString(font, invitedText, bx + 4, by + 6, C_AMBER, false);
+            drawTierPill(g, inv.tier(), bx + 4 + font.width(invitedText) + 4, by + 4);
             if (invitedLobbies.size() > 1) {
-                small(g, "+" + (invitedLobbies.size() - 1) + " more", bx + 4, by + 14, C_MUTED);
+                small(g, Component.translatable("gui.arenas_ld.more_count", invitedLobbies.size() - 1), bx + 4, by + 14, C_MUTED);
             }
             int axBtn = bx + IW - 6 - 80;
             g.fill(axBtn, by + 4, axBtn + 36, by + 16, 0xFF0a2a0a);
             drawBorder(g, axBtn, by + 4, 36, 12, 0xFF1a5a1a);
-            g.drawString(font, "Accept", axBtn + 4, by + 6, C_GREEN, false);
+            g.drawString(font, Component.translatable("gui.arenas_ld.accept"), axBtn + 4, by + 6, C_GREEN, false);
             g.fill(axBtn + 40, by + 4, axBtn + 76, by + 16, 0xFF2a0a0a);
             drawBorder(g, axBtn + 40, by + 4, 36, 12, 0xFF5a1a1a);
-            g.drawString(font, "Decline", axBtn + 44, by + 6, C_RED, false);
+            g.drawString(font, Component.translatable("gui.arenas_ld.decline"), axBtn + 44, by + 6, C_RED, false);
             contentY += 24; // banner height + gap
         }
 
         // "OPEN LOBBIES" label
-        smallLabel(g, "OPEN LOBBIES", x + P + 3, contentY);
+        smallLabel(g, Component.translatable("gui.arenas_ld.open_lobbies"), x + P + 3, contentY);
         contentY += 10;
 
         // Lobby list — fills remaining content zone down to action buttons
@@ -561,7 +563,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         lobbyScroll = Mth.clamp(lobbyScroll, 0, maxScroll);
 
         if (visLobbies.isEmpty()) {
-            g.drawString(font, Component.literal("No open lobbies"), listX + 4, listY + 4, C_MUTED, false);
+            g.drawString(font, Component.translatable("gui.arenas_ld.no_open_lobbies"), listX + 4, listY + 4, C_MUTED, false);
         }
         for (int i = 0; i < visLobbies.size(); i++) {
             var lv = visLobbies.get(i);
@@ -584,9 +586,11 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             int tierPx = drawTierPill(g, lv.tier(), listX + 115, ry + 3);
 
             // Action tag
-            String action = lobbyActionLabel(lv);
-            int actionColor = "Join".equals(action) ? C_BLUE : C_MUTED;
-            g.drawString(font, "[" + action + "]", listX + listW - font.width("[" + action + "]") - 4, ry + 5, actionColor, false);
+            String actionKey = lobbyActionLabelKey(lv);
+            Component action = Component.translatable(actionKey);
+            int actionColor = "gui.arenas_ld.action_join".equals(actionKey) ? C_BLUE : C_MUTED;
+            Component actionBracket = Component.literal("[").append(action).append(Component.literal("]"));
+            g.drawString(font, actionBracket, listX + listW - font.width(actionBracket) - 4, ry + 5, actionColor, false);
         }
         g.disableScissor();
 
@@ -602,27 +606,21 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
     private void renderMember(GuiGraphics g, int x, int y, int mx, int my) {
         // Find our lobby
-        String lobbyName  = "Lobby";
-        String lobbyTier  = DifficultyTier.NORMAL.name();
-        for (var lv : allLobbies) {
-            if (lv.invited()) continue; // skip — this finds our own lobby via status
-        }
         // Use server-pushed member list — first is owner
         int cy = y + Y_CONTENT + 4;
 
         // Lobby info row
-        g.drawString(font, "Lobby ", x + P + 3, cy + 3, C_MUTED, false);
-        int lnX = x + P + 3 + font.width("Lobby ");
+        g.drawString(font, Component.translatable("gui.arenas_ld.lobby"), x + P + 3, cy + 3, C_MUTED, false);
         // Tier badge from selectedTier
         drawTierPill(g, selectedTier.name(), x + W - P - 3 - 30, cy + 1);
         cy += 16;
 
         // Status
-        g.drawString(font, Component.literal("Waiting for owner to start"), x + P + 3, cy, C_GREEN, false);
+        g.drawString(font, Component.translatable("gui.arenas_ld.waiting_for_owner"), x + P + 3, cy, C_GREEN, false);
         cy += 16;
 
         // Members section
-        smallLabel(g, "MEMBERS", x + P + 3, cy);
+        smallLabel(g, Component.translatable("gui.arenas_ld.members"), x + P + 3, cy);
         cy += 12;
 
         renderMemberList(g, x, y, cy, false);
@@ -630,22 +628,22 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
     private void renderOwner(GuiGraphics g, int x, int y, int mx, int my) {
         // "Difficulty" label above tier buttons
-        smallLabel(g, "DIFFICULTY", x + P + 3, y + YO_DIFF);
+        smallLabel(g, Component.translatable("gui.arenas_ld.difficulty"), x + P + 3, y + YO_DIFF);
 
         // Hardcore suffix next to checkbox label is handled by the Checkbox widget itself
         // "1 life, 2× rewards" — draw muted text next to the checkbox
-        int hcTextX = x + P + 3 + 14 + font.width("Hardcore") + 4;
-        g.drawString(font, "— 1 life, 2\u00d7 rewards", hcTextX + 2, y + YO_HC + 5, C_MUTED, false);
+        int hcTextX = x + P + 3 + 14 + font.width(Component.translatable("gui.arenas_ld.hardcore")) + 4;
+        g.drawString(font, Component.translatable("gui.arenas_ld.hardcore_suffix"), hcTextX + 2, y + YO_HC + 5, C_MUTED, false);
 
         // Members label
-        smallLabel(g, "MEMBERS", x + P + 3, y + YO_MEMBERS);
+        smallLabel(g, Component.translatable("gui.arenas_ld.members"), x + P + 3, y + YO_MEMBERS);
 
         renderMemberList(g, x, y, y + YO_LIST, true);
     }
 
     private void renderMemberList(GuiGraphics g, int x, int y, int listStartY, boolean ownerMode) {
         if (memberNames.isEmpty()) {
-            g.drawString(font, Component.literal("No members"), x + P + 3, listStartY + 3, C_MUTED, false);
+            g.drawString(font, Component.translatable("gui.arenas_ld.no_members"), x + P + 3, listStartY + 3, C_MUTED, false);
             return;
         }
         for (int i = 0; i < memberNames.size(); i++) {
@@ -660,11 +658,12 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             g.drawString(font, memberNames.get(i), x + P + 14, ry + 4, nameColor, false);
             // "owner" tag
             if (i == 0) {
-                small(g, "owner", x + W - P - 3 - font.width("owner"), ry + 6, C_MUTED);
+                Component ownerTag = Component.translatable("gui.arenas_ld.owner");
+                small(g, ownerTag, x + W - P - 3 - font.width(ownerTag), ry + 6, C_MUTED);
             }
         }
         // Player count
-        small(g, memberNames.size() + " / 4 players",
+        small(g, Component.translatable("gui.arenas_ld.players_count", memberNames.size(), 4),
               x + P + 3, listStartY + memberNames.size() * ROW_H + 2, C_MUTED);
     }
 
@@ -673,32 +672,36 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         int lx = x + P + 3;
 
         // "Queue  [#2 in line]"
-        g.drawString(font, "Queue", lx, cy + 3, C_TEXT, false);
-        int badgeX = lx + font.width("Queue") + 6;
-        g.fill(badgeX, cy, badgeX + font.width("#" + queuePos + " in line") + 8, cy + 14, 0xFF1a0a2a);
-        drawBorder(g, badgeX, cy, font.width("#" + queuePos + " in line") + 8, 14, 0xFF4a2a7a);
-        g.drawString(font, "#" + queuePos + " in line", badgeX + 4, cy + 3, C_PURPLE, false);
+        Component queueLabel = Component.translatable("gui.arenas_ld.queue");
+        Component queuePosLabel = Component.translatable("gui.arenas_ld.queue_in_line", queuePos);
+        g.drawString(font, queueLabel, lx, cy + 3, C_TEXT, false);
+        int badgeX = lx + font.width(queueLabel) + 6;
+        g.fill(badgeX, cy, badgeX + font.width(queuePosLabel) + 8, cy + 14, 0xFF1a0a2a);
+        drawBorder(g, badgeX, cy, font.width(queuePosLabel) + 8, 14, 0xFF4a2a7a);
+        g.drawString(font, queuePosLabel, badgeX + 4, cy + 3, C_PURPLE, false);
         cy += 18;
 
         // Est. wait
-        g.drawString(font, "Est. wait ", lx, cy, C_MUTED, false);
-        g.drawString(font, formatTime(queueEstSecs), lx + font.width("Est. wait "), cy, C_AMBER, false);
+        Component estWaitLabel = Component.translatable("gui.arenas_ld.est_wait");
+        g.drawString(font, estWaitLabel, lx, cy, C_MUTED, false);
+        g.drawString(font, formatTime(queueEstSecs), lx + font.width(estWaitLabel), cy, C_AMBER, false);
         cy += 13;
 
         // Next slot
         if (cooldownSecs > 0) {
-            g.drawString(font, "Next slot ", lx, cy, C_MUTED, false);
-            g.drawString(font, formatTime(cooldownSecs), lx + font.width("Next slot "), cy, C_TEXT, false);
+            Component nextSlotLabel = Component.translatable("gui.arenas_ld.next_slot");
+            g.drawString(font, nextSlotLabel, lx, cy, C_MUTED, false);
+            g.drawString(font, formatTime(cooldownSecs), lx + font.width(nextSlotLabel), cy, C_TEXT, false);
             cy += 13;
         }
 
         // Notification
         cy += 4;
-        g.drawString(font, "You will be notified when a slot opens.", lx, cy, C_NOTIFY, false);
+        g.drawString(font, Component.translatable("gui.arenas_ld.slot_notify"), lx, cy, C_NOTIFY, false);
         cy += 16;
 
         // Your party
-        smallLabel(g, "YOUR PARTY", lx, cy);
+        smallLabel(g, Component.translatable("gui.arenas_ld.your_party"), lx, cy);
         cy += 12;
         renderMemberList(g, x, y, cy, false);
     }
@@ -713,7 +716,8 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
         List<DungeonLeaderboardEntry> entries = leaderboard; // server sends for current tier
         if (entries.isEmpty()) {
-            small(g, "No records yet", lx + (IW - 6 - font.width("No records yet")) / 2, ey + 4, C_MUTED);
+            Component noRecords = Component.translatable("gui.arenas_ld.no_records_yet");
+            small(g, noRecords, lx + (IW - 6 - font.width(noRecords)) / 2, ey + 4, C_MUTED);
             return;
         }
         int totalH = entries.size() * rowH;
@@ -745,8 +749,8 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
     private void renderAdminBar(GuiGraphics g, int x, int y) {
         int lx = x + P + 88; // after the three buttons
-        small(g, "CD: " + formatTime(serverRespawnTicks / 20), lx, y + Y_ADMIN + 3, C_LABEL);
-        small(g, "  Draft: " + formatTime(draftRespawnTicks / 20), lx + 50, y + Y_ADMIN + 3, C_MUTED);
+        small(g, Component.translatable("gui.arenas_ld.admin_cd", formatTime(serverRespawnTicks / 20)), lx, y + Y_ADMIN + 3, C_LABEL);
+        small(g, Component.translatable("gui.arenas_ld.admin_draft", formatTime(draftRespawnTicks / 20)), lx + 50, y + Y_ADMIN + 3, C_MUTED);
     }
 
     // ── Input handling ─────────────────────────────────────────────────────────
@@ -877,7 +881,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         return x + pw + 3;
     }
 
-    private void smallLabel(GuiGraphics g, String text, int x, int y) {
+    private void smallLabel(GuiGraphics g, Component text, int x, int y) {
         g.pose().pushPose();
         g.pose().translate(x, y, 0);
         g.pose().scale(0.75f, 0.75f, 1f);
@@ -885,12 +889,20 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         g.pose().popPose();
     }
 
-    private void small(GuiGraphics g, String text, int x, int y, int color) {
+    private void smallLabel(GuiGraphics g, String text, int x, int y) {
+        smallLabel(g, Component.literal(text), x, y);
+    }
+
+    private void small(GuiGraphics g, Component text, int x, int y, int color) {
         g.pose().pushPose();
         g.pose().translate(x, y, 0);
         g.pose().scale(0.85f, 0.85f, 1f);
         g.drawString(font, text, 0, 0, color, false);
         g.pose().popPose();
+    }
+
+    private void small(GuiGraphics g, String text, int x, int y, int color) {
+        small(g, Component.literal(text), x, y, color);
     }
 
     // ── UI state helpers ──────────────────────────────────────────────────────
@@ -933,17 +945,17 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
     private static String pillLabel(ModPackets.DungeonControllerInfoPayload.InstanceView iv, int num) {
         return switch (iv.status().toUpperCase()) {
-            case "FREE"     -> "#" + num + " Free";
-            case "RUNNING"  -> "#" + num + " Running";
-            default         -> "#" + num + " CD " + formatTime(iv.cooldownSeconds());
+            case "FREE"     -> Component.translatable("gui.arenas_ld.instance_free", num).getString();
+            case "RUNNING"  -> Component.translatable("gui.arenas_ld.instance_running", num).getString();
+            default         -> Component.translatable("gui.arenas_ld.instance_cd", num, formatTime(iv.cooldownSeconds())).getString();
         };
     }
 
-    private static String lobbyActionLabel(ModPackets.DungeonControllerInfoPayload.LobbyView lv) {
-        if ("QUEUED".equalsIgnoreCase(lv.status()) || "IN_DUNGEON".equalsIgnoreCase(lv.status())) return "Busy";
-        if (lv.size() >= lv.maxSize()) return "Full";
-        if ("INVITE_ONLY".equalsIgnoreCase(lv.visibility()) && !lv.invited()) return "Locked";
-        return "Join";
+    private static String lobbyActionLabelKey(ModPackets.DungeonControllerInfoPayload.LobbyView lv) {
+        if ("QUEUED".equalsIgnoreCase(lv.status()) || "IN_DUNGEON".equalsIgnoreCase(lv.status())) return "gui.arenas_ld.action_busy";
+        if (lv.size() >= lv.maxSize()) return "gui.arenas_ld.action_full";
+        if ("INVITE_ONLY".equalsIgnoreCase(lv.visibility()) && !lv.invited()) return "gui.arenas_ld.action_locked";
+        return "gui.arenas_ld.action_join";
     }
 
     private static LobbyStatus parseLobbyStatus(String s) {

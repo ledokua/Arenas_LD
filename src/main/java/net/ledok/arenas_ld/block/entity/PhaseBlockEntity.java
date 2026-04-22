@@ -22,6 +22,7 @@ public class PhaseBlockEntity extends BlockEntity {
     private boolean isMain = false;
     private boolean legacyGroupWarningShown = false;
     private final List<BlockPos> watchedSpawnerOffsets = new ArrayList<>();
+    private int checkTick = 0;
 
     public PhaseBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.PHASE_BLOCK_ENTITY, pos, state);
@@ -31,6 +32,11 @@ public class PhaseBlockEntity extends BlockEntity {
         if (world.isClientSide() || !be.isMain) {
             return;
         }
+
+        if (++be.checkTick < 20) {
+            return;
+        }
+        be.checkTick = 0;
 
         boolean allSpawnersWon = be.checkSpawnerConditions();
         boolean shouldBeSolid = !allSpawnersWon;
@@ -51,15 +57,16 @@ public class PhaseBlockEntity extends BlockEntity {
                 // If a spawner is missing or not a spawner, treat it as not won
                 return false;
             }
-            if (level.getBlockEntity(spawnerPos) instanceof MobSpawnerBlockEntity mobSpawner) {
-                if (mobSpawner.isBattleActive()) {
+            BlockEntity spawnerEntity = level.getBlockEntity(spawnerPos);
+            if (spawnerEntity instanceof MobSpawnerBlockEntity mobSpawner) {
+                if (!mobSpawner.isDungeonCleared()) {
                     return false;
                 }
-            } else if (level.getBlockEntity(spawnerPos) instanceof BossSpawnerBlockEntity bossSpawner) {
+            } else if (spawnerEntity instanceof BossSpawnerBlockEntity bossSpawner) {
                 if (bossSpawner.isBattleActive) {
                     return false;
                 }
-            } else if (level.getBlockEntity(spawnerPos) instanceof DungeonBossSpawnerBlockEntity dungeonSpawner) {
+            } else if (spawnerEntity instanceof DungeonBossSpawnerBlockEntity dungeonSpawner) {
                 if (dungeonSpawner.isDungeonRunning()) {
                     return false;
                 }

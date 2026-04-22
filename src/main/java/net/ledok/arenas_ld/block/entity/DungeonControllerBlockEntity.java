@@ -38,6 +38,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -60,7 +61,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     public int dungeonCooldownSeconds = 0;
     public boolean hardcoreEnabled = false;
     public DifficultyTier selectedTier = DifficultyTier.NORMAL;
-    public List<DungeonLeaderboardEntry> leaderboard = new ArrayList<>();
+    private final Map<DifficultyTier, List<DungeonLeaderboardEntry>> leaderboardByTier = new EnumMap<>(DifficultyTier.class);
     public List<InstanceState> instances = new ArrayList<>();
     public int respawnTimeTicks = DEFAULT_RESPAWN_TIME_TICKS;
     public List<Lobby> lobbies = new ArrayList<>();
@@ -110,6 +111,26 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     public void setSelectedTier(DifficultyTier selectedTier) {
         this.selectedTier = selectedTier != null ? selectedTier : DifficultyTier.NORMAL;
         setChanged();
+    }
+
+    public List<DungeonLeaderboardEntry> getLeaderboardForTier(DifficultyTier tier) {
+        return leaderboardByTier.getOrDefault(tier, List.of());
+    }
+
+    public void upsertLeaderboardEntry(DifficultyTier tier, String playerName, int timeSeconds) {
+        List<DungeonLeaderboardEntry> list =
+                leaderboardByTier.computeIfAbsent(tier, t -> new ArrayList<>());
+        list.removeIf(e -> e.playerName.equals(playerName) && e.timeSeconds <= timeSeconds);
+        boolean alreadyBetter = list.stream().anyMatch(e -> e.playerName.equals(playerName));
+        if (alreadyBetter) return;
+        int idx = 0;
+        while (idx < list.size() && list.get(idx).timeSeconds <= timeSeconds) idx++;
+        list.add(idx, new DungeonLeaderboardEntry(playerName, timeSeconds));
+        if (list.size() > 20) list.remove(list.size() - 1);
+        setChanged();
+        if (level instanceof ServerLevel sl) {
+            sl.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
     }
 
     public boolean hasAnyFreeInstance() {
@@ -323,7 +344,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             return false;
         }
         nextQueued.status = LobbyStatus.OPEN;
-        notifyLobbyMembers(level, nextQueued, Component.literal("A dungeon instance is now available. Your lobby can start now."));
+        notifyLobbyMembers(level, nextQueued, Component.translatable("message.arenas_ld.lobby_slot_available"));
         return true;
     }
 
@@ -746,7 +767,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             ServerPlayer newOwner = level instanceof ServerLevel serverLevel ? serverLevel.getServer().getPlayerList().getPlayer(candidate) : null;
             lobby.ownerName = newOwner != null ? newOwner.getGameProfile().getName() : "Unknown";
             if (newOwner != null) {
-                newOwner.sendSystemMessage(Component.literal("You are now the lobby owner."));
+                newOwner.sendSystemMessage(Component.translatable("message.arenas_ld.lobby_owner_transferred"));
             }
             return false;
         }
@@ -803,11 +824,14 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         }
         nbt.put("LobbyInstanceMap", lobbyInstanceList);
 
-        ListTag leaderboardList = new ListTag();
-        for (DungeonLeaderboardEntry entry : leaderboard) {
-            leaderboardList.add(entry.toNbt());
+        CompoundTag lbTag = new CompoundTag();
+        for (DifficultyTier tier : DifficultyTier.values()) {
+            List<DungeonLeaderboardEntry> list = leaderboardByTier.getOrDefault(tier, List.of());
+            ListTag tierList = new ListTag();
+            for (DungeonLeaderboardEntry entry : list) tierList.add(entry.toNbt());
+            lbTag.put(tier.name(), tierList);
         }
-        nbt.put("Leaderboard", leaderboardList);
+        nbt.put("LeaderboardByTier", lbTag);
     }
 
     @Override
@@ -828,11 +852,16 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             }
         }
 
-        leaderboard.clear();
-        if (nbt.contains("Leaderboard")) {
-            ListTag leaderboardList = nbt.getList("Leaderboard", Tag.TAG_COMPOUND);
-            for (Tag t : leaderboardList) {
-                leaderboard.add(DungeonLeaderboardEntry.fromNbt((CompoundTag) t));
+        leaderboardByTier.clear();
+        if (nbt.contains("LeaderboardByTier", Tag.TAG_COMPOUND)) {
+            CompoundTag lbTag = nbt.getCompound("LeaderboardByTier");
+            for (DifficultyTier tier : DifficultyTier.values()) {
+                if (lbTag.contains(tier.name(), Tag.TAG_LIST)) {
+                    ListTag tierList = lbTag.getList(tier.name(), Tag.TAG_COMPOUND);
+                    List<DungeonLeaderboardEntry> list = new ArrayList<>();
+                    for (Tag t : tierList) list.add(DungeonLeaderboardEntry.fromNbt((CompoundTag) t));
+                    leaderboardByTier.put(tier, list);
+                }
             }
         }
 

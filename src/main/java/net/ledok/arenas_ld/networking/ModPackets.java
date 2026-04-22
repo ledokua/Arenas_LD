@@ -857,18 +857,21 @@ public class ModPackets {
                 Level world = context.player().level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
                 if (be instanceof DungeonBossSpawnerBlockEntity blockEntity) {
-                    blockEntity.setMobId(payload.mobId());
-                    blockEntity.setRespawnTime(payload.respawnTime());
-                    blockEntity.setDungeonCloseTimer(payload.dungeonCloseTimer());
-                    blockEntity.setDungeonTime(payload.dungeonTime());
-                    blockEntity.setLootTableId(payload.lootTable());
-                    blockEntity.setPerPlayerLootTableId(payload.perPlayerLootTable());
-                    blockEntity.setExitPositionCoords(payload.exitPositionCoords(), ResourceKey.create(Registries.DIMENSION, payload.exitDimension()));
-                    blockEntity.setTriggerRadius(payload.triggerRadius());
-                    blockEntity.setBattleRadius(payload.battleRadius());
-                    blockEntity.setRegeneration(payload.regeneration());
-                    blockEntity.setSkillExperiencePerWin(payload.skillExperiencePerWin());
-                    blockEntity.setGroupId(payload.groupId());
+                    blockEntity.applyConfig(
+                            payload.mobId(),
+                            payload.respawnTime(),
+                            payload.dungeonCloseTimer(),
+                            payload.dungeonTime(),
+                            payload.lootTable(),
+                            payload.perPlayerLootTable(),
+                            payload.exitPositionCoords(),
+                            ResourceKey.create(Registries.DIMENSION, payload.exitDimension()),
+                            payload.triggerRadius(),
+                            payload.battleRadius(),
+                            payload.regeneration(),
+                            payload.skillExperiencePerWin(),
+                            payload.groupId()
+                    );
                     if (world instanceof ServerLevel serverLevel) {
                         DungeonControllerBlockEntity.updateControllerRespawnTimeForSpawner(
                                 serverLevel.getServer(),
@@ -925,19 +928,23 @@ public class ModPackets {
             context.server().execute(() -> {
                 Level world = context.player().level();
                 if (world.getBlockEntity(payload.pos()) instanceof MobArenaSpawnerBlockEntity blockEntity) {
-                    blockEntity.setTriggerRadius(payload.triggerRadius());
-                    blockEntity.setBattleRadius(payload.battleRadius());
-                    blockEntity.setSpawnDistance(payload.spawnDistance());
-                    blockEntity.setWaveTimer(payload.waveTimer());
-                    blockEntity.setAdditionalTime(payload.additionalTime());
-                    blockEntity.setTimeBetweenWaves(payload.timeBetweenWaves());
-                    blockEntity.setAttributeScale(payload.attributeScale());
-                    blockEntity.setPrepareTime(payload.prepareTime());
-                    blockEntity.setExitPosition(payload.exitPosition(), ResourceKey.create(Registries.DIMENSION, payload.exitDimension()));
-                    blockEntity.setArenaEntrancePosition(payload.arenaEntrancePosition(), ResourceKey.create(Registries.DIMENSION, payload.arenaEntranceDimension()));
-                    blockEntity.setGroupId(payload.groupId());
-                    blockEntity.setBossWaveAdditionalTime(payload.bossWaveAdditionalTime());
-                    blockEntity.setEntityHighlightTime(payload.entityHighlightTime());
+                    blockEntity.applyConfig(
+                            payload.triggerRadius(),
+                            payload.battleRadius(),
+                            payload.spawnDistance(),
+                            payload.waveTimer(),
+                            payload.additionalTime(),
+                            payload.timeBetweenWaves(),
+                            payload.attributeScale(),
+                            payload.prepareTime(),
+                            payload.exitPosition(),
+                            ResourceKey.create(Registries.DIMENSION, payload.exitDimension()),
+                            payload.arenaEntrancePosition(),
+                            ResourceKey.create(Registries.DIMENSION, payload.arenaEntranceDimension()),
+                            payload.groupId(),
+                            payload.bossWaveAdditionalTime(),
+                            payload.entityHighlightTime()
+                    );
                     world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
                 }
             });
@@ -1084,11 +1091,11 @@ public class ModPackets {
                             if (!controller.isLocked) {
                                 Lobby lobby = controller.getLobbyByMember(player.getUUID());
                                 if (lobby == null) {
-                                    player.sendSystemMessage(Component.literal("You are not in a lobby."));
+                                    player.sendSystemMessage(Component.translatable("message.arenas_ld.not_in_lobby"));
                                     return;
                                 }
                                 if (!lobby.ownerUuid.equals(player.getUUID())) {
-                                    player.sendSystemMessage(Component.literal("Only the lobby owner can start the dungeon."));
+                                    player.sendSystemMessage(Component.translatable("message.arenas_ld.only_owner_can_start_dungeon"));
                                     return;
                                 }
                                 DungeonInstanceRef instanceRef = controller.reserveFreeInstance();
@@ -1543,20 +1550,7 @@ public class ModPackets {
         if (controller == null || tier == null || server == null) {
             return List.of();
         }
-        for (InstanceState instance : controller.instances) {
-            ServerLevel level = server.getLevel(instance.ref().dimension());
-            if (level == null) {
-                continue;
-            }
-            if (!level.isLoaded(instance.ref().spawnerPos())) {
-                continue;
-            }
-            BlockEntity be = level.getBlockEntity(instance.ref().spawnerPos());
-            if (be instanceof DungeonBossSpawnerBlockEntity dungeonSpawner) {
-                return new ArrayList<>(dungeonSpawner.getLeaderboardForTier(tier));
-            }
-        }
-        return new ArrayList<>(controller.leaderboard);
+        return new ArrayList<>(controller.getLeaderboardForTier(tier));
     }
 
     private static void removePlayerFromOtherLobbies(ServerPlayer player, BlockPos currentControllerPos, ResourceKey<Level> currentControllerDim) {
