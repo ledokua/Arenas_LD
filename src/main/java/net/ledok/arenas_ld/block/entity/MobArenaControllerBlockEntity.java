@@ -142,6 +142,10 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
         return isLocked;
     }
 
+    public boolean isArenaActive() {
+        return isLocked || currentWave > 0;
+    }
+
     public void setLocked(boolean locked) {
         if (this.isLocked != locked) {
             this.isLocked = locked;
