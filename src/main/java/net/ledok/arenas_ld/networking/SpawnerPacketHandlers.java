@@ -220,7 +220,7 @@ final class SpawnerPacketHandlers {
                     LinkerModeDataComponent data = stack.getOrDefault(DataComponentRegistry.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
                     int currentMode = data.mode();
                     int newMode = (currentMode + (payload.forward() ? 1 : -1) + LinkerItem.Mode.values().length) % LinkerItem.Mode.values().length;
-                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(newMode, data.mainSpawnerPos(), data.mainSpawnerDimension()));
+                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(newMode, data.mainSpawnerPos(), data.mainSpawnerDimension(), data.respawnPointCount()));
 
                     LinkerItem.Mode mode = LinkerItem.Mode.values()[newMode];
                     context.player().sendSystemMessage(net.minecraft.network.chat.Component.translatable("message.arenas_ld.linker.mode_changed", mode.getName()));

@@ -537,7 +537,8 @@ public class LinkerItem extends Item {
                     || modeData.mainSpawnerDimension().isEmpty()
                     || !mainPosOpt.get().equals(pos)
                     || !modeData.mainSpawnerDimension().get().equals(world.dimension())) {
-                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(
+                        modeData.mode(), Optional.of(pos), Optional.of(world.dimension()), bossSpawner.getRespawnPointOffsets().size()));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.respawn_point_selected", pos.toShortString()));
                 return InteractionResult.SUCCESS;
             }
@@ -550,6 +551,8 @@ public class LinkerItem extends Item {
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.respawn_point_list", pos.offset(relativePos).toShortString()));
                 }
             }
+            stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(
+                    modeData.mode(), Optional.of(pos), Optional.of(world.dimension()), linked.size()));
             return InteractionResult.SUCCESS;
         }
 
@@ -563,14 +566,14 @@ public class LinkerItem extends Item {
             ServerLevel spawnerWorld = world.getServer().getLevel(modeData.mainSpawnerDimension().get());
             if (spawnerWorld == null) {
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_spawner_invalid"));
-                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty(), -1));
                 return InteractionResult.FAIL;
             }
 
             BlockEntity spawnerBe = spawnerWorld.getBlockEntity(spawnerPos);
             if (!(spawnerBe instanceof BossSpawnerBlockEntity bossSpawner)) {
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_spawner_invalid"));
-                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty(), -1));
                 return InteractionResult.FAIL;
             }
 
@@ -585,6 +588,8 @@ public class LinkerItem extends Item {
                 bossSpawner.addRespawnPointOffset(relativePos);
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.respawn_point_added", pos.toShortString()));
             }
+            stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(
+                    modeData.mode(), Optional.of(spawnerPos), Optional.of(modeData.mainSpawnerDimension().get()), bossSpawner.getRespawnPointOffsets().size()));
             spawnerWorld.sendBlockUpdated(spawnerPos, bossSpawner.getBlockState(), bossSpawner.getBlockState(), 3);
             return InteractionResult.SUCCESS;
         }
@@ -608,7 +613,7 @@ public class LinkerItem extends Item {
                         || Mode.values()[modeData.mode()] == Mode.RAID_SPAWNER_POSITION
                         || Mode.values()[modeData.mode()] == Mode.RESPAWN_POINT_LINKING) {
                     // Clear Main Spawner/Phase Block selection
-                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty(), -1));
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.cleared_selection"));
                     return InteractionResultHolder.success(stack);
                 }
@@ -636,7 +641,18 @@ public class LinkerItem extends Item {
                 || currentMode == Mode.RESPAWN_POINT_LINKING) && modeData.mainSpawnerPos().isPresent()) {
             tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.main_spawner", modeData.mainSpawnerPos().get().toShortString()).withStyle(net.minecraft.ChatFormatting.GOLD));
         }
+
+        if (currentMode == Mode.RESPAWN_POINT_LINKING
+                && modeData.mainSpawnerPos().isPresent()
+                && modeData.mainSpawnerDimension().isPresent()) {
+            int linkedCount = modeData.respawnPointCount();
+            if (linkedCount >= 0) {
+                tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.respawn_points_linked", linkedCount)
+                        .withStyle(net.minecraft.ChatFormatting.GRAY));
+            }
+        }
         
         tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.shift_scroll").withStyle(net.minecraft.ChatFormatting.DARK_GRAY));
     }
+
 }

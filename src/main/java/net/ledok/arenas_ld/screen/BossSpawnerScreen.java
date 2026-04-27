@@ -346,7 +346,20 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
 
     @Override
     protected void renderLabels(GuiGraphics context, int mouseX, int mouseY) {
-        if (activeTab != Tab.TIERS || menu.blockEntity == null) {
+        if (menu.blockEntity == null) {
+            return;
+        }
+        if (activeTab == Tab.GENERAL) {
+            int linkedRespawns = menu.blockEntity.getRespawnPointOffsets().size();
+            context.drawString(this.font,
+                    Component.translatable("gui.arenas_ld.respawn_points_linked_readonly", linkedRespawns),
+                    10,
+                    this.imageHeight - 62,
+                    0x808080,
+                    false);
+            return;
+        }
+        if (activeTab != Tab.TIERS) {
             return;
         }
         captureCurrentTierEdits();

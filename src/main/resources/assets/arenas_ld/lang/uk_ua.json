@@ -210,6 +210,7 @@
   "message.arenas_ld.linker.respawn_point_list": "Точка відродження: %s",
   "tooltip.arenas_ld.linker.mode": "Режим: %s",
   "tooltip.arenas_ld.linker.main_spawner": "Основний спавнер: %s",
+  "tooltip.arenas_ld.linker.respawn_points_linked": "Точки відродження: %s прив'язано",
   "tooltip.arenas_ld.linker.main_phase_block": "Основний фазовий блок: %s",
   "tooltip.arenas_ld.linker.shift_scroll": "Shift + Прокрутка для зміни режиму",
 
@@ -273,6 +274,7 @@
   "gui.arenas_ld.decline": "Відхилити",
   "gui.arenas_ld.hardcore": "Хардкор",
   "gui.arenas_ld.hardcore_desc": "Хардкор: 1 життя, 2x нагороди.",
+  "gui.arenas_ld.respawn_points_linked_readonly": "Точки відродження: %s (налаштовується через Linker)",
   "gui.arenas_ld.raid_timer": "Таймер рейду",
   "gui.arenas_ld.raid_timer_remaining": "Таймер рейду: %s",
   "gui.arenas_ld.apply": "Застосувати",
