@@ -440,7 +440,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         if (!resolvedPerPlayerLootTableId.isEmpty()) {
             for (UUID uuid : trackedPlayerIds) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-                if (player == null || player.isSpectator() || downedPlayers.containsKey(uuid)) {
+                if (player == null || !isTracked(uuid)) {
                     continue;
                 }
                 ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
