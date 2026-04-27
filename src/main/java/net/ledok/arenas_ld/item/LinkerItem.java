@@ -256,53 +256,55 @@ public class LinkerItem extends Item {
     private InteractionResult handleArenaControllerLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, boolean isShiftDown, LinkerModeDataComponent modeData) {
         Optional<BlockPos> mainPosOpt = modeData.mainSpawnerPos();
 
-        if (blockEntity instanceof MobArenaSpawnerBlockEntity) {
-            if (mainPosOpt.isPresent() && mainPosOpt.get().equals(pos) && modeData.mainSpawnerDimension().isPresent() && modeData.mainSpawnerDimension().get().equals(world.dimension())) {
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.arena_spawner_selected", pos.toShortString()));
-                return InteractionResult.SUCCESS;
-            }
-            stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.set_main_spawner", pos.toShortString()));
-            return InteractionResult.SUCCESS;
-        }
-
         if (blockEntity instanceof MobArenaControllerBlockEntity controller) {
-            if (mainPosOpt.isEmpty() || modeData.mainSpawnerDimension().isEmpty()) {
+            if (isShiftDown) {
                 if (controller.hasLinkedSpawner()) {
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_linked_to", controller.getArenaSpawnerPos().toShortString(), controller.getArenaSpawnerDimension().location().toString()));
+                    BlockPos linkedSpawner = controller.getArenaSpawnerPos();
+                    controller.clearLinkedSpawner();
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.unlinked_controller_from_spawner", linkedSpawner.toShortString()));
                 } else {
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_arena_spawner_selected"));
                 }
                 return InteractionResult.SUCCESS;
             }
 
-            BlockPos mainPos = mainPosOpt.get();
-            ServerLevel mainWorld = world.getServer().getLevel(modeData.mainSpawnerDimension().get());
-            if (mainWorld == null) {
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_spawner_invalid"));
-                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
-                return InteractionResult.FAIL;
-            }
-
-            BlockEntity mainBe = mainWorld.getBlockEntity(mainPos);
-            if (!(mainBe instanceof MobArenaSpawnerBlockEntity)) {
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_spawner_invalid"));
-                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
-                return InteractionResult.FAIL;
-            }
-
-            if (isShiftDown) {
-                if (controller.getArenaSpawnerPos().equals(mainPos) && controller.getArenaSpawnerDimension().equals(modeData.mainSpawnerDimension().get())) {
-                    controller.clearLinkedSpawner();
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.unlinked_controller_from_spawner", mainPos.toShortString()));
-                } else {
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.spawner_not_linked_controller"));
-                }
+            if (mainPosOpt.isEmpty() || modeData.mainSpawnerDimension().isEmpty() || !mainPosOpt.get().equals(pos) || !modeData.mainSpawnerDimension().get().equals(world.dimension())) {
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.arena_controller_selected", pos.toShortString()));
                 return InteractionResult.SUCCESS;
             }
 
-            controller.setLinkedSpawner(mainPos, modeData.mainSpawnerDimension().get());
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.linked_controller_to_spawner", pos.toShortString(), mainPos.toShortString()));
+            // Selected controller clicked again: show linked spawner.
+            if (controller.hasLinkedSpawner()) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_linked_to", controller.getArenaSpawnerPos().toShortString(), controller.getArenaSpawnerDimension().location().toString()));
+            } else {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_arena_spawner_selected"));
+            }
+            return InteractionResult.SUCCESS;
+        }
+
+        if (blockEntity instanceof MobArenaSpawnerBlockEntity) {
+            if (mainPosOpt.isEmpty() || modeData.mainSpawnerDimension().isEmpty()) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_arena_controller_selected"));
+                return InteractionResult.FAIL;
+            }
+
+            ServerLevel controllerWorld = world.getServer().getLevel(modeData.mainSpawnerDimension().get());
+            if (controllerWorld == null) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_spawner_invalid"));
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+                return InteractionResult.FAIL;
+            }
+
+            BlockEntity controllerBe = controllerWorld.getBlockEntity(mainPosOpt.get());
+            if (!(controllerBe instanceof MobArenaControllerBlockEntity controller)) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_arena_controller_selected"));
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+                return InteractionResult.FAIL;
+            }
+
+            controller.setLinkedSpawner(pos, world.dimension());
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.linked_controller_to_spawner", mainPosOpt.get().toShortString(), pos.toShortString()));
             return InteractionResult.SUCCESS;
         }
 

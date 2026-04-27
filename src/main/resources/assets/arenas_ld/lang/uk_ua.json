@@ -177,6 +177,8 @@
   "message.arenas_ld.linker.unlinked_spawner_phase": "Відв'язано спавнер %s від фазового блоку %s",
   "message.arenas_ld.linker.spawner_not_linked_phase": "Спавнер не був прив'язаний до вибраного фазового блоку.",
   "message.arenas_ld.linker.arena_spawner_selected": "Вибрано спавнер арени: %s",
+  "message.arenas_ld.linker.arena_controller_selected": "Вибрано контролер арени: %s",
+  "message.arenas_ld.linker.no_arena_controller_selected": "Контролер арени не вибрано. Спочатку натисніть на контролер.",
   "message.arenas_ld.linker.controller_linked_to": "Контролер прив'язаний до: %s @ %s",
   "message.arenas_ld.linker.no_arena_spawner_selected": "Спавнер арени не вибрано. Спочатку натисніть на спавнер.",
   "message.arenas_ld.linker.unlinked_controller_from_spawner": "Контролер відв'язано від спавнера %s",

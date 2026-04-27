@@ -179,6 +179,8 @@
   "message.arenas_ld.linker.unlinked_spawner_phase": "Unlinked spawner %s from phase block %s",
   "message.arenas_ld.linker.spawner_not_linked_phase": "Spawner was not linked to selected phase block.",
   "message.arenas_ld.linker.arena_spawner_selected": "Selected arena spawner: %s",
+  "message.arenas_ld.linker.arena_controller_selected": "Selected arena controller: %s",
+  "message.arenas_ld.linker.no_arena_controller_selected": "No arena controller selected. Click a controller first.",
   "message.arenas_ld.linker.controller_linked_to": "Controller linked to: %s @ %s",
   "message.arenas_ld.linker.no_arena_spawner_selected": "No arena spawner selected. Click a spawner first.",
   "message.arenas_ld.linker.unlinked_controller_from_spawner": "Unlinked controller from spawner %s",

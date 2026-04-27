@@ -29,7 +29,7 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
     private static final int LEADERBOARD_Y = 152;
     private static final int LEADERBOARD_H = 80;
 
-    private static final int BTN_H = 20;
+    private static final int BTN_H = 18;
     private static final int BTN_W = (IW - 8) / 3;
 
     private static final int C_BG = 0xFF111622;
@@ -72,7 +72,7 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
         int x = leftPos;
         int y = topPos;
 
-        int actionsY = y + PARTY_Y + PARTY_H - BTN_H - 8;
+        int actionsY = y + PARTY_Y + PARTY_H - BTN_H - 7;
         joinButton = addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.join_party"), b -> {
             ClientPlayNetworking.send(new ModPackets.MobArenaControllerActionPayload(menu.getPos(), 1));
             updateInfo();
@@ -90,7 +90,7 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
 
         hardcoreCheckbox = addRenderableWidget(Checkbox.builder(
                         Component.translatable("gui.arenas_ld.hardcore"), this.font)
-                .pos(x + P, y + PARTY_Y + PARTY_H - 36)
+                .pos(x + P + 2, y + PARTY_Y + PARTY_H - 36)
                 .selected(false)
                 .onValueChange((checkbox, selected) -> {
                     if (!suppressHardcoreSync) {
@@ -238,7 +238,7 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
         drawBorder(g, listX, listY, listW, listH, C_BDR);
 
         renderPartyMembers(g, listX + 4, listY + 4, listH - 8, false);
-        small(g, Component.literal(partyNames.size() + " players"), x + P + 4, y + PARTY_Y + PARTY_H - 48, C_MUTED);
+        small(g, Component.literal(partyNames.size() + " players"), x + P + 4, y + PARTY_Y + PARTY_H - 47, C_MUTED);
     }
 
     private void renderActiveState(GuiGraphics g, int x, int y) {
