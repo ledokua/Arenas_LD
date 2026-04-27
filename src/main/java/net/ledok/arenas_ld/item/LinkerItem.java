@@ -163,11 +163,11 @@ public class LinkerItem extends Item {
         if (mainPos.equals(pos) && modeData.mainSpawnerDimension().get().equals(world.dimension())) {
             List<BlockPos> linked = mainSpawner.getLinkedSpawners();
             if (linked.isEmpty()) {
-                player.sendSystemMessage(Component.literal("No linked spawners."));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_linked_spawners"));
             } else {
-                player.sendSystemMessage(Component.literal("Linked spawners:"));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.linked_spawners"));
                 for (BlockPos offset : linked) {
-                    player.sendSystemMessage(Component.literal("- " + mainPos.offset(offset).toShortString()));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.linked_spawner_entry", mainPos.offset(offset).toShortString()));
                 }
             }
             return InteractionResult.SUCCESS;
@@ -177,9 +177,9 @@ public class LinkerItem extends Item {
         if (isShiftDown) {
             boolean removed = mainSpawner.removeLinkedSpawner(relativePos);
             if (removed) {
-                player.sendSystemMessage(Component.literal("Unlinked spawner " + pos.toShortString() + " from " + mainPos.toShortString()));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.unlinked_spawner", pos.toShortString(), mainPos.toShortString()));
             } else {
-                player.sendSystemMessage(Component.literal("Spawner was not linked to selected main spawner."));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.spawner_not_linked_main"));
             }
             return InteractionResult.SUCCESS;
         }
@@ -203,12 +203,12 @@ public class LinkerItem extends Item {
             // Selected phase block clicked again: list watched spawners.
             List<BlockPos> watched = phaseBlock.getWatchedSpawnerOffsets();
             if (watched.isEmpty()) {
-                player.sendSystemMessage(Component.literal("No watched spawners linked."));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_watched_spawners"));
             } else {
-                player.sendSystemMessage(Component.literal("Watched spawners:"));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.watched_spawners"));
                 for (BlockPos offset : watched) {
                     BlockPos absolutePos = pos.offset(offset);
-                    player.sendSystemMessage(Component.literal("- " + absolutePos.toShortString()));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.watched_spawner_entry", absolutePos.toShortString()));
                 }
             }
             return InteractionResult.SUCCESS;
@@ -230,9 +230,9 @@ public class LinkerItem extends Item {
                     if (isShiftDown) {
                         boolean removed = mainPhaseBlock.removeWatchedSpawnerOffset(relativePos);
                         if (removed) {
-                            player.sendSystemMessage(Component.literal("Unlinked spawner " + pos.toShortString() + " from phase block " + mainPos.toShortString()));
+                            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.unlinked_spawner_phase", pos.toShortString(), mainPos.toShortString()));
                         } else {
-                            player.sendSystemMessage(Component.literal("Spawner was not linked to selected phase block."));
+                            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.spawner_not_linked_phase"));
                         }
                         return InteractionResult.SUCCESS;
                     }
@@ -255,7 +255,7 @@ public class LinkerItem extends Item {
 
         if (blockEntity instanceof MobArenaSpawnerBlockEntity) {
             if (mainPosOpt.isPresent() && mainPosOpt.get().equals(pos) && modeData.mainSpawnerDimension().isPresent() && modeData.mainSpawnerDimension().get().equals(world.dimension())) {
-                player.sendSystemMessage(Component.literal("Selected arena spawner: " + pos.toShortString()));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.arena_spawner_selected", pos.toShortString()));
                 return InteractionResult.SUCCESS;
             }
             stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
@@ -266,9 +266,9 @@ public class LinkerItem extends Item {
         if (blockEntity instanceof MobArenaControllerBlockEntity controller) {
             if (mainPosOpt.isEmpty() || modeData.mainSpawnerDimension().isEmpty()) {
                 if (!controller.arenaSpawnerPos.equals(BlockPos.ZERO)) {
-                    player.sendSystemMessage(Component.literal("Controller linked to: " + controller.arenaSpawnerPos.toShortString() + " @ " + controller.arenaSpawnerDimension.location()));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_linked_to", controller.arenaSpawnerPos.toShortString(), controller.arenaSpawnerDimension.location().toString()));
                 } else {
-                    player.sendSystemMessage(Component.literal("No arena spawner selected. Click a spawner first."));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_arena_spawner_selected"));
                 }
                 return InteractionResult.SUCCESS;
             }
@@ -293,9 +293,9 @@ public class LinkerItem extends Item {
                     controller.arenaSpawnerPos = BlockPos.ZERO;
                     controller.arenaSpawnerDimension = Level.OVERWORLD;
                     controller.setChanged();
-                    player.sendSystemMessage(Component.literal("Unlinked controller from spawner " + mainPos.toShortString()));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.unlinked_controller_from_spawner", mainPos.toShortString()));
                 } else {
-                    player.sendSystemMessage(Component.literal("Selected spawner is not linked to this controller."));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.spawner_not_linked_controller"));
                 }
                 return InteractionResult.SUCCESS;
             }
@@ -317,23 +317,25 @@ public class LinkerItem extends Item {
             if (mainPosOpt.isEmpty() || modeData.mainSpawnerDimension().isEmpty() || !mainPosOpt.get().equals(pos) || !modeData.mainSpawnerDimension().get().equals(world.dimension())) {
                 // Select controller first.
                 stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
-                player.sendSystemMessage(Component.literal("Selected dungeon controller: " + pos.toShortString()));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_controller_selected", pos.toShortString()));
                 return InteractionResult.SUCCESS;
             }
 
             // Selected controller clicked again: list instances.
             if (controller.getInstances().isEmpty()) {
-                player.sendSystemMessage(Component.literal("No dungeon instances linked."));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_dungeon_instances"));
             } else {
-                player.sendSystemMessage(Component.literal("Dungeon instances:"));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_instances"));
                 for (var instance : controller.getInstances()) {
                     int cooldownSec = (instance.cooldownTicksRemaining() + 19) / 20;
                     String suffix = instance.status() == net.ledok.arenas_ld.util.InstanceStatus.COOLDOWN
                             ? ", " + String.format("%02d:%02d", cooldownSec / 60, cooldownSec % 60)
                             : "";
-                    player.sendSystemMessage(Component.literal(
-                            "- " + instance.ref().spawnerPos().toShortString() + " @ " + instance.ref().dimension().location()
-                                    + " (" + instance.status().name() + suffix + ")"
+                    player.sendSystemMessage(Component.translatable(
+                            "message.arenas_ld.linker.dungeon_instance_entry",
+                            instance.ref().spawnerPos().toShortString(),
+                            instance.ref().dimension().location().toString(),
+                            instance.status().name() + suffix
                     ));
                 }
             }
@@ -342,21 +344,21 @@ public class LinkerItem extends Item {
 
         if (blockEntity instanceof DungeonBossSpawnerBlockEntity) {
             if (mainPosOpt.isEmpty() || modeData.mainSpawnerDimension().isEmpty()) {
-                player.sendSystemMessage(Component.literal("No dungeon controller selected. Click a controller first."));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_dungeon_controller_selected"));
                 return InteractionResult.SUCCESS;
             }
 
             BlockPos controllerPos = mainPosOpt.get();
             ServerLevel controllerWorld = world.getServer().getLevel(modeData.mainSpawnerDimension().get());
             if (controllerWorld == null) {
-                player.sendSystemMessage(Component.literal("Selected dungeon controller is invalid."));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_controller_invalid"));
                 stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
                 return InteractionResult.FAIL;
             }
 
             BlockEntity controllerBe = controllerWorld.getBlockEntity(controllerPos);
             if (!(controllerBe instanceof DungeonControllerBlockEntity controller)) {
-                player.sendSystemMessage(Component.literal("Selected dungeon controller is invalid."));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_controller_invalid"));
                 stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
                 return InteractionResult.FAIL;
             }
@@ -365,19 +367,19 @@ public class LinkerItem extends Item {
             if (isShiftDown) {
                 boolean removed = controller.removeInstance(ref);
                 if (removed) {
-                    player.sendSystemMessage(Component.literal("Removed dungeon instance " + pos.toShortString() + " from controller " + controllerPos.toShortString()));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_instance_removed", pos.toShortString(), controllerPos.toShortString()));
                 } else {
-                    player.sendSystemMessage(Component.literal("Selected instance is not linked (or running)."));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_instance_not_linked"));
                 }
                 return InteractionResult.SUCCESS;
             }
 
             boolean added = controller.addInstance(ref);
             if (added) {
-                player.sendSystemMessage(Component.literal("Added dungeon instance " + pos.toShortString() + " to controller " + controllerPos.toShortString()));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_instance_added", pos.toShortString(), controllerPos.toShortString()));
                 return InteractionResult.SUCCESS;
             }
-            player.sendSystemMessage(Component.literal("Could not add instance. It may already be linked or running."));
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_instance_add_failed"));
             return InteractionResult.SUCCESS;
         }
 

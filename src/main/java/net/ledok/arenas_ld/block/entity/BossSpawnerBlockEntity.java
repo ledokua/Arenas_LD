@@ -45,6 +45,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
@@ -98,6 +99,8 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     protected int regenerationTickTimer = 0;
     protected int boundsTickCounter = 0;
     private final Map<UUID, GameType> playerGameModesBeforeRaid = new HashMap<>();
+    private AABB cachedBattleBounds = null;
+    private int cachedBattleBoundsRadius = Integer.MIN_VALUE;
 
     public BossSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
@@ -650,7 +653,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     }
 
     private void enforceBattleBounds(ServerLevel world) {
-        net.minecraft.world.phys.AABB battleBox = new net.minecraft.world.phys.AABB(worldPosition).inflate(battleRadius);
+        AABB battleBox = getCachedBattleBounds();
         for (UUID uuid : trackedPlayerIds) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
             if (player == null || player.isSpectator() || downedPlayers.containsKey(uuid)) {
@@ -668,6 +671,14 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.raid_out_of_bounds"));
             }
         }
+    }
+
+    private AABB getCachedBattleBounds() {
+        if (cachedBattleBounds == null || cachedBattleBoundsRadius != battleRadius) {
+            cachedBattleBounds = new AABB(worldPosition).inflate(battleRadius);
+            cachedBattleBoundsRadius = battleRadius;
+        }
+        return cachedBattleBounds;
     }
 
     private void notifyController(ServerLevel world, boolean wasWin) {
