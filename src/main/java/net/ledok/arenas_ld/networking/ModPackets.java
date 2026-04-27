@@ -1140,42 +1140,8 @@ public class ModPackets {
     }
 
     public static void registerC2SPackets() {
-        PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerTierConfigsPayload.TYPE, UpdateBossSpawnerTierConfigsPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateDungeonBossSpawnerPayload.TYPE, UpdateDungeonBossSpawnerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateDungeonTierConfigsPayload.TYPE, UpdateDungeonTierConfigsPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerPayload.TYPE, UpdateMobSpawnerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateMobArenaSpawnerPayload.TYPE, UpdateMobArenaSpawnerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateMobArenaMobsPayload.TYPE, UpdateMobArenaMobsPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateMobArenaRewardsPayload.TYPE, UpdateMobArenaRewardsPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateAttributesPayload.TYPE, UpdateAttributesPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateEquipmentPayload.TYPE, UpdateEquipmentPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(CycleConfiguratorModePayload.TYPE, CycleConfiguratorModePayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(MobArenaControllerActionPayload.TYPE, MobArenaControllerActionPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(DungeonControllerActionPayload.TYPE, DungeonControllerActionPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RaidControllerActionPayload.TYPE, RaidControllerActionPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(JoinDungeonLobbyPayload.TYPE, JoinDungeonLobbyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(JoinRaidLobbyPayload.TYPE, JoinRaidLobbyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RespondDungeonLobbyInvitePayload.TYPE, RespondDungeonLobbyInvitePayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RespondRaidLobbyInvitePayload.TYPE, RespondRaidLobbyInvitePayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(CreateDungeonLobbyPayload.TYPE, CreateDungeonLobbyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(CreateRaidLobbyPayload.TYPE, CreateRaidLobbyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(DisbandDungeonLobbyPayload.TYPE, DisbandDungeonLobbyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(DisbandRaidLobbyPayload.TYPE, DisbandRaidLobbyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(InviteDungeonLobbyPlayerPayload.TYPE, InviteDungeonLobbyPlayerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(InviteRaidLobbyPlayerPayload.TYPE, InviteRaidLobbyPlayerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(KickDungeonLobbyPlayerPayload.TYPE, KickDungeonLobbyPlayerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RequestDungeonControllerInfoPayload.TYPE, RequestDungeonControllerInfoPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RequestRaidControllerInfoPayload.TYPE, RequestRaidControllerInfoPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RequestMobArenaControllerInfoPayload.TYPE, RequestMobArenaControllerInfoPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateDungeonControllerSettingsPayload.TYPE, UpdateDungeonControllerSettingsPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateRaidControllerSettingsPayload.TYPE, UpdateRaidControllerSettingsPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateDungeonLobbyVisibilityPayload.TYPE, UpdateDungeonLobbyVisibilityPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateRaidLobbyVisibilityPayload.TYPE, UpdateRaidLobbyVisibilityPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateDungeonControllerAdminSettingsPayload.TYPE, UpdateDungeonControllerAdminSettingsPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateRaidControllerAdminSettingsPayload.TYPE, UpdateRaidControllerAdminSettingsPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateMobArenaControllerSettingsPayload.TYPE, UpdateMobArenaControllerSettingsPayload.STREAM_CODEC);
+        ModPacketTypeRegistry.registerC2STypes();
+        RaidPacketHandlers.register();
 
         ServerPlayNetworking.registerGlobalReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -1555,64 +1521,6 @@ public class ModPackets {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(RaidControllerActionPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof RaidControllerBlockEntity controller)) {
-                    return;
-                }
-                switch (payload.action()) {
-                    case 0: // Start/Queue Raid
-                        if (isPlayerBusy(player)) {
-                            player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(net.minecraft.ChatFormatting.RED));
-                            return;
-                        }
-                        RaidControllerBlockEntity.Lobby lobby = controller.getLobbyByMember(player.getUUID());
-                        if (lobby == null) {
-                            player.sendSystemMessage(Component.translatable("message.arenas_ld.not_in_lobby"));
-                            return;
-                        }
-                        if (!lobby.ownerUuid.equals(player.getUUID())) {
-                            player.sendSystemMessage(Component.translatable("message.arenas_ld.only_owner_can_start_dungeon"));
-                            return;
-                        }
-                        if (!(world instanceof ServerLevel serverLevel)) {
-                            return;
-                        }
-                        controller.startRaid(serverLevel, lobby);
-                        break;
-                    case 1: // Leave Queue
-                        RaidControllerBlockEntity.Lobby queueLobby = controller.getLobbyByMember(player.getUUID());
-                        if (queueLobby == null || !queueLobby.ownerUuid.equals(player.getUUID())) {
-                            return;
-                        }
-                        if (queueLobby.status == LobbyStatus.QUEUED) {
-                            queueLobby.status = LobbyStatus.OPEN;
-                            controller.setChanged();
-                            world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                        }
-                        break;
-                    case 2: // Leave Lobby
-                        controller.leaveLobby(player.getUUID());
-                        break;
-                    case 3: // Create Lobby
-                        if (isPlayerBusy(player)) {
-                            player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(net.minecraft.ChatFormatting.RED));
-                            return;
-                        }
-                        removePlayerFromOtherLobbies(player, controller.getBlockPos(), world.dimension());
-                        if (controller.getLobbyByMember(player.getUUID()) != null) {
-                            return;
-                        }
-                        controller.createLobby(player.getUUID(), player.getGameProfile().getName());
-                        break;
-                    default:
-                        break;
-                }
-            });
-        });
 
         ServerPlayNetworking.registerGlobalReceiver(JoinDungeonLobbyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -1659,46 +1567,6 @@ public class ModPackets {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(JoinRaidLobbyPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof RaidControllerBlockEntity controller)) {
-                    return;
-                }
-                if (isPlayerBusy(player)) {
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(net.minecraft.ChatFormatting.RED));
-                    return;
-                }
-                removePlayerFromOtherLobbies(player, controller.getBlockPos(), world.dimension());
-                if (controller.getLobbyByMember(player.getUUID()) != null) {
-                    return;
-                }
-                UUID lobbyId;
-                try {
-                    lobbyId = UUID.fromString(payload.lobbyId());
-                } catch (IllegalArgumentException e) {
-                    return;
-                }
-                RaidControllerBlockEntity.Lobby lobby = controller.getLobbyById(lobbyId);
-                if (lobby == null || lobby.status != LobbyStatus.OPEN) {
-                    return;
-                }
-                if (lobby.visibility == LobbyVisibility.INVITE_ONLY) {
-                    long nowTick = player.serverLevel().getGameTime();
-                    boolean accepted = controller.acceptInvite(lobby.id, player.getUUID(), player.getGameProfile().getName(), nowTick);
-                    if (!accepted) {
-                        return;
-                    }
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                    return;
-                }
-                if (controller.addMemberToLobby(lobby.id, player.getUUID())) {
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                }
-            });
-        });
 
         ServerPlayNetworking.registerGlobalReceiver(RespondDungeonLobbyInvitePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -1727,32 +1595,6 @@ public class ModPackets {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(RespondRaidLobbyInvitePayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                UUID lobbyId;
-                try {
-                    lobbyId = UUID.fromString(payload.lobbyId());
-                } catch (IllegalArgumentException e) {
-                    return;
-                }
-                RaidControllerBlockEntity controller = findRaidControllerByLobbyId(player.server, lobbyId);
-                if (controller == null) {
-                    return;
-                }
-                if (payload.accept()) {
-                    if (isPlayerBusy(player)) {
-                        player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(net.minecraft.ChatFormatting.RED));
-                        return;
-                    }
-                    removePlayerFromOtherLobbies(player, controller.getBlockPos(), controller.getLevel() != null ? controller.getLevel().dimension() : Level.OVERWORLD);
-                    long nowTick = player.serverLevel().getGameTime();
-                    controller.acceptInvite(lobbyId, player.getUUID(), player.getGameProfile().getName(), nowTick);
-                } else {
-                    controller.declineInvite(lobbyId, player.getUUID());
-                }
-            });
-        });
 
         ServerPlayNetworking.registerGlobalReceiver(CreateDungeonLobbyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -1774,25 +1616,6 @@ public class ModPackets {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(CreateRaidLobbyPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof RaidControllerBlockEntity controller)) {
-                    return;
-                }
-                if (isPlayerBusy(player)) {
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(net.minecraft.ChatFormatting.RED));
-                    return;
-                }
-                removePlayerFromOtherLobbies(player, controller.getBlockPos(), world.dimension());
-                if (controller.getLobbyByMember(player.getUUID()) != null) {
-                    return;
-                }
-                controller.createLobby(player.getUUID(), player.getGameProfile().getName());
-            });
-        });
 
         ServerPlayNetworking.registerGlobalReceiver(DisbandDungeonLobbyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -1806,17 +1629,6 @@ public class ModPackets {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(DisbandRaidLobbyPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof RaidControllerBlockEntity controller)) {
-                    return;
-                }
-                controller.disbandLobby(player.getUUID());
-            });
-        });
 
         ServerPlayNetworking.registerGlobalReceiver(InviteDungeonLobbyPlayerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -1843,30 +1655,6 @@ public class ModPackets {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(InviteRaidLobbyPlayerPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer owner = context.player();
-                Level world = owner.level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof RaidControllerBlockEntity controller)) {
-                    return;
-                }
-                RaidControllerBlockEntity.Lobby lobby = controller.getLobbyByMember(owner.getUUID());
-                if (lobby == null || !lobby.ownerUuid.equals(owner.getUUID())) {
-                    return;
-                }
-                ServerPlayer target = owner.server.getPlayerList().getPlayerByName(payload.playerName());
-                if (target == null || target.getUUID().equals(owner.getUUID())) {
-                    return;
-                }
-                long nowTick = owner.serverLevel().getGameTime();
-                long expireAt = nowTick + (5L * 60L * 20L);
-                if (!controller.invitePlayer(owner.getUUID(), target.getUUID(), expireAt)) {
-                    return;
-                }
-                sendClickableLobbyInvite(target, owner.getGameProfile().getName(), lobby.id);
-            });
-        });
 
         ServerPlayNetworking.registerGlobalReceiver(KickDungeonLobbyPlayerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -1992,126 +1780,6 @@ public class ModPackets {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(RequestRaidControllerInfoPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (be instanceof RaidControllerBlockEntity controller) {
-                    RaidDifficulty requestedLeaderboardDifficulty =
-                            RaidDifficulty.fromNameOrDefault(payload.leaderboardDifficulty(), RaidDifficulty.NORMAL);
-                    RaidControllerBlockEntity.Lobby lobby = controller.getLobbyByMember(player.getUUID());
-                    List<String> players = new ArrayList<>();
-                    List<RaidControllerInfoPayload.InstanceView> instances = new ArrayList<>();
-                    List<RaidControllerInfoPayload.LobbyView> lobbies = new ArrayList<>();
-                    boolean inLobby = lobby != null;
-                    boolean isLobbyOwner = false;
-                    String lobbyStatus = LobbyStatus.OPEN.name();
-                    int queuePosition = 0;
-                    String selectedDifficulty = RaidDifficulty.NORMAL.name();
-                    boolean hardcoreEnabled = false;
-                    String currentLobbyVisibility = LobbyVisibility.OPEN.name();
-                    boolean canManageAdmin = player.hasPermissions(2);
-                    int controllerRespawnTimeTicks = controller.getRespawnTimeTicks();
-                    int controllerMaxPartySize = controller.getMaxPartySize();
-                    if (lobby != null) {
-                        isLobbyOwner = lobby.ownerUuid.equals(player.getUUID());
-                        lobbyStatus = lobby.status.name();
-                        selectedDifficulty = lobby.selectedDifficulty.name();
-                        hardcoreEnabled = lobby.hardcoreEnabled;
-                        currentLobbyVisibility = lobby.visibility.name();
-                        if (lobby.status == LobbyStatus.QUEUED) {
-                            int pos = 1;
-                            for (RaidControllerBlockEntity.Lobby candidate : controller.getLobbies()) {
-                                if (candidate.status != LobbyStatus.QUEUED) {
-                                    continue;
-                                }
-                                if (candidate.id.equals(lobby.id)) {
-                                    queuePosition = pos;
-                                    break;
-                                }
-                                pos++;
-                            }
-                        }
-                        ServerPlayer owner = player.server.getPlayerList().getPlayer(lobby.ownerUuid);
-                        String ownerName = owner != null ? owner.getGameProfile().getName() : lobby.ownerName;
-                        if (ownerName == null || ownerName.isEmpty()) {
-                            ownerName = "Unknown";
-                        }
-                        players.add(ownerName);
-                        for (UUID uuid : lobby.members) {
-                            ServerPlayer lobbyPlayer = player.server.getPlayerList().getPlayer(uuid);
-                            players.add(lobbyPlayer != null ? lobbyPlayer.getGameProfile().getName() : "Unknown");
-                        }
-                    }
-
-                    int queuedPosCounter = 0;
-                    for (RaidControllerBlockEntity.Lobby candidate : controller.getLobbies()) {
-                        int candidateQueuePosition = 0;
-                        if (candidate.status == LobbyStatus.QUEUED) {
-                            queuedPosCounter++;
-                            candidateQueuePosition = queuedPosCounter;
-                        }
-                        String ownerName = candidate.ownerName != null && !candidate.ownerName.isEmpty()
-                                ? candidate.ownerName : "Unknown";
-                        lobbies.add(new RaidControllerInfoPayload.LobbyView(
-                                candidate.id.toString(),
-                                ownerName,
-                                1 + candidate.members.size(),
-                                controller.getMaxPartySize(),
-                                candidate.visibility.name(),
-                                candidate.status.name(),
-                                candidateQueuePosition,
-                                candidate.selectedDifficulty.name(),
-                                candidate.pendingInvites.containsKey(player.getUUID())
-                        ));
-                    }
-
-                    for (RaidControllerBlockEntity.RaidInstanceState instance : controller.getInstances()) {
-                        int cooldownSeconds = instance.status() == InstanceStatus.COOLDOWN
-                                ? (Math.max(0, instance.cooldownTicksRemaining()) + 19) / 20
-                                : 0;
-                        instances.add(new RaidControllerInfoPayload.InstanceView(instance.status().name(), cooldownSeconds));
-                    }
-
-                    ServerPlayNetworking.send(player, new RaidControllerInfoPayload(
-                            payload.pos(),
-                            inLobby,
-                            isLobbyOwner,
-                            lobbyStatus,
-                            queuePosition,
-                            selectedDifficulty,
-                            hardcoreEnabled,
-                            currentLobbyVisibility,
-                            canManageAdmin,
-                            controllerRespawnTimeTicks,
-                            controllerMaxPartySize,
-                            players,
-                            resolveRaidLeaderboardForDifficulty(controller, requestedLeaderboardDifficulty),
-                            instances,
-                            lobbies
-                    ));
-                } else {
-                    ServerPlayNetworking.send(player, new RaidControllerInfoPayload(
-                            payload.pos(),
-                            false,
-                            false,
-                            LobbyStatus.OPEN.name(),
-                            0,
-                            RaidDifficulty.NORMAL.name(),
-                            false,
-                            LobbyVisibility.OPEN.name(),
-                            false,
-                            6000,
-                            10,
-                            List.of(),
-                            List.of(),
-                            List.of(),
-                            List.of()
-                    ));
-                }
-            });
-        });
 
         ServerPlayNetworking.registerGlobalReceiver(RequestMobArenaControllerInfoPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -2160,22 +1828,6 @@ public class ModPackets {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(UpdateRaidControllerSettingsPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof RaidControllerBlockEntity controller)) {
-                    return;
-                }
-                RaidDifficulty difficulty = RaidDifficulty.fromNameOrDefault(payload.selectedDifficulty(), RaidDifficulty.NORMAL);
-                RaidControllerBlockEntity.Lobby lobby = controller.getLobbyByMember(player.getUUID());
-                if (lobby != null && lobby.ownerUuid.equals(player.getUUID())) {
-                    controller.setLobbyDifficulty(player.getUUID(), difficulty);
-                    controller.setLobbyHardcoreEnabled(player.getUUID(), payload.hardcoreEnabled());
-                }
-            });
-        });
 
         ServerPlayNetworking.registerGlobalReceiver(UpdateDungeonLobbyVisibilityPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -2201,29 +1853,6 @@ public class ModPackets {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(UpdateRaidLobbyVisibilityPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof RaidControllerBlockEntity controller)) {
-                    return;
-                }
-                RaidControllerBlockEntity.Lobby lobby = controller.getLobbyByMember(player.getUUID());
-                if (lobby == null || !lobby.ownerUuid.equals(player.getUUID())) {
-                    return;
-                }
-                LobbyVisibility visibility;
-                try {
-                    visibility = LobbyVisibility.valueOf(payload.visibility().toUpperCase(java.util.Locale.ROOT));
-                } catch (IllegalArgumentException e) {
-                    return;
-                }
-                if (controller.setLobbyVisibility(player.getUUID(), visibility)) {
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                }
-            });
-        });
 
         ServerPlayNetworking.registerGlobalReceiver(UpdateDungeonControllerAdminSettingsPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -2241,21 +1870,6 @@ public class ModPackets {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(UpdateRaidControllerAdminSettingsPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!player.hasPermissions(2)) {
-                    return;
-                }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (!(be instanceof RaidControllerBlockEntity controller)) {
-                    return;
-                }
-                controller.setRespawnTimeTicks(payload.respawnTimeTicks());
-                controller.setMaxPartySize(payload.maxPartySize());
-            });
-        });
 
         ServerPlayNetworking.registerGlobalReceiver(UpdateMobArenaControllerSettingsPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
@@ -2272,13 +1886,13 @@ public class ModPackets {
         });
     }
 
-    private static boolean isPlayerInActiveGame(ServerPlayer player) {
+    static boolean isPlayerInActiveGame(ServerPlayer player) {
         if (ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) return true;
         if (ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player) != null) return true;
         return false;
     }
 
-    private static boolean isPlayerBusy(ServerPlayer player) {
+    static boolean isPlayerBusy(ServerPlayer player) {
         if (player == null) {
             return false;
         }
@@ -2299,7 +1913,7 @@ public class ModPackets {
         return new ArrayList<>(controller.getLeaderboardForTier(tier));
     }
 
-    private static List<RaidLeaderboardEntry> resolveRaidLeaderboardForDifficulty(
+    static List<RaidLeaderboardEntry> resolveRaidLeaderboardForDifficulty(
             RaidControllerBlockEntity controller,
             RaidDifficulty difficulty
     ) {
@@ -2309,7 +1923,7 @@ public class ModPackets {
         return new ArrayList<>(controller.getLeaderboardForDifficulty(difficulty));
     }
 
-    private static void removePlayerFromOtherLobbies(ServerPlayer player, BlockPos currentControllerPos, ResourceKey<Level> currentControllerDim) {
+    static void removePlayerFromOtherLobbies(ServerPlayer player, BlockPos currentControllerPos, ResourceKey<Level> currentControllerDim) {
         var server = player.server;
         if (server == null) return;
         for (MobArenaControllerBlockEntity.ControllerKey key : MobArenaControllerBlockEntity.getControllers()) {
@@ -2368,7 +1982,7 @@ public class ModPackets {
         return null;
     }
 
-    private static RaidControllerBlockEntity findRaidControllerByLobbyId(net.minecraft.server.MinecraftServer server, UUID lobbyId) {
+    static RaidControllerBlockEntity findRaidControllerByLobbyId(net.minecraft.server.MinecraftServer server, UUID lobbyId) {
         for (RaidControllerBlockEntity.ControllerKey key : RaidControllerBlockEntity.getControllers()) {
             ServerLevel level = server.getLevel(key.dimension());
             if (level == null) {
@@ -2382,7 +1996,7 @@ public class ModPackets {
         return null;
     }
 
-    private static void sendClickableLobbyInvite(ServerPlayer target, String ownerName, UUID lobbyId) {
+    static void sendClickableLobbyInvite(ServerPlayer target, String ownerName, UUID lobbyId) {
         String acceptCommand = "/arenasld lobby accept " + lobbyId;
         String declineCommand = "/arenasld lobby decline " + lobbyId;
         MutableComponent header = Component.translatable("message.arenas_ld.lobby_invite_from", ownerName);
@@ -2400,9 +2014,7 @@ public class ModPackets {
     }
 
     public static void registerS2CPackets() {
-        PayloadTypeRegistry.playS2C().register(DungeonControllerInfoPayload.TYPE, DungeonControllerInfoPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playS2C().register(RaidControllerInfoPayload.TYPE, RaidControllerInfoPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playS2C().register(MobArenaControllerInfoPayload.TYPE, MobArenaControllerInfoPayload.STREAM_CODEC);
+        ModPacketTypeRegistry.registerS2CTypes();
     }
 
     private static String formatSeconds(int totalSeconds) {
