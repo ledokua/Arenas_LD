@@ -43,6 +43,12 @@ public class BlockRegistry {
     public static final Block RAID_CONTROLLER_BLOCK = registerBlock("raid_controller",
             new RaidControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));
 
+    public static final Block RESPAWN_POINT_BLOCK = registerBlock("respawn_point",
+            new RespawnPointBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.AMETHYST_BLOCK)
+                    .noOcclusion()
+                    .noCollission()
+                    .strength(-1.0f, 3600000.0f)));
+
     private static Block registerBlock(String name, Block block) {
         registerBlockItem(name, block);
         return Registry.register(BuiltInRegistries.BLOCK, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":" + name), block);

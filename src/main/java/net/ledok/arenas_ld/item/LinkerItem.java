@@ -38,7 +38,8 @@ public class LinkerItem extends Item {
         ARENA_CONTROLLER_LINKING("item.arenas_ld.linker.mode.arena_controller_linking"),
         DUNGEON_CONTROLLER_LINKING("item.arenas_ld.linker.mode.dungeon_controller_linking"),
         RAID_CONTROLLER_LINKING("item.arenas_ld.linker.mode.raid_controller_linking"),
-        RAID_SPAWNER_POSITION("item.arenas_ld.linker.mode.raid_spawner_position");
+        RAID_SPAWNER_POSITION("item.arenas_ld.linker.mode.raid_spawner_position"),
+        RESPAWN_POINT_LINKING("item.arenas_ld.linker.mode.respawn_point_linking");
 
         private final String translationKey;
 
@@ -86,6 +87,8 @@ public class LinkerItem extends Item {
             return handleRaidControllerLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
         } else if (currentMode == Mode.RAID_SPAWNER_POSITION) {
             return handleRaidSpawnerPosition(world, pos, player, stack, blockEntity, isShiftDown, modeData);
+        } else if (currentMode == Mode.RESPAWN_POINT_LINKING) {
+            return handleRespawnPointLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
         }
 
         return super.useOn(context);
@@ -526,6 +529,69 @@ public class LinkerItem extends Item {
         return InteractionResult.SUCCESS;
     }
 
+    private InteractionResult handleRespawnPointLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, boolean isShiftDown, LinkerModeDataComponent modeData) {
+        Optional<BlockPos> mainPosOpt = modeData.mainSpawnerPos();
+
+        if (blockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
+            if (mainPosOpt.isEmpty()
+                    || modeData.mainSpawnerDimension().isEmpty()
+                    || !mainPosOpt.get().equals(pos)
+                    || !modeData.mainSpawnerDimension().get().equals(world.dimension())) {
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.respawn_point_selected", pos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
+
+            List<BlockPos> linked = bossSpawner.getRespawnPointOffsets();
+            if (linked.isEmpty()) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_respawn_points"));
+            } else {
+                for (BlockPos relativePos : linked) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.respawn_point_list", pos.offset(relativePos).toShortString()));
+                }
+            }
+            return InteractionResult.SUCCESS;
+        }
+
+        if (blockEntity instanceof RespawnPointBlockEntity) {
+            if (mainPosOpt.isEmpty() || modeData.mainSpawnerDimension().isEmpty()) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_spawner_invalid"));
+                return InteractionResult.FAIL;
+            }
+
+            BlockPos spawnerPos = mainPosOpt.get();
+            ServerLevel spawnerWorld = world.getServer().getLevel(modeData.mainSpawnerDimension().get());
+            if (spawnerWorld == null) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_spawner_invalid"));
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+                return InteractionResult.FAIL;
+            }
+
+            BlockEntity spawnerBe = spawnerWorld.getBlockEntity(spawnerPos);
+            if (!(spawnerBe instanceof BossSpawnerBlockEntity bossSpawner)) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.main_spawner_invalid"));
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+                return InteractionResult.FAIL;
+            }
+
+            BlockPos relativePos = pos.subtract(spawnerPos);
+            if (isShiftDown) {
+                if (bossSpawner.removeRespawnPointOffset(relativePos)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.respawn_point_removed", pos.toShortString()));
+                } else {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_respawn_points"));
+                }
+            } else {
+                bossSpawner.addRespawnPointOffset(relativePos);
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.respawn_point_added", pos.toShortString()));
+            }
+            spawnerWorld.sendBlockUpdated(spawnerPos, bossSpawner.getBlockState(), bossSpawner.getBlockState(), 3);
+            return InteractionResult.SUCCESS;
+        }
+
+        return InteractionResult.PASS;
+    }
+
     @Override
     public InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand usedHand) {
         ItemStack stack = player.getItemInHand(usedHand);
@@ -539,7 +605,8 @@ public class LinkerItem extends Item {
                         || Mode.values()[modeData.mode()] == Mode.ARENA_CONTROLLER_LINKING
                         || Mode.values()[modeData.mode()] == Mode.DUNGEON_CONTROLLER_LINKING
                         || Mode.values()[modeData.mode()] == Mode.RAID_CONTROLLER_LINKING
-                        || Mode.values()[modeData.mode()] == Mode.RAID_SPAWNER_POSITION) {
+                        || Mode.values()[modeData.mode()] == Mode.RAID_SPAWNER_POSITION
+                        || Mode.values()[modeData.mode()] == Mode.RESPAWN_POINT_LINKING) {
                     // Clear Main Spawner/Phase Block selection
                     stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.cleared_selection"));
@@ -565,7 +632,8 @@ public class LinkerItem extends Item {
         } else if ((currentMode == Mode.ARENA_CONTROLLER_LINKING
                 || currentMode == Mode.DUNGEON_CONTROLLER_LINKING
                 || currentMode == Mode.RAID_CONTROLLER_LINKING
-                || currentMode == Mode.RAID_SPAWNER_POSITION) && modeData.mainSpawnerPos().isPresent()) {
+                || currentMode == Mode.RAID_SPAWNER_POSITION
+                || currentMode == Mode.RESPAWN_POINT_LINKING) && modeData.mainSpawnerPos().isPresent()) {
             tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.main_spawner", modeData.mainSpawnerPos().get().toShortString()).withStyle(net.minecraft.ChatFormatting.GOLD));
         }
         

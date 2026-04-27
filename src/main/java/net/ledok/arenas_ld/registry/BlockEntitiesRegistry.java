@@ -60,6 +60,11 @@ public class BlockEntitiesRegistry {
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_controller_be"),
                     BlockEntityType.Builder.of(RaidControllerBlockEntity::new, BlockRegistry.RAID_CONTROLLER_BLOCK).build(null));
 
+    public static final BlockEntityType<RespawnPointBlockEntity> RESPAWN_POINT_BLOCK_ENTITY =
+            Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
+                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":respawn_point_be"),
+                    BlockEntityType.Builder.of(RespawnPointBlockEntity::new, BlockRegistry.RESPAWN_POINT_BLOCK).build(null));
+
     public static void initialize() {
     }
 }

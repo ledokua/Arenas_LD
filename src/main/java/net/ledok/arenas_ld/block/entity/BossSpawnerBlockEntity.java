@@ -70,6 +70,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     public ResourceKey<Level> entranceDimension = Level.OVERWORLD;
     public BlockPos exitPosition = BlockPos.ZERO; // absolute
     public ResourceKey<Level> exitDimension = Level.OVERWORLD;
+    private final List<BlockPos> respawnPointOffsets = new ArrayList<>();
     private final Map<RaidDifficulty, RaidTierConfig> tierConfigs = new EnumMap<>(RaidDifficulty.class);
     private final List<AttributeData> attributes = new ArrayList<>();
     private EquipmentData equipment = new EquipmentData();
@@ -127,6 +128,31 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         }
         tierConfigs.put(tier, config);
         setChanged();
+    }
+
+    public void addRespawnPointOffset(BlockPos relativePos) {
+        if (relativePos == null) {
+            return;
+        }
+        if (!respawnPointOffsets.contains(relativePos)) {
+            respawnPointOffsets.add(relativePos);
+            setChanged();
+        }
+    }
+
+    public boolean removeRespawnPointOffset(BlockPos relativePos) {
+        if (relativePos == null) {
+            return false;
+        }
+        if (respawnPointOffsets.remove(relativePos)) {
+            setChanged();
+            return true;
+        }
+        return false;
+    }
+
+    public List<BlockPos> getRespawnPointOffsets() {
+        return Collections.unmodifiableList(respawnPointOffsets);
     }
 
     public double computeExpectedHp(RaidDifficulty tier, int playerCount) {
@@ -640,16 +666,26 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         if (!isBattleActive || player == null) {
             return;
         }
+
+        BlockPos target = worldPosition.offset(entrancePosition);
+        if (!respawnPointOffsets.isEmpty()) {
+            Vec3 playerPos = player.position();
+            target = respawnPointOffsets.stream()
+                    .map(worldPosition::offset)
+                    .min(Comparator.comparingDouble(p ->
+                            playerPos.distanceToSqr(p.getX() + 0.5, p.getY(), p.getZ() + 0.5)))
+                    .orElse(target);
+        }
+
         ServerLevel entranceWorld = world.getServer().getLevel(entranceDimension);
-        BlockPos absoluteEntrance = worldPosition.offset(entrancePosition);
         player.setGameMode(GameType.ADVENTURE);
         player.setHealth(player.getMaxHealth());
         if (entranceWorld != null) {
             player.teleportTo(
                     entranceWorld,
-                    absoluteEntrance.getX() + 0.5,
-                    absoluteEntrance.getY(),
-                    absoluteEntrance.getZ() + 0.5,
+                    target.getX() + 0.5,
+                    target.getY(),
+                    target.getZ() + 0.5,
                     player.getYRot(),
                     player.getXRot()
             );
@@ -735,6 +771,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         nbt.putString("EntranceDimension", entranceDimension.location().toString());
         nbt.putLong("ExitPosition", exitPosition.asLong());
         nbt.putString("ExitDimension", exitDimension.location().toString());
+        nbt.putLongArray("RespawnPointOffsets", respawnPointOffsets.stream().mapToLong(BlockPos::asLong).toArray());
 
         nbt.putBoolean("IsBattleActive", isBattleActive);
         nbt.putInt("RespawnCooldown", respawnCooldown);
@@ -800,6 +837,12 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             exitDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitDimension")));
         } else {
             exitDimension = Level.OVERWORLD;
+        }
+        respawnPointOffsets.clear();
+        if (nbt.contains("RespawnPointOffsets", Tag.TAG_LONG_ARRAY)) {
+            for (long posLong : nbt.getLongArray("RespawnPointOffsets")) {
+                respawnPointOffsets.add(BlockPos.of(posLong));
+            }
         }
 
         isBattleActive = nbt.getBoolean("IsBattleActive");
