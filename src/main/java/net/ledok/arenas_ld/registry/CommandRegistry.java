@@ -79,7 +79,7 @@ public class CommandRegistry {
                                             HitResult hitResult = player.pick(10.0D, 0.0F, false);
                                             if (hitResult.getType() == HitResult.Type.BLOCK && hitResult instanceof BlockHitResult hit) {
                                                 if (player.level().getBlockEntity(hit.getBlockPos()) instanceof DungeonControllerBlockEntity controller) {
-                                                    if (!controller.instances.isEmpty()) {
+                                                    if (!controller.getInstances().isEmpty()) {
                                                         boolean added = ArenasLdMod.DUNGEON_BOSS_MANAGER.registerDungeon(
                                                                 context.getSource().getServer(),
                                                                 name,
@@ -159,7 +159,7 @@ public class CommandRegistry {
                                                                                     }
                                                                                     // Remove matching position in any dimension first; fallback to controller dimension.
                                                                                     DungeonInstanceRef target = null;
-                                                                                    for (InstanceState instance : controller.instances) {
+                                                                                    for (InstanceState instance : controller.getInstances()) {
                                                                                         if (instance.ref().spawnerPos().equals(spawnerPos)) {
                                                                                             target = instance.ref();
                                                                                             break;
@@ -188,12 +188,12 @@ public class CommandRegistry {
                                                                 context.getSource().sendFailure(Component.literal("No dungeon controller at given controller position."));
                                                                 return 0;
                                                             }
-                                                            if (controller.instances.isEmpty()) {
+                                                            if (controller.getInstances().isEmpty()) {
                                                                 context.getSource().sendSuccess(() -> Component.literal("No dungeon instances linked."), false);
                                                                 return 1;
                                                             }
                                                             context.getSource().sendSuccess(() -> Component.literal("Dungeon instances:"), false);
-                                                            for (InstanceState instance : controller.instances) {
+                                                            for (InstanceState instance : controller.getInstances()) {
                                                                 int cooldownSec = (instance.cooldownTicksRemaining() + 19) / 20;
                                                                 String line = String.format(
                                                                         "- %s @ %s (%s%s)",
@@ -322,14 +322,14 @@ public class CommandRegistry {
                                         if (!(level.getBlockEntity(key.pos()) instanceof DungeonControllerBlockEntity controller)) {
                                             continue;
                                         }
-                                        if (controller.lobbies.isEmpty()) {
+                                        if (controller.getLobbies().isEmpty()) {
                                             continue;
                                         }
                                         context.getSource().sendSuccess(() -> Component.literal(
                                                 "Controller " + key.pos().toShortString() + " @ " + key.dimension().location()
                                         ), false);
                                         int queuedIndex = 0;
-                                        for (Lobby lobby : controller.lobbies) {
+                                        for (Lobby lobby : controller.getLobbies()) {
                                             int queuePosition = 0;
                                             if (lobby.status == net.ledok.arenas_ld.util.LobbyStatus.QUEUED) {
                                                 queuedIndex++;
@@ -344,7 +344,7 @@ public class CommandRegistry {
                                                     lobby.id,
                                                     ownerName,
                                                     size,
-                                                    Math.max(1, controller.maxPartySize),
+                                                    controller.getMaxPartySize(),
                                                     lobby.visibility.name().toLowerCase(),
                                                     lobby.status.name().toLowerCase(),
                                                     queuePosition > 0 ? Integer.toString(queuePosition) : "-"
@@ -391,7 +391,7 @@ public class CommandRegistry {
                                                 ), false);
                                                 context.getSource().sendSuccess(() -> Component.literal(
                                                         "owner=" + (lobby.ownerName == null || lobby.ownerName.isEmpty() ? "Unknown" : lobby.ownerName) +
-                                                                " size=" + size + "/" + Math.max(1, controller.maxPartySize) +
+                                                                " size=" + size + "/" + controller.getMaxPartySize() +
                                                                 " visibility=" + lobby.visibility.name().toLowerCase() +
                                                                 " status=" + lobby.status.name().toLowerCase() +
                                                                 " tier=" + lobby.selectedTier.name().toLowerCase() +
@@ -426,7 +426,7 @@ public class CommandRegistry {
                                         if (!(level.getBlockEntity(key.pos()) instanceof DungeonControllerBlockEntity controller)) {
                                             continue;
                                         }
-                                        for (Lobby lobby : controller.lobbies) {
+                                        for (Lobby lobby : controller.getLobbies()) {
                                             Long expireAt = lobby.pendingInvites.get(player.getUUID());
                                             if (expireAt == null) {
                                                 continue;
@@ -618,7 +618,7 @@ public class CommandRegistry {
                                         Level level = player.server.getLevel(key.dimension());
                                         if (level != null && level.getBlockEntity(key.pos()) instanceof DungeonControllerBlockEntity controller) {
                                             String status;
-                                            if (controller.isLocked) {
+                                            if (controller.isLocked()) {
                                                 status = "In Progress";
                                             } else {
                                                 int seconds = controller.getNextAvailableCooldownSeconds();
@@ -664,7 +664,7 @@ public class CommandRegistry {
             if (!(level.getBlockEntity(key.pos()) instanceof DungeonControllerBlockEntity controller)) {
                 continue;
             }
-            for (Lobby lobby : controller.lobbies) {
+            for (Lobby lobby : controller.getLobbies()) {
                 ids.add(lobby.id.toString());
             }
         }
@@ -688,7 +688,7 @@ public class CommandRegistry {
             if (!(level.getBlockEntity(key.pos()) instanceof DungeonControllerBlockEntity controller)) {
                 continue;
             }
-            for (Lobby lobby : controller.lobbies) {
+            for (Lobby lobby : controller.getLobbies()) {
                 if (lobby.pendingInvites.containsKey(player.getUUID())) {
                     ids.add(lobby.id.toString());
                 }

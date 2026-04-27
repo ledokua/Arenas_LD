@@ -10,7 +10,6 @@ import net.ledok.arenas_ld.util.InstanceState;
 import net.ledok.arenas_ld.util.Lobby;
 import net.ledok.arenas_ld.util.LobbyStatus;
 import net.ledok.arenas_ld.util.LobbyVisibility;
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -57,9 +56,7 @@ final class DungeonPacketHandlers {
                                 if (cooldownSeconds > 0) {
                                     context.player().sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_cooldown", ModPackets.formatSeconds(cooldownSeconds)));
                                 }
-                                lobby.status = LobbyStatus.QUEUED;
-                                controller.setChanged();
-                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                                controller.setLobbyStatus(lobby.id, LobbyStatus.QUEUED);
                                 return;
                             }
                             ServerLevel spawnerLevel = world.getServer().getLevel(instanceRef.dimension());
@@ -82,16 +79,12 @@ final class DungeonPacketHandlers {
                             }
                             spawner.setHardcoreEnabled(lobby.hardcoreEnabled);
                             if (spawner.startDungeon(onlinePlayers, payload.pos(), world.dimension(), lobby.selectedTier)) {
-                                lobby.status = LobbyStatus.IN_DUNGEON;
+                                controller.setLobbyStatus(lobby.id, LobbyStatus.IN_DUNGEON);
                                 controller.assignLobbyToInstance(lobby.id, instanceRef);
-                                controller.isLocked = true;
-                                controller.setChanged();
-                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                                controller.setLocked(true);
                             } else {
                                 controller.releaseReservedInstance(instanceRef);
-                                lobby.status = LobbyStatus.OPEN;
-                                controller.setChanged();
-                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                                controller.setLobbyStatus(lobby.id, LobbyStatus.OPEN);
                             }
                             break;
                         case 1: // Join Party
@@ -104,7 +97,7 @@ final class DungeonPacketHandlers {
                                 return;
                             }
                             Lobby openLobby = null;
-                            for (Lobby candidate : controller.lobbies) {
+                            for (Lobby candidate : controller.getLobbies()) {
                                 if (candidate.status == LobbyStatus.OPEN
                                         && candidate.visibility == LobbyVisibility.OPEN
                                         && (1 + candidate.members.size()) < controller.getMaxPartySize()) {
@@ -118,9 +111,7 @@ final class DungeonPacketHandlers {
                                     return;
                                 }
                             } else {
-                                openLobby.members.add(player.getUUID());
-                                controller.setChanged();
-                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                                controller.addMemberToLobby(openLobby.id, player.getUUID());
                             }
                             break;
                         case 2: // Leave Party
@@ -163,16 +154,9 @@ final class DungeonPacketHandlers {
                     if (!accepted) {
                         return;
                     }
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
                     return;
                 }
-                int currentSize = 1 + lobby.members.size();
-                if (currentSize >= controller.getMaxPartySize()) {
-                    return;
-                }
-                lobby.members.add(player.getUUID());
-                controller.setChanged();
-                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                controller.addMemberToLobby(lobby.id, player.getUUID());
             });
         });
 
@@ -291,8 +275,8 @@ final class DungeonPacketHandlers {
                     List<String> players = new ArrayList<>();
                     List<DungeonControllerInfoPayload.InstanceView> instances = new ArrayList<>();
                     List<DungeonControllerInfoPayload.LobbyView> lobbies = new ArrayList<>();
-                    boolean hardcoreEnabled = controller.hardcoreEnabled;
-                    String selectedTier = controller.selectedTier.name();
+                    boolean hardcoreEnabled = controller.isHardcoreEnabled();
+                    String selectedTier = controller.getSelectedTier().name();
                     boolean inLobby = lobby != null;
                     boolean isLobbyOwner = false;
                     String lobbyStatus = LobbyStatus.OPEN.name();
@@ -307,7 +291,7 @@ final class DungeonPacketHandlers {
                         currentLobbyVisibility = lobby.visibility.name();
                         if (lobby.status == LobbyStatus.QUEUED) {
                             int pos = 1;
-                            for (Lobby candidate : controller.lobbies) {
+                            for (Lobby candidate : controller.getLobbies()) {
                                 if (candidate.status != LobbyStatus.QUEUED) {
                                     continue;
                                 }
@@ -332,7 +316,7 @@ final class DungeonPacketHandlers {
                         selectedTier = lobby.selectedTier.name();
                     }
                     int queuedPosCounter = 0;
-                    for (Lobby candidate : controller.lobbies) {
+                    for (Lobby candidate : controller.getLobbies()) {
                         int candidateQueuePosition = 0;
                         if (candidate.status == LobbyStatus.QUEUED) {
                             queuedPosCounter++;
@@ -352,7 +336,7 @@ final class DungeonPacketHandlers {
                                 candidate.pendingInvites.containsKey(player.getUUID())
                         ));
                     }
-                    for (InstanceState instance : controller.instances) {
+                    for (InstanceState instance : controller.getInstances()) {
                         int cooldownSeconds = instance.status() == InstanceStatus.COOLDOWN
                                 ? (Math.max(0, instance.cooldownTicksRemaining()) + 19) / 20
                                 : 0;
@@ -360,8 +344,8 @@ final class DungeonPacketHandlers {
                     }
                     ServerPlayNetworking.send(player, new DungeonControllerInfoPayload(
                             payload.pos(),
-                            controller.remainingDungeonTimeSeconds,
-                            controller.dungeonCooldownSeconds,
+                            controller.getRemainingDungeonTimeSeconds(),
+                            controller.getDungeonCooldownSeconds(),
                             hardcoreEnabled,
                             selectedTier,
                             inLobby,
@@ -372,7 +356,7 @@ final class DungeonPacketHandlers {
                             canManageAdmin,
                             controllerRespawnTimeTicks,
                             controllerMaxPartySize,
-                            controller.isLocked,
+                            controller.isLocked(),
                             players,
                             ModPackets.resolveLeaderboardForTier(controller, requestedLeaderboardTier, player.server),
                             instances,
@@ -397,14 +381,10 @@ final class DungeonPacketHandlers {
                     DifficultyTier tier = DifficultyTier.fromNameOrDefault(payload.selectedTier(), DifficultyTier.NORMAL);
                     Lobby lobby = controller.getLobbyByMember(player.getUUID());
                     if (lobby != null && lobby.ownerUuid.equals(player.getUUID())) {
-                        lobby.hardcoreEnabled = payload.hardcoreEnabled();
-                        lobby.selectedTier = tier;
-                        controller.setChanged();
-                        world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                        controller.setLobbyTierAndHardcore(player.getUUID(), tier, payload.hardcoreEnabled());
                     } else if (lobby == null) {
                         controller.setHardcoreEnabled(payload.hardcoreEnabled());
                         controller.setSelectedTier(tier);
-                        world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
                     }
                 }
             });
@@ -428,9 +408,7 @@ final class DungeonPacketHandlers {
                 } catch (IllegalArgumentException e) {
                     return;
                 }
-                if (controller.setLobbyVisibility(player.getUUID(), visibility)) {
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                }
+                controller.setLobbyVisibility(player.getUUID(), visibility);
             });
         });
 

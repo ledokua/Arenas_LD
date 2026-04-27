@@ -74,8 +74,14 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
         partyMembers.clear();
         isLocked = false;
         currentWave = 0;
+        markDirtyAndSync();
+    }
+
+    public void markDirtyAndSync() {
         setChanged();
-        level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
     }
 
     @Override

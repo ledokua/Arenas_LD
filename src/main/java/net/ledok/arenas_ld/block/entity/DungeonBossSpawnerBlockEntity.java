@@ -789,16 +789,10 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         if (controllerPos != null && controllerDimension != null) {
             ServerLevel controllerWorld = world.getServer().getLevel(controllerDimension);
             if (controllerWorld != null && controllerWorld.getBlockEntity(controllerPos) instanceof DungeonControllerBlockEntity controller) {
-                boolean changed = false;
-                if (pendingControllerRemainingSeconds != Integer.MIN_VALUE && controller.remainingDungeonTimeSeconds != pendingControllerRemainingSeconds) {
-                    controller.remainingDungeonTimeSeconds = pendingControllerRemainingSeconds;
-                    changed = true;
+                if (pendingControllerRemainingSeconds != Integer.MIN_VALUE) {
+                    controller.setRemainingDungeonTimeSeconds(pendingControllerRemainingSeconds);
                 }
                 pendingControllerRemainingSeconds = Integer.MIN_VALUE;
-                if (changed) {
-                    controller.setChanged();
-                    controllerWorld.sendBlockUpdated(controllerPos, controller.getBlockState(), controller.getBlockState(), 3);
-                }
             }
         }
     }

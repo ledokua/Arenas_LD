@@ -7,7 +7,6 @@ import net.ledok.arenas_ld.util.LobbyStatus;
 import net.ledok.arenas_ld.util.LobbyVisibility;
 import net.ledok.arenas_ld.util.RaidDifficulty;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -60,9 +59,7 @@ final class RaidPacketHandlers {
                             return;
                         }
                         if (queueLobby.status == LobbyStatus.QUEUED) {
-                            queueLobby.status = LobbyStatus.OPEN;
-                            controller.setChanged();
-                            world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                            controller.setLobbyStatus(queueLobby.id, LobbyStatus.OPEN);
                         }
                         break;
                     case 2: // Leave Lobby
@@ -117,12 +114,9 @@ final class RaidPacketHandlers {
                     if (!accepted) {
                         return;
                     }
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
                     return;
                 }
-                if (controller.addMemberToLobby(lobby.id, player.getUUID())) {
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                }
+                controller.addMemberToLobby(lobby.id, player.getUUID());
             });
         });
 
@@ -370,9 +364,7 @@ final class RaidPacketHandlers {
                 } catch (IllegalArgumentException e) {
                     return;
                 }
-                if (controller.setLobbyVisibility(player.getUUID(), visibility)) {
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
-                }
+                controller.setLobbyVisibility(player.getUUID(), visibility);
             });
         });
 

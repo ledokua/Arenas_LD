@@ -50,8 +50,7 @@ final class SpawnerPacketHandlers {
                     blockEntity.skillExperiencePerWin = payload.skillExperiencePerWin();
                     blockEntity.battleTimeLimitTicks = payload.battleTimeLimitTicks();
                     blockEntity.hpScalePerPlayer = payload.hpScalePerPlayer();
-                    blockEntity.setChanged();
-                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                    markDirtyAndSync(world, blockEntity);
                 }
             });
         });
@@ -71,8 +70,7 @@ final class SpawnerPacketHandlers {
                         }
                         blockEntity.getTierConfigs().put(tier, config);
                     }
-                    blockEntity.setChanged();
-                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                    markDirtyAndSync(world, blockEntity);
                 }
             });
         });
@@ -104,7 +102,7 @@ final class SpawnerPacketHandlers {
                                 payload.respawnTime()
                         );
                     }
-                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                    markDirtyAndSync(world, blockEntity);
                 }
             });
         });
@@ -123,8 +121,7 @@ final class SpawnerPacketHandlers {
                         }
                         blockEntity.getTierConfigs().put(tier, config);
                     }
-                    blockEntity.setChanged();
-                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                    markDirtyAndSync(world, blockEntity);
                 }
             });
         });
@@ -143,8 +140,7 @@ final class SpawnerPacketHandlers {
                     blockEntity.mobCount = payload.mobCount();
                     blockEntity.mobSpread = payload.mobSpread();
                     blockEntity.groupId = payload.groupId();
-                    blockEntity.setChanged();
-                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                    markDirtyAndSync(world, blockEntity);
                 }
             });
         });
@@ -170,7 +166,7 @@ final class SpawnerPacketHandlers {
                             payload.bossWaveAdditionalTime(),
                             payload.entityHighlightTime()
                     );
-                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                    markDirtyAndSync(world, blockEntity);
                 }
             });
         });
@@ -180,7 +176,7 @@ final class SpawnerPacketHandlers {
                 Level world = context.player().level();
                 if (world.getBlockEntity(payload.pos()) instanceof MobArenaSpawnerBlockEntity blockEntity) {
                     blockEntity.setMobs(payload.mobs());
-                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                    markDirtyAndSync(world, blockEntity);
                 }
             });
         });
@@ -190,7 +186,7 @@ final class SpawnerPacketHandlers {
                 Level world = context.player().level();
                 if (world.getBlockEntity(payload.pos()) instanceof MobArenaSpawnerBlockEntity blockEntity) {
                     blockEntity.setRewards(payload.rewards());
-                    world.sendBlockUpdated(payload.pos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+                    markDirtyAndSync(world, blockEntity);
                 }
             });
         });
@@ -201,8 +197,7 @@ final class SpawnerPacketHandlers {
                 BlockEntity be = world.getBlockEntity(payload.pos());
                 if (be instanceof AttributeProvider provider) {
                     provider.setAttributes(payload.attributes());
-                    be.setChanged();
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                    markDirtyAndSync(world, be);
                 }
             });
         });
@@ -213,8 +208,7 @@ final class SpawnerPacketHandlers {
                 BlockEntity be = world.getBlockEntity(payload.pos());
                 if (be instanceof EquipmentProvider provider) {
                     provider.setEquipment(payload.equipment());
-                    be.setChanged();
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                    markDirtyAndSync(world, be);
                 }
             });
         });
@@ -248,5 +242,10 @@ final class SpawnerPacketHandlers {
                 }
             });
         });
+    }
+
+    private static void markDirtyAndSync(Level world, BlockEntity blockEntity) {
+        blockEntity.setChanged();
+        world.sendBlockUpdated(blockEntity.getBlockPos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
     }
 }

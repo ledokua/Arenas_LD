@@ -50,8 +50,7 @@ final class ArenaPacketHandlers {
                                         spawner.setHardcoreEnabled(controller.hardcoreEnabled);
                                         spawner.startArena(onlinePlayers, payload.pos(), world.dimension());
                                         controller.isLocked = true;
-                                        controller.setChanged();
-                                        world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                                        controller.markDirtyAndSync();
                                     }
                                 }
                             }
@@ -64,15 +63,13 @@ final class ArenaPacketHandlers {
                                 }
                                 ModPackets.removePlayerFromOtherLobbies(player, controller.getBlockPos(), world.dimension());
                                 controller.partyMembers.add(player.getUUID());
-                                controller.setChanged();
-                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                                controller.markDirtyAndSync();
                             }
                             break;
                         case 2: // Leave Party
                             if (!controller.isLocked) {
                                 controller.partyMembers.remove(player.getUUID());
-                                controller.setChanged();
-                                world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                                controller.markDirtyAndSync();
                             }
                             break;
                     }
@@ -112,8 +109,7 @@ final class ArenaPacketHandlers {
                 if (be instanceof MobArenaControllerBlockEntity controller) {
                     if (controller.isLocked) return;
                     controller.hardcoreEnabled = payload.hardcoreEnabled();
-                    controller.setChanged();
-                    world.sendBlockUpdated(payload.pos(), be.getBlockState(), be.getBlockState(), 3);
+                    controller.markDirtyAndSync();
                 }
             });
         });

@@ -4,13 +4,8 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.*;
-import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
-import net.ledok.arenas_ld.item.LinkerItem;
-import net.ledok.arenas_ld.item.SpawnerConfiguratorItem;
-import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.*;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.ChatFormatting;
@@ -25,12 +20,10 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -1196,8 +1189,7 @@ public class ModPackets {
                 if (controller.partyMembers.contains(player.getUUID())) {
                     if (!(level.dimension().equals(currentControllerDim) && controller.getBlockPos().equals(currentControllerPos))) {
                         controller.partyMembers.remove(player.getUUID());
-                        controller.setChanged();
-                        level.sendBlockUpdated(controller.getBlockPos(), controller.getBlockState(), controller.getBlockState(), 3);
+                        controller.markDirtyAndSync();
                     }
                 }
             }

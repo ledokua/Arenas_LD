@@ -516,6 +516,19 @@ public class RaidControllerBlockEntity extends BlockEntity implements RaidRunCal
         return true;
     }
 
+    public boolean setLobbyStatus(UUID lobbyId, LobbyStatus status) {
+        Lobby lobby = getLobbyById(lobbyId);
+        if (lobby == null || status == null) {
+            return false;
+        }
+        if (lobby.status == status) {
+            return true;
+        }
+        lobby.status = status;
+        markDirtyAndSync();
+        return true;
+    }
+
     public boolean setLobbyDifficulty(UUID ownerUuid, RaidDifficulty difficulty) {
         Lobby lobby = getLobbyByMember(ownerUuid);
         if (lobby == null || !lobby.ownerUuid.equals(ownerUuid) || difficulty == null) {

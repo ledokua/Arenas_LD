@@ -322,11 +322,11 @@ public class LinkerItem extends Item {
             }
 
             // Selected controller clicked again: list instances.
-            if (controller.instances.isEmpty()) {
+            if (controller.getInstances().isEmpty()) {
                 player.sendSystemMessage(Component.literal("No dungeon instances linked."));
             } else {
                 player.sendSystemMessage(Component.literal("Dungeon instances:"));
-                for (var instance : controller.instances) {
+                for (var instance : controller.getInstances()) {
                     int cooldownSec = (instance.cooldownTicksRemaining() + 19) / 20;
                     String suffix = instance.status() == net.ledok.arenas_ld.util.InstanceStatus.COOLDOWN
                             ? ", " + String.format("%02d:%02d", cooldownSec / 60, cooldownSec % 60)

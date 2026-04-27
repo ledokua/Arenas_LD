@@ -56,17 +56,17 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private static final int DEFAULT_RESPAWN_TIME_TICKS = 6000;
     private static final UUID EMPTY_UUID = new UUID(0L, 0L);
 
-    public boolean isLocked = false;
-    public int remainingDungeonTimeSeconds = 0;
-    public int dungeonCooldownSeconds = 0;
-    public boolean hardcoreEnabled = false;
-    public DifficultyTier selectedTier = DifficultyTier.NORMAL;
+    private boolean isLocked = false;
+    private int remainingDungeonTimeSeconds = 0;
+    private int dungeonCooldownSeconds = 0;
+    private boolean hardcoreEnabled = false;
+    private DifficultyTier selectedTier = DifficultyTier.NORMAL;
     private final Map<DifficultyTier, List<DungeonLeaderboardEntry>> leaderboardByTier = new EnumMap<>(DifficultyTier.class);
-    public List<InstanceState> instances = new ArrayList<>();
-    public int respawnTimeTicks = DEFAULT_RESPAWN_TIME_TICKS;
-    public List<Lobby> lobbies = new ArrayList<>();
-    public Map<UUID, DungeonInstanceRef> lobbyInstanceMap = new HashMap<>();
-    public int maxPartySize = 4;
+    private final List<InstanceState> instances = new ArrayList<>();
+    private int respawnTimeTicks = DEFAULT_RESPAWN_TIME_TICKS;
+    private final List<Lobby> lobbies = new ArrayList<>();
+    private final Map<UUID, DungeonInstanceRef> lobbyInstanceMap = new HashMap<>();
+    private int maxPartySize = 4;
     private final Map<UUID, Long> offlineSinceTick = new HashMap<>();
     private long nextLobbyCleanupTick = 0L;
     private int instanceValidationTickCounter = 0;
@@ -99,18 +99,64 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         isLocked = false;
         remainingDungeonTimeSeconds = 0;
         dungeonCooldownSeconds = 0;
-        setChanged();
-        level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        markDirtyAndSync();
     }
 
     public void setHardcoreEnabled(boolean hardcoreEnabled) {
         this.hardcoreEnabled = hardcoreEnabled;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public void setSelectedTier(DifficultyTier selectedTier) {
         this.selectedTier = selectedTier != null ? selectedTier : DifficultyTier.NORMAL;
-        setChanged();
+        markDirtyAndSync();
+    }
+
+    public boolean isLocked() {
+        return isLocked;
+    }
+
+    public boolean setLocked(boolean locked) {
+        if (isLocked == locked) {
+            return false;
+        }
+        isLocked = locked;
+        markDirtyAndSync();
+        return true;
+    }
+
+    public int getRemainingDungeonTimeSeconds() {
+        return remainingDungeonTimeSeconds;
+    }
+
+    public int getDungeonCooldownSeconds() {
+        return dungeonCooldownSeconds;
+    }
+
+    public boolean setRemainingDungeonTimeSeconds(int seconds) {
+        int clamped = Math.max(0, seconds);
+        if (remainingDungeonTimeSeconds == clamped) {
+            return false;
+        }
+        remainingDungeonTimeSeconds = clamped;
+        markDirtyAndSync();
+        return true;
+    }
+
+    public boolean isHardcoreEnabled() {
+        return hardcoreEnabled;
+    }
+
+    public DifficultyTier getSelectedTier() {
+        return selectedTier;
+    }
+
+    public List<InstanceState> getInstances() {
+        return instances;
+    }
+
+    public List<Lobby> getLobbies() {
+        return lobbies;
     }
 
     public List<DungeonLeaderboardEntry> getLeaderboardForTier(DifficultyTier tier) {
@@ -495,7 +541,58 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             return;
         }
         lobbyInstanceMap.put(lobbyId, instanceRef);
-        setChanged();
+        markDirtyAndSync();
+    }
+
+    public boolean setLobbyStatus(UUID lobbyId, LobbyStatus status) {
+        Lobby lobby = getLobbyById(lobbyId);
+        if (lobby == null || status == null) {
+            return false;
+        }
+        if (lobby.status == status) {
+            return true;
+        }
+        lobby.status = status;
+        markDirtyAndSync();
+        return true;
+    }
+
+    public boolean setLobbyTierAndHardcore(UUID ownerUuid, DifficultyTier tier, boolean hardcore) {
+        Lobby lobby = getLobbyByMember(ownerUuid);
+        if (lobby == null || !lobby.ownerUuid.equals(ownerUuid)) {
+            return false;
+        }
+        if (lobby.status == LobbyStatus.IN_DUNGEON) {
+            return false;
+        }
+        DifficultyTier safeTier = tier != null ? tier : DifficultyTier.NORMAL;
+        if (lobby.selectedTier == safeTier && lobby.hardcoreEnabled == hardcore) {
+            return true;
+        }
+        lobby.selectedTier = safeTier;
+        lobby.hardcoreEnabled = hardcore;
+        markDirtyAndSync();
+        return true;
+    }
+
+    public boolean addMemberToLobby(UUID lobbyId, UUID playerUuid) {
+        Lobby lobby = getLobbyById(lobbyId);
+        if (lobby == null || playerUuid == null) {
+            return false;
+        }
+        if (lobby.status == LobbyStatus.IN_DUNGEON) {
+            return false;
+        }
+        if (getLobbyByMember(playerUuid) != null) {
+            return false;
+        }
+        int currentSize = 1 + lobby.members.size();
+        if (currentSize >= Math.max(1, maxPartySize)) {
+            return false;
+        }
+        lobby.members.add(playerUuid);
+        markDirtyAndSync();
+        return true;
     }
 
     public Lobby createLobby(UUID ownerUuid, String ownerName) {
