@@ -210,11 +210,11 @@ public class ModPackets {
     }
 
     public record UpdateMobArenaSpawnerPayload(
-            BlockPos pos, int triggerRadius, int battleRadius, int spawnDistance,
+            BlockPos pos, int battleRadius, int spawnDistance,
             int waveTimer, int additionalTime, int timeBetweenWaves, double attributeScale, int prepareTime,
             BlockPos exitPosition, ResourceLocation exitDimension,
             BlockPos arenaEntrancePosition, ResourceLocation arenaEntranceDimension,
-            String groupId, int bossWaveAdditionalTime, int entityHighlightTime
+            int bossWaveAdditionalTime, int entityHighlightTime
     ) implements CustomPacketPayload {
         public static final Type<UpdateMobArenaSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_spawner"));
 
@@ -223,17 +223,16 @@ public class ModPackets {
 
         public UpdateMobArenaSpawnerPayload(FriendlyByteBuf buf) {
             this(
-                    buf.readBlockPos(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(),
+                    buf.readBlockPos(), buf.readVarInt(), buf.readVarInt(),
                     buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readDouble(), buf.readVarInt(),
                     buf.readBlockPos(), buf.readResourceLocation(),
                     buf.readBlockPos(), buf.readResourceLocation(),
-                    buf.readUtf(), buf.readVarInt(), buf.readVarInt()
+                    buf.readVarInt(), buf.readVarInt()
             );
         }
 
         public void write(FriendlyByteBuf buf) {
             buf.writeBlockPos(pos);
-            buf.writeVarInt(triggerRadius);
             buf.writeVarInt(battleRadius);
             buf.writeVarInt(spawnDistance);
             buf.writeVarInt(waveTimer);
@@ -245,7 +244,6 @@ public class ModPackets {
             buf.writeResourceLocation(exitDimension);
             buf.writeBlockPos(arenaEntrancePosition);
             buf.writeResourceLocation(arenaEntranceDimension);
-            buf.writeUtf(groupId);
             buf.writeVarInt(bossWaveAdditionalTime);
             buf.writeVarInt(entityHighlightTime);
         }
@@ -1186,10 +1184,9 @@ public class ModPackets {
             if (level == null) continue;
             BlockEntity be = level.getBlockEntity(key.pos());
             if (be instanceof MobArenaControllerBlockEntity controller) {
-                if (controller.partyMembers.contains(player.getUUID())) {
+                if (controller.isPartyMember(player.getUUID())) {
                     if (!(level.dimension().equals(currentControllerDim) && controller.getBlockPos().equals(currentControllerPos))) {
-                        controller.partyMembers.remove(player.getUUID());
-                        controller.markDirtyAndSync();
+                        controller.removePartyMember(player.getUUID());
                     }
                 }
             }

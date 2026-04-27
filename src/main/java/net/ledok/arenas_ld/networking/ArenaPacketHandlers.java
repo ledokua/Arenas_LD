@@ -32,45 +32,38 @@ final class ArenaPacketHandlers {
                                 player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(net.minecraft.ChatFormatting.RED));
                                 return;
                             }
-                            if (!controller.isLocked && controller.partyMembers.contains(player.getUUID())) {
-                                if (controller.arenaSpawnerPos != net.minecraft.core.BlockPos.ZERO) {
-                                    ServerLevel spawnerLevel = world.getServer().getLevel(controller.arenaSpawnerDimension);
-                                    if (spawnerLevel != null && spawnerLevel.getBlockEntity(controller.arenaSpawnerPos) instanceof MobArenaSpawnerBlockEntity spawner) {
-                                        java.util.Set<java.util.UUID> onlinePlayers = new HashSet<>();
-                                        for (java.util.UUID uuid : controller.partyMembers) {
-                                            if (world.getServer().getPlayerList().getPlayer(uuid) != null) {
-                                                onlinePlayers.add(uuid);
-                                            }
-                                        }
-                                        if (onlinePlayers.isEmpty()) {
-                                            return;
-                                        }
-                                        controller.partyMembers.clear();
-                                        controller.partyMembers.addAll(onlinePlayers);
-                                        spawner.setHardcoreEnabled(controller.hardcoreEnabled);
-                                        spawner.startArena(onlinePlayers, payload.pos(), world.dimension());
-                                        controller.isLocked = true;
-                                        controller.markDirtyAndSync();
+                            if (controller.isPartyMember(player.getUUID()) && controller.hasLinkedSpawner()) {
+                                ServerLevel spawnerLevel = world.getServer().getLevel(controller.getArenaSpawnerDimension());
+                                if (spawnerLevel != null && spawnerLevel.getBlockEntity(controller.getArenaSpawnerPos()) instanceof MobArenaSpawnerBlockEntity spawner) {
+                                    if (spawner.isArenaActive()) {
+                                        return;
                                     }
+                                    java.util.Set<java.util.UUID> onlinePlayers = new HashSet<>();
+                                    for (java.util.UUID uuid : controller.getPartyMembers()) {
+                                        if (world.getServer().getPlayerList().getPlayer(uuid) != null) {
+                                            onlinePlayers.add(uuid);
+                                        }
+                                    }
+                                    if (onlinePlayers.isEmpty()) {
+                                        return;
+                                    }
+                                    controller.setPartyMembers(onlinePlayers);
+                                    spawner.setHardcoreEnabled(controller.isHardcoreEnabled());
+                                    spawner.startArena(onlinePlayers, payload.pos(), world.dimension());
+                                    controller.setLocked(true);
                                 }
                             }
                             break;
                         case 1: // Join Party
-                            if (!controller.isLocked) {
-                                if (ModPackets.isPlayerBusy(player)) {
-                                    player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(net.minecraft.ChatFormatting.RED));
-                                    return;
-                                }
-                                ModPackets.removePlayerFromOtherLobbies(player, controller.getBlockPos(), world.dimension());
-                                controller.partyMembers.add(player.getUUID());
-                                controller.markDirtyAndSync();
+                            if (ModPackets.isPlayerBusy(player)) {
+                                player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(net.minecraft.ChatFormatting.RED));
+                                return;
                             }
+                            ModPackets.removePlayerFromOtherLobbies(player, controller.getBlockPos(), world.dimension());
+                            controller.addPartyMember(player.getUUID());
                             break;
                         case 2: // Leave Party
-                            if (!controller.isLocked) {
-                                controller.partyMembers.remove(player.getUUID());
-                                controller.markDirtyAndSync();
-                            }
+                            controller.removePartyMember(player.getUUID());
                             break;
                     }
                 }
@@ -84,16 +77,16 @@ final class ArenaPacketHandlers {
                 BlockEntity be = world.getBlockEntity(payload.pos());
                 if (be instanceof MobArenaControllerBlockEntity controller) {
                     List<String> players = new ArrayList<>();
-                    for (java.util.UUID uuid : controller.partyMembers) {
+                    for (java.util.UUID uuid : controller.getPartyMembers()) {
                         ServerPlayer partyPlayer = player.server.getPlayerList().getPlayer(uuid);
                         players.add(partyPlayer != null ? partyPlayer.getGameProfile().getName() : "Unknown");
                     }
                     ServerPlayNetworking.send(player, new MobArenaControllerInfoPayload(
                             payload.pos(),
-                            controller.currentWave,
-                            controller.hardcoreEnabled,
+                            controller.getCurrentWave(),
+                            controller.isHardcoreEnabled(),
                             players,
-                            new ArrayList<>(controller.leaderboard)
+                            new ArrayList<>(controller.getLeaderboard())
                     ));
                 } else {
                     ServerPlayNetworking.send(player, new MobArenaControllerInfoPayload(payload.pos(), 0, false, List.of(), List.of()));
@@ -107,9 +100,7 @@ final class ArenaPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
                 if (be instanceof MobArenaControllerBlockEntity controller) {
-                    if (controller.isLocked) return;
-                    controller.hardcoreEnabled = payload.hardcoreEnabled();
-                    controller.markDirtyAndSync();
+                    controller.setHardcoreEnabled(payload.hardcoreEnabled());
                 }
             });
         });

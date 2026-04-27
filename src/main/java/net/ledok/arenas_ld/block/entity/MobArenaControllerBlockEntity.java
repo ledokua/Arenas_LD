@@ -38,13 +38,13 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
     public record ControllerKey(BlockPos pos, ResourceKey<Level> dimension) {}
     private static final Set<ControllerKey> CONTROLLERS = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-    public BlockPos arenaSpawnerPos = BlockPos.ZERO;
-    public ResourceKey<Level> arenaSpawnerDimension = Level.OVERWORLD;
-    public Set<UUID> partyMembers = new HashSet<>();
-    public boolean isLocked = false;
-    public int currentWave = 0;
-    public boolean hardcoreEnabled = false;
-    public List<LeaderboardEntry> leaderboard = new ArrayList<>();
+    private BlockPos arenaSpawnerPos = BlockPos.ZERO;
+    private ResourceKey<Level> arenaSpawnerDimension = Level.OVERWORLD;
+    private final Set<UUID> partyMembers = new HashSet<>();
+    private boolean isLocked = false;
+    private int currentWave = 0;
+    private boolean hardcoreEnabled = false;
+    private List<LeaderboardEntry> leaderboard = new ArrayList<>();
 
     public MobArenaControllerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.MOB_ARENA_CONTROLLER_BLOCK_ENTITY, pos, state);
@@ -74,6 +74,109 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
         partyMembers.clear();
         isLocked = false;
         currentWave = 0;
+        markDirtyAndSync();
+    }
+
+    public BlockPos getArenaSpawnerPos() {
+        return arenaSpawnerPos;
+    }
+
+    public ResourceKey<Level> getArenaSpawnerDimension() {
+        return arenaSpawnerDimension;
+    }
+
+    public boolean hasLinkedSpawner() {
+        return !arenaSpawnerPos.equals(BlockPos.ZERO);
+    }
+
+    public void setLinkedSpawner(BlockPos spawnerPos, ResourceKey<Level> spawnerDimension) {
+        this.arenaSpawnerPos = spawnerPos;
+        this.arenaSpawnerDimension = spawnerDimension;
+        markDirtyAndSync();
+    }
+
+    public void clearLinkedSpawner() {
+        this.arenaSpawnerPos = BlockPos.ZERO;
+        this.arenaSpawnerDimension = Level.OVERWORLD;
+        markDirtyAndSync();
+    }
+
+    public Set<UUID> getPartyMembers() {
+        return Collections.unmodifiableSet(partyMembers);
+    }
+
+    public boolean isPartyMember(UUID playerId) {
+        return partyMembers.contains(playerId);
+    }
+
+    public boolean addPartyMember(UUID playerId) {
+        boolean changed = partyMembers.add(playerId);
+        if (changed) {
+            markDirtyAndSync();
+        }
+        return changed;
+    }
+
+    public boolean removePartyMember(UUID playerId) {
+        boolean changed = partyMembers.remove(playerId);
+        if (changed) {
+            markDirtyAndSync();
+        }
+        return changed;
+    }
+
+    public void setPartyMembers(Set<UUID> newMembers) {
+        partyMembers.clear();
+        partyMembers.addAll(newMembers);
+        markDirtyAndSync();
+    }
+
+    public void clearPartyMembers() {
+        if (!partyMembers.isEmpty()) {
+            partyMembers.clear();
+            markDirtyAndSync();
+        }
+    }
+
+    public boolean isLocked() {
+        return isLocked;
+    }
+
+    public void setLocked(boolean locked) {
+        if (this.isLocked != locked) {
+            this.isLocked = locked;
+            markDirtyAndSync();
+        }
+    }
+
+    public int getCurrentWave() {
+        return currentWave;
+    }
+
+    public void setCurrentWave(int currentWave) {
+        if (this.currentWave != currentWave) {
+            this.currentWave = currentWave;
+            markDirtyAndSync();
+        }
+    }
+
+    public boolean isHardcoreEnabled() {
+        return hardcoreEnabled;
+    }
+
+    public void setHardcoreEnabled(boolean hardcoreEnabled) {
+        if (this.hardcoreEnabled != hardcoreEnabled) {
+            this.hardcoreEnabled = hardcoreEnabled;
+            markDirtyAndSync();
+        }
+    }
+
+    public List<LeaderboardEntry> getLeaderboard() {
+        return Collections.unmodifiableList(leaderboard);
+    }
+
+    public void setLeaderboard(List<LeaderboardEntry> leaderboard) {
+        this.leaderboard = new ArrayList<>(leaderboard);
         markDirtyAndSync();
     }
 

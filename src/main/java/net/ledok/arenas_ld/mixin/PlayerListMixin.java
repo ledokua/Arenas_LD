@@ -73,10 +73,7 @@ public class PlayerListMixin {
                 if (level == null) continue;
                 var be = level.getBlockEntity(key.pos());
                 if (be instanceof net.ledok.arenas_ld.block.entity.MobArenaControllerBlockEntity controller) {
-                    if (controller.partyMembers.remove(player.getUUID())) {
-                        controller.setChanged();
-                        level.sendBlockUpdated(controller.getBlockPos(), controller.getBlockState(), controller.getBlockState(), 3);
-                    }
+                    controller.removePartyMember(player.getUUID());
                 }
             }
         }

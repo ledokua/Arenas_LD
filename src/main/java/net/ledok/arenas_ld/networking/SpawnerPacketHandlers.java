@@ -150,7 +150,6 @@ final class SpawnerPacketHandlers {
                 Level world = context.player().level();
                 if (world.getBlockEntity(payload.pos()) instanceof MobArenaSpawnerBlockEntity blockEntity) {
                     blockEntity.applyConfig(
-                            payload.triggerRadius(),
                             payload.battleRadius(),
                             payload.spawnDistance(),
                             payload.waveTimer(),
@@ -162,7 +161,6 @@ final class SpawnerPacketHandlers {
                             ResourceKey.create(Registries.DIMENSION, payload.exitDimension()),
                             payload.arenaEntrancePosition(),
                             ResourceKey.create(Registries.DIMENSION, payload.arenaEntranceDimension()),
-                            payload.groupId(),
                             payload.bossWaveAdditionalTime(),
                             payload.entityHighlightTime()
                     );

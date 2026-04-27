@@ -50,8 +50,6 @@ import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.scores.PlayerTeam;
-import net.minecraft.world.scores.Scoreboard;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -59,7 +57,6 @@ import java.util.*;
 public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<MobArenaSpawnerData> {
 
     // --- Configuration Fields ---
-    private int triggerRadius = 16;
     private int battleRadius = 64;
     private int spawnDistance = 8;
     private int waveTimer = 120;
@@ -67,7 +64,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private int timeBetweenWaves = 10;
     private double attributeScale = 0.1;
     private int prepareTime = 10;
-    private String groupId = "";
     private int bossWaveAdditionalTime = 60;
     private int entityHighlightTime = 0;
 
@@ -102,15 +98,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public MobArenaSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.MOB_ARENA_SPAWNER_BLOCK_ENTITY, pos, state);
-    }
-
-    public int getTriggerRadius() {
-        return triggerRadius;
-    }
-
-    public void setTriggerRadius(int triggerRadius) {
-        this.triggerRadius = triggerRadius;
-        setChanged();
     }
 
     public int getBattleRadius() {
@@ -176,15 +163,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         setChanged();
     }
 
-    public String getGroupId() {
-        return groupId;
-    }
-
-    public void setGroupId(String groupId) {
-        this.groupId = groupId;
-        setChanged();
-    }
-
     public int getBossWaveAdditionalTime() {
         return bossWaveAdditionalTime;
     }
@@ -204,7 +182,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     }
 
     public void applyConfig(
-            int triggerRadius,
             int battleRadius,
             int spawnDistance,
             int waveTimer,
@@ -216,11 +193,9 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             ResourceKey<Level> exitDimension,
             BlockPos arenaEntrancePosition,
             ResourceKey<Level> arenaEntranceDimension,
-            String groupId,
             int bossWaveAdditionalTime,
             int entityHighlightTime
     ) {
-        this.triggerRadius = triggerRadius;
         this.battleRadius = battleRadius;
         this.spawnDistance = spawnDistance;
         this.waveTimer = waveTimer;
@@ -232,7 +207,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         this.exitDimension = exitDimension;
         this.arenaEntrancePosition = arenaEntrancePosition;
         this.arenaEntranceDimension = arenaEntranceDimension;
-        this.groupId = groupId;
         this.bossWaveAdditionalTime = bossWaveAdditionalTime;
         this.entityHighlightTime = entityHighlightTime;
         setChanged();
@@ -300,6 +274,10 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public int getParticipatingPlayerCount() {
         return participatingPlayers.size();
+    }
+
+    public boolean isArenaActive() {
+        return isArenaActive;
     }
     
     public void endArena() {
@@ -423,6 +401,9 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void startArena(Set<UUID> players, BlockPos controllerPos, ResourceKey<Level> controllerDimension) {
         if (level instanceof ServerLevel serverLevel) {
+            if (isArenaActive) {
+                return;
+            }
             this.participatingPlayers = new HashSet<>(players);
             this.controllerPos = controllerPos;
             this.controllerDimension = controllerDimension;
@@ -489,9 +470,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (controllerPos != null && controllerDimension != null) {
             ServerLevel controllerWorld = world.getServer().getLevel(controllerDimension);
             if (controllerWorld != null && controllerWorld.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller) {
-                controller.currentWave = currentWave;
-                controller.setChanged();
-                controllerWorld.sendBlockUpdated(controllerPos, controller.getBlockState(), controller.getBlockState(), 3);
+                controller.setCurrentWave(currentWave);
             }
         }
         
@@ -653,9 +632,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (controllerPos != null && controllerDimension != null) {
             ServerLevel controllerWorld = player.getServer().getLevel(controllerDimension);
             if (controllerWorld != null && controllerWorld.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller) {
-                controller.leaderboard = this.leaderboard;
-                controller.setChanged();
-                controllerWorld.sendBlockUpdated(controllerPos, controller.getBlockState(), controller.getBlockState(), 3);
+                controller.setLeaderboard(this.leaderboard);
             }
         }
     }
@@ -818,16 +795,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
             livingEntity.heal(livingEntity.getMaxHealth());
             
-            if (!this.groupId.isEmpty()) {
-                Scoreboard scoreboard = world.getScoreboard();
-                PlayerTeam team = scoreboard.getPlayerTeam(this.groupId);
-                if (team == null) {
-                    team = scoreboard.addPlayerTeam(this.groupId);
-                    team.setAllowFriendlyFire(false);
-                }
-                scoreboard.addPlayerToTeam(livingEntity.getScoreboardName(), team);
-            }
-            
             boolean spawned = false;
             for (int attempt = 0; attempt < 10; attempt++) {
                 double x, z;
@@ -930,7 +897,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.saveAdditional(nbt, registryLookup);
-        nbt.putInt("TriggerRadius", triggerRadius);
         nbt.putInt("BattleRadius", battleRadius);
         nbt.putBoolean("HardcoreEnabled", hardcoreEnabled);
         nbt.putInt("SpawnDistance", spawnDistance);
@@ -939,7 +905,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         nbt.putInt("TimeBetweenWaves", timeBetweenWaves);
         nbt.putDouble("AttributeScale", attributeScale);
         nbt.putInt("PrepareTime", prepareTime);
-        nbt.putString("GroupId", groupId);
         nbt.putInt("BossWaveAdditionalTime", bossWaveAdditionalTime);
         nbt.putInt("EntityHighlightTime", entityHighlightTime);
         
@@ -997,7 +962,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     @Override
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.loadAdditional(nbt, registryLookup);
-        triggerRadius = nbt.getInt("TriggerRadius");
         battleRadius = nbt.getInt("BattleRadius");
         hardcoreEnabled = nbt.getBoolean("HardcoreEnabled");
         spawnDistance = nbt.getInt("SpawnDistance");
@@ -1006,7 +970,6 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         timeBetweenWaves = nbt.getInt("TimeBetweenWaves");
         attributeScale = nbt.getDouble("AttributeScale");
         prepareTime = nbt.getInt("PrepareTime");
-        groupId = nbt.getString("GroupId");
         bossWaveAdditionalTime = nbt.getInt("BossWaveAdditionalTime");
         entityHighlightTime = nbt.getInt("EntityHighlightTime");
         

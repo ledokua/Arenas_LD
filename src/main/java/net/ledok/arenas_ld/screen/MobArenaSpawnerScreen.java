@@ -13,7 +13,6 @@ import net.minecraft.world.entity.player.Inventory;
 
 public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawnerScreenHandler> {
 
-    private EditBox triggerRadiusField;
     private EditBox battleRadiusField;
     private EditBox spawnDistanceField;
     private EditBox waveTimerField;
@@ -21,7 +20,6 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
     private EditBox timeBetweenWavesField;
     private EditBox attributeScaleField;
     private EditBox prepareTimeField;
-    private EditBox groupIdField;
     private EditBox bossWaveAdditionalTimeField;
     private EditBox entityHighlightTimeField;
     private EditBox exitPositionField;
@@ -52,12 +50,6 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
 
         // Column 1
         y = 20;
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.trigger_radius"), (button) -> {}, this.font));
-        triggerRadiusField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
-        triggerRadiusField.setMaxLength(4);
-        this.addRenderableWidget(triggerRadiusField);
-        y += (int)(yOffset * 1.7);
-
         addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.battle_radius"), (button) -> {}, this.font));
         battleRadiusField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         battleRadiusField.setMaxLength(4);
@@ -100,12 +92,6 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
         this.addRenderableWidget(prepareTimeField);
         y += (int)(yOffset * 1.7);
         
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.group_id"), (button) -> {}, this.font));
-        groupIdField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
-        groupIdField.setMaxLength(32);
-        this.addRenderableWidget(groupIdField);
-        y += (int)(yOffset * 1.7);
-
         addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.boss_wave_additional_time"), (button) -> {}, this.font));
         bossWaveAdditionalTimeField = new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal(""));
         bossWaveAdditionalTimeField.setMaxLength(8);
@@ -159,7 +145,6 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
 
     private void loadBlockEntityData() {
         if (menu.blockEntity != null) {
-            triggerRadiusField.setValue(String.valueOf(menu.blockEntity.getTriggerRadius()));
             battleRadiusField.setValue(String.valueOf(menu.blockEntity.getBattleRadius()));
             spawnDistanceField.setValue(String.valueOf(menu.blockEntity.getSpawnDistance()));
             waveTimerField.setValue(String.valueOf(menu.blockEntity.getWaveTimer()));
@@ -167,7 +152,6 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
             timeBetweenWavesField.setValue(String.valueOf(menu.blockEntity.getTimeBetweenWaves()));
             attributeScaleField.setValue(String.valueOf(menu.blockEntity.getAttributeScale()));
             prepareTimeField.setValue(String.valueOf(menu.blockEntity.getPrepareTime()));
-            groupIdField.setValue(menu.blockEntity.getGroupId());
             bossWaveAdditionalTimeField.setValue(String.valueOf(menu.blockEntity.getBossWaveAdditionalTime()));
             entityHighlightTimeField.setValue(String.valueOf(menu.blockEntity.getEntityHighlightTime()));
             exitPositionField.setValue(String.format("%d %d %d", menu.blockEntity.getExitPosition().getX(), menu.blockEntity.getExitPosition().getY(), menu.blockEntity.getExitPosition().getZ()));
@@ -200,7 +184,6 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
         try {
             ClientPlayNetworking.send(new ModPackets.UpdateMobArenaSpawnerPayload(
                     menu.blockEntity.getBlockPos(),
-                    Integer.parseInt(triggerRadiusField.getValue()),
                     Integer.parseInt(battleRadiusField.getValue()),
                     Integer.parseInt(spawnDistanceField.getValue()),
                     Integer.parseInt(waveTimerField.getValue()),
@@ -212,7 +195,6 @@ public class MobArenaSpawnerScreen extends AbstractContainerScreen<MobArenaSpawn
                     parseDimension(exitDimensionField.getValue()),
                     parseCoords(arenaEntrancePositionField.getValue()),
                     parseDimension(arenaEntranceDimensionField.getValue()),
-                    groupIdField.getValue(),
                     Integer.parseInt(bossWaveAdditionalTimeField.getValue()),
                     Integer.parseInt(entityHighlightTimeField.getValue())
             ));

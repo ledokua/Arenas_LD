@@ -3,7 +3,6 @@ package net.ledok.arenas_ld.screen;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.networking.ModPackets;
-import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.util.LeaderboardEntry;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -17,10 +16,6 @@ import net.minecraft.world.entity.player.Player;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaControllerScreenHandler> {
     private static final ResourceLocation BACKGROUND_TEXTURE = ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "textures/test/arena_controller_background.png");
@@ -34,7 +29,7 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
     private List<Component> playerList = new ArrayList<>();
     private List<LeaderboardEntry> leaderboard = new ArrayList<>();
     private int currentWave = 0;
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private int refreshTickCounter = 0;
     private double scrollAmount = 0;
     private boolean scrolling = false;
 
@@ -76,13 +71,17 @@ public class MobArenaControllerScreen extends AbstractContainerScreen<MobArenaCo
                 .build());
         hardcoreCheckbox.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.arenas_ld.hardcore_desc")));
 
-        scheduler.scheduleAtFixedRate(this::updateInfo, 0, 1, TimeUnit.SECONDS);
+        updateInfo();
     }
 
     @Override
-    public void removed() {
-        super.removed();
-        scheduler.shutdown();
+    protected void containerTick() {
+        super.containerTick();
+        refreshTickCounter++;
+        if (refreshTickCounter >= 20) {
+            refreshTickCounter = 0;
+            updateInfo();
+        }
     }
 
     private void updateInfo() {

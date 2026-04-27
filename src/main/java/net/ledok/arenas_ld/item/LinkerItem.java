@@ -268,8 +268,8 @@ public class LinkerItem extends Item {
 
         if (blockEntity instanceof MobArenaControllerBlockEntity controller) {
             if (mainPosOpt.isEmpty() || modeData.mainSpawnerDimension().isEmpty()) {
-                if (!controller.arenaSpawnerPos.equals(BlockPos.ZERO)) {
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_linked_to", controller.arenaSpawnerPos.toShortString(), controller.arenaSpawnerDimension.location().toString()));
+                if (controller.hasLinkedSpawner()) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_linked_to", controller.getArenaSpawnerPos().toShortString(), controller.getArenaSpawnerDimension().location().toString()));
                 } else {
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_arena_spawner_selected"));
                 }
@@ -292,10 +292,8 @@ public class LinkerItem extends Item {
             }
 
             if (isShiftDown) {
-                if (controller.arenaSpawnerPos.equals(mainPos) && controller.arenaSpawnerDimension.equals(modeData.mainSpawnerDimension().get())) {
-                    controller.arenaSpawnerPos = BlockPos.ZERO;
-                    controller.arenaSpawnerDimension = Level.OVERWORLD;
-                    controller.setChanged();
+                if (controller.getArenaSpawnerPos().equals(mainPos) && controller.getArenaSpawnerDimension().equals(modeData.mainSpawnerDimension().get())) {
+                    controller.clearLinkedSpawner();
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.unlinked_controller_from_spawner", mainPos.toShortString()));
                 } else {
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.spawner_not_linked_controller"));
@@ -303,9 +301,7 @@ public class LinkerItem extends Item {
                 return InteractionResult.SUCCESS;
             }
 
-            controller.arenaSpawnerPos = mainPos;
-            controller.arenaSpawnerDimension = modeData.mainSpawnerDimension().get();
-            controller.setChanged();
+            controller.setLinkedSpawner(mainPos, modeData.mainSpawnerDimension().get());
             player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.linked_controller_to_spawner", pos.toShortString(), mainPos.toShortString()));
             return InteractionResult.SUCCESS;
         }
