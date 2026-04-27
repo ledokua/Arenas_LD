@@ -129,6 +129,31 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         setChanged();
     }
 
+    public double computeExpectedHp(RaidDifficulty tier, int playerCount) {
+        RaidDifficulty safeTier = tier != null ? tier : RaidDifficulty.NORMAL;
+        RaidTierConfig config = tierConfigs.getOrDefault(safeTier, RaidTierConfig.defaultFor(safeTier));
+        return computeExpectedHp(safeTier, playerCount, config, hpScalePerPlayer);
+    }
+
+    public double computeExpectedHp(RaidDifficulty tier, int playerCount, RaidTierConfig config, double hpScale) {
+        RaidDifficulty safeTier = tier != null ? tier : RaidDifficulty.NORMAL;
+        RaidTierConfig safeConfig = config != null ? config : tierConfigs.getOrDefault(safeTier, RaidTierConfig.defaultFor(safeTier));
+        int safePlayerCount = Math.max(1, playerCount);
+        double baseHp = getConfiguredBaseMaxHealth();
+        double healthMult = safeConfig.healthMultOverride() > 0 ? safeConfig.healthMultOverride() : safeTier.healthMult;
+        double perPlayerMult = Math.pow(1.0 + hpScale, Math.max(0, safePlayerCount - 1));
+        return baseHp * healthMult * perPlayerMult;
+    }
+
+    private double getConfiguredBaseMaxHealth() {
+        for (AttributeData attr : attributes) {
+            if ("minecraft:generic.max_health".equals(attr.id())) {
+                return attr.value();
+            }
+        }
+        return 20.0;
+    }
+
     @Override
     public List<AttributeData> getAttributes() {
         return attributes;

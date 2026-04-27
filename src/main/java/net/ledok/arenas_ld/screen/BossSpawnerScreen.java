@@ -15,6 +15,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.util.Mth;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -235,6 +236,8 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
         tierDamageMultField.setValue(Double.toString(cfg.damageMultOverride()));
         tierLootTableField.setValue(cfg.lootTableId());
         tierPerPlayerLootTableField.setValue(cfg.perPlayerLootTableId());
+        tierHealthMultField.setHint(Component.translatable("gui.arenas_ld.default_hint", formatDecimal(selectedTier.healthMult)));
+        tierDamageMultField.setHint(Component.translatable("gui.arenas_ld.default_hint", formatDecimal(selectedTier.damageMult)));
     }
 
     private void captureCurrentTierEdits() {
@@ -333,12 +336,36 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
         }
     }
 
+    private static String formatDecimal(double value) {
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
+    }
+
     @Override
     protected void renderBg(GuiGraphics context, float delta, int mouseX, int mouseY) {
     }
 
     @Override
     protected void renderLabels(GuiGraphics context, int mouseX, int mouseY) {
+        if (activeTab != Tab.TIERS || menu.blockEntity == null) {
+            return;
+        }
+        captureCurrentTierEdits();
+        RaidTierConfig cfg = tierConfigDraft.getOrDefault(selectedTier, RaidTierConfig.defaultFor(selectedTier));
+        double hpScale = parseDoubleOrDefault(hpScalePerPlayerField.getValue(), menu.blockEntity.hpScalePerPlayer);
+        hpScale = Mth.clamp(hpScale, -0.99, 100.0);
+
+        int x = 10;
+        int y = this.imageHeight - 74;
+        context.drawString(this.font, Component.translatable("gui.arenas_ld.hp_preview"), x, y, 0xC0C0C0, false);
+        y += 12;
+        long hp1 = Math.round(menu.blockEntity.computeExpectedHp(selectedTier, 1, cfg, hpScale));
+        long hp2 = Math.round(menu.blockEntity.computeExpectedHp(selectedTier, 2, cfg, hpScale));
+        long hp4 = Math.round(menu.blockEntity.computeExpectedHp(selectedTier, 4, cfg, hpScale));
+        context.drawString(this.font, Component.translatable("gui.arenas_ld.hp_preview_players", 1, hp1), x, y, 0xE0E0E0, false);
+        y += 10;
+        context.drawString(this.font, Component.translatable("gui.arenas_ld.hp_preview_players", 2, hp2), x, y, 0xE0E0E0, false);
+        y += 10;
+        context.drawString(this.font, Component.translatable("gui.arenas_ld.hp_preview_players", 4, hp4), x, y, 0xE0E0E0, false);
     }
 
     @Override
