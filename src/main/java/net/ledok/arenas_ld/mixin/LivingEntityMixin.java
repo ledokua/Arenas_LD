@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.mixin;
 
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -42,7 +43,15 @@ public abstract class LivingEntityMixin {
 
         DungeonBossSpawnerBlockEntity dungeonSpawner = ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player);
         if (dungeonSpawner == null) {
-            return amount;
+            BossSpawnerBlockEntity raidSpawner = ArenasLdMod.RAID_BOSS_MANAGER.getSpawnerForPlayer(player);
+            if (raidSpawner == null) {
+                return amount;
+            }
+            double raidDamageMultiplier = raidSpawner.getEffectiveDamageMultiplier();
+            if (raidDamageMultiplier == 1.0) {
+                return amount;
+            }
+            return (float) (amount * raidDamageMultiplier);
         }
 
         if (!arenasLd$matchesDungeonDamageFilter(this.arenasLd$currentDamageSource)) {
@@ -88,6 +97,18 @@ public abstract class LivingEntityMixin {
                     return;
                 }
             }
+            BossSpawnerBlockEntity raidSpawner = ArenasLdMod.RAID_BOSS_MANAGER.getSpawnerForPlayer(player);
+            if (health <= 0.0F && raidSpawner != null) {
+                if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
+                    if (raidSpawner.isHardcoreEnabled()) {
+                        raidSpawner.handlePlayerHardcoreDeath(player);
+                    } else {
+                        raidSpawner.handlePlayerDown(player);
+                    }
+                    ci.cancel();
+                    return;
+                }
+            }
             if (health <= 0.0F && ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) {
                 if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
                     var arenaInfo = ArenasLdMod.MOB_ARENA_MANAGER.getArenaInfo(player);
@@ -120,6 +141,18 @@ public abstract class LivingEntityMixin {
                         dungeonSpawner.handlePlayerHardcoreDeath(player);
                     } else {
                         dungeonSpawner.handlePlayerDown(player);
+                    }
+                    ci.cancel();
+                    return;
+                }
+            }
+            BossSpawnerBlockEntity raidSpawner = ArenasLdMod.RAID_BOSS_MANAGER.getSpawnerForPlayer(player);
+            if (raidSpawner != null) {
+                if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
+                    if (raidSpawner.isHardcoreEnabled()) {
+                        raidSpawner.handlePlayerHardcoreDeath(player);
+                    } else {
+                        raidSpawner.handlePlayerDown(player);
                     }
                     ci.cancel();
                     return;

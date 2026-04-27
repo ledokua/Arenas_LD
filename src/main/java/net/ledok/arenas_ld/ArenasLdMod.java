@@ -6,6 +6,7 @@ import net.ledok.arenas_ld.config.ArenasLdConfig;
 import net.ledok.arenas_ld.event.PlayerTickHandler;
 import net.ledok.arenas_ld.manager.DungeonBossManager;
 import net.ledok.arenas_ld.manager.MobArenaManager;
+import net.ledok.arenas_ld.manager.RaidBossManager;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.registry.*;
 import net.ledok.arenas_ld.screen.ModScreenHandlers;
@@ -18,6 +19,7 @@ public class ArenasLdMod implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     public static final DungeonBossManager DUNGEON_BOSS_MANAGER = new DungeonBossManager();
+    public static final RaidBossManager RAID_BOSS_MANAGER = new RaidBossManager();
     public static final MobArenaManager MOB_ARENA_MANAGER = new MobArenaManager();
     public static final ArenasLdConfig CONFIG = ArenasLdConfig.load();
 
@@ -35,6 +37,7 @@ public class ArenasLdMod implements ModInitializer {
         BossDataComponent.initialize();
         CommandRegistry.initialize();
         DUNGEON_BOSS_MANAGER.initialize();
+        RAID_BOSS_MANAGER.initialize();
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             for (var player : server.getPlayerList().getPlayers()) {

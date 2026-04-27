@@ -2,248 +2,334 @@ package net.ledok.arenas_ld.screen;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.networking.ModPackets;
+import net.ledok.arenas_ld.util.RaidDifficulty;
+import net.ledok.arenas_ld.util.RaidTierConfig;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.PlainTextButton;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+
 public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreenHandler> {
+    private enum Tab {
+        GENERAL,
+        TIERS
+    }
+
+    private Tab activeTab = Tab.GENERAL;
+    private RaidDifficulty selectedTier = RaidDifficulty.NORMAL;
 
     private EditBox mobIdField;
     private EditBox respawnTimeField;
-    private EditBox portalActiveTimeField;
     private EditBox lootTableIdField;
     private EditBox perPlayerLootTableIdField;
-    private EditBox exitPortalCoordsField;
-    private EditBox exitDimensionField;
-    private EditBox triggerRadiusField;
     private EditBox battleRadiusField;
     private EditBox regenerationField;
-    private EditBox enterPortalSpawnCoordsField;
-    private EditBox enterPortalSpawnDimensionField;
-    private EditBox enterPortalDestCoordsField;
-    private EditBox enterPortalDestDimensionField;
-    private EditBox minPlayersField;
     private EditBox skillExperienceField;
-    private EditBox groupIdField;
+    private EditBox hpScalePerPlayerField;
+    private EditBox battleTimeLimitSecsField;
+
+    private EditBox tierHealthMultField;
+    private EditBox tierDamageMultField;
+    private EditBox tierLootTableField;
+    private EditBox tierPerPlayerLootTableField;
+
+    private Button tabGeneralBtn;
+    private Button tabTiersBtn;
+    private final Button[] tierButtons = new Button[4];
+    private Button saveButton;
+
+    private final List<AbstractWidget> generalWidgets = new ArrayList<>();
+    private final List<AbstractWidget> tierWidgets = new ArrayList<>();
+    private final Map<RaidDifficulty, RaidTierConfig> tierConfigDraft = new EnumMap<>(RaidDifficulty.class);
 
     public BossSpawnerScreen(BossSpawnerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
-        this.imageWidth = 470; // Adjusted for three columns (3*150 + 2*10 padding)
-        this.imageHeight = 280; // Adjusted height to fit content
+        this.imageWidth = 330;
+        this.imageHeight = 290;
     }
 
     @Override
     protected void init() {
         super.init();
-        this.clearWidgets(); // Clear existing widgets to re-add them
+        this.clearWidgets();
+        this.generalWidgets.clear();
+        this.tierWidgets.clear();
 
         int fieldWidth = 150;
         int fieldHeight = 20;
-        int yOffset = 24;
+        int yOffset = 36;
         int columnPadding = 10;
-
-        // Calculate column X positions relative to the screen's left edge
-        int col1X = this.leftPos + 5; // Small margin from the left edge of the screen
+        int col1X = this.leftPos + 10;
         int col2X = col1X + fieldWidth + columnPadding;
-        int col3X = col2X + fieldWidth + columnPadding;
 
-        int currentY;
+        tabGeneralBtn = addRenderableWidget(Button.builder(
+                Component.translatable("gui.arenas_ld.tab_general"),
+                b -> {
+                    captureCurrentTierEdits();
+                    activeTab = Tab.GENERAL;
+                    updateTabVisibility();
+                }).bounds(this.leftPos + 10, this.topPos + 8, 80, 16).build());
+        tabTiersBtn = addRenderableWidget(Button.builder(
+                Component.translatable("gui.arenas_ld.tab_tiers"),
+                b -> {
+                    captureCurrentTierEdits();
+                    activeTab = Tab.TIERS;
+                    updateTabVisibility();
+                }).bounds(this.leftPos + 94, this.topPos + 8, 80, 16).build());
 
-        // --- Column 1: General Settings ---
-        currentY = 20;
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.mob_id"), (button) -> {}, this.font));
-        mobIdField = new EditBox(this.font, col1X, currentY, fieldWidth, fieldHeight, Component.literal(""));
+        int y = this.topPos + 50;
+        addGeneralWidget(new PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.mob_id"), b -> {}, this.font));
+        mobIdField = addGeneralWidget(new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal("")));
         mobIdField.setMaxLength(128);
-        this.addRenderableWidget(mobIdField);
-        currentY += (int)(yOffset * 1.7);
+        y += yOffset;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.loot_table_id"), (button) -> {}, this.font));
-        lootTableIdField = new EditBox(this.font, col1X, currentY, fieldWidth, fieldHeight, Component.literal(""));
+        addGeneralWidget(new PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.loot_table_id"), b -> {}, this.font));
+        lootTableIdField = addGeneralWidget(new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal("")));
         lootTableIdField.setMaxLength(128);
-        this.addRenderableWidget(lootTableIdField);
-        currentY += (int)(yOffset * 1.7);
+        y += yOffset;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.per_player_loot_table_id"), (button) -> {}, this.font));
-        perPlayerLootTableIdField = new EditBox(this.font, col1X, currentY, fieldWidth, fieldHeight, Component.literal(""));
+        addGeneralWidget(new PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.per_player_loot_table_id"), b -> {}, this.font));
+        perPlayerLootTableIdField = addGeneralWidget(new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal("")));
         perPlayerLootTableIdField.setMaxLength(128);
-        this.addRenderableWidget(perPlayerLootTableIdField);
-        currentY += (int)(yOffset * 1.7);
+        y += yOffset;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col1X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.group_id"), (button) -> {}, this.font));
-        groupIdField = new EditBox(this.font, col1X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        groupIdField.setMaxLength(128);
-        this.addRenderableWidget(groupIdField);
+        addGeneralWidget(new PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.hp_scale_per_player"), b -> {}, this.font));
+        hpScalePerPlayerField = addGeneralWidget(new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal("")));
+        hpScalePerPlayerField.setMaxLength(12);
+        y += yOffset;
 
+        addGeneralWidget(new PlainTextButton(col1X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.battle_time_limit"), b -> {}, this.font));
+        battleTimeLimitSecsField = addGeneralWidget(new EditBox(this.font, col1X, y, fieldWidth, fieldHeight, Component.literal("")));
+        battleTimeLimitSecsField.setMaxLength(8);
 
-        // --- Column 2: Numerical Settings ---
-        currentY = 20;
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.respawn_time"), (button) -> {}, this.font));
-        respawnTimeField = new EditBox(this.font, col2X, currentY, fieldWidth, fieldHeight, Component.literal(""));
+        y = this.topPos + 50;
+        addGeneralWidget(new PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.respawn_time"), b -> {}, this.font));
+        respawnTimeField = addGeneralWidget(new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal("")));
         respawnTimeField.setMaxLength(8);
-        this.addRenderableWidget(respawnTimeField);
-        currentY += (int)(yOffset * 1.7);
+        y += yOffset;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.portal_active_time"), (button) -> {}, this.font));
-        portalActiveTimeField = new EditBox(this.font, col2X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        portalActiveTimeField.setMaxLength(8);
-        this.addRenderableWidget(portalActiveTimeField);
-        currentY += (int)(yOffset * 1.7);
-
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.trigger_radius"), (button) -> {}, this.font));
-        triggerRadiusField = new EditBox(this.font, col2X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        triggerRadiusField.setMaxLength(4);
-        this.addRenderableWidget(triggerRadiusField);
-        currentY += (int)(yOffset * 1.7);
-
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.battle_radius"), (button) -> {}, this.font));
-        battleRadiusField = new EditBox(this.font, col2X, currentY, fieldWidth, fieldHeight, Component.literal(""));
+        addGeneralWidget(new PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.battle_radius"), b -> {}, this.font));
+        battleRadiusField = addGeneralWidget(new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal("")));
         battleRadiusField.setMaxLength(4);
-        this.addRenderableWidget(battleRadiusField);
-        currentY += (int)(yOffset * 1.7);
+        y += yOffset;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.regeneration"), (button) -> {}, this.font));
-        regenerationField = new EditBox(this.font, col2X, currentY, fieldWidth, fieldHeight, Component.literal(""));
+        addGeneralWidget(new PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.regeneration"), b -> {}, this.font));
+        regenerationField = addGeneralWidget(new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal("")));
         regenerationField.setMaxLength(4);
-        this.addRenderableWidget(regenerationField);
-        currentY += (int)(yOffset * 1.7);
+        y += yOffset;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.min_players"), (button) -> {}, this.font));
-        minPlayersField = new EditBox(this.font, col2X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        minPlayersField.setMaxLength(3);
-        this.addRenderableWidget(minPlayersField);
-        currentY += (int)(yOffset * 1.7);
-
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col2X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.skill_xp"), (button) -> {}, this.font));
-        skillExperienceField = new EditBox(this.font, col2X, currentY, fieldWidth, fieldHeight, Component.literal(""));
+        addGeneralWidget(new PlainTextButton(col2X, y - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.skill_xp"), b -> {}, this.font));
+        skillExperienceField = addGeneralWidget(new EditBox(this.font, col2X, y, fieldWidth, fieldHeight, Component.literal("")));
         skillExperienceField.setMaxLength(8);
-        this.addRenderableWidget(skillExperienceField);
 
+        int tierBtnY = this.topPos + 50;
+        int tierBtnW = 74;
+        int tierBtnGap = 4;
+        RaidDifficulty[] difficulties = RaidDifficulty.values();
+        for (int i = 0; i < difficulties.length; i++) {
+            final RaidDifficulty tier = difficulties[i];
+            tierButtons[i] = addTierWidget(Button.builder(
+                    Component.translatable(tier.translationKey()),
+                    b -> {
+                        captureCurrentTierEdits();
+                        selectedTier = tier;
+                        loadTierFieldsForSelectedTier();
+                        updateTierButtonState();
+                    }
+            ).bounds(this.leftPos + 10 + i * (tierBtnW + tierBtnGap), tierBtnY, tierBtnW, 16).build());
+        }
 
-        // --- Column 3: Portal Settings ---
-        currentY = 20;
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_spawn"), (button) -> {}, this.font));
-        enterPortalSpawnCoordsField = new EditBox(this.font, col3X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        enterPortalSpawnCoordsField.setMaxLength(32);
-        this.addRenderableWidget(enterPortalSpawnCoordsField);
-        currentY += (int)(yOffset * 1.7);
+        int tierCol1X = this.leftPos + 10;
+        int tierCol2X = tierCol1X + fieldWidth + columnPadding;
+        int tierY = this.topPos + 86;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_spawn_dim"), (button) -> {}, this.font));
-        enterPortalSpawnDimensionField = new EditBox(this.font, col3X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        enterPortalSpawnDimensionField.setMaxLength(128);
-        this.addRenderableWidget(enterPortalSpawnDimensionField);
-        currentY += (int)(yOffset * 1.7);
+        addTierWidget(new PlainTextButton(tierCol1X, tierY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.tier_health_mult"), b -> {}, this.font));
+        tierHealthMultField = addTierWidget(new EditBox(this.font, tierCol1X, tierY, fieldWidth, fieldHeight, Component.literal("")));
+        tierHealthMultField.setMaxLength(12);
+        tierY += yOffset;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_dest"), (button) -> {}, this.font));
-        enterPortalDestCoordsField = new EditBox(this.font, col3X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        enterPortalDestCoordsField.setMaxLength(32);
-        this.addRenderableWidget(enterPortalDestCoordsField);
-        currentY += (int)(yOffset * 1.7);
+        addTierWidget(new PlainTextButton(tierCol1X, tierY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.tier_damage_mult"), b -> {}, this.font));
+        tierDamageMultField = addTierWidget(new EditBox(this.font, tierCol1X, tierY, fieldWidth, fieldHeight, Component.literal("")));
+        tierDamageMultField.setMaxLength(12);
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.enter_portal_dest_dim"), (button) -> {}, this.font));
-        enterPortalDestDimensionField = new EditBox(this.font, col3X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        enterPortalDestDimensionField.setMaxLength(128);
-        this.addRenderableWidget(enterPortalDestDimensionField);
-        currentY += (int)(yOffset * 1.7);
+        int tierY2 = this.topPos + 86;
+        addTierWidget(new PlainTextButton(tierCol2X, tierY2 - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.tier_loot_table"), b -> {}, this.font));
+        tierLootTableField = addTierWidget(new EditBox(this.font, tierCol2X, tierY2, fieldWidth, fieldHeight, Component.literal("")));
+        tierLootTableField.setMaxLength(128);
+        tierY2 += yOffset;
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.exit_portal_coords"), (button) -> {}, this.font));
-        exitPortalCoordsField = new EditBox(this.font, col3X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        exitPortalCoordsField.setMaxLength(32);
-        this.addRenderableWidget(exitPortalCoordsField);
-        currentY += (int)(yOffset * 1.7);
+        addTierWidget(new PlainTextButton(tierCol2X, tierY2 - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.tier_per_player_loot_table"), b -> {}, this.font));
+        tierPerPlayerLootTableField = addTierWidget(new EditBox(this.font, tierCol2X, tierY2, fieldWidth, fieldHeight, Component.literal("")));
+        tierPerPlayerLootTableField.setMaxLength(128);
 
-        addRenderableWidget(new net.minecraft.client.gui.components.PlainTextButton(col3X, currentY - 15, fieldWidth, fieldHeight, Component.translatable("gui.arenas_ld.exit_portal_dim"), (button) -> {}, this.font));
-        exitDimensionField = new EditBox(this.font, col3X, currentY, fieldWidth, fieldHeight, Component.literal(""));
-        exitDimensionField.setMaxLength(128);
-        this.addRenderableWidget(exitDimensionField);
-
-
-        // --- Action Buttons ---
         this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.attributes"), button -> {
-            this.minecraft.setScreen(new MobAttributesScreen(new MobAttributesScreenHandler(menu.containerId, minecraft.player.getInventory(), new MobAttributesData(menu.blockEntity.getBlockPos())), minecraft.player.getInventory(), Component.translatable("gui.arenas_ld.boss_attributes")));
-        }).bounds(this.leftPos + this.imageWidth / 2 - 150, this.height - 70, 100, 20).build());
+            this.minecraft.setScreen(new MobAttributesScreen(
+                    new MobAttributesScreenHandler(menu.containerId, minecraft.player.getInventory(), new MobAttributesData(menu.blockEntity.getBlockPos())),
+                    minecraft.player.getInventory(),
+                    Component.translatable("gui.arenas_ld.boss_attributes")));
+        }).bounds(this.leftPos + 15, this.topPos + this.imageHeight - 48, 95, 20).build());
 
         this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.equipment"), button -> {
-            this.minecraft.setScreen(new EquipmentScreen(new EquipmentScreenHandler(menu.containerId, minecraft.player.getInventory(), new EquipmentScreenData(menu.blockEntity.getBlockPos())), minecraft.player.getInventory(), Component.translatable("gui.arenas_ld.boss_equipment")));
-        }).bounds(this.leftPos + this.imageWidth / 2 + 50, this.height - 70, 100, 20).build());
+            this.minecraft.setScreen(new EquipmentScreen(
+                    new EquipmentScreenHandler(menu.containerId, minecraft.player.getInventory(), new EquipmentScreenData(menu.blockEntity.getBlockPos())),
+                    minecraft.player.getInventory(),
+                    Component.translatable("gui.arenas_ld.boss_equipment")));
+        }).bounds(this.leftPos + 120, this.topPos + this.imageHeight - 48, 95, 20).build());
 
-        this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.save"), button -> onSave())
-                .bounds(this.leftPos + this.imageWidth / 2 - 50, this.height - 50, 100, 20)
+        saveButton = this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.save"), button -> onSave())
+                .bounds(this.leftPos + 225, this.topPos + this.imageHeight - 48, 90, 20)
                 .build());
 
         loadBlockEntityData();
+        loadTierFieldsForSelectedTier();
+        updateTierButtonState();
+        updateTabVisibility();
+    }
+
+    private <T extends AbstractWidget> T addGeneralWidget(T widget) {
+        this.addRenderableWidget(widget);
+        this.generalWidgets.add(widget);
+        return widget;
+    }
+
+    private <T extends AbstractWidget> T addTierWidget(T widget) {
+        this.addRenderableWidget(widget);
+        this.tierWidgets.add(widget);
+        return widget;
     }
 
     private void loadBlockEntityData() {
-        if (menu.blockEntity != null) {
-            mobIdField.setValue(menu.blockEntity.mobId);
-            respawnTimeField.setValue(String.valueOf(menu.blockEntity.respawnTime));
-            portalActiveTimeField.setValue(String.valueOf(menu.blockEntity.portalActiveTime));
-            lootTableIdField.setValue(menu.blockEntity.lootTableId);
-            perPlayerLootTableIdField.setValue(menu.blockEntity.perPlayerLootTableId);
-            exitPortalCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.exitPortalCoords.getX(), menu.blockEntity.exitPortalCoords.getY(), menu.blockEntity.exitPortalCoords.getZ()));
-            exitDimensionField.setValue(menu.blockEntity.exitDimension.location().toString());
-            triggerRadiusField.setValue(String.valueOf(menu.blockEntity.triggerRadius));
-            battleRadiusField.setValue(String.valueOf(menu.blockEntity.battleRadius));
-            regenerationField.setValue(String.valueOf(menu.blockEntity.regeneration));
-            enterPortalSpawnCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.enterPortalSpawnCoords.getX(), menu.blockEntity.enterPortalSpawnCoords.getY(), menu.blockEntity.enterPortalSpawnCoords.getZ()));
-            enterPortalSpawnDimensionField.setValue(menu.blockEntity.enterPortalSpawnDimension.location().toString());
-            enterPortalDestCoordsField.setValue(String.format("%d %d %d", menu.blockEntity.enterPortalDestCoords.getX(), menu.blockEntity.enterPortalDestCoords.getY(), menu.blockEntity.enterPortalDestCoords.getZ()));
-            enterPortalDestDimensionField.setValue(menu.blockEntity.enterPortalDestDimension.location().toString());
-            minPlayersField.setValue(String.valueOf(menu.blockEntity.minPlayers));
-            skillExperienceField.setValue(String.valueOf(menu.blockEntity.skillExperiencePerWin));
-            groupIdField.setValue(menu.blockEntity.groupId);
+        if (menu.blockEntity == null) return;
+        mobIdField.setValue(menu.blockEntity.mobId);
+        respawnTimeField.setValue(String.valueOf(menu.blockEntity.respawnTime));
+        lootTableIdField.setValue(menu.blockEntity.lootTableId);
+        perPlayerLootTableIdField.setValue(menu.blockEntity.perPlayerLootTableId);
+        battleRadiusField.setValue(String.valueOf(menu.blockEntity.battleRadius));
+        regenerationField.setValue(String.valueOf(menu.blockEntity.regeneration));
+        skillExperienceField.setValue(String.valueOf(menu.blockEntity.skillExperiencePerWin));
+        hpScalePerPlayerField.setValue(String.valueOf(menu.blockEntity.hpScalePerPlayer));
+        battleTimeLimitSecsField.setValue(String.valueOf(Math.max(0, menu.blockEntity.battleTimeLimitTicks / 20)));
+
+        tierConfigDraft.clear();
+        for (RaidDifficulty tier : RaidDifficulty.values()) {
+            RaidTierConfig cfg = menu.blockEntity.getTierConfigs().getOrDefault(tier, RaidTierConfig.defaultFor(tier));
+            tierConfigDraft.put(tier, cfg);
         }
     }
 
-    private BlockPos parseCoords(String text) {
-        try {
-            String[] parts = text.split(" ");
-            if (parts.length == 3) {
-                return new BlockPos(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
+    private void loadTierFieldsForSelectedTier() {
+        RaidTierConfig cfg = tierConfigDraft.getOrDefault(selectedTier, RaidTierConfig.defaultFor(selectedTier));
+        tierHealthMultField.setValue(Double.toString(cfg.healthMultOverride()));
+        tierDamageMultField.setValue(Double.toString(cfg.damageMultOverride()));
+        tierLootTableField.setValue(cfg.lootTableId());
+        tierPerPlayerLootTableField.setValue(cfg.perPlayerLootTableId());
+    }
+
+    private void captureCurrentTierEdits() {
+        RaidTierConfig existing = tierConfigDraft.getOrDefault(selectedTier, RaidTierConfig.defaultFor(selectedTier));
+        double health = parseDoubleOrDefault(tierHealthMultField.getValue(), existing.healthMultOverride());
+        double damage = parseDoubleOrDefault(tierDamageMultField.getValue(), existing.damageMultOverride());
+        String loot = tierLootTableField.getValue().trim();
+        String perPlayer = tierPerPlayerLootTableField.getValue().trim();
+        tierConfigDraft.put(selectedTier, new RaidTierConfig(health, damage, loot, perPlayer));
+    }
+
+    private void updateTierButtonState() {
+        for (int i = 0; i < tierButtons.length; i++) {
+            if (tierButtons[i] != null) {
+                tierButtons[i].active = RaidDifficulty.values()[i] != selectedTier;
             }
-        } catch (NumberFormatException ignored) {
         }
-        return BlockPos.ZERO;
     }
 
-    private ResourceLocation parseDimension(String text) {
-        try {
-            return ResourceLocation.parse(text);
-        } catch (Exception ignored) {
+    private void updateTabVisibility() {
+        boolean general = activeTab == Tab.GENERAL;
+        for (AbstractWidget widget : generalWidgets) {
+            widget.visible = general;
+            widget.active = general;
         }
-        return ResourceLocation.fromNamespaceAndPath("minecraft", "overworld"); // Default to overworld
+        for (AbstractWidget widget : tierWidgets) {
+            widget.visible = !general;
+            widget.active = !general;
+        }
+        tabGeneralBtn.active = !general;
+        tabTiersBtn.active = general;
     }
 
     private void onSave() {
+        if (activeTab == Tab.GENERAL) {
+            onSaveGeneral();
+        } else {
+            onSaveTierConfigs();
+        }
+    }
+
+    private void onSaveGeneral() {
         try {
+            double hpScale = Double.parseDouble(hpScalePerPlayerField.getValue());
+            int battleTimeLimitTicks = Math.max(0, Integer.parseInt(battleTimeLimitSecsField.getValue()) * 20);
             ClientPlayNetworking.send(new ModPackets.UpdateBossSpawnerPayload(
                     menu.blockEntity.getBlockPos(),
                     mobIdField.getValue(),
                     Integer.parseInt(respawnTimeField.getValue()),
-                    Integer.parseInt(portalActiveTimeField.getValue()),
+                    0,
                     lootTableIdField.getValue(),
                     perPlayerLootTableIdField.getValue(),
-                    parseCoords(exitPortalCoordsField.getValue()),
-                    parseDimension(exitDimensionField.getValue()),
-                    parseCoords(enterPortalSpawnCoordsField.getValue()),
-                    parseDimension(enterPortalSpawnDimensionField.getValue()),
-                    parseCoords(enterPortalDestCoordsField.getValue()),
-                    parseDimension(enterPortalDestDimensionField.getValue()),
-                    Integer.parseInt(triggerRadiusField.getValue()),
+                    menu.blockEntity.exitPosition,
+                    menu.blockEntity.exitDimension.location(),
+                    menu.blockEntity.entrancePosition,
+                    menu.blockEntity.entranceDimension.location(),
+                    BlockPos.ZERO,
+                    ResourceLocation.withDefaultNamespace("overworld"),
+                    0,
                     Integer.parseInt(battleRadiusField.getValue()),
                     Integer.parseInt(regenerationField.getValue()),
-                    Integer.parseInt(minPlayersField.getValue()),
+                    1,
                     Integer.parseInt(skillExperienceField.getValue()),
-                    groupIdField.getValue()
+                    battleTimeLimitTicks,
+                    hpScale,
+                    ""
             ));
             this.onClose();
         } catch (NumberFormatException e) {
             System.err.println("Invalid number format in one of the fields.");
+        }
+    }
+
+    private void onSaveTierConfigs() {
+        captureCurrentTierEdits();
+        double hpScale = parseDoubleOrDefault(hpScalePerPlayerField.getValue(), menu.blockEntity.hpScalePerPlayer);
+        CompoundTag tierConfigsTag = new CompoundTag();
+        for (RaidDifficulty tier : RaidDifficulty.values()) {
+            RaidTierConfig cfg = tierConfigDraft.getOrDefault(tier, RaidTierConfig.defaultFor(tier));
+            tierConfigsTag.put(tier.name(), cfg.toNbt());
+        }
+        ClientPlayNetworking.send(new ModPackets.UpdateBossSpawnerTierConfigsPayload(
+                menu.blockEntity.getBlockPos(),
+                hpScale,
+                tierConfigsTag
+        ));
+        this.onClose();
+    }
+
+    private static double parseDoubleOrDefault(String value, double def) {
+        if (value == null || value.isBlank()) return def;
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException ignored) {
+            return def;
         }
     }
 

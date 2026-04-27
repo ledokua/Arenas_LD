@@ -107,7 +107,7 @@ public class SpawnerConfiguratorItem extends Item {
         switch (currentMode) {
             case EXIT_POSITION:
                 if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
-                    bossSpawner.exitPortalCoords = relativePos;
+                    bossSpawner.exitPosition = clickedPos;
                     bossSpawner.exitDimension = clickedDimension;
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
                     dungeonBossSpawner.setExitPositionCoords(clickedPos, clickedDimension);
@@ -118,15 +118,15 @@ public class SpawnerConfiguratorItem extends Item {
                 break;
             case ENTER_PORTAL_SPAWN:
                 if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
-                    bossSpawner.enterPortalSpawnCoords = relativePos;
-                    bossSpawner.enterPortalSpawnDimension = clickedDimension;
+                    player.sendSystemMessage(Component.literal("Boss spawner portal settings were removed."));
+                    return InteractionResult.SUCCESS;
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.enter_portal_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
             case ENTER_PORTAL_DESTINATION:
                 if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
-                    bossSpawner.enterPortalDestCoords = relativePos;
-                    bossSpawner.enterPortalDestDimension = clickedDimension;
+                    player.sendSystemMessage(Component.literal("Boss spawner portal settings were removed."));
+                    return InteractionResult.SUCCESS;
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.enter_portal_dest_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
@@ -135,6 +135,9 @@ public class SpawnerConfiguratorItem extends Item {
                     mobArenaSpawner.setArenaEntrancePosition(relativePos, clickedDimension);
                 } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
                     dungeonBossSpawner.setEntrancePosition(relativePos, clickedDimension);
+                } else if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
+                    bossSpawner.entrancePosition = relativePos;
+                    bossSpawner.entranceDimension = clickedDimension;
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.entrance_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;

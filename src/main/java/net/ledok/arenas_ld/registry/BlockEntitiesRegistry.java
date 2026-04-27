@@ -55,6 +55,11 @@ public class BlockEntitiesRegistry {
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller_be"),
                     BlockEntityType.Builder.of(DungeonControllerBlockEntity::new, BlockRegistry.DUNGEON_CONTROLLER_BLOCK).build(null));
 
+    public static final BlockEntityType<RaidControllerBlockEntity> RAID_CONTROLLER_BLOCK_ENTITY =
+            Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
+                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_controller_be"),
+                    BlockEntityType.Builder.of(RaidControllerBlockEntity::new, BlockRegistry.RAID_CONTROLLER_BLOCK).build(null));
+
     public static void initialize() {
     }
 }

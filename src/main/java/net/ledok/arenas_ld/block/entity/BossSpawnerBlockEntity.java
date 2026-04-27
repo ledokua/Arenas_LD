@@ -5,7 +5,6 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
-import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.screen.BossSpawnerData;
@@ -16,7 +15,6 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
@@ -24,8 +22,11 @@ import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
+import net.minecraft.world.BossEvent;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -35,68 +36,94 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<BossSpawnerData>, AttributeProvider, EquipmentProvider, LinkableSpawner {
+public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<BossSpawnerData>, AttributeProvider, EquipmentProvider {
+    private static final int DOWNED_RESPAWN_TICKS = 60;
+    private static final int REGEN_INTERVAL_TICKS = 100;
+    private static final int DEATH_TIME_PENALTY_TICKS = 10 * 20;
 
-    // --- Configuration Fields ---
+    // --- Config ---
     public String mobId = "minecraft:zombie";
     public int respawnTime = 6000;
-    public int portalActiveTime = 600;
     public String lootTableId = "minecraft:chests/simple_dungeon";
     public String perPlayerLootTableId = "";
-    public BlockPos exitPortalCoords = BlockPos.ZERO;
-    public ResourceKey<Level> exitDimension = Level.OVERWORLD;
-    public BlockPos enterPortalSpawnCoords = BlockPos.ZERO;
-    public ResourceKey<Level> enterPortalSpawnDimension = Level.OVERWORLD;
-    public BlockPos enterPortalDestCoords = BlockPos.ZERO;
-    public ResourceKey<Level> enterPortalDestDimension = Level.OVERWORLD;
-    public int triggerRadius = 16;
     public int battleRadius = 64;
     public int regeneration = 0;
-    public int minPlayers = 2;
     public int skillExperiencePerWin = 100;
-    public String groupId = "";
+    public double hpScalePerPlayer = 0.10;
+    public int battleTimeLimitTicks = 0;
+    public BlockPos entrancePosition = BlockPos.ZERO; // relative to spawner
+    public ResourceKey<Level> entranceDimension = Level.OVERWORLD;
+    public BlockPos exitPosition = BlockPos.ZERO; // absolute
+    public ResourceKey<Level> exitDimension = Level.OVERWORLD;
+    private final Map<RaidDifficulty, RaidTierConfig> tierConfigs = new EnumMap<>(RaidDifficulty.class);
     private final List<AttributeData> attributes = new ArrayList<>();
     private EquipmentData equipment = new EquipmentData();
-    private final List<BlockPos> linkedSpawners = new ArrayList<>();
 
-    // --- State Machine Fields ---
+    // --- Runtime from controller ---
+    private BlockPos controllerPos = null;
+    private ResourceKey<Level> controllerDimension = null;
+    private RaidDifficulty activeDifficulty = RaidDifficulty.NORMAL;
+    private int trackedPlayerCount = 0;
+    private long battleStartTime = -1;
+    private boolean hardcoreEnabled = false;
+    private final List<UUID> trackedPlayerIds = new ArrayList<>();
+    private final List<String> trackedPlayerNames = new ArrayList<>();
+    private final Map<UUID, DownedPlayer> downedPlayers = new HashMap<>();
+    private final Set<UUID> disconnectedPlayers = new HashSet<>();
+    private final ServerBossEvent raidTimerBossBar = (ServerBossEvent) new ServerBossEvent(
+            Component.translatable("gui.arenas_ld.raid_timer"),
+            BossEvent.BossBarColor.YELLOW,
+            BossEvent.BossBarOverlay.PROGRESS
+    );
+
+    // --- Runtime state ---
     protected boolean isBattleActive = false;
     protected int respawnCooldown = 0;
     protected UUID activeBossUuid = null;
     protected ResourceKey<Level> bossDimension = null;
     protected int regenerationTickTimer = 0;
-    protected int enterPortalRemovalTimer = -1;
-    protected boolean firstTick = true;
-    protected long lastTickTime = -1;
-    private boolean isChunkLoaded = false;
+    protected int boundsTickCounter = 0;
+    private final Map<UUID, GameType> playerGameModesBeforeRaid = new HashMap<>();
 
     public BossSpawnerBlockEntity(BlockPos pos, BlockState state) {
-        this(BlockEntitiesRegistry.BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
-    }
-
-    protected BossSpawnerBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
-        super(type, pos, state);
+        super(BlockEntitiesRegistry.BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
+        initializeTierConfigs();
         if (attributes.isEmpty()) {
             attributes.add(new AttributeData("minecraft:generic.max_health", 300.0));
             attributes.add(new AttributeData("minecraft:generic.attack_damage", 15.0));
         }
+    }
+
+    private void initializeTierConfigs() {
+        for (RaidDifficulty tier : RaidDifficulty.values()) {
+            tierConfigs.putIfAbsent(tier, RaidTierConfig.defaultFor(tier));
+        }
+    }
+
+    public Map<RaidDifficulty, RaidTierConfig> getTierConfigs() {
+        return tierConfigs;
+    }
+
+    public void setTierConfig(RaidDifficulty tier, RaidTierConfig config) {
+        if (tier == null || config == null) {
+            return;
+        }
+        tierConfigs.put(tier, config);
+        setChanged();
     }
 
     @Override
@@ -122,211 +149,185 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         setChanged();
     }
 
-    @Override
-    public void addLinkedSpawner(BlockPos pos) {
-        if (!linkedSpawners.contains(pos)) {
-            linkedSpawners.add(pos);
-            setChanged();
-        }
-    }
-
-    @Override
-    public boolean removeLinkedSpawner(BlockPos pos) {
-        if (linkedSpawners.remove(pos)) {
-            setChanged();
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    public void clearLinkedSpawners() {
-        linkedSpawners.clear();
-        setChanged();
-    }
-
-    @Override
-    public List<BlockPos> getLinkedSpawners() {
-        return linkedSpawners;
-    }
-
-    @Override
-    public void forceReset() {
-        if (this.level instanceof ServerLevel serverLevel) {
-            resetSpawner(serverLevel);
-        }
-    }
-
     public static void tick(Level world, BlockPos pos, BlockState state, BossSpawnerBlockEntity be) {
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
-        
-        long currentTime = world.getGameTime();
-        if (be.lastTickTime != -1) {
-            long timeDiff = currentTime - be.lastTickTime;
-            if (timeDiff > 1) {
-                // Chunk was unloaded or server lagged, catch up cooldown
-                if (be.respawnCooldown > 0) {
-                    int oldCooldown = be.respawnCooldown;
-                    be.respawnCooldown = Math.max(0, be.respawnCooldown - (int) timeDiff);
-                    if (oldCooldown > 0 && be.respawnCooldown == 0) {
-                        be.spawnEnterPortal(serverLevel);
-                        // Trigger linked spawners
-                        for (BlockPos relativePos : be.linkedSpawners) {
-                            BlockPos absolutePos = pos.offset(relativePos);
-                            BlockEntity linkedBe = world.getBlockEntity(absolutePos);
-                            if (linkedBe instanceof LinkableSpawner linkedSpawner) {
-                                linkedSpawner.forceReset();
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        be.lastTickTime = currentTime;
-        
-        be.updateChunkLoading(serverLevel);
-
-        if (be.firstTick) {
-            // Re-link spawners on first tick
-            for (BlockPos relativePos : be.linkedSpawners) {
-                BlockPos absolutePos = pos.offset(relativePos);
-                if (world.isLoaded(absolutePos)) {
-                    BlockEntity linkedBe = world.getBlockEntity(absolutePos);
-                    // Just ensuring the chunk is loaded and we can access it if needed
-                }
-            }
-            be.firstTick = false;
-        }
 
         if (be.isBattleActive) {
             be.handleActiveBattle(serverLevel);
         } else {
-            be.handleIdleState(serverLevel, pos);
+            be.handleIdleState();
         }
     }
-    
-    private void updateChunkLoading(ServerLevel world) {
-        boolean shouldBeLoaded = this.respawnCooldown > 0 || this.isBattleActive;
-        if (shouldBeLoaded != isChunkLoaded) {
-            ChunkPos chunkPos = new ChunkPos(this.worldPosition);
-            world.setChunkForced(chunkPos.x, chunkPos.z, shouldBeLoaded);
-            isChunkLoaded = shouldBeLoaded;
-        }
-    }
-    
+
     @Override
     public void setRemoved() {
-        if (level instanceof ServerLevel serverLevel && isChunkLoaded) {
-            ChunkPos chunkPos = new ChunkPos(this.worldPosition);
-            serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
-            isChunkLoaded = false;
-        }
+        ArenasLdMod.RAID_BOSS_MANAGER.unregisterSpawner(this);
         super.setRemoved();
     }
 
-    protected void handleIdleState(ServerLevel world, BlockPos pos) {
+    protected void handleIdleState() {
         if (respawnCooldown > 0) {
             respawnCooldown--;
-            if (respawnCooldown == 0) {
-                spawnEnterPortal(world);
-                
-                // Trigger linked spawners
-                for (BlockPos relativePos : linkedSpawners) {
-                    BlockPos absolutePos = pos.offset(relativePos);
-                    BlockEntity be = world.getBlockEntity(absolutePos);
-                    if (be instanceof LinkableSpawner linkedSpawner) {
-                        linkedSpawner.forceReset();
-                    }
-                }
-            }
-            return;
-        }
-
-        AABB triggerBox = new AABB(pos).inflate(triggerRadius);
-        List<ServerPlayer> playersInTriggerZone = world.getEntitiesOfClass(ServerPlayer.class, triggerBox, p -> !p.isSpectator());
-
-        if (playersInTriggerZone.size() >= this.minPlayers) {
-            startBattle(world, pos, playersInTriggerZone.get(0));
         }
     }
 
     protected void handleActiveBattle(ServerLevel world) {
-        if (this.enterPortalRemovalTimer > 0) {
-            this.enterPortalRemovalTimer--;
-            if (this.enterPortalRemovalTimer == 0) {
-                removeEnterPortal(world);
-                ArenasLdMod.LOGGER.info("Enter portal at {} has timed out and was removed.", this.worldPosition.offset(enterPortalSpawnCoords));
-            }
-        }
-
         if (activeBossUuid == null) {
             handleBattleLoss(world, "Boss UUID was null.");
             return;
         }
 
-        ServerLevel bossWorld = Objects.requireNonNull(world.getServer()).getLevel(bossDimension);
+        ServerLevel bossWorld = world.getServer().getLevel(bossDimension);
         if (bossWorld == null) {
             handleBattleLoss(world, "Boss world was null.");
             return;
         }
+
         Entity bossEntity = bossWorld.getEntity(activeBossUuid);
         if (bossEntity == null) {
             handleBattleLoss(world, "Boss entity disappeared.");
             return;
         }
+
         if (!bossEntity.isAlive()) {
             handleBattleWin(world, bossEntity);
             return;
         }
-        AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
-        List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
-        if (playersInBattle.isEmpty()) {
-            bossEntity.discard();
-            handleBattleLoss(world, "All players left the battle area.");
-            return;
+
+        if (battleTimeLimitTicks > 0 && battleStartTime >= 0) {
+            long elapsedTicks = world.getGameTime() - battleStartTime;
+            updateRaidTimerBossBar(world, elapsedTicks);
+            if (elapsedTicks >= battleTimeLimitTicks) {
+                bossEntity.discard();
+                handleBattleLoss(world, "Time ran out.");
+                return;
+            }
         }
+
+        if (++boundsTickCounter >= 20) {
+            boundsTickCounter = 0;
+            enforceBattleBounds(world);
+            for (UUID uuid : trackedPlayerIds) {
+                ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+                if (player == null || player.isSpectator() || downedPlayers.containsKey(uuid)) {
+                    continue;
+                }
+                if (player.getHealth() <= 1.0F) {
+                    if (hardcoreEnabled) {
+                        handlePlayerHardcoreDeath(player);
+                    } else {
+                        handlePlayerDown(player);
+                    }
+                }
+            }
+        }
+
+        tickDownedPlayers(world);
+
+        if (hardcoreEnabled) {
+            boolean anyFighting = trackedPlayerIds.stream().anyMatch(id -> {
+                ServerPlayer player = world.getServer().getPlayerList().getPlayer(id);
+                return player != null && player.isAlive() && !player.isSpectator();
+            });
+            if (!anyFighting && downedPlayers.isEmpty()) {
+                bossEntity.discard();
+                handleBattleLoss(world, "All players eliminated.");
+                return;
+            }
+        }
+
         if (regeneration > 0 && bossEntity instanceof LivingEntity livingBoss) {
             regenerationTickTimer++;
-            if (regenerationTickTimer >= 100) {
+            if (regenerationTickTimer >= REGEN_INTERVAL_TICKS) {
                 livingBoss.heal((float) regeneration);
                 regenerationTickTimer = 0;
             }
         }
     }
 
-    protected void startBattle(ServerLevel world, BlockPos spawnPos, ServerPlayer triggeringPlayer) {
-        this.enterPortalRemovalTimer = 600;
+    public void startBattle(
+            ServerLevel world,
+            List<ServerPlayer> players,
+            RaidDifficulty difficulty,
+            BlockPos controllerPos,
+            ResourceKey<Level> controllerDimension,
+            boolean hardcoreEnabled,
+            int battleTimeLimitTicks
+    ) {
+        if (players == null || players.isEmpty()) {
+            return;
+        }
 
         Optional<EntityType<?>> entityTypeOpt = EntityType.byString(this.mobId);
-
         Component mobDisplayName = entityTypeOpt.map(EntityType::getDescription).orElse(Component.literal(this.mobId));
-
-        Component announcement = Component.translatable("message.arenas_ld.raid_start", triggeringPlayer.getDisplayName(), mobDisplayName)
-                .withStyle(net.minecraft.ChatFormatting.GOLD);
-        Objects.requireNonNull(world.getServer()).getPlayerList().broadcastSystemMessage(announcement, false);
+        Component announcement = Component.translatable(
+                "message.arenas_ld.raid_start",
+                players.get(0).getDisplayName(),
+                mobDisplayName
+        ).withStyle(net.minecraft.ChatFormatting.GOLD);
+        world.getServer().getPlayerList().broadcastSystemMessage(announcement, false);
 
         if (entityTypeOpt.isEmpty()) {
             ArenasLdMod.LOGGER.error("Invalid mob ID in spawner at {}: {}", this.worldPosition, this.mobId);
-            this.respawnCooldown = this.respawnTime;
             return;
         }
+
         Entity boss = entityTypeOpt.get().create(world);
+        if (boss == null) {
+            ArenasLdMod.LOGGER.error("Failed to create entity from ID: {}", this.mobId);
+            return;
+        }
+
+        this.controllerPos = controllerPos;
+        this.controllerDimension = controllerDimension;
+        this.activeDifficulty = difficulty != null ? difficulty : RaidDifficulty.NORMAL;
+        this.trackedPlayerCount = players.size();
+        this.battleStartTime = world.getGameTime();
+        this.hardcoreEnabled = hardcoreEnabled;
+        this.battleTimeLimitTicks = Math.max(0, battleTimeLimitTicks);
+        this.trackedPlayerIds.clear();
+        this.trackedPlayerNames.clear();
+        this.downedPlayers.clear();
+        this.disconnectedPlayers.clear();
+        this.playerGameModesBeforeRaid.clear();
+        for (ServerPlayer p : players) {
+            trackedPlayerIds.add(p.getUUID());
+            trackedPlayerNames.add(p.getGameProfile().getName());
+            playerGameModesBeforeRaid.put(p.getUUID(), p.gameMode.getGameModeForPlayer());
+            raidTimerBossBar.addPlayer(p);
+        }
+        if (this.battleTimeLimitTicks > 0) {
+            raidTimerBossBar.setVisible(true);
+            raidTimerBossBar.setProgress(1.0f);
+            raidTimerBossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(this.battleTimeLimitTicks / 20)));
+        } else {
+            raidTimerBossBar.setVisible(false);
+        }
+
         if (boss instanceof LivingEntity livingBoss) {
+            RaidTierConfig tierCfg = tierConfigs.getOrDefault(activeDifficulty, RaidTierConfig.defaultFor(activeDifficulty));
+            double healthMult = tierCfg.healthMultOverride() > 0 ? tierCfg.healthMultOverride() : activeDifficulty.healthMult;
+            double damageMult = tierCfg.damageMultOverride() > 0 ? tierCfg.damageMultOverride() : activeDifficulty.damageMult;
+            double perPlayerMult = Math.pow(1.0 + hpScalePerPlayer, Math.max(0, players.size() - 1));
+
             for (AttributeData attr : attributes) {
                 ResourceLocation attrLocation = ResourceLocation.tryParse(attr.id());
-                if (attrLocation != null) {
-                    var attributeRegistry = world.registryAccess().registryOrThrow(Registries.ATTRIBUTE);
-                    ResourceKey<Attribute> key = ResourceKey.create(Registries.ATTRIBUTE, attrLocation);
-                    attributeRegistry.getHolder(key).ifPresent(holder -> {
-                        AttributeInstance instance = livingBoss.getAttribute(holder);
-                        if (instance != null) {
-                            instance.setBaseValue(attr.value());
-                        }
-                    });
-                }
+                if (attrLocation == null) continue;
+                var attributeRegistry = world.registryAccess().registryOrThrow(Registries.ATTRIBUTE);
+                ResourceKey<Attribute> key = ResourceKey.create(Registries.ATTRIBUTE, attrLocation);
+                attributeRegistry.getHolder(key).ifPresent(holder -> {
+                    AttributeInstance instance = livingBoss.getAttribute(holder);
+                    if (instance == null) return;
+                    double value = attr.value();
+                    if ("minecraft:generic.max_health".equals(attr.id())) {
+                        value = value * healthMult * perPlayerMult;
+                    } else if ("minecraft:generic.attack_damage".equals(attr.id())) {
+                        value = value * damageMult;
+                    }
+                    instance.setBaseValue(value);
+                });
             }
-            
-            // Apply Equipment
+
             EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.HEAD, equipment.head, equipment.dropChance);
             EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.CHEST, equipment.chest, equipment.dropChance);
             EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.LEGS, equipment.legs, equipment.dropChance);
@@ -336,35 +337,62 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
 
             livingBoss.heal(livingBoss.getMaxHealth());
         }
-        if (boss == null) {
-            ArenasLdMod.LOGGER.error("Failed to create entity from ID: {}", this.mobId);
-            return;
-        }
-        boss.moveTo(spawnPos.getX() + 0.5, spawnPos.getY() + 1, spawnPos.getZ() + 0.5, 0, 0);
+
+        boss.moveTo(worldPosition.getX() + 0.5, worldPosition.getY() + 1, worldPosition.getZ() + 0.5, 0, 0);
         world.addFreshEntity(boss);
+
+        ServerLevel entranceWorld = world.getServer().getLevel(entranceDimension);
+        BlockPos absoluteEntrance = worldPosition.offset(entrancePosition);
+        for (ServerPlayer player : players) {
+            player.setGameMode(GameType.ADVENTURE);
+            player.setHealth(player.getMaxHealth());
+            if (entranceWorld != null) {
+                player.teleportTo(
+                        entranceWorld,
+                        absoluteEntrance.getX() + 0.5,
+                        absoluteEntrance.getY(),
+                        absoluteEntrance.getZ() + 0.5,
+                        player.getYRot(),
+                        player.getXRot()
+                );
+            }
+        }
+
         this.isBattleActive = true;
         this.activeBossUuid = boss.getUUID();
         this.bossDimension = world.dimension();
+        this.respawnCooldown = 0;
+        this.boundsTickCounter = 0;
+        ArenasLdMod.RAID_BOSS_MANAGER.registerSpawner(this);
         this.setChanged();
-        ArenasLdMod.LOGGER.info("Battle started at spawner {} with boss {}", this.worldPosition, this.mobId);
+        world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        ArenasLdMod.LOGGER.info(
+                "Raid battle started at {} with boss {}, tier={}, players={}",
+                this.worldPosition, this.mobId, this.activeDifficulty, this.trackedPlayerCount
+        );
     }
 
     protected void handleBattleWin(ServerLevel world, Entity defeatedBoss) {
-        ArenasLdMod.LOGGER.info("Battle won at spawner {}", worldPosition);
+        ArenasLdMod.LOGGER.info("Raid battle won at spawner {}", worldPosition);
 
         if (this.skillExperiencePerWin > 0) {
-            AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
-            List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
-            for (ServerPlayer player : playersInBattle) {
-                if (FabricLoader.getInstance().isModLoaded("puffish_skills")) {
+            for (UUID uuid : trackedPlayerIds) {
+                ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+                if (player != null && FabricLoader.getInstance().isModLoaded("puffish_skills")) {
                     PuffishSkillsCompat.addExperience(player, this.skillExperiencePerWin);
                 }
             }
         }
 
-        ResourceLocation lootTableIdentifier = ResourceLocation.tryParse(this.lootTableId);
+        RaidTierConfig tierCfg = tierConfigs.getOrDefault(activeDifficulty, RaidTierConfig.defaultFor(activeDifficulty));
+        String resolvedLootTableId = tierCfg.lootTableId().isEmpty() ? lootTableId : tierCfg.lootTableId();
+        String resolvedPerPlayerLootTableId = tierCfg.perPlayerLootTableId().isEmpty() ? perPlayerLootTableId : tierCfg.perPlayerLootTableId();
+
+        ResourceLocation lootTableIdentifier = ResourceLocation.tryParse(resolvedLootTableId);
         if (lootTableIdentifier != null) {
-            LootTable lootTable = Objects.requireNonNull(world.getServer()).reloadableRegistries().getLootTable(ResourceKey.create(Registries.LOOT_TABLE, lootTableIdentifier));
+            LootTable lootTable = world.getServer().reloadableRegistries().getLootTable(
+                    ResourceKey.create(Registries.LOOT_TABLE, lootTableIdentifier)
+            );
 
             LootParams.Builder builder = new LootParams.Builder(world)
                     .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(worldPosition))
@@ -372,50 +400,38 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
 
             LootParams lootParams = builder.create(net.minecraft.world.level.storage.loot.parameters.LootContextParamSets.GIFT);
             lootTable.getRandomItems(lootParams).forEach(stack -> {
-
                 double x = worldPosition.getX() + 0.5 + (world.random.nextDouble() * 8.0) - 4.0;
                 double y = worldPosition.getY() + 3.5;
                 double z = worldPosition.getZ() + 0.5 + (world.random.nextDouble() * 8.0) - 4.0;
-
                 ItemEntity itemEntity = new ItemEntity(world, x, y, z, stack);
                 itemEntity.setDeltaMovement(world.random.nextDouble() * 0.2 - 0.1, 0.4, world.random.nextDouble() * 0.2 - 0.1);
                 world.addFreshEntity(itemEntity);
             });
         }
 
-        if (this.perPlayerLootTableId != null && !this.perPlayerLootTableId.isEmpty()) {
-            AABB battleBox = new AABB(worldPosition).inflate(battleRadius);
-            List<ServerPlayer> playersInBattle = world.getEntitiesOfClass(ServerPlayer.class, battleBox, p -> !p.isSpectator());
-            for (ServerPlayer player : playersInBattle) {
+        if (!resolvedPerPlayerLootTableId.isEmpty()) {
+            for (UUID uuid : trackedPlayerIds) {
+                ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+                if (player == null || player.isSpectator() || downedPlayers.containsKey(uuid)) {
+                    continue;
+                }
                 ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
-                bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(this.perPlayerLootTableId));
+                bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(resolvedPerPlayerLootTableId));
                 if (!player.getInventory().add(bundle)) {
                     player.drop(bundle, false);
                 }
             }
         }
 
-        BlockPos portalPos = worldPosition.above(2);
-        world.setBlock(portalPos, BlockRegistry.EXIT_PORTAL_BLOCK.defaultBlockState(), 3);
-        if (world.getBlockEntity(portalPos) instanceof ExitPortalBlockEntity portal) {
-            BlockPos absoluteDest;
-            if (this.exitDimension.equals(world.dimension())) {
-                absoluteDest = this.worldPosition.offset(this.exitPortalCoords);
-            } else {
-                absoluteDest = this.exitPortalCoords;
-            }
-            portal.setDetails(this.portalActiveTime, absoluteDest, this.exitDimension);
-            ArenasLdMod.LOGGER.info("Spawned exit portal at {} for {} ticks.", portalPos, this.portalActiveTime);
-        }
-        resetSpawner(world);
-        removeEnterPortal(world);
+        notifyController(world, true);
+        resetAfterBattle(world);
     }
 
     protected void handleBattleLoss(ServerLevel world, String reason) {
-        ArenasLdMod.LOGGER.info("Battle lost at spawner {}: {}", worldPosition, reason);
+        ArenasLdMod.LOGGER.info("Raid battle lost at spawner {}: {}", worldPosition, reason);
 
         if (activeBossUuid != null && bossDimension != null) {
-            ServerLevel bossWorld = Objects.requireNonNull(world.getServer()).getLevel(bossDimension);
+            ServerLevel bossWorld = world.getServer().getLevel(bossDimension);
             if (bossWorld != null) {
                 Entity bossEntity = bossWorld.getEntity(activeBossUuid);
                 if (bossEntity != null && bossEntity.isAlive()) {
@@ -425,57 +441,246 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             }
         }
 
-        removeEnterPortal(world);
-        this.respawnCooldown = 1200; // 60 seconds
-        this.isBattleActive = false;
-        this.activeBossUuid = null;
-        this.bossDimension = null;
-        this.regenerationTickTimer = 0;
-        this.enterPortalRemovalTimer = -1;
-        this.setChanged();
-        world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
-        ArenasLdMod.LOGGER.info("Spawner at {} on short cooldown (60s) after battle loss.", worldPosition);
+        notifyController(world, false);
+        resetAfterBattle(world);
     }
 
-    protected void resetSpawner(ServerLevel world) {
-        this.isBattleActive = false;
-        this.activeBossUuid = null;
-        this.bossDimension = null;
-        this.respawnCooldown = this.respawnTime;
-        this.regenerationTickTimer = 0;
-        this.enterPortalRemovalTimer = -1;
-        this.setChanged();
-        world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
-        if (this.respawnCooldown <= 0) {
-            spawnEnterPortal(world);
+    private void resetAfterBattle(ServerLevel world) {
+        ServerLevel exitWorld = world.getServer().getLevel(exitDimension);
+        BlockPos absoluteExit = exitPosition;
+        for (UUID uuid : trackedPlayerIds) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            if (player == null) {
+                GameType restoreMode = playerGameModesBeforeRaid.getOrDefault(uuid, GameType.SURVIVAL);
+                ArenasLdMod.RAID_BOSS_MANAGER.addPendingRestore(uuid, exitPosition, exitDimension, restoreMode);
+                continue;
+            }
+            GameType restoreMode = playerGameModesBeforeRaid.getOrDefault(uuid, GameType.SURVIVAL);
+            player.setGameMode(restoreMode);
+            player.setHealth(player.getMaxHealth());
+            if (exitWorld != null) {
+                player.teleportTo(
+                        exitWorld,
+                        absoluteExit.getX() + 0.5,
+                        absoluteExit.getY(),
+                        absoluteExit.getZ() + 0.5,
+                        player.getYRot(),
+                        player.getXRot()
+                );
+            }
         }
-        updateChunkLoading(world);
+
+        this.isBattleActive = false;
+        this.activeBossUuid = null;
+        this.bossDimension = null;
+        this.regenerationTickTimer = 0;
+        this.boundsTickCounter = 0;
+        // 1-tick safety buffer so controller state can transition instance status first.
+        this.respawnCooldown = 1;
+        this.controllerPos = null;
+        this.controllerDimension = null;
+        this.activeDifficulty = RaidDifficulty.NORMAL;
+        this.trackedPlayerCount = 0;
+        this.battleStartTime = -1;
+        this.hardcoreEnabled = false;
+        this.disconnectedPlayers.clear();
+        this.trackedPlayerIds.clear();
+        this.trackedPlayerNames.clear();
+        this.downedPlayers.clear();
+        this.playerGameModesBeforeRaid.clear();
+        this.raidTimerBossBar.removeAllPlayers();
+        this.raidTimerBossBar.setVisible(false);
+        ArenasLdMod.RAID_BOSS_MANAGER.unregisterSpawner(this);
+        this.setChanged();
+        world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
     }
 
-    protected void spawnEnterPortal(ServerLevel world) {
-        if (enterPortalSpawnCoords == null || enterPortalDestCoords == null || enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
+    public boolean isHardcoreEnabled() {
+        return hardcoreEnabled;
+    }
+
+    public void setHardcoreEnabled(boolean hardcoreEnabled) {
+        this.hardcoreEnabled = hardcoreEnabled;
+        setChanged();
+    }
+
+    public double getEffectiveDamageMultiplier() {
+        RaidTierConfig tierCfg = tierConfigs.getOrDefault(activeDifficulty, RaidTierConfig.defaultFor(activeDifficulty));
+        if (tierCfg.damageMultOverride() > 0) {
+            return tierCfg.damageMultOverride();
+        }
+        return activeDifficulty.damageMult;
+    }
+
+    public boolean isTracked(UUID playerId) {
+        return playerId != null && trackedPlayerIds.contains(playerId);
+    }
+
+    public boolean isRaidRunning() {
+        return isBattleActive;
+    }
+
+    public void handlePlayerDown(ServerPlayer player) {
+        if (!isBattleActive || player == null) return;
+        if (!isTracked(player.getUUID())) return;
+        if (player.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) return;
+        if (downedPlayers.containsKey(player.getUUID())) return;
+
+        player.setHealth(1.0F);
+        player.setGameMode(GameType.SPECTATOR);
+        battleStartTime -= DEATH_TIME_PENALTY_TICKS;
+        downedPlayers.put(player.getUUID(), new DownedPlayer(DOWNED_RESPAWN_TICKS));
+        setChanged();
+    }
+
+    public void handlePlayerDisconnect(ServerPlayer player) {
+        if (player == null || !isBattleActive || !isTracked(player.getUUID())) {
             return;
         }
-        BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
-        BlockPos absoluteEnterDestPos = this.worldPosition.offset(enterPortalDestCoords);
 
-        ServerLevel spawnWorld = Objects.requireNonNull(world.getServer()).getLevel(enterPortalSpawnDimension);
-        if (spawnWorld != null) {
-            spawnWorld.setBlock(absoluteEnterSpawnPos, BlockRegistry.ENTER_PORTAL_BLOCK.defaultBlockState(), 3);
-            if (spawnWorld.getBlockEntity(absoluteEnterSpawnPos) instanceof EnterPortalBlockEntity be) {
-                be.setDestination(absoluteEnterDestPos, enterPortalDestDimension);
+        if (hardcoreEnabled) {
+            disconnectedPlayers.remove(player.getUUID());
+            handlePlayerHardcoreDeath(player);
+            return;
+        }
+
+        disconnectedPlayers.add(player.getUUID());
+        if (!downedPlayers.containsKey(player.getUUID())) {
+            if (battleTimeLimitTicks > 0) {
+                battleStartTime -= DEATH_TIME_PENALTY_TICKS;
+            }
+            downedPlayers.put(player.getUUID(), new DownedPlayer(DOWNED_RESPAWN_TICKS));
+        }
+        setChanged();
+    }
+
+    public void handlePlayerReconnect(ServerPlayer player) {
+        if (player == null || !isTracked(player.getUUID())) {
+            return;
+        }
+
+        disconnectedPlayers.remove(player.getUUID());
+
+        if (!isBattleActive) {
+            ArenasLdMod.RAID_BOSS_MANAGER.handlePostBattleReconnect(player);
+            return;
+        }
+
+        DownedPlayer downed = downedPlayers.computeIfAbsent(player.getUUID(), id -> new DownedPlayer(DOWNED_RESPAWN_TICKS));
+        player.setGameMode(GameType.SPECTATOR);
+        player.setHealth(player.getMaxHealth());
+        if (downed.ticksRemaining <= 0) {
+            respawnAtEntrance(player.serverLevel(), player);
+            downedPlayers.remove(player.getUUID());
+        }
+    }
+
+    public void handlePlayerHardcoreDeath(ServerPlayer player) {
+        if (!isBattleActive || player == null) return;
+        if (!isTracked(player.getUUID())) return;
+
+        player.setGameMode(GameType.SPECTATOR);
+        downedPlayers.remove(player.getUUID());
+        trackedPlayerIds.remove(player.getUUID());
+        trackedPlayerNames.remove(player.getGameProfile().getName());
+        setChanged();
+    }
+
+    private void tickDownedPlayers(ServerLevel world) {
+        if (downedPlayers.isEmpty()) return;
+
+        Iterator<Map.Entry<UUID, DownedPlayer>> iterator = downedPlayers.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<UUID, DownedPlayer> entry = iterator.next();
+            UUID uuid = entry.getKey();
+            DownedPlayer downed = entry.getValue();
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            if (player == null) {
+                downed.ticksRemaining = Math.max(0, downed.ticksRemaining - 1);
+                continue;
+            }
+            player.setDeltaMovement(0, 0, 0);
+            downed.ticksRemaining--;
+            if (downed.ticksRemaining <= 0) {
+                respawnAtEntrance(world, player);
+                iterator.remove();
             }
         }
     }
 
-    protected void removeEnterPortal(ServerLevel world) {
-        if (enterPortalSpawnCoords != null && !enterPortalSpawnCoords.equals(BlockPos.ZERO)) {
-            BlockPos absoluteEnterSpawnPos = this.worldPosition.offset(enterPortalSpawnCoords);
-            ServerLevel spawnWorld = Objects.requireNonNull(world.getServer()).getLevel(enterPortalSpawnDimension);
-            if (spawnWorld != null && spawnWorld.getBlockState(absoluteEnterSpawnPos).is(BlockRegistry.ENTER_PORTAL_BLOCK)) {
-                spawnWorld.setBlock(absoluteEnterSpawnPos, Blocks.AIR.defaultBlockState(), 3);
+    private void respawnAtEntrance(ServerLevel world, ServerPlayer player) {
+        if (!isBattleActive || player == null) {
+            return;
+        }
+        ServerLevel entranceWorld = world.getServer().getLevel(entranceDimension);
+        BlockPos absoluteEntrance = worldPosition.offset(entrancePosition);
+        player.setGameMode(GameType.ADVENTURE);
+        player.setHealth(player.getMaxHealth());
+        if (entranceWorld != null) {
+            player.teleportTo(
+                    entranceWorld,
+                    absoluteEntrance.getX() + 0.5,
+                    absoluteEntrance.getY(),
+                    absoluteEntrance.getZ() + 0.5,
+                    player.getYRot(),
+                    player.getXRot()
+            );
+        }
+    }
+
+    private void updateRaidTimerBossBar(ServerLevel world, long elapsedTicks) {
+        if (battleTimeLimitTicks <= 0) {
+            raidTimerBossBar.setVisible(false);
+            return;
+        }
+        if (!raidTimerBossBar.isVisible()) {
+            raidTimerBossBar.setVisible(true);
+        }
+        long remainingTicks = Math.max(0L, (long) battleTimeLimitTicks - elapsedTicks);
+        float progress = 1.0f - ((float) elapsedTicks / (float) battleTimeLimitTicks);
+        raidTimerBossBar.setProgress(Mth.clamp(progress, 0.0f, 1.0f));
+        raidTimerBossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime((int) (remainingTicks / 20L))));
+
+        for (UUID uuid : trackedPlayerIds) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            if (player != null && !raidTimerBossBar.getPlayers().contains(player)) {
+                raidTimerBossBar.addPlayer(player);
             }
         }
+    }
+
+    private void enforceBattleBounds(ServerLevel world) {
+        net.minecraft.world.phys.AABB battleBox = new net.minecraft.world.phys.AABB(worldPosition).inflate(battleRadius);
+        for (UUID uuid : trackedPlayerIds) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            if (player == null || player.isSpectator() || downedPlayers.containsKey(uuid)) {
+                continue;
+            }
+            if (player.level() != world || !battleBox.contains(player.position())) {
+                player.teleportTo(
+                        world,
+                        worldPosition.getX() + 0.5,
+                        worldPosition.getY() + 1,
+                        worldPosition.getZ() + 0.5,
+                        player.getYRot(),
+                        player.getXRot()
+                );
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.raid_out_of_bounds"));
+            }
+        }
+    }
+
+    private void notifyController(ServerLevel world, boolean wasWin) {
+        if (controllerPos == null || controllerDimension == null) return;
+        ServerLevel controllerWorld = world.getServer().getLevel(controllerDimension);
+        if (controllerWorld == null) return;
+        BlockEntity be = controllerWorld.getBlockEntity(controllerPos);
+        if (!(be instanceof RaidRunCallback callback)) {
+            return;
+        }
+
+        int elapsed = battleStartTime > 0 ? Math.max(0, (int) ((world.getGameTime() - battleStartTime) / 20L)) : 0;
+        callback.onRaidEnded(this.worldPosition, wasWin, activeDifficulty, new ArrayList<>(trackedPlayerNames), elapsed);
     }
 
     @Override
@@ -483,26 +688,50 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         super.saveAdditional(nbt, registryLookup);
         nbt.putString("MobId", mobId);
         nbt.putInt("RespawnTime", respawnTime);
-        nbt.putInt("PortalActiveTime", portalActiveTime);
         nbt.putString("LootTableId", lootTableId);
         nbt.putString("PerPlayerLootTableId", perPlayerLootTableId);
-        nbt.putLong("ExitPortalCoords", exitPortalCoords.asLong());
-        nbt.putString("ExitDimension", exitDimension.location().toString());
-        if (enterPortalSpawnCoords != null) nbt.putLong("EnterPortalSpawn", enterPortalSpawnCoords.asLong());
-        if (enterPortalSpawnDimension != null) nbt.putString("EnterPortalSpawnDimension", enterPortalSpawnDimension.location().toString());
-        if (enterPortalDestCoords != null) nbt.putLong("EnterPortalDest", enterPortalDestCoords.asLong());
-        if (enterPortalDestDimension != null) nbt.putString("EnterPortalDestDimension", enterPortalDestDimension.location().toString());
-        nbt.putInt("TriggerRadius", triggerRadius);
         nbt.putInt("BattleRadius", battleRadius);
         nbt.putInt("Regeneration", regeneration);
-        nbt.putInt("MinPlayers", minPlayers);
         nbt.putInt("SkillExperiencePerWin", skillExperiencePerWin);
+        nbt.putDouble("HpScalePerPlayer", hpScalePerPlayer);
+        nbt.putInt("BattleTimeLimitTicks", battleTimeLimitTicks);
+        nbt.putLong("EntrancePosition", entrancePosition.asLong());
+        nbt.putString("EntranceDimension", entranceDimension.location().toString());
+        nbt.putLong("ExitPosition", exitPosition.asLong());
+        nbt.putString("ExitDimension", exitDimension.location().toString());
+
         nbt.putBoolean("IsBattleActive", isBattleActive);
         nbt.putInt("RespawnCooldown", respawnCooldown);
-        nbt.putString("GroupId", groupId);
         if (activeBossUuid != null) nbt.putUUID("ActiveBossUuid", activeBossUuid);
         if (bossDimension != null) nbt.putString("BossDimension", bossDimension.location().toString());
-        nbt.putLong("LastTickTime", lastTickTime);
+        if (controllerPos != null) nbt.putLong("ControllerPos", controllerPos.asLong());
+        if (controllerDimension != null) nbt.putString("ControllerDimension", controllerDimension.location().toString());
+        nbt.putString("ActiveDifficulty", activeDifficulty.name());
+        nbt.putInt("TrackedPlayerCount", trackedPlayerCount);
+        nbt.putLong("BattleStartTime", battleStartTime);
+        nbt.putBoolean("HardcoreEnabled", hardcoreEnabled);
+
+        ListTag trackedIdList = new ListTag();
+        for (UUID id : trackedPlayerIds) {
+            CompoundTag t = new CompoundTag();
+            t.putUUID("uuid", id);
+            trackedIdList.add(t);
+        }
+        nbt.put("TrackedPlayerIds", trackedIdList);
+
+        ListTag trackedNameList = new ListTag();
+        for (String name : trackedPlayerNames) {
+            CompoundTag t = new CompoundTag();
+            t.putString("name", name);
+            trackedNameList.add(t);
+        }
+        nbt.put("TrackedPlayerNames", trackedNameList);
+
+        CompoundTag tierConfigsTag = new CompoundTag();
+        for (RaidDifficulty tier : RaidDifficulty.values()) {
+            tierConfigsTag.put(tier.name(), tierConfigs.getOrDefault(tier, RaidTierConfig.defaultFor(tier)).toNbt());
+        }
+        nbt.put("RaidTierConfigs", tierConfigsTag);
 
         ListTag attributeList = new ListTag();
         for (AttributeData attr : attributes) {
@@ -510,8 +739,6 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         }
         nbt.put("Attributes", attributeList);
         nbt.put("Equipment", equipment.toNbt());
-        
-        nbt.putLongArray("LinkedSpawners", linkedSpawners.stream().mapToLong(BlockPos::asLong).toArray());
     }
 
     @Override
@@ -519,41 +746,69 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         super.loadAdditional(nbt, registryLookup);
         mobId = nbt.getString("MobId");
         respawnTime = nbt.getInt("RespawnTime");
-        portalActiveTime = nbt.getInt("PortalActiveTime");
         lootTableId = nbt.getString("LootTableId");
         perPlayerLootTableId = nbt.getString("PerPlayerLootTableId");
-        exitPortalCoords = BlockPos.of(nbt.getLong("ExitPortalCoords"));
-        if (nbt.contains("ExitDimension")) {
-            exitDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitDimension")));
-        }
-        if (nbt.contains("EnterPortalSpawn"))
-            enterPortalSpawnCoords = BlockPos.of(nbt.getLong("EnterPortalSpawn"));
-        if (nbt.contains("EnterPortalSpawnDimension")) {
-            enterPortalSpawnDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("EnterPortalSpawnDimension")));
-        }
-        if (nbt.contains("EnterPortalDest"))
-            enterPortalDestCoords = BlockPos.of(nbt.getLong("EnterPortalDest"));
-        if (nbt.contains("EnterPortalDestDimension")) {
-            enterPortalDestDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("EnterPortalDestDimension")));
-        }
-        triggerRadius = nbt.getInt("TriggerRadius");
         battleRadius = nbt.getInt("BattleRadius");
         regeneration = nbt.getInt("Regeneration");
-        minPlayers = nbt.contains("MinPlayers") ? nbt.getInt("MinPlayers") : 1;
         skillExperiencePerWin = nbt.getInt("SkillExperiencePerWin");
+        hpScalePerPlayer = nbt.contains("HpScalePerPlayer") ? nbt.getDouble("HpScalePerPlayer") : 0.10;
+        battleTimeLimitTicks = nbt.contains("BattleTimeLimitTicks") ? nbt.getInt("BattleTimeLimitTicks") : 0;
+        entrancePosition = nbt.contains("EntrancePosition", Tag.TAG_LONG) ? BlockPos.of(nbt.getLong("EntrancePosition")) : BlockPos.ZERO;
+        if (nbt.contains("EntranceDimension")) {
+            entranceDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("EntranceDimension")));
+        } else {
+            entranceDimension = Level.OVERWORLD;
+        }
+        exitPosition = nbt.contains("ExitPosition", Tag.TAG_LONG) ? BlockPos.of(nbt.getLong("ExitPosition")) : BlockPos.ZERO;
+        if (nbt.contains("ExitDimension")) {
+            exitDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitDimension")));
+        } else {
+            exitDimension = Level.OVERWORLD;
+        }
+
         isBattleActive = nbt.getBoolean("IsBattleActive");
         respawnCooldown = nbt.getInt("RespawnCooldown");
-        groupId = nbt.getString("GroupId");
         if (nbt.hasUUID("ActiveBossUuid")) activeBossUuid = nbt.getUUID("ActiveBossUuid");
         if (nbt.contains("BossDimension")) {
             bossDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("BossDimension")));
         }
-        if (nbt.contains("LastTickTime")) {
-            lastTickTime = nbt.getLong("LastTickTime");
+        controllerPos = nbt.contains("ControllerPos") ? BlockPos.of(nbt.getLong("ControllerPos")) : null;
+        if (nbt.contains("ControllerDimension")) {
+            controllerDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ControllerDimension")));
+        }
+        activeDifficulty = RaidDifficulty.fromNameOrDefault(nbt.getString("ActiveDifficulty"), RaidDifficulty.NORMAL);
+        trackedPlayerCount = nbt.getInt("TrackedPlayerCount");
+        battleStartTime = nbt.getLong("BattleStartTime");
+        hardcoreEnabled = nbt.getBoolean("HardcoreEnabled");
+
+        trackedPlayerIds.clear();
+        if (nbt.contains("TrackedPlayerIds", Tag.TAG_LIST)) {
+            ListTag trackedIdList = nbt.getList("TrackedPlayerIds", Tag.TAG_COMPOUND);
+            for (Tag t : trackedIdList) {
+                trackedPlayerIds.add(((CompoundTag) t).getUUID("uuid"));
+            }
+        }
+        trackedPlayerNames.clear();
+        if (nbt.contains("TrackedPlayerNames", Tag.TAG_LIST)) {
+            ListTag trackedNameList = nbt.getList("TrackedPlayerNames", Tag.TAG_COMPOUND);
+            for (Tag t : trackedNameList) {
+                trackedPlayerNames.add(((CompoundTag) t).getString("name"));
+            }
+        }
+
+        tierConfigs.clear();
+        initializeTierConfigs();
+        if (nbt.contains("RaidTierConfigs", Tag.TAG_COMPOUND)) {
+            CompoundTag tierConfigsTag = nbt.getCompound("RaidTierConfigs");
+            for (RaidDifficulty tier : RaidDifficulty.values()) {
+                if (tierConfigsTag.contains(tier.name(), Tag.TAG_COMPOUND)) {
+                    tierConfigs.put(tier, RaidTierConfig.fromNbt(tierConfigsTag.getCompound(tier.name())));
+                }
+            }
         }
 
         attributes.clear();
-        ListTag attributeList = nbt.getList("Attributes", CompoundTag.TAG_COMPOUND);
+        ListTag attributeList = nbt.getList("Attributes", Tag.TAG_COMPOUND);
         for (Tag tag : attributeList) {
             attributes.add(AttributeData.fromNbt((CompoundTag) tag));
         }
@@ -564,14 +819,10 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         if (nbt.contains("Equipment")) {
             equipment = EquipmentData.fromNbt(nbt.getCompound("Equipment"));
         }
-        
-        linkedSpawners.clear();
-        if (nbt.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
-            long[] linkedSpawnersArray = nbt.getLongArray("LinkedSpawners");
-            for (long posLong : linkedSpawnersArray) {
-                linkedSpawners.add(BlockPos.of(posLong));
-            }
+        if (isBattleActive) {
+            ArenasLdMod.RAID_BOSS_MANAGER.registerSpawner(this);
         }
+        disconnectedPlayers.clear();
     }
 
     @Nullable
@@ -583,24 +834,6 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registryLookup) {
         return saveWithoutMetadata(registryLookup);
-    }
-
-    public void setExitPortalCoords(BlockPos exitPortalCoords, ResourceKey<Level> exitDimension) {
-        this.exitPortalCoords = exitPortalCoords;
-        this.exitDimension = exitDimension;
-        setChanged();
-    }
-
-    public void setEnterPortalSpawnCoords(BlockPos enterPortalSpawnCoords, ResourceKey<Level> enterPortalSpawnDimension) {
-        this.enterPortalSpawnCoords = enterPortalSpawnCoords;
-        this.enterPortalSpawnDimension = enterPortalSpawnDimension;
-        setChanged();
-    }
-
-    public void setEnterPortalDestCoords(BlockPos enterPortalDestCoords, ResourceKey<Level> enterPortalDestDimension) {
-        this.enterPortalDestCoords = enterPortalDestCoords;
-        this.enterPortalDestDimension = enterPortalDestDimension;
-        setChanged();
     }
 
     @Override
@@ -617,5 +850,20 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     @Override
     public BossSpawnerData getScreenOpeningData(ServerPlayer player) {
         return new BossSpawnerData(this.worldPosition);
+    }
+
+    private static class DownedPlayer {
+        private int ticksRemaining;
+
+        private DownedPlayer(int ticksRemaining) {
+            this.ticksRemaining = ticksRemaining;
+        }
+    }
+
+    private static String formatTime(int totalSeconds) {
+        int clamped = Math.max(0, totalSeconds);
+        int minutes = clamped / 60;
+        int seconds = clamped % 60;
+        return String.format("%02d:%02d", minutes, seconds);
     }
 }

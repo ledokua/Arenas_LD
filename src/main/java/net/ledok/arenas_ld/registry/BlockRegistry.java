@@ -40,6 +40,9 @@ public class BlockRegistry {
     public static final Block DUNGEON_CONTROLLER_BLOCK = registerBlock("dungeon_controller",
             new DungeonControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));
 
+    public static final Block RAID_CONTROLLER_BLOCK = registerBlock("raid_controller",
+            new RaidControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));
+
     private static Block registerBlock(String name, Block block) {
         registerBlockItem(name, block);
         return Registry.register(BuiltInRegistries.BLOCK, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":" + name), block);

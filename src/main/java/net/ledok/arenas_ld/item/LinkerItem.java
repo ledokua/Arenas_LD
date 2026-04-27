@@ -36,7 +36,9 @@ public class LinkerItem extends Item {
         SPAWNER_LINKING("item.arenas_ld.linker.mode.spawner_linking"),
         PHASE_BLOCK_LINKING("item.arenas_ld.linker.mode.phase_block_linking"),
         ARENA_CONTROLLER_LINKING("item.arenas_ld.linker.mode.arena_controller_linking"),
-        DUNGEON_CONTROLLER_LINKING("item.arenas_ld.linker.mode.dungeon_controller_linking");
+        DUNGEON_CONTROLLER_LINKING("item.arenas_ld.linker.mode.dungeon_controller_linking"),
+        RAID_CONTROLLER_LINKING("item.arenas_ld.linker.mode.raid_controller_linking"),
+        RAID_SPAWNER_POSITION("item.arenas_ld.linker.mode.raid_spawner_position");
 
         private final String translationKey;
 
@@ -80,6 +82,10 @@ public class LinkerItem extends Item {
             return handleArenaControllerLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
         } else if (currentMode == Mode.DUNGEON_CONTROLLER_LINKING) {
             return handleDungeonControllerLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
+        } else if (currentMode == Mode.RAID_CONTROLLER_LINKING) {
+            return handleRaidControllerLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
+        } else if (currentMode == Mode.RAID_SPAWNER_POSITION) {
+            return handleRaidSpawnerPosition(world, pos, player, stack, blockEntity, isShiftDown, modeData);
         }
 
         return super.useOn(context);
@@ -87,22 +93,6 @@ public class LinkerItem extends Item {
 
     private InteractionResult handleGroupConfig(Level world, BlockPos pos, BlockState state, Player player, ItemStack stack, BlockEntity blockEntity, boolean isShiftDown) {
         if (blockEntity instanceof MobSpawnerBlockEntity spawner) {
-            if (isShiftDown) {
-                String groupId = spawner.groupId;
-                stack.set(DataComponentRegistry.LINKER_DATA, new LinkerDataComponent(groupId));
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
-                return InteractionResult.SUCCESS;
-            } else {
-                LinkerDataComponent data = stack.get(DataComponentRegistry.LINKER_DATA);
-                if (data != null) {
-                    spawner.groupId = data.groupId();
-                    spawner.setChanged();
-                    world.sendBlockUpdated(pos, state, state, 3);
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.pasted_group_id", data.groupId()));
-                    return InteractionResult.SUCCESS;
-                }
-            }
-        } else if (blockEntity instanceof BossSpawnerBlockEntity spawner) {
             if (isShiftDown) {
                 String groupId = spawner.groupId;
                 stack.set(DataComponentRegistry.LINKER_DATA, new LinkerDataComponent(groupId));
@@ -394,6 +384,146 @@ public class LinkerItem extends Item {
         return InteractionResult.PASS;
     }
 
+    private InteractionResult handleRaidControllerLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, boolean isShiftDown, LinkerModeDataComponent modeData) {
+        Optional<BlockPos> mainPosOpt = modeData.mainSpawnerPos();
+
+        if (blockEntity instanceof RaidControllerBlockEntity controller) {
+            if (mainPosOpt.isEmpty()
+                    || modeData.mainSpawnerDimension().isEmpty()
+                    || !mainPosOpt.get().equals(pos)
+                    || !modeData.mainSpawnerDimension().get().equals(world.dimension())) {
+                // Select controller first.
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.raid_controller_selected", pos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
+
+            // Selected controller clicked again: list instances.
+            if (controller.getInstances().isEmpty()) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_raid_instances"));
+            } else {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.raid_instances"));
+                for (var instance : controller.getInstances()) {
+                    int cooldownSec = (instance.cooldownTicksRemaining() + 19) / 20;
+                    String suffix = instance.status() == net.ledok.arenas_ld.util.InstanceStatus.COOLDOWN
+                            ? ", " + String.format("%02d:%02d", cooldownSec / 60, cooldownSec % 60)
+                            : "";
+                    player.sendSystemMessage(Component.translatable(
+                            "message.arenas_ld.linker.raid_instance_entry",
+                            instance.spawnerPos().toShortString(),
+                            instance.dimension().location().toString(),
+                            instance.status().name() + suffix
+                    ));
+                }
+            }
+            return InteractionResult.SUCCESS;
+        }
+
+        if (blockEntity instanceof BossSpawnerBlockEntity) {
+            if (mainPosOpt.isEmpty() || modeData.mainSpawnerDimension().isEmpty()) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_raid_controller_selected"));
+                return InteractionResult.SUCCESS;
+            }
+
+            BlockPos controllerPos = mainPosOpt.get();
+            ServerLevel controllerWorld = world.getServer().getLevel(modeData.mainSpawnerDimension().get());
+            if (controllerWorld == null) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.raid_controller_invalid"));
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+                return InteractionResult.FAIL;
+            }
+
+            BlockEntity controllerBe = controllerWorld.getBlockEntity(controllerPos);
+            if (!(controllerBe instanceof RaidControllerBlockEntity controller)) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.raid_controller_invalid"));
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+                return InteractionResult.FAIL;
+            }
+
+            if (isShiftDown) {
+                boolean removed = controller.removeInstance(pos, world.dimension());
+                if (removed) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.raid_instance_removed", pos.toShortString(), controllerPos.toShortString()));
+                } else {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.raid_instance_not_linked"));
+                }
+                return InteractionResult.SUCCESS;
+            }
+
+            boolean added = controller.addInstance(pos, world.dimension());
+            if (added) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.raid_instance_added", pos.toShortString(), controllerPos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.raid_instance_add_failed"));
+            return InteractionResult.SUCCESS;
+        }
+
+        return InteractionResult.PASS;
+    }
+
+    private InteractionResult handleRaidSpawnerPosition(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, boolean isShiftDown, LinkerModeDataComponent modeData) {
+        Optional<BlockPos> selectedPosOpt = modeData.mainSpawnerPos();
+        Optional<net.minecraft.resources.ResourceKey<Level>> selectedDimOpt = modeData.mainSpawnerDimension();
+
+        if (blockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
+            if (selectedPosOpt.isEmpty()
+                    || selectedDimOpt.isEmpty()
+                    || !selectedPosOpt.get().equals(pos)
+                    || !selectedDimOpt.get().equals(world.dimension())) {
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.set_main_spawner", pos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
+            if (isShiftDown) {
+                player.sendSystemMessage(Component.translatable(
+                        "message.arenas_ld.linker.raid_spawner_entrance",
+                        pos.offset(bossSpawner.entrancePosition).toShortString(),
+                        bossSpawner.entranceDimension.location().toString()
+                ));
+                player.sendSystemMessage(Component.translatable(
+                        "message.arenas_ld.linker.raid_spawner_exit",
+                        bossSpawner.exitPosition.toShortString(),
+                        bossSpawner.exitDimension.location().toString()
+                ));
+            }
+            return InteractionResult.SUCCESS;
+        }
+
+        if (selectedPosOpt.isEmpty() || selectedDimOpt.isEmpty()) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.no_spawner_selected"));
+            return InteractionResult.SUCCESS;
+        }
+
+        ServerLevel spawnerWorld = world.getServer().getLevel(selectedDimOpt.get());
+        if (spawnerWorld == null) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.invalid_spawner"));
+            stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+            return InteractionResult.FAIL;
+        }
+
+        BlockPos spawnerPos = selectedPosOpt.get();
+        BlockEntity selectedBe = spawnerWorld.getBlockEntity(spawnerPos);
+        if (!(selectedBe instanceof BossSpawnerBlockEntity bossSpawner)) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.invalid_spawner"));
+            stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
+            return InteractionResult.FAIL;
+        }
+
+        if (isShiftDown) {
+            bossSpawner.exitPosition = pos;
+            bossSpawner.exitDimension = world.dimension();
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.exit_pos_set", pos.toShortString(), world.dimension().location().toString()));
+        } else {
+            bossSpawner.entrancePosition = pos.subtract(spawnerPos);
+            bossSpawner.entranceDimension = world.dimension();
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.entrance_pos_set", pos.toShortString(), world.dimension().location().toString()));
+        }
+        bossSpawner.setChanged();
+        spawnerWorld.sendBlockUpdated(spawnerPos, bossSpawner.getBlockState(), bossSpawner.getBlockState(), 3);
+        return InteractionResult.SUCCESS;
+    }
+
     @Override
     public InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand usedHand) {
         ItemStack stack = player.getItemInHand(usedHand);
@@ -402,7 +532,12 @@ public class LinkerItem extends Item {
             if (hitResult.getType() == BlockHitResult.Type.MISS) {
                 LinkerModeDataComponent modeData = stack.getOrDefault(DataComponentRegistry.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
 
-                if (Mode.values()[modeData.mode()] == Mode.SPAWNER_LINKING || Mode.values()[modeData.mode()] == Mode.PHASE_BLOCK_LINKING || Mode.values()[modeData.mode()] == Mode.ARENA_CONTROLLER_LINKING || Mode.values()[modeData.mode()] == Mode.DUNGEON_CONTROLLER_LINKING) {
+                if (Mode.values()[modeData.mode()] == Mode.SPAWNER_LINKING
+                        || Mode.values()[modeData.mode()] == Mode.PHASE_BLOCK_LINKING
+                        || Mode.values()[modeData.mode()] == Mode.ARENA_CONTROLLER_LINKING
+                        || Mode.values()[modeData.mode()] == Mode.DUNGEON_CONTROLLER_LINKING
+                        || Mode.values()[modeData.mode()] == Mode.RAID_CONTROLLER_LINKING
+                        || Mode.values()[modeData.mode()] == Mode.RAID_SPAWNER_POSITION) {
                     // Clear Main Spawner/Phase Block selection
                     stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.cleared_selection"));
@@ -425,7 +560,10 @@ public class LinkerItem extends Item {
             tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.main_spawner", modeData.mainSpawnerPos().get().toShortString()).withStyle(net.minecraft.ChatFormatting.GOLD));
         } else if (currentMode == Mode.PHASE_BLOCK_LINKING && modeData.mainSpawnerPos().isPresent()) {
             tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.main_phase_block", modeData.mainSpawnerPos().get().toShortString()).withStyle(net.minecraft.ChatFormatting.GOLD));
-        } else if ((currentMode == Mode.ARENA_CONTROLLER_LINKING || currentMode == Mode.DUNGEON_CONTROLLER_LINKING) && modeData.mainSpawnerPos().isPresent()) {
+        } else if ((currentMode == Mode.ARENA_CONTROLLER_LINKING
+                || currentMode == Mode.DUNGEON_CONTROLLER_LINKING
+                || currentMode == Mode.RAID_CONTROLLER_LINKING
+                || currentMode == Mode.RAID_SPAWNER_POSITION) && modeData.mainSpawnerPos().isPresent()) {
             tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.main_spawner", modeData.mainSpawnerPos().get().toShortString()).withStyle(net.minecraft.ChatFormatting.GOLD));
         }
         

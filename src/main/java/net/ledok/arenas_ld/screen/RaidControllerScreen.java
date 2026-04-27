@@ -2,8 +2,8 @@ package net.ledok.arenas_ld.screen;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.networking.ModPackets;
-import net.ledok.arenas_ld.util.DifficultyTier;
-import net.ledok.arenas_ld.util.DungeonLeaderboardEntry;
+import net.ledok.arenas_ld.util.RaidDifficulty;
+import net.ledok.arenas_ld.util.RaidLeaderboardEntry;
 import net.ledok.arenas_ld.util.LobbyStatus;
 import net.ledok.arenas_ld.util.LobbyVisibility;
 import net.minecraft.client.gui.GuiGraphics;
@@ -19,7 +19,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-public class DungeonControllerScreen extends AbstractContainerScreen<DungeonControllerScreenHandler> {
+public class RaidControllerScreen extends AbstractContainerScreen<RaidControllerScreenHandler> {
     private static final int BUTTON_SHIFT_X = 2;
 
     // ── Screen dimensions ────────────────────────────────────────────────────
@@ -47,9 +47,9 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     private static final int YO_DIFF    = Y_CONTENT + 2;   // 58  "Difficulty" label
     private static final int YO_TIERS   = Y_CONTENT + 12;  // 68  tier buttons
     private static final int YO_VIS     = Y_CONTENT + 32;  // 88  visibility buttons
-    private static final int YO_HC      = Y_CONTENT + 52;  // 108 hardcore checkbox
-    private static final int YO_MEMBERS = Y_CONTENT + 70;  // 126 "Members" label
-    private static final int YO_LIST    = Y_CONTENT + 80;  // 136 member list
+    private static final int YO_HC      = Y_CONTENT + 52;  // 114 hardcore checkbox
+    private static final int YO_MEMBERS = Y_CONTENT + 68;  // 130 "Members" label
+    private static final int YO_LIST    = Y_CONTENT + 78;  // 140 member list
     private static final int YO_INVITE  = Y_CONTENT + 130; // 186 invite box
 
     // Within BROWSING content zone:
@@ -95,47 +95,49 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     private static final int[] PILL_TXT = { 0xFF44ee44, 0xFFff9900, 0xFFff5555 };
     private static final int[] PILL_BDR = { 0xFF1a5a1a, 0xFF5a3a00, 0xFF5a1a1a };
 
-    // Tier colors indexed by DifficultyTier.ordinal(): [EASY=0, NORMAL=1, HARD=2, NIGHTMARE=3]
-    private static final int[] TIER_BG  = { 0xFF0a2a0a, 0xFF0a0a2a, 0xFF2a1800, 0xFF2a0a18 };
-    private static final int[] TIER_TXT = { 0xFF44ee44, 0xFF4a88ff, 0xFFff9900, 0xFFff55aa };
-    private static final int[] TIER_BDR = { 0xFF1a5a1a, 0xFF1a3a7a, 0xFF5a3800, 0xFF5a1a3a };
+    // Tier colors indexed by RaidDifficulty.ordinal(): [EASY=0, NORMAL=1, HARD=2, LEGENDARY=3]
+    private static final int[] TIER_BG  = { 0xFF0a2a0a, 0xFF0a0a2a, 0xFF2a1800, 0xFF2a0a2a };
+    private static final int[] TIER_TXT = { 0xFF44ee44, 0xFF4a88ff, 0xFFff9900, 0xFFcc88ff };
+    private static final int[] TIER_BDR = { 0xFF1a5a1a, 0xFF1a3a7a, 0xFF5a3800, 0xFF5a1a5a };
 
     // ── Server state ─────────────────────────────────────────────────────────
-    private int remainingSecs, cooldownSecs;
+    private int cooldownSecs;
     private boolean hardcoreEnabled;
-    private DifficultyTier selectedTier = DifficultyTier.NORMAL;
-    private boolean inLobby, isOwner, controllerLocked;
+    private boolean suppressHcSync;
+    private RaidDifficulty selectedDifficulty = RaidDifficulty.NORMAL;
+    private RaidDifficulty myLobbyDifficulty = RaidDifficulty.NORMAL;
+    private int myLobbyMaxSize = 10;
+    private boolean inLobby, isOwner;
     private LobbyStatus lobbyStatus = LobbyStatus.OPEN;
     private LobbyVisibility lobbyVis = LobbyVisibility.OPEN;
     private int queuePos, queueEstSecs;
     private boolean canAdmin;
     private int serverRespawnTicks = 6000;
     private int draftRespawnTicks  = 6000;
-    private int serverMaxPartySize = 4;
-    private int draftMaxPartySize  = 4;
+    private int serverMaxPartySize = 10;
+    private int draftMaxPartySize = 10;
+    private int maxPartySize = 10;
     private List<String>                                               memberNames    = new ArrayList<>();
-    private List<DungeonLeaderboardEntry>                              leaderboard    = new ArrayList<>();
-    private List<ModPackets.DungeonControllerInfoPayload.InstanceView> instanceViews  = new ArrayList<>();
-    private List<ModPackets.DungeonControllerInfoPayload.LobbyView>    allLobbies     = new ArrayList<>();
-    private List<ModPackets.DungeonControllerInfoPayload.LobbyView>    visLobbies     = new ArrayList<>();
-    private List<ModPackets.DungeonControllerInfoPayload.LobbyView>    invitedLobbies = new ArrayList<>();
+    private List<RaidLeaderboardEntry>                              leaderboard    = new ArrayList<>();
+    private List<ModPackets.RaidControllerInfoPayload.InstanceView> instanceViews  = new ArrayList<>();
+    private List<ModPackets.RaidControllerInfoPayload.LobbyView>    allLobbies     = new ArrayList<>();
+    private List<ModPackets.RaidControllerInfoPayload.LobbyView>    visLobbies     = new ArrayList<>();
+    private List<ModPackets.RaidControllerInfoPayload.LobbyView>    invitedLobbies = new ArrayList<>();
 
     // ── Client-only state ─────────────────────────────────────────────────────
-    private DifficultyTier lbTab        = DifficultyTier.NORMAL;
+    private RaidDifficulty lbTab        = RaidDifficulty.NORMAL;
     private int    selLobby             = 0;
     private int    selMember            = 0;
     private double lobbyScroll          = 0;
     private double memberScroll         = 0;
     private double lbScroll             = 0;
-    private boolean suppressHcSync      = false;
-    private boolean suppressAdminPartySync = false;
     private int refreshTick             = 0;
     private List<String> inviteSuggestions = List.of();
 
     private static final int ADMIN_STEP = 30 * 20;
     private static final int ADMIN_MAX  = 60 * 60 * 20;
     private static final int PARTY_MIN  = 1;
-    private static final int PARTY_MAX  = 16;
+    private static final int PARTY_MAX  = 20;
     private static final int ROW_H      = 19; // height of each lobby / member row
     private static final int INST_PANEL_H = 42;
     private static final int INST_PILL_GAP_X = 3;
@@ -163,9 +165,10 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     // Admin
     private Button adminMinusBtn, adminApplyBtn, adminPlusBtn;
     private EditBox adminPartySizeBox;
+    private boolean suppressAdminPartySync;
 
     // ── Constructor ───────────────────────────────────────────────────────────
-    public DungeonControllerScreen(DungeonControllerScreenHandler handler, Inventory inventory, Component title) {
+    public RaidControllerScreen(RaidControllerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
         this.imageWidth  = W;
         this.imageHeight = H;
@@ -180,14 +183,14 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         // ── BROWSING ──
         createLobbyBtn = addRenderableWidget(Button.builder(
                 Component.translatable("gui.arenas_ld.create_lobby"),
-                b -> { ClientPlayNetworking.send(new ModPackets.CreateDungeonLobbyPayload(menu.getPos())); updateInfo(); }
+                b -> { ClientPlayNetworking.send(new ModPackets.CreateRaidLobbyPayload(menu.getPos())); updateInfo(); }
         ).bounds(x + P + BUTTON_SHIFT_X, y + Y_ACTIONS - 5, BTN_HALF, BTN_H).build());
 
         joinLobbyBtn = addRenderableWidget(Button.builder(
                 Component.translatable("gui.arenas_ld.join_selected"),
                 b -> {
                     if (!visLobbies.isEmpty() && selLobby < visLobbies.size()) {
-                        ClientPlayNetworking.send(new ModPackets.JoinDungeonLobbyPayload(menu.getPos(), visLobbies.get(selLobby).id()));
+                        ClientPlayNetworking.send(new ModPackets.JoinRaidLobbyPayload(menu.getPos(), visLobbies.get(selLobby).id()));
                         updateInfo();
                     }
                 }
@@ -196,16 +199,16 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         // ── MEMBER ──
         leaveLobbyBtn = addRenderableWidget(Button.builder(
                 Component.translatable("gui.arenas_ld.leave_party"),
-                b -> { ClientPlayNetworking.send(new ModPackets.DungeonControllerActionPayload(menu.getPos(), 2)); updateInfo(); }
+                b -> { ClientPlayNetworking.send(new ModPackets.RaidControllerActionPayload(menu.getPos(), 2)); updateInfo(); }
         ).bounds(x + P + BUTTON_SHIFT_X, y + Y_ACTIONS + 2, IW - 4, BTN_H - 6).build());
 
         // ── OWNER: tier buttons ──
-        DifficultyTier[] tiers = DifficultyTier.values();
+        RaidDifficulty[] tiers = RaidDifficulty.values();
         for (int i = 0; i < 4; i++) {
-            final DifficultyTier t = tiers[i];
+            final RaidDifficulty t = tiers[i];
             tierBtns[i] = addRenderableWidget(Button.builder(
                     Component.translatable(t.translationKey()),
-                    b -> { selectedTier = t; syncSettings(); updateInfo(); }
+                    b -> { selectedDifficulty = t; syncSettings(); updateInfo(); }
             ).bounds(x + P + i * (TIER_W + 3) + BUTTON_SHIFT_X, y + YO_TIERS, TIER_W, 16).build());
         }
 
@@ -213,18 +216,22 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         int visW = ((IW - 3) / 2) - 2;
         visOpenBtn = addRenderableWidget(Button.builder(
                 Component.translatable("gui.arenas_ld.visibility_open"),
-                b -> { ClientPlayNetworking.send(new ModPackets.UpdateDungeonLobbyVisibilityPayload(menu.getPos(), "OPEN")); updateInfo(); }
+                b -> { ClientPlayNetworking.send(new ModPackets.UpdateRaidLobbyVisibilityPayload(menu.getPos(), "OPEN")); updateInfo(); }
         ).bounds(x + P + BUTTON_SHIFT_X, y + YO_VIS, visW, 16).build());
         visInviteBtn = addRenderableWidget(Button.builder(
                 Component.translatable("gui.arenas_ld.visibility_invite_only"),
-                b -> { ClientPlayNetworking.send(new ModPackets.UpdateDungeonLobbyVisibilityPayload(menu.getPos(), "INVITE_ONLY")); updateInfo(); }
+                b -> { ClientPlayNetworking.send(new ModPackets.UpdateRaidLobbyVisibilityPayload(menu.getPos(), "INVITE_ONLY")); updateInfo(); }
         ).bounds(x + P + ((IW - 3) / 2) + 3 + BUTTON_SHIFT_X, y + YO_VIS, visW, 16).build());
 
         // ── OWNER: hardcore checkbox ──
         hcBox = addRenderableWidget(Checkbox.builder(
                 Component.translatable("gui.arenas_ld.hardcore"),
                 font
-        ).pos(x + P + 2, y + YO_HC).selected(false).onValueChange((cb, sel) -> { if (!suppressHcSync) syncSettings(); }).build());
+        ).pos(x + P + 2, y + YO_HC).selected(false).onValueChange((cb, sel) -> {
+            if (!suppressHcSync) {
+                syncSettings();
+            }
+        }).build());
         hcBox.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
                 Component.translatable("gui.arenas_ld.hardcore_desc")));
 
@@ -233,8 +240,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
                 Component.translatable("gui.arenas_ld.kick_member"),
                 b -> {
                     if (selMember > 0 && selMember < memberNames.size()) {
-                        ClientPlayNetworking.send(new ModPackets.KickDungeonLobbyPlayerPayload(menu.getPos(), memberNames.get(selMember)));
-                        updateInfo();
+                        // Raid screen currently keeps kick as local selection affordance only.
                     }
                 }
         ).bounds(x + W - P - 46 + BUTTON_SHIFT_X, y + YO_LIST + (selMember * ROW_H) + 2, 44, 14).build());
@@ -249,7 +255,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
                 b -> {
                     String name = inviteBox.getValue().trim();
                     if (!name.isEmpty()) {
-                        ClientPlayNetworking.send(new ModPackets.InviteDungeonLobbyPlayerPayload(menu.getPos(), name));
+                        ClientPlayNetworking.send(new ModPackets.InviteRaidLobbyPlayerPayload(menu.getPos(), name));
                         inviteBox.setValue("");
                         updateInfo();
                     }
@@ -258,24 +264,24 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
         // ── OWNER: start / disband ──
         startBtn = addRenderableWidget(Button.builder(
-                Component.translatable("gui.arenas_ld.start_dungeon"),
-                b -> { ClientPlayNetworking.send(new ModPackets.DungeonControllerActionPayload(menu.getPos(), 0)); updateInfo(); }
+                Component.translatable("gui.arenas_ld.start_raid"),
+                b -> { ClientPlayNetworking.send(new ModPackets.RaidControllerActionPayload(menu.getPos(), 0)); updateInfo(); }
         ).bounds(x + P + BUTTON_SHIFT_X, y + Y_ACTIONS, 148, BTN_H - 5).build());
 
         disbandBtn = addRenderableWidget(Button.builder(
                 Component.translatable("gui.arenas_ld.disband_lobby"),
-                b -> { ClientPlayNetworking.send(new ModPackets.DisbandDungeonLobbyPayload(menu.getPos())); updateInfo(); }
+                b -> { ClientPlayNetworking.send(new ModPackets.DisbandRaidLobbyPayload(menu.getPos())); updateInfo(); }
         ).bounds(x + P + 152 + BUTTON_SHIFT_X, y + Y_ACTIONS, IW - 156, BTN_H - 5).build());
 
         // ── QUEUED ──
         leaveQueueBtn = addRenderableWidget(Button.builder(
                 Component.translatable("gui.arenas_ld.leave_queue"),
-                b -> { ClientPlayNetworking.send(new ModPackets.DungeonControllerActionPayload(menu.getPos(), 2)); updateInfo(); }
+                b -> { ClientPlayNetworking.send(new ModPackets.RaidControllerActionPayload(menu.getPos(), 1)); updateInfo(); }
         ).bounds(x + P + BUTTON_SHIFT_X, y + Y_ACTIONS, IW, BTN_H).build());
 
         // ── Leaderboard tier tabs ──
         for (int i = 0; i < 4; i++) {
-            final DifficultyTier t = DifficultyTier.values()[i];
+            final RaidDifficulty t = RaidDifficulty.values()[i];
             lbTabBtns[i] = addRenderableWidget(Button.builder(
                     Component.translatable(t.translationKey()),
                     b -> { lbTab = t; lbScroll = 0; updateInfo(); }
@@ -288,7 +294,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         }).bounds(x + P + BUTTON_SHIFT_X, y + Y_ADMIN + 1, 16, 12).build());
 
         adminApplyBtn = addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.apply"), b -> {
-            ClientPlayNetworking.send(new ModPackets.UpdateDungeonControllerAdminSettingsPayload(
+            ClientPlayNetworking.send(new ModPackets.UpdateRaidControllerAdminSettingsPayload(
                     menu.getPos(),
                     draftRespawnTicks,
                     draftMaxPartySize
@@ -311,10 +317,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         adminPartySizeBox.setFilter(s -> s.length() <= 2 && s.chars().allMatch(Character::isDigit));
         adminPartySizeBox.setValue(Integer.toString(draftMaxPartySize));
         adminPartySizeBox.setResponder(s -> {
-            if (suppressAdminPartySync) {
-                return;
-            }
-            if (s == null || s.isBlank()) {
+            if (suppressAdminPartySync || s == null || s.isBlank()) {
                 return;
             }
             try {
@@ -322,7 +325,8 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             } catch (NumberFormatException ignored) {
             }
             if (adminApplyBtn != null) {
-                adminApplyBtn.active = draftRespawnTicks != serverRespawnTicks || draftMaxPartySize != serverMaxPartySize;
+                adminApplyBtn.active = draftRespawnTicks != serverRespawnTicks
+                        || draftMaxPartySize != serverMaxPartySize;
             }
         });
         addRenderableWidget(adminPartySizeBox);
@@ -343,31 +347,28 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
     private void updateInfo() {
         if (minecraft == null || minecraft.level == null) return;
-        ClientPlayNetworking.send(new ModPackets.RequestDungeonControllerInfoPayload(menu.getPos(), lbTab.name()));
+        ClientPlayNetworking.send(new ModPackets.RequestRaidControllerInfoPayload(menu.getPos(), lbTab.name()));
     }
 
     // ── Apply server payload ──────────────────────────────────────────────────
-    public void applyServerInfo(ModPackets.DungeonControllerInfoPayload p) {
+    public void applyServerInfo(ModPackets.RaidControllerInfoPayload p) {
         if (!p.pos().equals(menu.getPos())) return;
 
-        remainingSecs     = p.remainingDungeonTimeSeconds();
-        cooldownSecs      = p.dungeonCooldownSeconds();
-        hardcoreEnabled   = p.hardcoreEnabled();
-        selectedTier      = DifficultyTier.fromNameOrDefault(p.selectedTier(), DifficultyTier.NORMAL);
+        selectedDifficulty = RaidDifficulty.fromNameOrDefault(p.selectedDifficulty(), RaidDifficulty.NORMAL);
         inLobby           = p.inLobby();
         isOwner           = p.isLobbyOwner();
-        controllerLocked  = p.controllerLocked();
         lobbyStatus       = parseLobbyStatus(p.lobbyStatus());
         lobbyVis          = parseLobbyVis(p.currentLobbyVisibility());
         queuePos          = p.queuePosition();
-        queueEstSecs      = queuePos > 0 && cooldownSecs > 0 ? queuePos * cooldownSecs : 0;
         canAdmin          = p.canManageAdmin();
         int prevRespawn   = serverRespawnTicks;
         serverRespawnTicks = Math.max(0, p.controllerRespawnTimeTicks());
         if (draftRespawnTicks == prevRespawn) draftRespawnTicks = serverRespawnTicks;
         int prevMaxParty = serverMaxPartySize;
         serverMaxPartySize = Mth.clamp(p.controllerMaxPartySize(), PARTY_MIN, PARTY_MAX);
-        if (draftMaxPartySize == prevMaxParty) draftMaxPartySize = serverMaxPartySize;
+        if (draftMaxPartySize == prevMaxParty) {
+            draftMaxPartySize = serverMaxPartySize;
+        }
         if (adminPartySizeBox != null && !adminPartySizeBox.isFocused()) {
             String target = Integer.toString(draftMaxPartySize);
             if (!target.equals(adminPartySizeBox.getValue())) {
@@ -376,10 +377,18 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
                 suppressAdminPartySync = false;
             }
         }
+        maxPartySize = serverMaxPartySize;
 
         memberNames  = new ArrayList<>(p.players());
         leaderboard  = new ArrayList<>(p.leaderboard());
         instanceViews= new ArrayList<>(p.instances());
+        cooldownSecs = instanceViews.stream()
+                .filter(iv -> "COOLDOWN".equalsIgnoreCase(iv.status()))
+                .mapToInt(ModPackets.RaidControllerInfoPayload.InstanceView::cooldownSeconds)
+                .min()
+                .orElse(0);
+        hardcoreEnabled = p.hardcoreEnabled();
+        queueEstSecs      = queuePos > 0 && cooldownSecs > 0 ? queuePos * cooldownSecs : 0;
 
         // Partition lobbies
         allLobbies     = new ArrayList<>(p.lobbies());
@@ -392,8 +401,28 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         }
         selLobby = Mth.clamp(selLobby, 0, Math.max(0, visLobbies.size() - 1));
         selMember = Mth.clamp(selMember, 0, Math.max(0, memberNames.size() - 1));
-
-        // Sync hardcore checkbox
+        myLobbyDifficulty = selectedDifficulty;
+        myLobbyMaxSize = maxPartySize;
+        if (inLobby && !memberNames.isEmpty()) {
+            String ownerName = memberNames.get(0);
+            for (var lv : allLobbies) {
+                if (lv.invited()) {
+                    continue;
+                }
+                if (!ownerName.equalsIgnoreCase(lv.ownerName())) {
+                    continue;
+                }
+                if (lv.size() != memberNames.size()) {
+                    continue;
+                }
+                if (!lv.status().equalsIgnoreCase(lobbyStatus.name())) {
+                    continue;
+                }
+                myLobbyDifficulty = RaidDifficulty.fromNameOrDefault(lv.difficulty(), selectedDifficulty);
+                myLobbyMaxSize = Mth.clamp(lv.maxSize(), PARTY_MIN, PARTY_MAX);
+                break;
+            }
+        }
         if (hcBox != null && hcBox.selected() != hardcoreEnabled) {
             suppressHcSync = true;
             hcBox.onPress();
@@ -439,14 +468,14 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         boolean ownerActive = s == UiState.OWNER;
         for (int i = 0; i < 4; i++) {
             show(tierBtns[i], ownerActive);
-            tierBtns[i].active = ownerActive && DifficultyTier.values()[i] != selectedTier;
+            tierBtns[i].active = ownerActive && RaidDifficulty.values()[i] != selectedDifficulty;
         }
         show(visOpenBtn,   ownerActive);
         show(visInviteBtn, ownerActive);
-        visOpenBtn.active   = ownerActive && lobbyVis != LobbyVisibility.OPEN;
-        visInviteBtn.active = ownerActive && lobbyVis != LobbyVisibility.INVITE_ONLY;
         show(hcBox, ownerActive);
         hcBox.active = ownerActive;
+        visOpenBtn.active   = ownerActive && lobbyVis != LobbyVisibility.OPEN;
+        visInviteBtn.active = ownerActive && lobbyVis != LobbyVisibility.INVITE_ONLY;
         int ownerListStart = topPos + YO_LIST;
         int ownerListBottom = topPos + Y_ACTIONS_EXPANDED - 20;
         int ownerListH = Math.max(ROW_H, ownerListBottom - ownerListStart);
@@ -455,11 +484,8 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         memberScroll = Mth.clamp(memberScroll, 0, ownerMaxScroll);
         int ownerFirstRow = (int) (memberScroll / ROW_H);
         int ownerVisibleCount = Math.min(Math.max(0, memberNames.size() - ownerFirstRow), ownerVisibleRows);
-        boolean selectedVisible = selMember >= ownerFirstRow && selMember < ownerFirstRow + ownerVisibleCount;
-        show(kickBtn, ownerActive && selMember > 0 && selectedVisible);
-        kickBtn.active = ownerActive && selMember > 0 && selectedVisible && selMember < memberNames.size();
-        // Reposition kick button next to selected member
-        if (kickBtn.visible) kickBtn.setY(topPos + YO_LIST + (selMember - ownerFirstRow) * ROW_H + 2);
+        show(kickBtn, false);
+        kickBtn.active = false;
         boolean inviteVisible = ownerActive
                 && (lobbyVis == LobbyVisibility.OPEN || lobbyVis == LobbyVisibility.INVITE_ONLY);
         show(inviteBox, inviteVisible);
@@ -476,7 +502,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         if (ownerActive) {
             boolean freeExists = instanceViews.stream().anyMatch(iv -> "FREE".equalsIgnoreCase(iv.status()));
             startBtn.setMessage(Component.translatable(
-                    freeExists ? "gui.arenas_ld.start_dungeon" : "gui.arenas_ld.join_queue"));
+                    freeExists ? "gui.arenas_ld.start_raid" : "gui.arenas_ld.join_raid_queue"));
         }
 
         // QUEUED
@@ -486,7 +512,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         // Leaderboard tabs (browsing only)
         for (int i = 0; i < 4; i++) {
             lbTabBtns[i].visible = s == UiState.BROWSING;
-            lbTabBtns[i].active  = s == UiState.BROWSING && DifficultyTier.values()[i] != lbTab;
+            lbTabBtns[i].active  = s == UiState.BROWSING && RaidDifficulty.values()[i] != lbTab;
         }
 
         // Admin
@@ -494,17 +520,11 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         show(adminApplyBtn, canAdmin);
         show(adminPlusBtn,  canAdmin);
         show(adminPartySizeBox, canAdmin);
-        if (adminApplyBtn.visible) adminApplyBtn.active = draftRespawnTicks != serverRespawnTicks || draftMaxPartySize != serverMaxPartySize;
+        adminPartySizeBox.setEditable(canAdmin);
+        if (adminApplyBtn.visible) adminApplyBtn.active = draftRespawnTicks != serverRespawnTicks
+                || draftMaxPartySize != serverMaxPartySize;
         if (adminMinusBtn.visible) adminMinusBtn.active = draftRespawnTicks > 0;
         if (adminPlusBtn.visible)  adminPlusBtn.active  = draftRespawnTicks < ADMIN_MAX;
-        if (adminPartySizeBox.visible && !adminPartySizeBox.isFocused()) {
-            String target = Integer.toString(draftMaxPartySize);
-            if (!target.equals(adminPartySizeBox.getValue())) {
-                suppressAdminPartySync = true;
-                adminPartySizeBox.setValue(target);
-                suppressAdminPartySync = false;
-            }
-        }
     }
 
     private static void show(net.minecraft.client.gui.components.AbstractWidget w, boolean v) {
@@ -635,13 +655,13 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             String ownerTrunc = truncate(inv.ownerName(), 12);
             Component invitedText = Component.translatable("gui.arenas_ld.owner_invited_you", ownerTrunc);
             g.drawString(font, invitedText, bx + 4, by + 6, C_AMBER, false);
-            drawTierPill(g, inv.tier(), bx + 4 + font.width(invitedText) + 4, by + 4);
+            drawTierPill(g, inv.difficulty(), bx + 4 + font.width(invitedText) + 4, by + 4);
             if (invitedLobbies.size() > 1) {
                 small(g, Component.translatable("gui.arenas_ld.more_count", invitedLobbies.size() - 1), bx + 4, by + 14, C_MUTED);
             }
             int btnW = 39;
             int btnGap = 4;
-            int axBtn = bx + IW - 6 - (btnW * 2 + btnGap) - 3;
+            int axBtn = bx + IW - 6 - (btnW * 2 + btnGap);
             g.fill(axBtn, by + 4, axBtn + btnW, by + 16, 0xFF0a2a0a);
             drawBorder(g, axBtn, by + 4, btnW, 12, 0xFF1a5a1a);
             g.drawString(font, Component.translatable("gui.arenas_ld.accept"), axBtn + 4, by + 6, C_GREEN, false);
@@ -686,7 +706,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             g.drawString(font, sizeStr, sizeX, ry + 5, C_MUTED, false);
 
             // Tier pill
-            int tierPx = drawTierPill(g, lv.tier(), listX + 115, ry + 3);
+            int tierPx = drawTierPill(g, lv.difficulty(), listX + 115, ry + 3);
 
             // Action tag
             String actionKey = lobbyActionLabelKey(lv);
@@ -714,9 +734,9 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
         // Lobby info row
         g.drawString(font, Component.translatable("gui.arenas_ld.lobby"), x + P + 3, cy + 3, C_MUTED, false);
-        // Tier badge from selectedTier
-        int tierPillW = tierPillWidth(selectedTier.name());
-        drawTierPill(g, selectedTier.name(), x + W - P - 3 - tierPillW, cy + 1);
+        // Tier badge from lobby selected difficulty
+        int tierPillW = tierPillWidth(myLobbyDifficulty.name());
+        drawTierPill(g, myLobbyDifficulty.name(), x + W - P - 3 - tierPillW, cy + 1);
         cy += 16;
 
         // Status
@@ -733,9 +753,6 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     private void renderOwner(GuiGraphics g, int x, int y, int mx, int my) {
         // "Difficulty" label above tier buttons
         smallLabel(g, Component.translatable("gui.arenas_ld.difficulty"), x + P + 3, y + YO_DIFF);
-
-        // Hardcore suffix next to checkbox label is handled by the Checkbox widget itself
-        // "1 life, 2× rewards" — draw muted text next to the checkbox
         int hcTextX = x + P + 28 + font.width(Component.translatable("gui.arenas_ld.hardcore")) + 4;
         g.drawString(font, Component.translatable("gui.arenas_ld.hardcore_suffix"), hcTextX + 2, y + YO_HC + 5, C_MUTED, false);
 
@@ -778,7 +795,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         int countY = Math.min(listBottomY - 8, listStartY + visibleCount * ROW_H + 10);
         small(
                 g,
-                Component.translatable("gui.arenas_ld.players_count", memberNames.size(), Math.max(PARTY_MIN, serverMaxPartySize)),
+                Component.translatable("gui.arenas_ld.players_count", memberNames.size(), Math.max(PARTY_MIN, myLobbyMaxSize)),
                 x + P + 3,
                 countY,
                 C_MUTED
@@ -840,7 +857,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         int viewBottom = y + Y_LB + 56 - 3;
         int viewH = Math.max(1, viewBottom - viewTop);
 
-        List<DungeonLeaderboardEntry> entries = leaderboard; // server sends for current tier
+        List<RaidLeaderboardEntry> entries = leaderboard; // server sends for current tier
         if (entries.isEmpty()) {
             Component noRecords = Component.translatable("gui.arenas_ld.no_records_yet");
             small(g, noRecords, lx + (IW - 6 - font.width(noRecords)) / 2, ey + 4, C_MUTED);
@@ -857,8 +874,8 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             var e = entries.get(i);
             int rank_color = i == 0 ? C_YELLOW : (i == 1 ? 0xFFcccccc : (i == 2 ? 0xFFcc8833 : C_MUTED));
             small(g, (i + 1) + ".", lx, rowY, rank_color);
-            small(g, truncate(e.playerName, 14), lx + 14, rowY, C_TEXT);
-            String t = formatTime(e.timeSeconds);
+            small(g, truncate(e.playerName(), 14), lx + 14, rowY, C_TEXT);
+            String t = formatTime(e.timeSeconds());
             small(g, t, lx + IW - 6 - font.width(t), rowY, C_CYAN);
         }
         g.disableScissor();
@@ -904,8 +921,11 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
         // Lobby list click (BROWSING)
         if (s == UiState.BROWSING) {
-            int listX = x + P + 3, listY = y + YB_LIST;
-            int listW = IW - 6, listH = YB_LIST_H;
+            int bannerOffset = invitedLobbies.isEmpty() ? 0 : 24;
+            int listX = x + P + 3;
+            int listY = y + Y_CONTENT + 4 + bannerOffset + 10;
+            int listW = IW - 6;
+            int listH = Math.max(20, (y + Y_ACTIONS - 8) - listY);
             if (mx >= listX && mx < listX + listW && my >= listY && my < listY + listH) {
                 int clicked = (int)((my - listY + lobbyScroll) / ROW_H);
                 if (clicked >= 0 && clicked < visLobbies.size()) {
@@ -920,7 +940,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
                 int bx = x + P + 3, by = y + Y_CONTENT + 4;
             int btnW = 39;
             int btnGap = 4;
-            int axBtn = bx + IW - 6 - (btnW * 2 + btnGap) - 3;
+            int axBtn = bx + IW - 6 - (btnW * 2 + btnGap);
             int declineX = axBtn + btnW + btnGap;
             if (my >= by + 4 && my <= by + 16) {
                     if (mx >= axBtn && mx < axBtn + btnW) {
@@ -1087,8 +1107,8 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         return names;
     }
 
-    private void respondInvite(ModPackets.DungeonControllerInfoPayload.LobbyView lv, boolean accept) {
-        ClientPlayNetworking.send(new ModPackets.RespondDungeonLobbyInvitePayload(lv.id(), accept));
+    private void respondInvite(ModPackets.RaidControllerInfoPayload.LobbyView lv, boolean accept) {
+        ClientPlayNetworking.send(new ModPackets.RespondRaidLobbyInvitePayload(lv.id(), accept));
         updateInfo();
     }
 
@@ -1122,7 +1142,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
 
     /** Draw tier pill, returns X after pill. */
     private int drawTierPill(GuiGraphics g, String tierName, int x, int y) {
-        DifficultyTier t = DifficultyTier.fromNameOrDefault(tierName, DifficultyTier.NORMAL);
+        RaidDifficulty t = RaidDifficulty.fromNameOrDefault(tierName, RaidDifficulty.NORMAL);
         int i = t.ordinal();
         String label = t.name().charAt(0) + t.name().substring(1).toLowerCase();
         int pw = font.width(label) + 6;
@@ -1133,7 +1153,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     }
 
     private int tierPillWidth(String tierName) {
-        DifficultyTier t = DifficultyTier.fromNameOrDefault(tierName, DifficultyTier.NORMAL);
+        RaidDifficulty t = RaidDifficulty.fromNameOrDefault(tierName, RaidDifficulty.NORMAL);
         String label = t.name().charAt(0) + t.name().substring(1).toLowerCase();
         return font.width(label) + 6;
     }
@@ -1180,8 +1200,10 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     }
 
     private void syncSettings() {
-        ClientPlayNetworking.send(new ModPackets.UpdateDungeonControllerSettingsPayload(
-                menu.getPos(), hcBox != null && hcBox.selected(), selectedTier.name()));
+        ClientPlayNetworking.send(new ModPackets.UpdateRaidControllerSettingsPayload(
+                menu.getPos(),
+                hcBox != null && hcBox.selected(),
+                selectedDifficulty.name()));
     }
 
     // ── Formatting helpers ────────────────────────────────────────────────────
@@ -1200,7 +1222,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         return 2; // COOLDOWN
     }
 
-    private static String pillLabel(ModPackets.DungeonControllerInfoPayload.InstanceView iv, int num) {
+    private static String pillLabel(ModPackets.RaidControllerInfoPayload.InstanceView iv, int num) {
         return switch (iv.status().toUpperCase()) {
             case "FREE"     -> Component.translatable("gui.arenas_ld.instance_free", num).getString();
             case "RUNNING"  -> Component.translatable("gui.arenas_ld.instance_running", num).getString();
@@ -1208,7 +1230,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         };
     }
 
-    private static String lobbyActionLabelKey(ModPackets.DungeonControllerInfoPayload.LobbyView lv) {
+    private static String lobbyActionLabelKey(ModPackets.RaidControllerInfoPayload.LobbyView lv) {
         if ("QUEUED".equalsIgnoreCase(lv.status()) || "IN_DUNGEON".equalsIgnoreCase(lv.status())) return "gui.arenas_ld.action_busy";
         if (lv.size() >= lv.maxSize()) return "gui.arenas_ld.action_full";
         if ("INVITE_ONLY".equalsIgnoreCase(lv.visibility()) && !lv.invited()) return "gui.arenas_ld.action_locked";

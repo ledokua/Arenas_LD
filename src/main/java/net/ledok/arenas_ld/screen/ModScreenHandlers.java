@@ -42,6 +42,10 @@ public class ModScreenHandlers {
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller"),
                     new ExtendedScreenHandlerType<>(DungeonControllerScreenHandler::new, DungeonControllerData.STREAM_CODEC));
 
+    public static final MenuType<RaidControllerScreenHandler> RAID_CONTROLLER_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_controller"),
+                    new ExtendedScreenHandlerType<>(RaidControllerScreenHandler::new, RaidControllerData.STREAM_CODEC));
+
     public static void initialize() {
     }
 }

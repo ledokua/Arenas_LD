@@ -19,6 +19,13 @@ public class ArenasLdClient implements ClientModInitializer {
                 }
             });
         });
+        ClientPlayNetworking.registerGlobalReceiver(ModPackets.RaidControllerInfoPayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> {
+                if (context.client().screen instanceof net.ledok.arenas_ld.screen.RaidControllerScreen screen) {
+                    screen.applyServerInfo(payload);
+                }
+            });
+        });
         ClientPlayNetworking.registerGlobalReceiver(ModPackets.MobArenaControllerInfoPayload.TYPE, (payload, context) -> {
             context.client().execute(() -> {
                 if (context.client().screen instanceof net.ledok.arenas_ld.screen.MobArenaControllerScreen screen) {
@@ -34,6 +41,7 @@ public class ArenasLdClient implements ClientModInitializer {
         MenuScreens.register(ModScreenHandlers.MOB_ARENA_SPAWNER_SCREEN_HANDLER, MobArenaSpawnerScreen::new);
         MenuScreens.register(ModScreenHandlers.MOB_ARENA_CONTROLLER_SCREEN_HANDLER, MobArenaControllerScreen::new);
         MenuScreens.register(ModScreenHandlers.DUNGEON_CONTROLLER_SCREEN_HANDLER, DungeonControllerScreen::new);
+        MenuScreens.register(ModScreenHandlers.RAID_CONTROLLER_SCREEN_HANDLER, RaidControllerScreen::new);
 
         BlockRenderLayerMap.INSTANCE.putBlock(BlockRegistry.PHASE_BLOCK, RenderType.translucent());
     }

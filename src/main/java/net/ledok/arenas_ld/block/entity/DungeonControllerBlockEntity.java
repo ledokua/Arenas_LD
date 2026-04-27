@@ -546,6 +546,9 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (lobby == null || !lobby.ownerUuid.equals(ownerUuid)) {
             return false;
         }
+        if (lobby.status == LobbyStatus.IN_DUNGEON) {
+            return false;
+        }
         if (getLobbyByMember(targetUuid) != null) {
             return false;
         }
@@ -575,6 +578,9 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (lobby == null) {
             return false;
         }
+        if (lobby.status == LobbyStatus.IN_DUNGEON) {
+            return false;
+        }
         Long expireAt = lobby.pendingInvites.get(playerUuid);
         if (expireAt == null || expireAt < nowTick) {
             lobby.pendingInvites.remove(playerUuid);
@@ -602,6 +608,9 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (lobby == null) {
             return false;
         }
+        if (lobby.status == LobbyStatus.IN_DUNGEON) {
+            return false;
+        }
         if (lobby.ownerUuid.equals(playerUuid)) {
             if (transferOrDissolveLobby(lobby, playerUuid)) {
                 lobbies.remove(lobby);
@@ -620,6 +629,9 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (lobby == null || !lobby.ownerUuid.equals(ownerUuid)) {
             return false;
         }
+        if (lobby.status == LobbyStatus.IN_DUNGEON) {
+            return false;
+        }
         if (ownerUuid.equals(targetUuid)) {
             return false;
         }
@@ -634,6 +646,9 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     public boolean disbandLobby(UUID ownerUuid) {
         Lobby lobby = getLobbyByMember(ownerUuid);
         if (lobby == null || !lobby.ownerUuid.equals(ownerUuid)) {
+            return false;
+        }
+        if (lobby.status == LobbyStatus.IN_DUNGEON) {
             return false;
         }
         for (UUID member : lobby.members) {
@@ -651,6 +666,9 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     public boolean setLobbyVisibility(UUID ownerUuid, LobbyVisibility visibility) {
         Lobby lobby = getLobbyByMember(ownerUuid);
         if (lobby == null || !lobby.ownerUuid.equals(ownerUuid) || visibility == null) {
+            return false;
+        }
+        if (lobby.status == LobbyStatus.IN_DUNGEON) {
             return false;
         }
         if (lobby.visibility == visibility) {
