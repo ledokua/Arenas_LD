@@ -13,9 +13,6 @@
 
   "environment": "*",
   "entrypoints": {
-    "fabric-datagen": [
-      "net.ledok.arenas_ld.client.ArenasLdDataGenerator"
-    ],
     "client": [
       "net.ledok.arenas_ld.client.ArenasLdClient"
     ],

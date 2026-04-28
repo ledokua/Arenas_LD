@@ -50,6 +50,8 @@ import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -66,6 +68,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private int prepareTime = 10;
     private int bossWaveAdditionalTime = 60;
     private int entityHighlightTime = 0;
+    private String groupId = "";
 
     private BlockPos exitPosition = BlockPos.ZERO;
     private ResourceKey<Level> exitDimension = Level.OVERWORLD;
@@ -189,6 +192,15 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void setEntityHighlightTime(int entityHighlightTime) {
         this.entityHighlightTime = entityHighlightTime;
+        markDirtyAndSync();
+    }
+
+    public String getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(String groupId) {
+        this.groupId = groupId == null ? "" : groupId.trim();
         markDirtyAndSync();
     }
 
@@ -805,6 +817,14 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.OFFHAND, mobData.equipment.offHand, mobData.equipment.dropChance);
 
             livingEntity.heal(livingEntity.getMaxHealth());
+            String teamName = this.groupId == null || this.groupId.isBlank() ? "arenas_ld" : this.groupId;
+            Scoreboard scoreboard = world.getScoreboard();
+            PlayerTeam team = scoreboard.getPlayerTeam(teamName);
+            if (team == null) {
+                team = scoreboard.addPlayerTeam(teamName);
+                team.setAllowFriendlyFire(false);
+            }
+            scoreboard.addPlayerToTeam(livingEntity.getScoreboardName(), team);
             
             boolean spawned = false;
             for (int attempt = 0; attempt < 10; attempt++) {
@@ -918,6 +938,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         nbt.putInt("PrepareTime", prepareTime);
         nbt.putInt("BossWaveAdditionalTime", bossWaveAdditionalTime);
         nbt.putInt("EntityHighlightTime", entityHighlightTime);
+        nbt.putString("GroupId", groupId);
         
         nbt.putLong("ExitPosition", exitPosition.asLong());
         nbt.putString("ExitDimension", exitDimension.location().toString());
@@ -983,6 +1004,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         prepareTime = nbt.getInt("PrepareTime");
         bossWaveAdditionalTime = nbt.getInt("BossWaveAdditionalTime");
         entityHighlightTime = nbt.getInt("EntityHighlightTime");
+        groupId = nbt.getString("GroupId");
         
         exitPosition = BlockPos.of(nbt.getLong("ExitPosition"));
         exitDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitDimension")));

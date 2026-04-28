@@ -309,15 +309,14 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
 
                 livingMob.heal(livingMob.getMaxHealth());
 
-                if (!this.groupId.isEmpty()) {
-                    Scoreboard scoreboard = world.getScoreboard();
-                    PlayerTeam team = scoreboard.getPlayerTeam(this.groupId);
-                    if (team == null) {
-                        team = scoreboard.addPlayerTeam(this.groupId);
-                        team.setAllowFriendlyFire(false);
-                    }
-                    scoreboard.addPlayerToTeam(livingMob.getScoreboardName(), team);
+                String teamName = this.groupId == null || this.groupId.isBlank() ? "arenas_ld" : this.groupId;
+                Scoreboard scoreboard = world.getScoreboard();
+                PlayerTeam team = scoreboard.getPlayerTeam(teamName);
+                if (team == null) {
+                    team = scoreboard.addPlayerTeam(teamName);
+                    team.setAllowFriendlyFire(false);
                 }
+                scoreboard.addPlayerToTeam(livingMob.getScoreboardName(), team);
 
                 // Attempt to find a safe spawn location
                 boolean spawned = false;
@@ -543,6 +542,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
 
     public String getGroupId() {
         return groupId;
+    }
+
+    public void setGroupId(String groupId) {
+        this.groupId = groupId == null ? "" : groupId.trim();
+        markDirtyAndSync();
     }
 
     @Nullable

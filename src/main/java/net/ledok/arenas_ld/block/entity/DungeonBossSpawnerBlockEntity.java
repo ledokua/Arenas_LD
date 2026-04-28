@@ -47,6 +47,8 @@ import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -309,7 +311,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     }
 
     public void setGroupId(String groupId) {
-        this.groupId = groupId;
+        this.groupId = groupId == null ? "" : groupId.trim();
         markDirtyAndSync();
     }
 
@@ -888,6 +890,15 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.OFFHAND, equipment.offHand, equipment.dropChance);
 
             livingBoss.heal(livingBoss.getMaxHealth());
+
+            String teamName = this.groupId == null || this.groupId.isBlank() ? "arenas_ld" : this.groupId;
+            Scoreboard scoreboard = world.getScoreboard();
+            PlayerTeam team = scoreboard.getPlayerTeam(teamName);
+            if (team == null) {
+                team = scoreboard.addPlayerTeam(teamName);
+                team.setAllowFriendlyFire(false);
+            }
+            scoreboard.addPlayerToTeam(livingBoss.getScoreboardName(), team);
         }
         boss.moveTo(spawnPos.getX() + 0.5, spawnPos.getY() + 1, spawnPos.getZ() + 0.5, 0, 0);
         world.addFreshEntity(boss);

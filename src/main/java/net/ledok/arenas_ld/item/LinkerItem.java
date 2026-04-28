@@ -94,16 +94,14 @@ public class LinkerItem extends Item {
     private InteractionResult handleGroupConfig(Level world, BlockPos pos, BlockState state, Player player, ItemStack stack, BlockEntity blockEntity, boolean isShiftDown) {
         if (blockEntity instanceof MobSpawnerBlockEntity spawner) {
             if (isShiftDown) {
-                String groupId = spawner.groupId;
+                String groupId = spawner.getGroupId();
                 stack.set(DataComponentRegistry.LINKER_DATA, new LinkerDataComponent(groupId));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
                 return InteractionResult.SUCCESS;
             } else {
                 LinkerDataComponent data = stack.get(DataComponentRegistry.LINKER_DATA);
                 if (data != null) {
-                    spawner.groupId = data.groupId();
-                    spawner.setChanged();
-                    world.sendBlockUpdated(pos, state, state, 3);
+                    spawner.setGroupId(data.groupId());
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.pasted_group_id", data.groupId()));
                     return InteractionResult.SUCCESS;
                 }
@@ -118,7 +116,34 @@ public class LinkerItem extends Item {
                 LinkerDataComponent data = stack.get(DataComponentRegistry.LINKER_DATA);
                 if (data != null) {
                     spawner.setGroupId(data.groupId());
-                    world.sendBlockUpdated(pos, state, state, 3);
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.pasted_group_id", data.groupId()));
+                    return InteractionResult.SUCCESS;
+                }
+            }
+        } else if (blockEntity instanceof BossSpawnerBlockEntity spawner) {
+            if (isShiftDown) {
+                String groupId = spawner.getGroupId();
+                stack.set(DataComponentRegistry.LINKER_DATA, new LinkerDataComponent(groupId));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
+                return InteractionResult.SUCCESS;
+            } else {
+                LinkerDataComponent data = stack.get(DataComponentRegistry.LINKER_DATA);
+                if (data != null) {
+                    spawner.setGroupId(data.groupId());
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.pasted_group_id", data.groupId()));
+                    return InteractionResult.SUCCESS;
+                }
+            }
+        } else if (blockEntity instanceof MobArenaSpawnerBlockEntity spawner) {
+            if (isShiftDown) {
+                String groupId = spawner.getGroupId();
+                stack.set(DataComponentRegistry.LINKER_DATA, new LinkerDataComponent(groupId));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
+                return InteractionResult.SUCCESS;
+            } else {
+                LinkerDataComponent data = stack.get(DataComponentRegistry.LINKER_DATA);
+                if (data != null) {
+                    spawner.setGroupId(data.groupId());
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.pasted_group_id", data.groupId()));
                     return InteractionResult.SUCCESS;
                 }

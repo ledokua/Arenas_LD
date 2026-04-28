@@ -47,6 +47,8 @@ import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -64,6 +66,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     public int battleRadius = 64;
     public int regeneration = 0;
     public int skillExperiencePerWin = 100;
+    private String groupId = "";
     public double hpScalePerPlayer = 0.10;
     public int battleTimeLimitTicks = 0;
     public BlockPos entrancePosition = BlockPos.ZERO; // relative to spawner
@@ -131,6 +134,15 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
 
     public Map<RaidDifficulty, RaidTierConfig> getTierConfigs() {
         return tierConfigs;
+    }
+
+    public String getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(String groupId) {
+        this.groupId = groupId == null ? "" : groupId.trim();
+        markDirtyAndSync();
     }
 
     public void setTierConfig(RaidDifficulty tier, RaidTierConfig config) {
@@ -401,6 +413,14 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.OFFHAND, equipment.offHand, equipment.dropChance);
 
             livingBoss.heal(livingBoss.getMaxHealth());
+            String teamName = this.groupId == null || this.groupId.isBlank() ? "arenas_ld" : this.groupId;
+            Scoreboard scoreboard = world.getScoreboard();
+            PlayerTeam team = scoreboard.getPlayerTeam(teamName);
+            if (team == null) {
+                team = scoreboard.addPlayerTeam(teamName);
+                team.setAllowFriendlyFire(false);
+            }
+            scoreboard.addPlayerToTeam(livingBoss.getScoreboardName(), team);
         }
 
         boss.moveTo(worldPosition.getX() + 0.5, worldPosition.getY() + 1, worldPosition.getZ() + 0.5, 0, 0);
@@ -776,6 +796,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         nbt.putInt("BattleRadius", battleRadius);
         nbt.putInt("Regeneration", regeneration);
         nbt.putInt("SkillExperiencePerWin", skillExperiencePerWin);
+        nbt.putString("GroupId", groupId);
         nbt.putDouble("HpScalePerPlayer", hpScalePerPlayer);
         nbt.putInt("BattleTimeLimitTicks", battleTimeLimitTicks);
         nbt.putLong("EntrancePosition", entrancePosition.asLong());
@@ -835,6 +856,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         battleRadius = nbt.getInt("BattleRadius");
         regeneration = nbt.getInt("Regeneration");
         skillExperiencePerWin = nbt.getInt("SkillExperiencePerWin");
+        groupId = nbt.getString("GroupId");
         hpScalePerPlayer = nbt.contains("HpScalePerPlayer") ? nbt.getDouble("HpScalePerPlayer") : 0.10;
         battleTimeLimitTicks = nbt.contains("BattleTimeLimitTicks") ? nbt.getInt("BattleTimeLimitTicks") : 0;
         entrancePosition = nbt.contains("EntrancePosition", Tag.TAG_LONG) ? BlockPos.of(nbt.getLong("EntrancePosition")) : BlockPos.ZERO;
