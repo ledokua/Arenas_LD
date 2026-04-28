@@ -33,8 +33,6 @@ public class SpawnerConfiguratorItem extends Item {
     public enum Mode {
         SPAWNER_SELECTION("item.arenas_ld.configurator.mode.spawner_selection"),
         EXIT_POSITION("item.arenas_ld.configurator.mode.exit_position"),
-        ENTER_PORTAL_SPAWN("item.arenas_ld.configurator.mode.enter_portal_spawn"),
-        ENTER_PORTAL_DESTINATION("item.arenas_ld.configurator.mode.enter_portal_destination"),
         ENTRANCE_POSITION("item.arenas_ld.configurator.mode.entrance_position");
 
         private final String translationKey;
@@ -115,20 +113,6 @@ public class SpawnerConfiguratorItem extends Item {
                     mobArenaSpawner.setExitPosition(relativePos, clickedDimension);
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.exit_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
-                break;
-            case ENTER_PORTAL_SPAWN:
-                if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
-                    player.sendSystemMessage(Component.literal("Boss spawner portal settings were removed."));
-                    return InteractionResult.SUCCESS;
-                }
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.enter_portal_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
-                break;
-            case ENTER_PORTAL_DESTINATION:
-                if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
-                    player.sendSystemMessage(Component.literal("Boss spawner portal settings were removed."));
-                    return InteractionResult.SUCCESS;
-                }
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.enter_portal_dest_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
             case ENTRANCE_POSITION:
                 if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {

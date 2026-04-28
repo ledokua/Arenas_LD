@@ -41,10 +41,6 @@ final class SpawnerPacketHandlers {
                     blockEntity.respawnTime = payload.respawnTime();
                     blockEntity.lootTableId = payload.lootTable();
                     blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
-                    blockEntity.exitPosition = payload.exitPortalCoords();
-                    blockEntity.exitDimension = ResourceKey.create(Registries.DIMENSION, payload.exitDimension());
-                    blockEntity.entrancePosition = payload.enterPortalSpawnCoords();
-                    blockEntity.entranceDimension = ResourceKey.create(Registries.DIMENSION, payload.enterPortalSpawnDimension());
                     blockEntity.battleRadius = payload.battleRadius();
                     blockEntity.regeneration = payload.regeneration();
                     blockEntity.skillExperiencePerWin = payload.skillExperiencePerWin();

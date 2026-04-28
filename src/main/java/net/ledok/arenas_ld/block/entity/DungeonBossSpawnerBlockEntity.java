@@ -1030,7 +1030,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                 if (exitWorld != null) {
                     revivePlayerForExit(player);
                     teleportPlayerToExit(player, exitWorld, exitPositionCoords);
-                    player.setPortalCooldown();
                 }
             }
         }
@@ -1066,7 +1065,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
                     if (exitWorld != null) {
                         revivePlayerForExit(player);
                         teleportPlayerToExit(player, exitWorld, exitPositionCoords);
-                        player.setPortalCooldown();
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_failed").withStyle(net.minecraft.ChatFormatting.RED));
                     }
                 }

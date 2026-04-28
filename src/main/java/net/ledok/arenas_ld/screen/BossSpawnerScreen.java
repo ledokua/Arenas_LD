@@ -10,10 +10,8 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.PlainTextButton;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.util.Mth;
 
@@ -287,15 +285,8 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
                     menu.blockEntity.getBlockPos(),
                     mobIdField.getValue(),
                     Integer.parseInt(respawnTimeField.getValue()),
-                    0,
                     lootTableIdField.getValue(),
                     perPlayerLootTableIdField.getValue(),
-                    menu.blockEntity.exitPosition,
-                    menu.blockEntity.exitDimension.location(),
-                    menu.blockEntity.entrancePosition,
-                    menu.blockEntity.entranceDimension.location(),
-                    BlockPos.ZERO,
-                    ResourceLocation.withDefaultNamespace("overworld"),
                     0,
                     Integer.parseInt(battleRadiusField.getValue()),
                     Integer.parseInt(regenerationField.getValue()),

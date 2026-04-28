@@ -30,10 +30,7 @@ import java.util.UUID;
 public class ModPackets {
 
     public record UpdateBossSpawnerPayload(
-            BlockPos pos, String mobId, int respawnTime, int portalTime, String lootTable, String perPlayerLootTable,
-            BlockPos exitPortalCoords, ResourceLocation exitDimension,
-            BlockPos enterPortalSpawnCoords, ResourceLocation enterPortalSpawnDimension,
-            BlockPos enterPortalDestCoords, ResourceLocation enterPortalDestDimension,
+            BlockPos pos, String mobId, int respawnTime, String lootTable, String perPlayerLootTable,
             int triggerRadius, int battleRadius, int regeneration, int minPlayers, int skillExperiencePerWin,
             int battleTimeLimitTicks,
             double hpScalePerPlayer,
@@ -46,10 +43,7 @@ public class ModPackets {
 
         public UpdateBossSpawnerPayload(FriendlyByteBuf buf) {
             this(
-                    buf.readBlockPos(), buf.readUtf(), buf.readVarInt(), buf.readVarInt(), buf.readUtf(), buf.readUtf(),
-                    buf.readBlockPos(), buf.readResourceLocation(),
-                    buf.readBlockPos(), buf.readResourceLocation(),
-                    buf.readBlockPos(), buf.readResourceLocation(),
+                    buf.readBlockPos(), buf.readUtf(), buf.readVarInt(), buf.readUtf(), buf.readUtf(),
                     buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(),
                     buf.readVarInt(),
                     buf.readDouble(),
@@ -61,15 +55,8 @@ public class ModPackets {
             buf.writeBlockPos(pos);
             buf.writeUtf(mobId);
             buf.writeVarInt(respawnTime);
-            buf.writeVarInt(portalTime);
             buf.writeUtf(lootTable);
             buf.writeUtf(perPlayerLootTable);
-            buf.writeBlockPos(exitPortalCoords);
-            buf.writeResourceLocation(exitDimension);
-            buf.writeBlockPos(enterPortalSpawnCoords);
-            buf.writeResourceLocation(enterPortalSpawnDimension);
-            buf.writeBlockPos(enterPortalDestCoords);
-            buf.writeResourceLocation(enterPortalDestDimension);
             buf.writeVarInt(triggerRadius);
             buf.writeVarInt(battleRadius);
             buf.writeVarInt(regeneration);
