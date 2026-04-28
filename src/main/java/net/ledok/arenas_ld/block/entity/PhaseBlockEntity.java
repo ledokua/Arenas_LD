@@ -28,6 +28,17 @@ public class PhaseBlockEntity extends BlockEntity {
         super(BlockEntitiesRegistry.PHASE_BLOCK_ENTITY, pos, state);
     }
 
+    private void markDirty() {
+        super.setChanged();
+    }
+
+    private void markDirtyAndSync() {
+        markDirty();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
     public static void tick(Level world, BlockPos pos, BlockState state, PhaseBlockEntity be) {
         if (world.isClientSide() || !be.isMain) {
             return;
@@ -121,7 +132,7 @@ public class PhaseBlockEntity extends BlockEntity {
                         getBlockPos(), legacyGroupId
                 );
                 legacyGroupWarningShown = true;
-                setChanged();
+                markDirtyAndSync();
             }
         }
     }
@@ -136,19 +147,19 @@ public class PhaseBlockEntity extends BlockEntity {
 
     public void setIsMain(boolean isMain) {
         this.isMain = isMain;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public void addWatchedSpawnerOffset(BlockPos relativePos) {
         if (!this.watchedSpawnerOffsets.contains(relativePos)) {
             this.watchedSpawnerOffsets.add(relativePos);
-            setChanged();
+            markDirtyAndSync();
         }
     }
 
     public boolean removeWatchedSpawnerOffset(BlockPos relativePos) {
         if (this.watchedSpawnerOffsets.remove(relativePos)) {
-            setChanged();
+            markDirtyAndSync();
             return true;
         }
         return false;

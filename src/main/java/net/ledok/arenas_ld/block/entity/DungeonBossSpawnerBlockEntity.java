@@ -124,6 +124,17 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         }
     }
 
+    private void markDirty() {
+        super.setChanged();
+    }
+
+    private void markDirtyAndSync() {
+        markDirty();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
     private void initializeTierConfigs() {
         for (DifficultyTier tier : DifficultyTier.values()) {
             tierConfigs.putIfAbsent(tier, new TierConfig());
@@ -139,7 +150,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     public void setAttributes(List<AttributeData> attributes) {
         this.attributes.clear();
         this.attributes.addAll(attributes);
-        setChanged();
+        markDirtyAndSync();
     }
 
     @Override
@@ -150,7 +161,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     @Override
     public void setEquipment(EquipmentData equipment) {
         this.equipment = equipment;
-        setChanged();
+        markDirtyAndSync();
     }
     
     public void trackPlayer(UUID playerUuid) {
@@ -164,14 +175,14 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     private void addTrackedPlayer(UUID playerUuid) {
         if (this.trackedPlayers.add(playerUuid)) {
             BusyStateCompat.setBusy(playerUuid, BUSY_REASON);
-            this.setChanged();
+            markDirtyAndSync();
         }
     }
 
     private void removeTrackedPlayer(UUID playerUuid) {
         if (this.trackedPlayers.remove(playerUuid)) {
             BusyStateCompat.clearBusy(playerUuid, BUSY_REASON);
-            this.setChanged();
+            markDirtyAndSync();
         }
     }
 
@@ -180,7 +191,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             BusyStateCompat.clearBusy(playerId, BUSY_REASON);
         }
         this.trackedPlayers.clear();
-        this.setChanged();
+        markDirtyAndSync();
     }
 
     public boolean isDungeonRunning() {
@@ -193,7 +204,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setMobId(String mobId) {
         this.mobId = mobId;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getRespawnTime() {
@@ -202,7 +213,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setRespawnTime(int respawnTime) {
         this.respawnTime = respawnTime;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getDungeonCloseTimer() {
@@ -211,7 +222,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setDungeonCloseTimer(int dungeonCloseTimer) {
         this.dungeonCloseTimer = dungeonCloseTimer;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getDungeonTime() {
@@ -220,7 +231,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setDungeonTime(int dungeonTime) {
         this.dungeonTime = dungeonTime;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public String getLootTableId() {
@@ -229,7 +240,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setLootTableId(String lootTableId) {
         this.lootTableId = lootTableId;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public String getPerPlayerLootTableId() {
@@ -238,7 +249,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setPerPlayerLootTableId(String perPlayerLootTableId) {
         this.perPlayerLootTableId = perPlayerLootTableId;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public BlockPos getExitPositionCoords() {
@@ -263,7 +274,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setTriggerRadius(int triggerRadius) {
         this.triggerRadius = triggerRadius;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getBattleRadius() {
@@ -272,7 +283,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setBattleRadius(int battleRadius) {
         this.battleRadius = battleRadius;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getRegeneration() {
@@ -281,7 +292,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setRegeneration(int regeneration) {
         this.regeneration = regeneration;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getSkillExperiencePerWin() {
@@ -290,7 +301,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setSkillExperiencePerWin(int skillExperiencePerWin) {
         this.skillExperiencePerWin = skillExperiencePerWin;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public String getGroupId() {
@@ -299,7 +310,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setGroupId(String groupId) {
         this.groupId = groupId;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public void applyConfig(
@@ -330,7 +341,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         this.regeneration = regeneration;
         this.skillExperiencePerWin = skillExperiencePerWin;
         this.groupId = groupId;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public Map<DifficultyTier, TierConfig> getTierConfigs() {
@@ -343,7 +354,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setActiveTier(DifficultyTier activeTier) {
         this.activeTier = activeTier;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public double getEffectiveDamageMultiplier() {
@@ -382,7 +393,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         }
         this.dungeonCloseBossBar.removePlayer(player);
         this.dungeonTimeBossBar.removePlayer(player);
-        this.setChanged();
+        markDirtyAndSync();
 
         if (trackedPlayers.isEmpty() && this.level instanceof ServerLevel serverLevel && isDungeonRunning()) {
             handleBattleLoss(serverLevel, "All players left the dungeon.");
@@ -393,14 +404,14 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     public void addLinkedSpawner(BlockPos pos) {
         if (!linkedSpawners.contains(pos)) {
             linkedSpawners.add(pos);
-            setChanged();
+            markDirtyAndSync();
         }
     }
 
     @Override
     public boolean removeLinkedSpawner(BlockPos pos) {
         if (linkedSpawners.remove(pos)) {
-            setChanged();
+            markDirtyAndSync();
             return true;
         }
         return false;
@@ -409,7 +420,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     @Override
     public void clearLinkedSpawners() {
         linkedSpawners.clear();
-        setChanged();
+        markDirtyAndSync();
     }
 
     @Override
@@ -578,7 +589,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         updateDungeonTimer(player.serverLevel());
 
         downedPlayers.put(player.getUUID(), new DownedPlayer(DOWNED_RESPAWN_TICKS, player.position(), player.level().dimension()));
-        setChanged();
+        markDirtyAndSync();
     }
 
     private void tickDownedPlayers(ServerLevel world) {
@@ -702,7 +713,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
             }
         }
 
-        setChanged();
+        markDirtyAndSync();
         return true;
     }
 
@@ -712,7 +723,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
 
     public void setHardcoreEnabled(boolean hardcoreEnabled) {
         this.hardcoreEnabled = hardcoreEnabled;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public boolean isHardcoreEnabled() {
@@ -883,7 +894,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         this.isBattleActive = true;
         this.activeBossUuid = boss.getUUID();
         this.bossDimension = world.dimension();
-        this.setChanged();
+        markDirtyAndSync();
         ArenasLdMod.LOGGER.info("Dungeon Battle started at spawner {} with boss {}", this.worldPosition, this.mobId);
     }
 
@@ -984,7 +995,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         this.dungeonCloseBossBar.setVisible(true);
         updateBossBarPlayers(world);
 
-        this.setChanged();
+        markDirtyAndSync();
         world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
     }
 
@@ -1121,7 +1132,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
         updateControllerRemainingTime(world, 0);
         this.controllerPos = null;
         this.controllerDimension = null;
-        this.setChanged();
+        markDirtyAndSync();
         world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
         updateChunkLoading(world);
         ArenasLdMod.DUNGEON_BOSS_MANAGER.unregisterSpawner(this);
@@ -1321,13 +1332,13 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Extend
     public void setExitPositionCoords(BlockPos exitPositionCoords, ResourceKey<Level> exitPositionDimension) {
         this.exitPositionCoords = exitPositionCoords;
         this.exitPositionDimension = exitPositionDimension;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public void setEntrancePosition(BlockPos entrancePosition, ResourceKey<Level> entranceDimension) {
         this.entrancePosition = entrancePosition;
         this.entranceDimension = entranceDimension;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public void debugEndDungeon() {

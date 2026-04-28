@@ -112,6 +112,17 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         }
     }
 
+    private void markDirty() {
+        super.setChanged();
+    }
+
+    private void markDirtyAndSync() {
+        markDirty();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
     private void initializeTierConfigs() {
         for (RaidDifficulty tier : RaidDifficulty.values()) {
             tierConfigs.putIfAbsent(tier, RaidTierConfig.defaultFor(tier));
@@ -127,7 +138,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             return;
         }
         tierConfigs.put(tier, config);
-        setChanged();
+        markDirtyAndSync();
     }
 
     public void addRespawnPointOffset(BlockPos relativePos) {
@@ -136,7 +147,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         }
         if (!respawnPointOffsets.contains(relativePos)) {
             respawnPointOffsets.add(relativePos);
-            setChanged();
+            markDirtyAndSync();
         }
     }
 
@@ -145,7 +156,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             return false;
         }
         if (respawnPointOffsets.remove(relativePos)) {
-            setChanged();
+            markDirtyAndSync();
             return true;
         }
         return false;
@@ -189,7 +200,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     public void setAttributes(List<AttributeData> attributes) {
         this.attributes.clear();
         this.attributes.addAll(attributes);
-        setChanged();
+        markDirtyAndSync();
     }
 
     @Override
@@ -200,7 +211,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     @Override
     public void setEquipment(EquipmentData equipment) {
         this.equipment = equipment;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public static void tick(Level world, BlockPos pos, BlockState state, BossSpawnerBlockEntity be) {
@@ -418,7 +429,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         this.respawnCooldown = 0;
         this.boundsTickCounter = 0;
         ArenasLdMod.RAID_BOSS_MANAGER.registerSpawner(this);
-        this.setChanged();
+        markDirtyAndSync();
         world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
         ArenasLdMod.LOGGER.info(
                 "Raid battle started at {} with boss {}, tier={}, players={}",
@@ -545,7 +556,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         this.raidTimerBossBar.removeAllPlayers();
         this.raidTimerBossBar.setVisible(false);
         ArenasLdMod.RAID_BOSS_MANAGER.unregisterSpawner(this);
-        this.setChanged();
+        markDirtyAndSync();
         world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
     }
 
@@ -555,7 +566,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
 
     public void setHardcoreEnabled(boolean hardcoreEnabled) {
         this.hardcoreEnabled = hardcoreEnabled;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public double getEffectiveDamageMultiplier() {
@@ -584,7 +595,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         player.setGameMode(GameType.SPECTATOR);
         battleStartTime -= DEATH_TIME_PENALTY_TICKS;
         downedPlayers.put(player.getUUID(), new DownedPlayer(DOWNED_RESPAWN_TICKS));
-        setChanged();
+        markDirtyAndSync();
     }
 
     public void handlePlayerDisconnect(ServerPlayer player) {
@@ -605,7 +616,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
             }
             downedPlayers.put(player.getUUID(), new DownedPlayer(DOWNED_RESPAWN_TICKS));
         }
-        setChanged();
+        markDirtyAndSync();
     }
 
     public void handlePlayerReconnect(ServerPlayer player) {
@@ -637,7 +648,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         downedPlayers.remove(player.getUUID());
         trackedPlayerIds.remove(player.getUUID());
         trackedPlayerNames.remove(player.getGameProfile().getName());
-        setChanged();
+        markDirtyAndSync();
     }
 
     private void tickDownedPlayers(ServerLevel world) {

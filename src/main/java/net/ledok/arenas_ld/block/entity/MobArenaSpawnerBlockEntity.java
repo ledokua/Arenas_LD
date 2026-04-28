@@ -100,13 +100,24 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         super(BlockEntitiesRegistry.MOB_ARENA_SPAWNER_BLOCK_ENTITY, pos, state);
     }
 
+    private void markDirty() {
+        super.setChanged();
+    }
+
+    private void markDirtyAndSync() {
+        markDirty();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
     public int getBattleRadius() {
         return battleRadius;
     }
 
     public void setBattleRadius(int battleRadius) {
         this.battleRadius = battleRadius;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getSpawnDistance() {
@@ -115,7 +126,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void setSpawnDistance(int spawnDistance) {
         this.spawnDistance = spawnDistance;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getWaveTimer() {
@@ -124,7 +135,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void setWaveTimer(int waveTimer) {
         this.waveTimer = waveTimer;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getAdditionalTime() {
@@ -133,7 +144,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void setAdditionalTime(int additionalTime) {
         this.additionalTime = additionalTime;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getTimeBetweenWaves() {
@@ -142,7 +153,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void setTimeBetweenWaves(int timeBetweenWaves) {
         this.timeBetweenWaves = timeBetweenWaves;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public double getAttributeScale() {
@@ -151,7 +162,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void setAttributeScale(double attributeScale) {
         this.attributeScale = attributeScale;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getPrepareTime() {
@@ -160,7 +171,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void setPrepareTime(int prepareTime) {
         this.prepareTime = prepareTime;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getBossWaveAdditionalTime() {
@@ -169,7 +180,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void setBossWaveAdditionalTime(int bossWaveAdditionalTime) {
         this.bossWaveAdditionalTime = bossWaveAdditionalTime;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getEntityHighlightTime() {
@@ -178,7 +189,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void setEntityHighlightTime(int entityHighlightTime) {
         this.entityHighlightTime = entityHighlightTime;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public void applyConfig(
@@ -209,7 +220,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         this.arenaEntranceDimension = arenaEntranceDimension;
         this.bossWaveAdditionalTime = bossWaveAdditionalTime;
         this.entityHighlightTime = entityHighlightTime;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public BlockPos getExitPosition() {
@@ -223,7 +234,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     public void setExitPosition(BlockPos exitPosition, ResourceKey<Level> exitDimension) {
         this.exitPosition = exitPosition;
         this.exitDimension = exitDimension;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public BlockPos getArenaEntrancePosition() {
@@ -237,7 +248,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     public void setArenaEntrancePosition(BlockPos arenaEntrancePosition, ResourceKey<Level> arenaEntranceDimension) {
         this.arenaEntrancePosition = arenaEntrancePosition;
         this.arenaEntranceDimension = arenaEntranceDimension;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public List<MobArenaMobData> getMobs() {
@@ -246,7 +257,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void setMobs(List<MobArenaMobData> mobs) {
         this.mobs = new ArrayList<>(mobs);
-        setChanged();
+        markDirtyAndSync();
     }
 
     public List<MobArenaRewardData> getRewards() {
@@ -255,7 +266,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void setRewards(List<MobArenaRewardData> rewards) {
         this.rewards = new ArrayList<>(rewards);
-        setChanged();
+        markDirtyAndSync();
     }
 
     public List<LeaderboardEntry> getLeaderboard() {
@@ -264,12 +275,12 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public void setLeaderboard(List<LeaderboardEntry> leaderboard) {
         this.leaderboard = new ArrayList<>(leaderboard);
-        setChanged();
+        markDirtyAndSync();
     }
 
     public void removeParticipatingPlayer(UUID playerUUID) {
         participatingPlayers.remove(playerUUID);
-        setChanged();
+        markDirtyAndSync();
     }
 
     public int getParticipatingPlayerCount() {
@@ -428,13 +439,13 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
             aliveMobs.clear();
             bossBar.setVisible(true);
             prepareTicksRemaining = prepareTime * 20;
-            setChanged();
+            markDirtyAndSync();
         }
     }
 
     public void setHardcoreEnabled(boolean hardcoreEnabled) {
         this.hardcoreEnabled = hardcoreEnabled;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public boolean isHardcoreEnabled() {
@@ -487,7 +498,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
         
         waveTicksRemaining = waveTimeSeconds * 20;
-        setChanged();
+        markDirtyAndSync();
     }
 
     private void completeWave(ServerLevel world) {
@@ -496,7 +507,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         timeBetweenWavesTicks = timeBetweenWaves * 20;
         reviveSpectators(world);
         applyWaveCompletionBonus(world);
-        setChanged();
+        markDirtyAndSync();
     }
 
     private void applyWaveCompletionBonus(ServerLevel world) {
@@ -580,7 +591,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
         arenaStartTick = -1;
         
-        setChanged();
+        markDirtyAndSync();
     }
 
     public void updateLeaderboardOnDisconnect(ServerPlayer player) {

@@ -91,6 +91,17 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         }
     }
 
+    private void markDirty() {
+        super.setChanged();
+    }
+
+    private void markDirtyAndSync() {
+        markDirty();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
     public boolean isBattleActive() {
         return isBattleActive;
     }
@@ -112,7 +123,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
     public void setAttributes(List<AttributeData> attributes) {
         this.attributes.clear();
         this.attributes.addAll(attributes);
-        setChanged();
+        markDirtyAndSync();
     }
 
     @Override
@@ -123,21 +134,21 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
     @Override
     public void setEquipment(EquipmentData equipment) {
         this.equipment = equipment;
-        setChanged();
+        markDirtyAndSync();
     }
 
     @Override
     public void addLinkedSpawner(BlockPos pos) {
         if (!linkedSpawners.contains(pos)) {
             linkedSpawners.add(pos);
-            setChanged();
+            markDirtyAndSync();
         }
     }
 
     @Override
     public boolean removeLinkedSpawner(BlockPos pos) {
         if (linkedSpawners.remove(pos)) {
-            setChanged();
+            markDirtyAndSync();
             return true;
         }
         return false;
@@ -146,7 +157,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
     @Override
     public void clearLinkedSpawners() {
         linkedSpawners.clear();
-        setChanged();
+        markDirtyAndSync();
     }
 
     @Override
@@ -347,7 +358,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
             }
         }
         ArenasLdMod.LOGGER.info("Mob Spawner started at {} with {} of {}", this.worldPosition, this.mobCount, this.mobId);
-        setChanged();
+        markDirtyAndSync();
     }
 
     private void applyEquipment(LivingEntity entity, EquipmentSlot slot, String itemId) {
@@ -438,7 +449,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         dungeonCleared = wasWin;
         triggerScanTick = 0;
         respawnCooldown = wasWin ? respawnTime : 0;
-        setChanged();
+        markDirtyAndSync();
         world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
     }
 
