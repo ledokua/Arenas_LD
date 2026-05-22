@@ -3,6 +3,7 @@ package net.ledok.arenas_ld.registry;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.*;
 import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
+import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -54,6 +55,11 @@ public class BlockEntitiesRegistry {
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":respawn_point_be"),
                     BlockEntityType.Builder.of(RespawnPointBlockEntity::new, BlockRegistry.RESPAWN_POINT_BLOCK).build(null));
+
+    public static final BlockEntityType<RoomControllerBlockEntity> ROOM_CONTROLLER_BLOCK_ENTITY =
+            Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
+                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":room_controller_be"),
+                    BlockEntityType.Builder.of(RoomControllerBlockEntity::new, BlockRegistry.ROOM_CONTROLLER_BLOCK).build(null));
 
     public static void initialize() {
     }

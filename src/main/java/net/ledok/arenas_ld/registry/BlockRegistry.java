@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.registry;
 
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.*;
+import net.ledok.arenas_ld.dungeon.block.RoomControllerBlock;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -41,6 +42,9 @@ public class BlockRegistry {
                     .noOcclusion()
                     .noCollission()
                     .strength(-1.0f, 3600000.0f)));
+
+    public static final Block ROOM_CONTROLLER_BLOCK = registerBlock("room_controller",
+            new RoomControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));
 
     private static Block registerBlock(String name, Block block) {
         registerBlockItem(name, block);
