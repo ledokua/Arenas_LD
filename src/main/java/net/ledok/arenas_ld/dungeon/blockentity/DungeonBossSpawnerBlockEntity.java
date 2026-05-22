@@ -2,17 +2,25 @@ package net.ledok.arenas_ld.dungeon.blockentity;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerData;
+import net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerScreenHandler;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.AttributeProvider;
 import net.ledok.arenas_ld.util.EntityEquipmentHelper;
+import net.ledok.arenas_ld.util.EquipmentData;
+import net.ledok.arenas_ld.util.EquipmentProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -20,6 +28,9 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -30,7 +41,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
-public class DungeonBossSpawnerBlockEntity extends BlockEntity {
+public class DungeonBossSpawnerBlockEntity extends BlockEntity implements AttributeProvider, EquipmentProvider, ExtendedScreenHandlerFactory<DungeonBossSpawnerData> {
 
     private EntityDefinition entityDefinition = EntityDefinition.DEFAULT.withMobId("minecraft:zombie");
     private BlockPos entrancePos = BlockPos.ZERO;
@@ -46,6 +57,26 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity {
     public void setEntityDefinition(EntityDefinition def) {
         this.entityDefinition = def;
         setChanged();
+    }
+
+    @Override
+    public List<AttributeData> getAttributes() {
+        return entityDefinition.attributes();
+    }
+
+    @Override
+    public void setAttributes(List<AttributeData> attrs) {
+        setEntityDefinition(entityDefinition.withAttributes(attrs));
+    }
+
+    @Override
+    public EquipmentData getEquipment() {
+        return entityDefinition.equipment();
+    }
+
+    @Override
+    public void setEquipment(EquipmentData eq) {
+        setEntityDefinition(entityDefinition.withEquipment(eq));
     }
 
     public BlockPos getEntrancePos() { return entrancePos; }
@@ -181,5 +212,21 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity {
                     this.rooms.addAll(state.rooms());
                 });
         }
+    }
+
+    @Override
+    public Component getDisplayName() {
+        return Component.translatable("gui.arenas_ld.dungeon_boss_spawner_v2.title");
+    }
+
+    @Nullable
+    @Override
+    public AbstractContainerMenu createMenu(int syncId, Inventory playerInventory, Player player) {
+        return new DungeonBossSpawnerScreenHandler(syncId, playerInventory, this);
+    }
+
+    @Override
+    public DungeonBossSpawnerData getScreenOpeningData(ServerPlayer player) {
+        return new DungeonBossSpawnerData(worldPosition, entityDefinition.mobId(), entrancePos, entranceDimension.location().toString(), List.copyOf(rooms));
     }
 }

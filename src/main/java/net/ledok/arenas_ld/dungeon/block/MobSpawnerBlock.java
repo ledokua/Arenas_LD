@@ -3,7 +3,9 @@ package net.ledok.arenas_ld.dungeon.block;
 import com.mojang.serialization.MapCodec;
 import net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity;
 import net.ledok.arenas_ld.item.LinkerItem;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -41,6 +43,17 @@ public class MobSpawnerBlock extends BaseEntityBlock {
     protected InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player, BlockHitResult hit) {
         if (player.getMainHandItem().getItem() instanceof LinkerItem || player.getOffhandItem().getItem() instanceof LinkerItem) {
             return InteractionResult.PASS;
+        }
+        if (!world.isClientSide) {
+            if (!player.isCreative() && !player.hasPermissions(2)) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission").withStyle(ChatFormatting.RED));
+                return InteractionResult.FAIL;
+            }
+            BlockEntity be = world.getBlockEntity(pos);
+            if (be instanceof MobSpawnerBlockEntity mobSpawner) {
+                player.openMenu(mobSpawner);
+                return InteractionResult.CONSUME;
+            }
         }
         return InteractionResult.SUCCESS;
     }

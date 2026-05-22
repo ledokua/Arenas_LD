@@ -2,17 +2,25 @@ package net.ledok.arenas_ld.dungeon.blockentity;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.dungeon.screen.MobSpawnerData;
+import net.ledok.arenas_ld.dungeon.screen.MobSpawnerScreenHandler;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.AttributeProvider;
 import net.ledok.arenas_ld.util.EntityEquipmentHelper;
+import net.ledok.arenas_ld.util.EquipmentData;
+import net.ledok.arenas_ld.util.EquipmentProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -20,13 +28,17 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
 import java.util.Optional;
 
-public class MobSpawnerBlockEntity extends BlockEntity {
+public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvider, EquipmentProvider, ExtendedScreenHandlerFactory<MobSpawnerData> {
 
     private EntityDefinition entityDefinition = EntityDefinition.DEFAULT;
 
@@ -41,6 +53,26 @@ public class MobSpawnerBlockEntity extends BlockEntity {
     public void setEntityDefinition(EntityDefinition def) {
         this.entityDefinition = def;
         setChanged();
+    }
+
+    @Override
+    public List<AttributeData> getAttributes() {
+        return entityDefinition.attributes();
+    }
+
+    @Override
+    public void setAttributes(List<AttributeData> attrs) {
+        setEntityDefinition(entityDefinition.withAttributes(attrs));
+    }
+
+    @Override
+    public EquipmentData getEquipment() {
+        return entityDefinition.equipment();
+    }
+
+    @Override
+    public void setEquipment(EquipmentData eq) {
+        setEntityDefinition(entityDefinition.withEquipment(eq));
     }
 
     private static final Codec<State> STATE_CODEC =
@@ -128,5 +160,21 @@ public class MobSpawnerBlockEntity extends BlockEntity {
                     "Failed to load MobSpawner at {}: {}", worldPosition, err))
                 .ifPresent(state -> this.entityDefinition = state.entity());
         }
+    }
+
+    @Override
+    public Component getDisplayName() {
+        return Component.translatable("gui.arenas_ld.mob_spawner_v2.title");
+    }
+
+    @Nullable
+    @Override
+    public AbstractContainerMenu createMenu(int syncId, Inventory playerInventory, Player player) {
+        return new MobSpawnerScreenHandler(syncId, playerInventory, this);
+    }
+
+    @Override
+    public MobSpawnerData getScreenOpeningData(ServerPlayer player) {
+        return new MobSpawnerData(worldPosition, entityDefinition.mobId());
     }
 }

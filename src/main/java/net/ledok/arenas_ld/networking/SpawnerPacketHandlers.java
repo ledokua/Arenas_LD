@@ -6,11 +6,17 @@ import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
+import net.ledok.arenas_ld.dungeon.packet.DbsClearRoomsPayload;
+import net.ledok.arenas_ld.dungeon.packet.DbsMoveRoomPayload;
+import net.ledok.arenas_ld.dungeon.packet.DbsRemoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomRemoveSpawnerPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomResetPayload;
+import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntrancePayload;
+import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
+import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
 import net.ledok.arenas_ld.item.LinkerItem;
 import net.ledok.arenas_ld.item.SpawnerConfiguratorItem;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
@@ -27,6 +33,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -305,6 +312,109 @@ final class SpawnerPacketHandlers {
                 if (be instanceof RoomControllerBlockEntity room && world instanceof ServerLevel serverLevel) {
                     room.reset(serverLevel);
                     markDirtyAndSync(world, room);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(UpdateMobSpawnerEntityDefPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity spawner) {
+                    spawner.setEntityDefinition(spawner.getEntityDefinition().withMobId(payload.mobId()));
+                    markDirtyAndSync(world, spawner);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(UpdateDbsEntityDefPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
+                    spawner.setEntityDefinition(spawner.getEntityDefinition().withMobId(payload.mobId()));
+                    markDirtyAndSync(world, spawner);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(UpdateDbsEntrancePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
+                    if (payload.setToPlayer()) {
+                        spawner.setEntrance(player.blockPosition(), player.level().dimension());
+                    } else {
+                        ResourceKey<Level> dim = ResourceKey.create(Registries.DIMENSION, ResourceLocation.tryParse(payload.dimension()) != null
+                                ? ResourceLocation.tryParse(payload.dimension())
+                                : Level.OVERWORLD.location());
+                        spawner.setEntrance(new net.minecraft.core.BlockPos(payload.x(), payload.y(), payload.z()), dim);
+                    }
+                    markDirtyAndSync(world, spawner);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(DbsRemoveRoomPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
+                    spawner.removeRoom(payload.roomPos());
+                    markDirtyAndSync(world, spawner);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(DbsMoveRoomPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
+                    spawner.moveRoom(payload.fromIndex(), payload.toIndex());
+                    markDirtyAndSync(world, spawner);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(DbsClearRoomsPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
+                    spawner.clearRooms();
+                    markDirtyAndSync(world, spawner);
                 }
             });
         });

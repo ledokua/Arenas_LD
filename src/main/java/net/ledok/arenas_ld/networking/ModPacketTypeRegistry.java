@@ -1,10 +1,16 @@
 package net.ledok.arenas_ld.networking;
 
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.ledok.arenas_ld.dungeon.packet.DbsClearRoomsPayload;
+import net.ledok.arenas_ld.dungeon.packet.DbsMoveRoomPayload;
+import net.ledok.arenas_ld.dungeon.packet.DbsRemoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomRemoveSpawnerPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomResetPayload;
+import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntrancePayload;
+import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
+import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
 
 import static net.ledok.arenas_ld.networking.ModPackets.*;
 
@@ -53,6 +59,12 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(RoomClearSpawnersPayload.TYPE, RoomClearSpawnersPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomClearDoorPayload.TYPE, RoomClearDoorPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomResetPayload.TYPE, RoomResetPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerEntityDefPayload.TYPE, UpdateMobSpawnerEntityDefPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateDbsEntityDefPayload.TYPE, UpdateDbsEntityDefPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateDbsEntrancePayload.TYPE, UpdateDbsEntrancePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(DbsRemoveRoomPayload.TYPE, DbsRemoveRoomPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(DbsMoveRoomPayload.TYPE, DbsMoveRoomPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(DbsClearRoomsPayload.TYPE, DbsClearRoomsPayload.STREAM_CODEC);
     }
 
     static void registerS2CTypes() {

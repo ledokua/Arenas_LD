@@ -150,6 +150,12 @@
   "gui.arenas_ld.room_controller.confirm.clear_message": "Це видалить усі підключені спавнери з цієї кімнати.",
   "gui.arenas_ld.room_controller.confirm.reset_title": "Скинути кімнату зараз?",
   "gui.arenas_ld.room_controller.confirm.reset_message": "Це знищить відстежуваних мобів, скине рантайм-стан і закриє двері.",
+  "gui.arenas_ld.mob_spawner_v2.title": "Спавнер мобів",
+  "gui.arenas_ld.dungeon_boss_spawner_v2.title": "Спавнер боса підземелля",
+  "gui.arenas_ld.dbs_v2.entrance": "Вхід:",
+  "gui.arenas_ld.dbs_v2.rooms": "Кімнати:",
+  "gui.arenas_ld.dbs_v2.set_to_player": "Встановити на позицію гравця",
+  "gui.arenas_ld.dbs_v2.clear_rooms_confirm": "Це видалить усі прив'язані кімнати з цього спавнера.",
 
   "item.arenas_ld.linker.mode.group_config": "Конфігурація групи",
   "item.arenas_ld.linker.mode.spawner_linking": "Зв'язування спавнерів",
