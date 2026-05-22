@@ -43,6 +43,7 @@
   "gui.arenas_ld.off_hand_item_id": "Off Hand Item ID",
   "gui.arenas_ld.enable_drops": "Enable Drops",
   "gui.arenas_ld.add": "Add",
+  "gui.arenas_ld.apply": "Apply",
   "gui.arenas_ld.attribute_id": "Attribute ID",
   "gui.arenas_ld.value": "Value",
   "gui.arenas_ld.max_value": "Max Value",
@@ -158,6 +159,7 @@
   "gui.arenas_ld.dbs_v2.rooms": "Rooms:",
   "gui.arenas_ld.dbs_v2.set_to_player": "Set to player's position",
   "gui.arenas_ld.dbs_v2.clear_rooms_confirm": "This removes every linked room from this spawner.",
+  "gui.arenas_ld.spawner_v2.invalid_dimension": "Invalid dimension; entrance dimension not changed.",
 
   "item.arenas_ld.linker.mode.group_config": "Group Config",
   "item.arenas_ld.linker.mode.spawner_linking": "Spawner Linking",

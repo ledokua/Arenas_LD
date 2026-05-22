@@ -6,6 +6,7 @@ import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
+import net.minecraft.ChatFormatting;
 import net.ledok.arenas_ld.dungeon.packet.DbsClearRoomsPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsMoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsRemoveRoomPayload;
@@ -361,9 +362,15 @@ final class SpawnerPacketHandlers {
                     if (payload.setToPlayer()) {
                         spawner.setEntrance(player.blockPosition(), player.level().dimension());
                     } else {
-                        ResourceKey<Level> dim = ResourceKey.create(Registries.DIMENSION, ResourceLocation.tryParse(payload.dimension()) != null
-                                ? ResourceLocation.tryParse(payload.dimension())
-                                : Level.OVERWORLD.location());
+                        ResourceLocation parsedDim = ResourceLocation.tryParse(payload.dimension());
+                        ResourceKey<Level> dim;
+                        if (parsedDim != null) {
+                            dim = ResourceKey.create(Registries.DIMENSION, parsedDim);
+                        } else {
+                            dim = spawner.getEntranceDimension();
+                            player.sendSystemMessage(Component.translatable("gui.arenas_ld.spawner_v2.invalid_dimension")
+                                .withStyle(ChatFormatting.YELLOW));
+                        }
                         spawner.setEntrance(new net.minecraft.core.BlockPos(payload.x(), payload.y(), payload.z()), dim);
                     }
                     markDirtyAndSync(world, spawner);

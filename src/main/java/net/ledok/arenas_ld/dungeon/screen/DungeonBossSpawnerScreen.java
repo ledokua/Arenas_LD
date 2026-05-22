@@ -56,10 +56,13 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
         int x = leftPos;
         int y = topPos;
 
-        mobIdField = new EditBox(font, x + 68, y + 26, 260, 16, Component.empty());
+        mobIdField = new EditBox(font, x + 68, y + 26, 200, 16, Component.empty());
         mobIdField.setValue(menu.getMobId());
-        mobIdField.setResponder(v -> ClientPlayNetworking.send(new UpdateDbsEntityDefPayload(menu.getBlockPos(), v)));
+        mobIdField.setMaxLength(128);
         addRenderableWidget(mobIdField);
+        addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.apply"), b ->
+            ClientPlayNetworking.send(new UpdateDbsEntityDefPayload(menu.getBlockPos(), mobIdField.getValue()))
+        ).bounds(x + 272, y + 25, 56, 18).build());
 
         addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.attributes"), b -> {
             if (minecraft != null && minecraft.player != null) {

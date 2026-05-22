@@ -36,8 +36,11 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerScreenHa
 
         mobIdField = new EditBox(font, x + 70, y + 34, 165, 16, Component.empty());
         mobIdField.setValue(menu.getMobId());
-        mobIdField.setResponder(value -> ClientPlayNetworking.send(new UpdateMobSpawnerEntityDefPayload(menu.getBlockPos(), value)));
+        mobIdField.setMaxLength(128);
         addRenderableWidget(mobIdField);
+        addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.apply"), b -> {
+            ClientPlayNetworking.send(new UpdateMobSpawnerEntityDefPayload(menu.getBlockPos(), mobIdField.getValue()));
+        }).bounds(x + 241, y + 33, 50, 18).build());
 
         addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.attributes"), b -> {
             if (minecraft != null && minecraft.player != null) {

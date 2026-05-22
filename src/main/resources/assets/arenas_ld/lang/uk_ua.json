@@ -43,6 +43,7 @@
   "gui.arenas_ld.off_hand_item_id": "ID предмета для другої руки",
   "gui.arenas_ld.enable_drops": "Увімкнути випадання предметів",
   "gui.arenas_ld.add": "Додати",
+  "gui.arenas_ld.apply": "Застосувати",
   "gui.arenas_ld.attribute_id": "ID атрибута",
   "gui.arenas_ld.value": "Значення",
   "gui.arenas_ld.max_value": "Макс. значення",
@@ -156,6 +157,7 @@
   "gui.arenas_ld.dbs_v2.rooms": "Кімнати:",
   "gui.arenas_ld.dbs_v2.set_to_player": "Встановити на позицію гравця",
   "gui.arenas_ld.dbs_v2.clear_rooms_confirm": "Це видалить усі прив'язані кімнати з цього спавнера.",
+  "gui.arenas_ld.spawner_v2.invalid_dimension": "Невірний вимір; вимір входу не змінено.",
 
   "item.arenas_ld.linker.mode.group_config": "Конфігурація групи",
   "item.arenas_ld.linker.mode.spawner_linking": "Зв'язування спавнерів",
