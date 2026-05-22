@@ -703,16 +703,29 @@ public final class DungeonRun {
 - Codec round-trip on a populated run.
 
 ---
-
 ## Phase C — The Room block (1 PR)
 
-Goal of the phase: introduce the brand-new `RoomController` block. It does not interact with anything outside itself yet — the controller doesn't exist; the new DBS doesn't exist. The room's `activate(tier)` and `reset()` work against the world directly (spawning/despawning entities by querying linked spawner positions).
+**Goal of the phase:** introduce the brand-new `RoomController` block. It does not interact with the v4.0 controller or v4.0 DBS yet — those don't exist. The room's `activate(tier)` and `reset()` work against the world directly, spawning/despawning entities by talking to the **legacy** `MobSpawnerBlockEntity` and `DungeonBossSpawnerBlockEntity`. The new V2 spawners replace these in Phase D.
 
-The new `MobSpawner` block is *not* introduced in this phase — the room talks to the *existing* `MobSpawnerBlockEntity` for now. Phase D replaces it.
+This phase is bigger than Phase B in lines of code, but the structure is well-defined. It contains: the new block + block entity, runtime methods that drive a room's lifecycle, additive methods on legacy spawners so the new room can use them, the admin GUI, and a smoke gametest proving the whole thing works in-world.
 
-### PC-1: `RoomController` block + block entity
+Tasks in this phase (8 total):
+- **PC-1** — Register the new block + block entity in the registries, with placeholder texture and basic placement.
+- **PC-2** — Block entity data model (fields, getters, admin operations, NBT via codec).
+- **PC-3** — Block entity runtime methods (`activate`, `reset`, `openDoor`, `refreshAliveMobs`).
+- **PC-3-old** — Additive methods on legacy `MobSpawnerBlockEntity` and `DungeonBossSpawnerBlockEntity` so the room can call them.
+- **PC-4** — Admin GUI (screen + handler + packets).
+- **PC-5** — Loom run config for gametests.
+- **PC-6** — Smoke gametest validating spawn/clear/reset/door cycle.
+- **PC-7** — Item registration + lang strings + creative tab entry.
 
-**Goal**: register a new block + block entity in the new package.
+After Phase C, the RoomController exists as a fully usable block in-world: admins can place it, configure its spawner list and door via the Linker (Linker support deferred to Phase F, but the data model and methods are ready). It does not yet *do* anything during a run because the v4.0 controller doesn't exist; Phase E wires it up.
+
+---
+
+### PC-1 — Register the RoomController block + block entity
+
+**Goal**: get a placeable block on the registry with an empty block entity. No NBT, no logic, no GUI yet. This task is small on purpose — proves the registration plumbing works end-to-end before we put any data behind it.
 
 **Files to create:**
 - `src/main/java/net/ledok/arenas_ld/dungeon/block/RoomControllerBlock.java`
@@ -720,125 +733,339 @@ The new `MobSpawner` block is *not* introduced in this phase — the room talks 
 - `src/main/resources/assets/arenas_ld/blockstates/room_controller.json`
 - `src/main/resources/assets/arenas_ld/models/block/room_controller.json`
 - `src/main/resources/assets/arenas_ld/models/item/room_controller.json`
-- `src/main/resources/assets/arenas_ld/textures/block/room_controller.png` (placeholder solid color is fine)
-- Lang entries in `en_us.json`: `block.arenas_ld.room_controller` = `"Room Controller"`.
+- `src/main/resources/assets/arenas_ld/textures/block/room_controller.png` — placeholder, a solid magenta `#FF00FF` 16x16 PNG is fine. The texture exists only so the block doesn't render as the missing-texture purple-checkerboard. Real art comes later.
 
 **Files to modify:**
 - `src/main/java/net/ledok/arenas_ld/registry/BlockRegistry.java` — register the block.
 - `src/main/java/net/ledok/arenas_ld/registry/BlockEntitiesRegistry.java` — register the block entity type.
 
-**Block spec:**
-```java
-public class RoomControllerBlock extends Block implements EntityBlock {
-    public RoomControllerBlock(Properties props) { super(props); }
+#### Block spec
 
+```java
+package net.ledok.arenas_ld.dungeon.block;
+
+import com.mojang.serialization.MapCodec;
+import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.Nullable;
+
+public class RoomControllerBlock extends BaseEntityBlock {
+
+    public static final MapCodec<RoomControllerBlock> CODEC = simpleCodec(RoomControllerBlock::new);
+
+    public RoomControllerBlock(Properties properties) {
+        super(properties);
+    }
+
+    @Override
+    protected MapCodec<? extends BaseEntityBlock> codec() {
+        return CODEC;
+    }
+
+    @Nullable
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
         return new RoomControllerBlockEntity(pos, state);
     }
-    // Standard iron-block-style properties: strength(-1.0f, 3600000.0f), unbreakable.
+
+    @Override
+    public RenderShape getRenderShape(BlockState state) {
+        return RenderShape.MODEL;
+    }
 }
 ```
 
-**Block entity spec:** (full spec in PC-2)
+Note: no `useWithoutItem` yet — opening the GUI is PC-4. No ticker — the room doesn't tick on its own; the controller (Phase E) will drive it. No `getTicker` override.
 
-**Acceptance:**
-- Block placeable in creative.
-- Block entity persists across save/load (empty NBT for now is fine).
+#### Block entity spec (PC-1 stub only)
+
+Just enough to compile. PC-2 fills in fields and persistence.
+
+```java
+package net.ledok.arenas_ld.dungeon.blockentity;
+
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+
+public class RoomControllerBlockEntity extends BlockEntity {
+
+    public RoomControllerBlockEntity(BlockPos pos, BlockState state) {
+        super(BlockEntitiesRegistry.ROOM_CONTROLLER_BLOCK_ENTITY, pos, state);
+    }
+}
+```
+
+#### Block registration
+
+In `BlockRegistry.java`, add (alongside existing entries, alphabetical order doesn't matter):
+
+```java
+public static final Block ROOM_CONTROLLER_BLOCK = registerBlock("room_controller",
+        new RoomControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));
+```
+
+In `BlockEntitiesRegistry.java`, add:
+
+```java
+public static final BlockEntityType<RoomControllerBlockEntity> ROOM_CONTROLLER_BLOCK_ENTITY =
+        Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
+                ResourceLocation.parse(ArenasLdMod.MOD_ID + ":room_controller_be"),
+                BlockEntityType.Builder.of(RoomControllerBlockEntity::new, BlockRegistry.ROOM_CONTROLLER_BLOCK).build(null));
+```
+
+Update the import in `BlockEntitiesRegistry.java`:
+
+```java
+import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
+```
+
+And in `BlockRegistry.java`:
+
+```java
+import net.ledok.arenas_ld.dungeon.block.RoomControllerBlock;
+```
+
+#### Block assets
+
+`blockstates/room_controller.json`:
+```json
+{
+  "variants": {
+    "": { "model": "arenas_ld:block/room_controller" }
+  }
+}
+```
+
+`models/block/room_controller.json`:
+```json
+{
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "arenas_ld:block/room_controller"
+  }
+}
+```
+
+`models/item/room_controller.json`:
+```json
+{
+  "parent": "arenas_ld:block/room_controller"
+}
+```
+
+`textures/block/room_controller.png`: a 16x16 magenta placeholder image.
+
+#### Acceptance
+
 - `./gradlew build` passes.
+- Block exists on the registry under `arenas_ld:room_controller`.
+- Block entity type registered as `arenas_ld:room_controller_be`.
+- Block can be obtained via `/give @s arenas_ld:room_controller` and placed in-world.
+- Block renders (even as solid magenta).
+- Right-clicking the block does nothing yet (no GUI — that's PC-4).
+- No NBT persistence yet — block entity exists but is empty.
 
-**Don'ts:** don't add a GUI yet (Phase C-4). Don't add `tick()` yet (Phase C-3). Don't add the spawner list yet (PC-2). Texture can be a solid color placeholder.
+#### Don'ts
+
+- No GUI / screen / packets in this task. PC-4.
+- No tick logic in this task. PC-3.
+- No fields on the block entity beyond what the constructor inherits. PC-2.
+- No creative tab entry yet. PC-7 adds lang + creative tab in one go.
+- No tooltip on the item.
+- Do not name the texture file differently or put it in a subfolder. Path must be `assets/arenas_ld/textures/block/room_controller.png`.
+
+#### References
+
+- `BlockRegistry.java` — registration patterns are visible at lines 15–43.
+- `BlockEntitiesRegistry.java` — entity type registration patterns at lines 13–56.
+- `MobSpawnerBlock.java` — comparable simple block, useful template (the v4.0 RoomControllerBlock is simpler).
+- `PhaseBlock.java` — useful template for a block with a custom block state, **but** the RoomController has no block state, so we use the simpler form.
 
 ---
 
-### PC-2: `RoomControllerBlockEntity` — data model
+### PC-2 — RoomController data model
 
-**Goal**: the room's persisted state: spawner positions and door position.
+**Goal**: add the data fields, getters, admin operations, and NBT persistence. Pure data layer; runtime methods (`activate`, `reset`, `openDoor`) come in PC-3.
 
-**Files to modify:** `RoomControllerBlockEntity.java`
+**Files to modify:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/blockentity/RoomControllerBlockEntity.java`
 
-**Spec:**
+#### Field design
+
+The room owns:
+- `spawnerPositions: List<BlockPos>` — block positions of spawners this room owns. The spawner can be a legacy `MobSpawnerBlockEntity` (regular mob room) or legacy `DungeonBossSpawnerBlockEntity` (boss room). PC-3 resolves the type at runtime via `instanceof`. There's no need to track the type here.
+- `doorPos: Optional<BlockPos>` — the phase block this room opens on clear. `Optional.empty()` for rooms with no door (e.g. the spawn room or the final/boss room).
+- `aliveMobs: Set<UUID>` — runtime list of mob UUIDs spawned by this room. Populated by `activate()`, drained by `refreshAliveMobs()` as mobs die.
+- `activated: boolean` — has the room been activated (its spawners told to spawn) in the current run? Prevents double-activation.
+- `cleared: boolean` — have all spawned mobs died? Latches true; reset clears it.
+
+#### Class structure
+
 ```java
+package net.ledok.arenas_ld.dungeon.blockentity;
+
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.*;
+
 public class RoomControllerBlockEntity extends BlockEntity {
-    /** Positions of spawners (MobSpawner or DungeonBossSpawner) this room owns. */
+
+    // ---- Fields ----
+
     private final List<BlockPos> spawnerPositions = new ArrayList<>();
-
-    /** The phase block this room opens on clear. Null = no door (e.g. spawn room). */
-    @Nullable
-    private BlockPos doorPos = null;
-
-    /** UUIDs of currently-alive mobs spawned by this room. Cleared on reset. */
+    @Nullable private BlockPos doorPos = null;
     private final Set<UUID> aliveMobs = new HashSet<>();
-
-    /** Has the room been activated (mobs spawned) in the current run? */
     private boolean activated = false;
-
-    /** Has the room been cleared (all mobs dead)? */
     private boolean cleared = false;
+
+    // ---- Construction ----
 
     public RoomControllerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.ROOM_CONTROLLER_BLOCK_ENTITY, pos, state);
     }
 
-    // Getters
-    public List<BlockPos> getSpawnerPositions() { return Collections.unmodifiableList(spawnerPositions); }
-    @Nullable public BlockPos getDoorPos() { return doorPos; }
-    public Set<UUID> getAliveMobs() { return Collections.unmodifiableSet(aliveMobs); }
-    public boolean isActivated() { return activated; }
-    public boolean isCleared() { return cleared; }
+    // ---- Getters ----
 
-    // Admin/Linker operations
-    public boolean addSpawner(BlockPos pos) { ... add if not present, return true ... }
-    public boolean removeSpawner(BlockPos pos) { ... }
-    public void clearSpawners() { ... }
-    public void setDoorPos(@Nullable BlockPos pos) { ... }
+    public List<BlockPos> getSpawnerPositions() {
+        return Collections.unmodifiableList(spawnerPositions);
+    }
 
-    // Runtime operations (called by Phase E controller code, not implemented here yet)
-    void markActivated() { activated = true; setChanged(); }
-    void markCleared() { cleared = true; setChanged(); }
+    @Nullable
+    public BlockPos getDoorPos() {
+        return doorPos;
+    }
+
+    public Set<UUID> getAliveMobs() {
+        return Collections.unmodifiableSet(aliveMobs);
+    }
+
+    public boolean isActivated() {
+        return activated;
+    }
+
+    public boolean isCleared() {
+        return cleared;
+    }
+
+    // ---- Admin / Linker operations ----
+
+    /** Returns true if the spawner was added (false if already present). */
+    public boolean addSpawner(BlockPos pos) {
+        if (spawnerPositions.contains(pos)) {
+            return false;
+        }
+        spawnerPositions.add(pos);
+        setChanged();
+        return true;
+    }
+
+    /** Returns true if the spawner was removed (false if not present). */
+    public boolean removeSpawner(BlockPos pos) {
+        boolean removed = spawnerPositions.remove(pos);
+        if (removed) setChanged();
+        return removed;
+    }
+
+    public void clearSpawners() {
+        if (!spawnerPositions.isEmpty()) {
+            spawnerPositions.clear();
+            setChanged();
+        }
+    }
+
+    public void setDoorPos(@Nullable BlockPos pos) {
+        if (!Objects.equals(doorPos, pos)) {
+            this.doorPos = pos;
+            setChanged();
+        }
+    }
+
+    // ---- Runtime operations (called by PC-3 methods + Phase E controller) ----
+    // Package-private so only same-package code can flip activated/cleared flags.
+
+    void markActivated() {
+        activated = true;
+        setChanged();
+    }
+
+    void markCleared() {
+        cleared = true;
+        setChanged();
+    }
+
     void clearRuntimeState() {
         activated = false;
         cleared = false;
         aliveMobs.clear();
         setChanged();
     }
-    void trackSpawnedMob(UUID uuid) { aliveMobs.add(uuid); setChanged(); }
-    void untrackSpawnedMob(UUID uuid) { aliveMobs.remove(uuid); setChanged(); }
 
-    // NBT via codec — codec defined as static field, used in saveAdditional/loadAdditional
-    private static final Codec<RoomState> STATE_CODEC = ...;
+    void trackSpawnedMob(UUID uuid) {
+        aliveMobs.add(uuid);
+        setChanged();
+    }
 
-    private record RoomState(
+    void untrackSpawnedMob(UUID uuid) {
+        aliveMobs.remove(uuid);
+        setChanged();
+    }
+
+    // ---- NBT ----
+
+    // Internal serialization record; never exposed outside the class.
+    private record State(
         List<BlockPos> spawners,
         Optional<BlockPos> door,
         Set<UUID> aliveMobs,
         boolean activated,
         boolean cleared
     ) {
-        static final Codec<RoomState> CODEC = RecordCodecBuilder.create(i -> i.group(
-            BlockPos.CODEC.listOf().fieldOf("spawners").forGetter(RoomState::spawners),
-            BlockPos.CODEC.optionalFieldOf("door").forGetter(RoomState::door),
-            UUIDUtil.CODEC.listOf().xmap(HashSet::new, ArrayList::new).fieldOf("aliveMobs").forGetter(rs -> new ArrayList<>(rs.aliveMobs())),
-            Codec.BOOL.fieldOf("activated").forGetter(RoomState::activated),
-            Codec.BOOL.fieldOf("cleared").forGetter(RoomState::cleared)
-        ).apply(i, RoomState::new));
+        static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
+            BlockPos.CODEC.listOf().fieldOf("spawners").forGetter(State::spawners),
+            BlockPos.CODEC.optionalFieldOf("door").forGetter(State::door),
+            UUIDUtil.CODEC.listOf()
+                .xmap((List<UUID> list) -> (Set<UUID>) new HashSet<>(list),
+                      (Set<UUID> set) -> new ArrayList<>(set))
+                .fieldOf("aliveMobs").forGetter(State::aliveMobs),
+            Codec.BOOL.fieldOf("activated").forGetter(State::activated),
+            Codec.BOOL.fieldOf("cleared").forGetter(State::cleared)
+        ).apply(i, State::new));
     }
 
     @Override
-    protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider lookup) {
-        super.saveAdditional(nbt, lookup);
-        RoomState state = new RoomState(spawnerPositions, Optional.ofNullable(doorPos), aliveMobs, activated, cleared);
-        STATE_CODEC.encodeStart(NbtOps.INSTANCE, state)
-            .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save RoomController: {}", err))
+    protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
+        super.saveAdditional(nbt, registries);
+        State state = new State(spawnerPositions, Optional.ofNullable(doorPos), aliveMobs, activated, cleared);
+        State.CODEC.encodeStart(NbtOps.INSTANCE, state)
+            .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
+                "Failed to save RoomController at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
     }
 
     @Override
-    protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider lookup) {
-        super.loadAdditional(nbt, lookup);
+    protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
+        super.loadAdditional(nbt, registries);
         if (nbt.contains("State")) {
-            STATE_CODEC.parse(NbtOps.INSTANCE, nbt.get("State"))
-                .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load RoomController: {}", err))
+            State.CODEC.parse(NbtOps.INSTANCE, nbt.get("State"))
+                .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
+                    "Failed to load RoomController at {}: {}", worldPosition, err))
                 .ifPresent(state -> {
                     spawnerPositions.clear();
                     spawnerPositions.addAll(state.spawners());
@@ -853,203 +1080,683 @@ public class RoomControllerBlockEntity extends BlockEntity {
 }
 ```
 
-**Acceptance:**
-- All getters/setters work.
-- `addSpawner` deduplicates (returns false if already present).
-- `removeSpawner` returns true only if it was present.
-- NBT round-trip: place block, add 3 spawners, set door, mark activated, save, /reload, fields preserved.
+#### NBT schema
 
-**Don'ts:**
-- No `activate(tier)` / `reset()` / `openDoor()` yet — Phase C-3.
-- No GUI / screen handler yet — Phase C-4.
-- Do not store the *parent* DBS reference here. The DBS owns its rooms; the room doesn't need to know its parent.
-- Do not validate that `pos` is a valid spawner — admins can typo, the validation happens at activate time.
-
-**References:**
-- Old `DungeonBossSpawnerBlockEntity.linkedSpawners` (lines 86, 405–431) — same idea, but for a room.
-
----
-
-### PC-3: `RoomController` runtime methods
-
-**Goal**: `activate(tier)`, `reset()`, `openDoor()`, `refreshAliveMobs()`, `isCleared()` semantics implemented against the world.
-
-**Files to modify:** `RoomControllerBlockEntity.java`
-
-**Spec:** (added methods on the same class)
-
-```java
-/**
- * Spawn this room's mobs, applying the tier's health multiplier.
- * For each spawner position in the room:
- *   - If it's a MobSpawnerBlockEntity (old) — call spawner.spawnMob() and track UUID.
- *   - If it's a DungeonBossSpawnerBlockEntity — call dbs.spawnBoss() and track UUID.
- *   - If neither — log a warning and skip.
- * Sets activated=true. No-op if already activated.
- *
- * @param tier the active tier for scaling
- * @return number of mobs actually spawned
- */
-public int activate(ServerLevel level, TierConfig tier) { ... }
-
-/**
- * Despawn any alive mobs this room spawned, clear runtime state, close the door.
- * Idempotent — safe to call multiple times.
- */
-public void reset(ServerLevel level) { ... }
-
-/**
- * Open the room's door (set phase block to non-solid). No-op if no door, or door isn't a phase block.
- */
-public void openDoor(ServerLevel level) { ... }
-
-/**
- * Close the room's door (set phase block to solid). No-op if no door.
- */
-public void closeDoor(ServerLevel level) { ... }
-
-/**
- * Remove any aliveMobs UUIDs whose entities are dead or unloaded.
- * Updates `cleared` to true if no alive mobs remain after activation.
- * Should be called by the controller's tick each tick during a run.
- */
-public void refreshAliveMobs(ServerLevel level) { ... }
+```
+{
+  "State": {
+    "spawners": [<long array>, ...],   // BlockPos.CODEC list form
+    "door": <long array>,              // optional; absent when no door
+    "aliveMobs": [<int array>, ...],   // UUIDUtil.CODEC list form
+    "activated": false,
+    "cleared": false
+  }
+}
 ```
 
-**Detailed behavior:**
+#### Acceptance
 
-`activate(level, tier)`:
-1. If `activated`, return 0.
-2. For each `BlockPos spawnerPos` in `spawnerPositions`:
-   - Get the block entity. If not loaded, force-load the chunk first.
-   - If `instanceof net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity old`, call a NEW method `old.spawnSingleMobScaled(tier.healthMultiplier())` which returns the spawned `Mob` or null. (This method is added to the old class in PC-3-old below.)
-   - If `instanceof net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity old`, call `old.spawnSingleBossScaled(tier.healthMultiplier())`. Same return.
-   - If neither: log warn, skip.
-   - For each returned entity, add its UUID to `aliveMobs`.
-3. Set `activated=true`, set `setChanged()`.
-4. Return the count.
+- Block entity has the 5 fields described, in the visibility shown.
+- All 5 getters return what's documented; collection getters return unmodifiable views.
+- `addSpawner` deduplicates: returns false if already present, doesn't add a duplicate.
+- `removeSpawner` returns true only if it was present and got removed.
+- `clearSpawners` is a no-op if already empty (no `setChanged()`).
+- `setDoorPos` is a no-op if the value is unchanged (no `setChanged()`).
+- Runtime mutators (`markActivated`, etc.) are package-private.
+- Save/load round-trip preserves all fields (verified by gametest in PC-6).
 
-`reset(level)`:
-1. For each UUID in `aliveMobs`, look up the entity in the level. If present and alive, `entity.discard()`.
-2. Clear `aliveMobs`, set `activated=false`, set `cleared=false`.
-3. Call `closeDoor(level)`.
-4. `setChanged()`.
+#### Don'ts
 
-`openDoor(level)`:
-- If `doorPos == null` return.
-- Get block at `doorPos`. If `instanceof PhaseBlock`, change its blockstate to "unsolid" (the existing PhaseBlock has solid/unsolid variants per the assets).
-- The exact API to change PhaseBlock state — see References below.
+- Do not call `setChanged()` on getter access.
+- Do not validate spawner positions point to actual spawners — admins can typo; runtime methods will skip invalid entries.
+- Do not auto-mark `cleared` when `aliveMobs` becomes empty — that's PC-3's `refreshAliveMobs()` logic.
+- Do not store the parent DBS reference here. Ownership is top-down (DBS knows its rooms); rooms don't reach up.
+- Do not add hand-written `toNbt`/`fromNbt` methods. NBT goes through the codec.
+- Do not add equals/hashCode/toString.
+- Do not synchronize. Server thread only.
+- Do not split `State` into its own top-level class — it's a private serialization helper.
 
-`refreshAliveMobs(level)`:
-1. Iterator over `aliveMobs`. For each UUID, look up the entity. If null, removed, dead, or in another dimension → remove from set.
-2. If `activated && !cleared && aliveMobs.isEmpty()` → set `cleared=true`, `setChanged()`.
-3. **Do not call `openDoor()` here.** That's the controller's job — the controller observes `isCleared()` becoming true and then decides to open the door + advance.
+#### References
 
-**Acceptance:**
-- Gametest PC-3-T1: place RoomController, link 2 MobSpawners with zombie configs, call activate(NORMAL), assert 2 zombies in world, both UUIDs in aliveMobs, activated=true.
-- Gametest PC-3-T2: as above, then kill both zombies, call refreshAliveMobs each tick for 5 ticks, assert aliveMobs empty, cleared=true.
-- Gametest PC-3-T3: as above, then call reset(), assert no zombies in world, aliveMobs empty, activated=false, cleared=false.
-- Gametest PC-3-T4: place phase block, call setDoorPos, call openDoor, assert blockstate changed.
-
-**Don'ts:**
-- Do not despawn mobs in `activate()` — only spawn.
-- Do not auto-open the door inside `refreshAliveMobs()` — controller's job.
-- Do not retry spawning on failure — log and continue.
-- Do not synchronize access to `aliveMobs` — server thread only.
-- Do not check for the parent DBS or controller here — rooms are owned-from-above; they don't reach up.
-
-**References:**
-- Existing `PhaseBlock` and its blockstates JSON (`blockstates/phase_block.json`, `models/block/phase_block_solid.json`, `models/block/phase_block_unsolid.json`).
-- Existing `MobSpawnerBlockEntity.spawn*` methods.
-- Existing chunk-forcing pattern in `DungeonBossSpawnerBlockEntity.updateChunkLoading()` (line ~521).
+- PB-* tasks for codec patterns.
+- Legacy `DungeonBossSpawnerBlockEntity.linkedSpawners` (lines 86, 405–431) — the room replaces that pattern, but the data shape is similar.
 
 ---
 
-### PC-3-old: Add `spawnSingleMobScaled` to old `MobSpawnerBlockEntity` and `DungeonBossSpawnerBlockEntity`
+### PC-3-old — Add `spawnSingleMobScaled` to legacy spawners
 
-**Goal**: minimal extension to old classes so the new room can drive them. Old behavior elsewhere unchanged.
+**Important: this task comes BEFORE PC-3.** PC-3's `activate()` calls these new methods. We add them to legacy classes first so PC-3 has working callees.
+
+**Goal**: add additive methods to legacy `MobSpawnerBlockEntity` and `DungeonBossSpawnerBlockEntity` that spawn one entity using the spawner's configured attributes/equipment, scaled by a health multiplier. Old behavior is not modified.
 
 **Files to modify:**
 - `src/main/java/net/ledok/arenas_ld/block/entity/MobSpawnerBlockEntity.java`
 - `src/main/java/net/ledok/arenas_ld/block/entity/DungeonBossSpawnerBlockEntity.java`
 
-**Spec:**
+#### Method spec
 
-On `MobSpawnerBlockEntity` add:
+On `MobSpawnerBlockEntity`:
+
 ```java
 /**
- * Spawn one mob using this spawner's config, scaled by the given health multiplier.
- * Used by the v4.0 RoomController. Does not interact with the legacy wave/loot system.
+ * Spawn a single mob using this spawner's mobId + attributes + equipment, scaled by
+ * the given health multiplier. Used by the v4.0 {@code RoomControllerBlockEntity}.
  *
- * @return the spawned Mob, or null on failure
+ * <p>This method does not interact with the legacy wave/loot/trigger system on this spawner.
+ * It is purely a "make me one configured mob at this spawner's location" helper for the
+ * new architecture.
+ *
+ * <p>Spawn position: 1 block above the spawner. No spread, no multi-attempt safe-spawn
+ * scan — the new architecture trusts the admin to place spawners in valid spots.
+ *
+ * @param world             the level (must be the spawner's level)
+ * @param healthMultiplier  multiplier applied to max_health when scaling attributes
+ * @return the spawned entity, or null on failure (invalid mobId, level.addFreshEntity returned false)
  */
 @Nullable
-public Mob spawnSingleMobScaled(double healthMultiplier) { ... }
+public LivingEntity spawnSingleScaled(ServerLevel world, double healthMultiplier) {
+    Optional<EntityType<?>> entityTypeOpt = EntityType.byString(this.mobId);
+    if (entityTypeOpt.isEmpty()) {
+        ArenasLdMod.LOGGER.warn("RoomController-driven spawn: invalid mob ID {} at {}", mobId, worldPosition);
+        return null;
+    }
+
+    Entity mob = entityTypeOpt.get().create(world);
+    if (!(mob instanceof LivingEntity living)) {
+        ArenasLdMod.LOGGER.warn("RoomController-driven spawn: not a LivingEntity: {}", mobId);
+        return null;
+    }
+
+    // Attributes
+    for (AttributeData attr : this.attributes) {
+        ResourceLocation attrLoc = ResourceLocation.tryParse(attr.id());
+        if (attrLoc == null) continue;
+        var attrRegistry = world.registryAccess().registryOrThrow(Registries.ATTRIBUTE);
+        ResourceKey<Attribute> key = ResourceKey.create(Registries.ATTRIBUTE, attrLoc);
+        attrRegistry.getHolder(key).ifPresent(holder -> {
+            AttributeInstance inst = living.getAttribute(holder);
+            if (inst != null) {
+                double value = attr.value();
+                if ("minecraft:generic.max_health".equals(attr.id())) {
+                    value *= healthMultiplier;
+                }
+                inst.setBaseValue(value);
+            }
+        });
+    }
+
+    // Equipment (use existing EntityEquipmentHelper if available; otherwise inline)
+    // Legacy MobSpawnerBlockEntity's applyEquipment method exists; we reuse it.
+    applyEquipment(living, EquipmentSlot.HEAD, equipment.head);
+    applyEquipment(living, EquipmentSlot.CHEST, equipment.chest);
+    applyEquipment(living, EquipmentSlot.LEGS, equipment.legs);
+    applyEquipment(living, EquipmentSlot.FEET, equipment.feet);
+    applyEquipment(living, EquipmentSlot.MAINHAND, equipment.mainHand);
+    applyEquipment(living, EquipmentSlot.OFFHAND, equipment.offHand);
+
+    living.heal(living.getMaxHealth());
+
+    // Position
+    living.moveTo(
+        worldPosition.getX() + 0.5,
+        worldPosition.getY() + 1,
+        worldPosition.getZ() + 0.5,
+        world.random.nextFloat() * 360.0F,
+        0.0F
+    );
+
+    if (!world.addFreshEntity(living)) {
+        return null;
+    }
+    return living;
+}
 ```
 
-On `DungeonBossSpawnerBlockEntity` add:
+On `DungeonBossSpawnerBlockEntity`, same method signature, same body — except:
+- Uses `EntityEquipmentHelper.applyEquipment(living, slot, itemId, equipment.dropChance)` (the DBS has the drop-chance variant; the regular `MobSpawnerBlockEntity` doesn't and uses its own simpler `applyEquipment`).
+- That's the only difference.
+
 ```java
-/**
- * Spawn one boss entity using this spawner's config (entityType, attributes, equipment),
- * scaled by the given health multiplier. v4.0 RoomController consumer.
- *
- * @return the spawned LivingEntity, or null on failure
- */
 @Nullable
-public LivingEntity spawnSingleBossScaled(double healthMultiplier) { ... }
+public LivingEntity spawnSingleScaled(ServerLevel world, double healthMultiplier) {
+    // ... same as above but ...
+    EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.HEAD, equipment.head, equipment.dropChance);
+    EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.CHEST, equipment.chest, equipment.dropChance);
+    EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.LEGS, equipment.legs, equipment.dropChance);
+    EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.FEET, equipment.feet, equipment.dropChance);
+    EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.MAINHAND, equipment.mainHand, equipment.dropChance);
+    EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.OFFHAND, equipment.offHand, equipment.dropChance);
+    // ... rest identical ...
+}
 ```
 
-Each method:
-1. Look up the entity type from the stored mobId.
-2. Create the entity. If null, log error and return null.
-3. Apply attributes (existing pattern), with `max_health` multiplied by `healthMultiplier`.
-4. Apply equipment.
-5. Move to spawn position (existing pattern: above the spawner block).
-6. `level.addFreshEntity(entity)`.
-7. Heal to max.
-8. Return the entity.
+#### Acceptance
 
-**Acceptance:** old code unaffected for current callers. New methods callable from PC-3 gametests.
+- Method added to both legacy classes with the signature shown.
+- Returns null on invalid mobId (logged at WARN, not ERROR — these are admin typos, not bugs).
+- Returns null on non-LivingEntity (logged at WARN).
+- Spawned entity has its `max_health` scaled by `healthMultiplier`.
+- Other attributes (attack_damage, movement_speed, etc.) are set to their raw configured values, **not** scaled. Tier scaling only touches HP at this layer; damage scaling lives in the mixin.
+- Spawned entity is healed to full immediately after attribute application.
+- Existing methods/behavior of both classes are unchanged.
 
-**Don'ts:** don't refactor anything else in these old classes. Don't change existing behavior. Don't add new fields.
+#### Don'ts
+
+- Do not add the new method via an interface. Direct method on each class. We could share the impl via a shared helper later (Phase D when we build V2 spawners) but not now.
+- Do not modify any existing method.
+- Do not modify any existing field.
+- Do not change the log level on existing error paths.
+- Do not add the team-assignment code (`scoreboard.addPlayerToTeam(...)`). The new architecture defers team logic to the controller (Phase E) — for now, mobs spawned via this method are teamless.
+- Do not invoke this method from anywhere yet. PC-3 calls it.
+
+#### References
+
+- Legacy `MobSpawnerBlockEntity.startBattle()` lines 269–360 — most of the code in `spawnSingleScaled` is a stripped version of that.
+- Legacy `DungeonBossSpawnerBlockEntity.startBattle()` lines 851–910 — same for the boss.
+- `EntityEquipmentHelper.applyEquipment` — referenced by the DBS variant.
 
 ---
 
-### PC-4: `RoomController` admin GUI
+### PC-3 — RoomController runtime methods
 
-**Goal**: a screen for admins to manage the room's spawner list and door, without using commands.
+**Goal**: implement `activate(tier)`, `reset()`, `openDoor()`, `closeDoor()`, `refreshAliveMobs()` on `RoomControllerBlockEntity`.
+
+**Files to modify:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/blockentity/RoomControllerBlockEntity.java`
+
+#### Method specs
+
+```java
+/**
+ * Spawn this room's mobs, applying the tier's health multiplier.
+ *
+ * <p>For each {@code BlockPos} in {@link #spawnerPositions}:
+ * <ul>
+ *   <li>If the block entity at that position is a legacy {@code MobSpawnerBlockEntity},
+ *       call {@code spawnSingleScaled(world, tier.healthMultiplier())} on it.</li>
+ *   <li>If it's a legacy {@code DungeonBossSpawnerBlockEntity}, same call on that type.</li>
+ *   <li>Otherwise, log a warning and skip that position.</li>
+ * </ul>
+ *
+ * <p>Sets {@code activated=true} regardless of how many mobs actually spawned.
+ *
+ * <p>If {@code activated} is already true, this is a no-op and returns 0 (defensive against
+ * double-activation in case of a controller bug).
+ *
+ * @return the count of mobs that were spawned and tracked
+ */
+public int activate(ServerLevel world, TierConfig tier) {
+    if (activated) return 0;
+
+    int spawned = 0;
+    for (BlockPos pos : spawnerPositions) {
+        BlockEntity be = world.getBlockEntity(pos);
+        LivingEntity entity = null;
+        if (be instanceof MobSpawnerBlockEntity mobSpawner) {
+            entity = mobSpawner.spawnSingleScaled(world, tier.healthMultiplier());
+        } else if (be instanceof DungeonBossSpawnerBlockEntity bossSpawner) {
+            entity = bossSpawner.spawnSingleScaled(world, tier.healthMultiplier());
+        } else {
+            ArenasLdMod.LOGGER.warn(
+                "RoomController at {}: linked position {} is not a spawner (got {})",
+                worldPosition, pos, be == null ? "null" : be.getClass().getSimpleName());
+            continue;
+        }
+        if (entity != null) {
+            trackSpawnedMob(entity.getUUID());
+            spawned++;
+        }
+    }
+    markActivated();
+    return spawned;
+}
+
+/**
+ * Despawn any alive mobs this room spawned, clear runtime state, close the door.
+ * Idempotent: safe to call on a not-yet-activated or already-reset room.
+ */
+public void reset(ServerLevel world) {
+    // Despawn alive mobs
+    for (UUID uuid : new ArrayList<>(aliveMobs)) {
+        Entity entity = world.getEntity(uuid);
+        if (entity != null && entity.isAlive()) {
+            entity.discard();
+        }
+    }
+    clearRuntimeState();
+    closeDoor(world);
+}
+
+/**
+ * Open the room's door by setting the phase block's SOLID property to false.
+ * No-op if no door is set, the door position isn't loaded, or the block at that position
+ * isn't a PhaseBlock.
+ */
+public void openDoor(ServerLevel world) {
+    setDoorSolid(world, false);
+}
+
+/**
+ * Close the room's door by setting the phase block's SOLID property to true.
+ * Same no-op conditions as {@link #openDoor(ServerLevel)}.
+ */
+public void closeDoor(ServerLevel world) {
+    setDoorSolid(world, true);
+}
+
+private void setDoorSolid(ServerLevel world, boolean solid) {
+    if (doorPos == null) return;
+    if (!world.isLoaded(doorPos)) return;
+    BlockState state = world.getBlockState(doorPos);
+    if (!(state.getBlock() instanceof PhaseBlock)) {
+        ArenasLdMod.LOGGER.warn(
+            "RoomController at {}: door position {} is not a PhaseBlock (got {})",
+            worldPosition, doorPos, state.getBlock());
+        return;
+    }
+    if (state.getValue(PhaseBlock.SOLID) != solid) {
+        world.setBlock(doorPos, state.setValue(PhaseBlock.SOLID, solid), 3);
+    }
+}
+
+/**
+ * Drop any aliveMobs UUIDs whose entities are dead, removed, in another dimension, or unloaded.
+ * Updates {@link #cleared} to true if this leaves {@code aliveMobs} empty (and the room was activated).
+ *
+ * <p>This is intended to be called once per tick by the controller (Phase E) during a run.
+ * It does NOT open the door — that's the controller's job after observing {@code isCleared()}.
+ */
+public void refreshAliveMobs(ServerLevel world) {
+    Iterator<UUID> it = aliveMobs.iterator();
+    boolean changed = false;
+    while (it.hasNext()) {
+        UUID uuid = it.next();
+        Entity entity = world.getEntity(uuid);
+        if (entity == null || !entity.isAlive() || entity.isRemoved() || entity.level() != world) {
+            it.remove();
+            changed = true;
+        }
+    }
+    if (activated && !cleared && aliveMobs.isEmpty()) {
+        markCleared();
+        return; // setChanged is called by markCleared
+    }
+    if (changed) setChanged();
+}
+```
+
+#### Imports to add
+
+```java
+import net.ledok.arenas_ld.block.PhaseBlock;
+import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
+import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
+import net.ledok.arenas_ld.dungeon.run.TierConfig;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+
+import java.util.Iterator;
+```
+
+#### Acceptance
+
+- All five public methods present with the documented signatures.
+- `activate` returns 0 if already activated (no double-spawn).
+- `activate` accepts mixed legacy spawner types correctly.
+- `activate` logs a warning and skips for any position whose block isn't a known spawner type.
+- `reset` discards all tracked entities and clears runtime state. Idempotent.
+- `openDoor` / `closeDoor` set the PhaseBlock.SOLID property correctly. No-op if no door / not loaded / wrong block type.
+- `refreshAliveMobs` removes dead/missing/cross-dimension UUIDs.
+- `refreshAliveMobs` sets `cleared = true` once `aliveMobs` becomes empty post-activation, but **does not** open the door.
+
+#### Don'ts
+
+- Do not auto-open the door in `refreshAliveMobs`. The controller is the orchestrator.
+- Do not retry failed spawns. Logged, skipped, move on.
+- Do not synchronize. Server thread only.
+- Do not chunk-force at this layer. Chunk loading is a controller-level concern (Phase E) — by the time the controller calls `activate`, chunks should already be loaded. If they're not (`world.getBlockEntity` returns null), we log and skip; we don't load on demand.
+- Do not propagate the open/close state to adjacent phase blocks (chain doors). Single-block doors only in v4.0 core. Multi-block door chains are deferred.
+- Do not return the spawned entities from `activate` — the caller only needs to know "how many." If the controller ever needs the entities themselves, it asks via `getAliveMobs()`.
+
+#### References
+
+- PC-3-old's `spawnSingleScaled` (just landed).
+- `PhaseBlock.SOLID` — `BooleanProperty.create("solid")`.
+- The existing `PhaseBlockEntity.propagateState` (line 91) is the chain-door mechanism. We deliberately don't use it; rooms set the state directly.
+
+---
+
+### PC-4 — Admin GUI
+
+**Goal**: a simple ops-only screen where admins can see the room's spawner list, remove entries, see/clear the door, and trigger a manual `reset()`. **Adding** spawners/door is via Linker (Phase F); the GUI is a viewer + remover.
 
 **Files to create:**
-- `src/main/java/net/ledok/arenas_ld/dungeon/screen/RoomControllerScreen.java` (client)
-- `src/main/java/net/ledok/arenas_ld/dungeon/screen/RoomControllerScreenHandler.java`
-- `src/main/java/net/ledok/arenas_ld/dungeon/screen/RoomControllerData.java` (the ExtendedScreenHandlerFactory data record)
-- `src/main/java/net/ledok/arenas_ld/dungeon/packet/RoomControllerPackets.java` (C2S: RemoveSpawnerPacket, SetDoorPacket, ClearSpawnersPacket)
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/RoomControllerScreen.java` (client-side screen)
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/RoomControllerScreenHandler.java` (server menu)
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/RoomControllerData.java` (the ExtendedScreenHandlerFactory data record sent on open)
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/RoomRemoveSpawnerPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/RoomClearSpawnersPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/RoomClearDoorPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/RoomResetPayload.java`
 
 **Files to modify:**
 - `RoomControllerBlockEntity.java` — implement `ExtendedScreenHandlerFactory<RoomControllerData>`.
-- `RoomControllerBlock.java` — `use(...)` opens the screen for ops only.
+- `RoomControllerBlock.java` — `useWithoutItem` opens the screen for ops.
 - `ModScreenHandlers.java` — register the new screen handler.
-- `ModPackets.java` — register the new C2S packets (we'll split this file in a later phase; for now add here).
+- `ModPackets.java` or `ArenasLdMod.java` (wherever the existing payload registration happens) — register the 4 new C2S payloads.
+- Existing client init class — register the screen factory for the new screen handler type.
 
-**Screen layout:**
-- Title: "Room Controller"
-- A list (scrollable) of `spawnerPositions`, each row: `[x, y, z]  [Remove]`
-- An "Add spawner" hint: "Use the Linker tool" (no inline add via GUI).
-- A field showing `doorPos` (or "no door"), with a "Clear door" button. Setting the door is via Linker.
-- A "Reset Room" button (calls `reset()` — admin-only).
+#### Data shape
 
-**Acceptance:**
-- Op opens the block, sees the GUI.
-- Non-op gets no GUI (use() returns InteractionResult.PASS).
-- Remove button removes the spawner from the list, sync'd to server, persists.
-- Reset Room calls `reset()` on the BE.
+```java
+public record RoomControllerData(
+    BlockPos blockPos,
+    List<BlockPos> spawnerPositions,
+    Optional<BlockPos> doorPos
+) {
+    public static final StreamCodec<RegistryFriendlyByteBuf, RoomControllerData> STREAM_CODEC =
+        StreamCodec.composite(
+            BlockPos.STREAM_CODEC, RoomControllerData::blockPos,
+            BlockPos.STREAM_CODEC.apply(ByteBufCodecs.list()), RoomControllerData::spawnerPositions,
+            ByteBufCodecs.optional(BlockPos.STREAM_CODEC), RoomControllerData::doorPos,
+            RoomControllerData::new
+        );
+}
+```
 
-**Don'ts:**
-- No inline "add spawner" form in the GUI — Linker is the only way to add (Phase F).
-- No mob preview, no spawner config editing here.
-- Do not use shared components from old screens — start fresh in the new package.
+#### Screen layout
+
+Plain text-list screen, similar to the existing `DungeonControllerScreen` style. Width ~250px, height ~200px.
+
+```
++-----------------------------------------------+
+| Room Controller                          [X]  |
++-----------------------------------------------+
+| Spawners (use Linker to add):                 |
+|   • [100, 64, 200]              [Remove]     |
+|   • [102, 64, 201]              [Remove]     |
+|   • [104, 65, 198]              [Remove]     |
+|                                  [Clear All]  |
++-----------------------------------------------+
+| Door: [110, 64, 200]            [Clear Door]  |
+|   (use Linker to set)                         |
++-----------------------------------------------+
+|                              [Reset Room]     |
++-----------------------------------------------+
+```
+
+Buttons:
+- **Remove** (per row): sends `RoomRemoveSpawnerPayload(pos)` and locally removes the row. Server applies `removeSpawner(pos)`.
+- **Clear All**: confirmation dialog → sends `RoomClearSpawnersPayload`.
+- **Clear Door**: sends `RoomClearDoorPayload`. Door is then `null`.
+- **Reset Room**: sends `RoomResetPayload`. Server calls `reset(world)`. Useful for admins testing dungeons mid-design.
+
+No "Add" UI — Linker only.
+
+#### Permissions
+
+`useWithoutItem` in `RoomControllerBlock`:
+
+```java
+@Override
+public InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player, BlockHitResult hit) {
+    if (player.getMainHandItem().getItem() instanceof LinkerItem || player.getOffhandItem().getItem() instanceof LinkerItem) {
+        return InteractionResult.PASS;
+    }
+    if (!world.isClientSide) {
+        if (!player.isCreative() && !player.hasPermissions(2)) {
+            player.sendSystemMessage(Component.literal("You don't have permission to configure this block.")
+                .withStyle(ChatFormatting.RED));
+            return InteractionResult.FAIL;
+        }
+        BlockEntity be = world.getBlockEntity(pos);
+        if (be instanceof RoomControllerBlockEntity room) {
+            player.openMenu(room);
+            return InteractionResult.CONSUME;
+        }
+    }
+    return InteractionResult.SUCCESS;
+}
+```
+
+#### Packet handlers
+
+Each packet has a handler that:
+1. Verifies the sender is a server player.
+2. Verifies the player has op permission level ≥ 2.
+3. Loads the block entity at the packet's `blockPos`.
+4. Verifies it's a `RoomControllerBlockEntity`.
+5. Calls the appropriate method.
+
+The exact handler registration mirrors the existing `DungeonControllerPacketHandlers` pattern — read that file before writing this one.
+
+#### Acceptance
+
+- Op opens the block, sees the GUI listing current spawners and door.
+- Non-op gets a chat message and no GUI.
+- Holding a Linker, right-click passes through (returns PASS) — so the Linker can still interact.
+- Each button sends its payload, server applies the change, BE is `setChanged()`'d.
+- Removing the last spawner shows an empty list (not a crash, not a "no spawners" placeholder).
+- Reset Room actually calls `reset(world)` and despawns mobs if any were active.
+
+#### Don'ts
+
+- Do not allow inline adding from the GUI. Linker is the only path.
+- Do not show mob preview, attribute editing, equipment editing — none of that belongs on the Room; it's on the spawners.
+- Do not auto-refresh the GUI live as the room's state changes. Click "close, reopen" if data goes stale.
+- Do not block GUI open during an active run. We don't have runs yet (Phase E); even after we do, admins should still be able to inspect rooms.
+- Do not put confirmation dialogs on individual Remove buttons. Only on "Clear All" and "Reset Room."
+
+#### References
+
+- `DungeonControllerScreen` and its handler — the existing screen pattern.
+- Existing `DungeonControllerPacketHandlers` — packet registration pattern.
+- `ModScreenHandlers` — screen handler registration.
 
 ---
+
+### PC-5 — Loom run config for gametests
+
+**Goal**: enable `./gradlew runGametest` to launch a server and run our gametests. Without this, PC-6's gametest can't actually run.
+
+**Files to modify:**
+- `build.gradle`
+
+#### Spec
+
+Add a `loom { runs { gametestServer {} } }` block:
+
+```gradle
+loom {
+    runs {
+        gametestServer {
+            server()
+            name "Gametest Server"
+            vmArg "-Dfabric-api.gametest"
+            vmArg "-Dfabric-api.gametest.report-file=${project.buildDir}/gametest-report.xml"
+            runDir "build/gametest"
+        }
+    }
+}
+```
+
+The `runDir` is set to `build/gametest` so the run output goes into the build directory (cleaned by `gradle clean`) rather than persisting in the repo's `run/` dir.
+
+#### Acceptance
+
+- `./gradlew tasks --all | grep -i gametest` now lists `runGametestServer`.
+- `./gradlew runGametestServer` launches without crashing. It will fail with "no gametests registered" since we haven't written any yet — that's fine, PC-6 fixes it.
+- The gametest report file path is configured.
+
+#### Don'ts
+
+- Do not configure a client gametest (no `clientWithServer`, no `gametestClient`). Server-only is enough for us — all our tests are server-side.
+- Do not add gametest VM args to existing run configs (the regular `runServer` shouldn't include gametest behavior).
+- Do not commit the `build/gametest` directory.
+
+#### References
+
+- Fabric Loom docs on gametest run configs (loom version-specific; check the README of `fabric-loom` for 1.21.1).
+
+---
+
+### PC-6 — Smoke gametest
+
+**Goal**: a single gametest that proves the spawn → clear → reset → door cycle works end-to-end with the legacy MobSpawnerBlockEntity. This is our smoke test for every subsequent Phase C/D/E change.
+
+**Files to create:**
+- `src/main/java/net/ledok/arenas_ld/gametest/RoomControllerGametests.java`
+- `src/main/resources/data/arenas_ld/gametest/structure/room_smoke.snbt` (the structure spawned for the test)
+
+**Files to modify:**
+- `src/main/java/net/ledok/arenas_ld/gametest/ArenasLdGametests.java` — register the new gametest class via the gametest entrypoint mechanism. (Look up how fabric-gametest-api-v1 discovers tests; it's typically annotation-driven via `@GameTest` and an entrypoint impl. If your existing stub class needs to implement an interface, do it now.)
+
+#### The structure (`room_smoke.snbt`)
+
+A small platform built with the legacy mob_spawner block and a room_controller block. Easiest path: build this in-game once, save with `/test export room_smoke`, copy the resulting .snbt into the resource path.
+
+Required contents:
+- A 5×5×3 platform of stone.
+- A `room_controller` block at one corner.
+- 2× `mob_spawner` blocks somewhere on the platform.
+- A `phase_block` at the door position.
+
+The gametest harness will spawn this structure into the test world, run assertions, then clean up.
+
+#### The test method
+
+```java
+package net.ledok.arenas_ld.gametest;
+
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
+import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
+import net.ledok.arenas_ld.dungeon.run.TierConfig;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+
+public class RoomControllerGametests {
+
+    @GameTest(template = "arenas_ld:room_smoke")
+    public void roomSpawnsClearResetCycle(GameTestHelper helper) {
+        // Find the room controller in the structure.
+        BlockPos roomPos = helper.absolutePos(/* relative pos within structure */);
+        BlockPos spawner1 = helper.absolutePos(/* ... */);
+        BlockPos spawner2 = helper.absolutePos(/* ... */);
+        BlockPos doorPos = helper.absolutePos(/* ... */);
+
+        ServerLevel level = helper.getLevel();
+        RoomControllerBlockEntity room = (RoomControllerBlockEntity) level.getBlockEntity(roomPos);
+        helper.assertTrue(room != null, "RoomController block entity present");
+
+        // Programmatically set up the room (Linker isn't available in v4.0 core yet).
+        room.addSpawner(spawner1);
+        room.addSpawner(spawner2);
+        room.setDoorPos(doorPos);
+
+        // Configure the legacy spawners to spawn husks.
+        ((MobSpawnerBlockEntity) level.getBlockEntity(spawner1)).mobId = "minecraft:husk";
+        ((MobSpawnerBlockEntity) level.getBlockEntity(spawner2)).mobId = "minecraft:husk";
+
+        // Activate at NORMAL tier.
+        int spawned = room.activate(level, TierConfig.NORMAL_DEFAULT);
+        helper.assertTrue(spawned == 2, "2 mobs spawned (got " + spawned + ")");
+        helper.assertTrue(room.isActivated(), "room is activated");
+        helper.assertTrue(!room.isCleared(), "room is not yet cleared");
+        helper.assertTrue(room.getAliveMobs().size() == 2, "2 mobs tracked");
+
+        // Verify door is closed (SOLID=true).
+        helper.assertBlockProperty(/* relative doorPos */, PhaseBlock.SOLID, true);
+
+        // Kill all spawned mobs.
+        room.getAliveMobs().forEach(uuid -> {
+            var entity = level.getEntity(uuid);
+            if (entity instanceof net.minecraft.world.entity.LivingEntity living) {
+                living.kill();
+            }
+        });
+
+        // Tick refreshAliveMobs to detect deaths.
+        helper.succeedWhen(() -> {
+            room.refreshAliveMobs(level);
+            helper.assertTrue(room.getAliveMobs().isEmpty(), "alive mobs drained");
+            helper.assertTrue(room.isCleared(), "room cleared");
+        });
+
+        // Manually open the door (controller would do this in Phase E).
+        room.openDoor(level);
+        helper.assertBlockProperty(/* relative doorPos */, PhaseBlock.SOLID, false);
+
+        // Reset.
+        room.reset(level);
+        helper.assertTrue(!room.isActivated(), "reset clears activated");
+        helper.assertTrue(!room.isCleared(), "reset clears cleared");
+        helper.assertBlockProperty(/* relative doorPos */, PhaseBlock.SOLID, true);
+    }
+}
+```
+
+The exact relative coordinates depend on how the structure is built; Codex will need to determine them when creating the .snbt.
+
+#### Acceptance
+
+- `./gradlew runGametestServer` runs the test and passes.
+- The test exercises: addSpawner, setDoorPos, activate, refreshAliveMobs (detecting deaths), openDoor, reset.
+- No assertion failures; gametest report shows green.
+
+#### Don'ts
+
+- Do not test PC-4 (the GUI) here. UI testing is out of scope for gametest.
+- Do not test multiple rooms or controllers. Single room, smoke test.
+- Do not write multiple test methods. One end-to-end cycle is enough; if it works, every piece worked.
+- Do not stub or mock anything. Real legacy spawners, real entities, real world.
+- Do not test the boss spawner variant in this task. The boss variant works the same way; one test covers both via the polymorphism in `activate()`. If we hit issues we add a boss-specific test later.
+
+#### References
+
+- Fabric Gametest examples: typically in the `fabric-gametest-api-v1` README.
+- `GameTestHelper` API for assertions and structure-relative positioning.
+
+---
+
+### PC-7 — Lang + creative tab
+
+**Goal**: hook up the new block's display name and add it to the existing creative tab. Trivial cleanup task that closes Phase C.
+
+**Files to modify:**
+- `src/main/resources/assets/arenas_ld/lang/en_us.json` — add `"block.arenas_ld.room_controller": "Room Controller"`.
+- `src/main/resources/assets/arenas_ld/lang/uk_ua.json` — add the Ukrainian translation. If unsure, use `"block.arenas_ld.room_controller": "Контролер кімнати"`.
+- `src/main/java/net/ledok/arenas_ld/registry/ModCreativeModeTabs.java` — add the new block to the existing creative tab.
+
+#### Acceptance
+
+- Block displays the proper name in-game (not `block.arenas_ld.room_controller`).
+- Block appears in the existing Arenas_LD creative tab.
+- Build passes.
+
+#### Don'ts
+
+- Do not create a new creative tab.
+- Do not add tooltips. The block has no tooltip in v4.0 core.
+- Do not add a recipe.
+- Do not localize for other languages — only en + uk to match existing scope.
+
+---
+
+### Phase C exit criteria
+
+After all 7 tasks (PC-1 → PC-7) complete:
+
+- `./gradlew build test runGametestServer` all pass.
+- A RoomController block can be placed in-world, configured via its GUI (remove spawner / clear door / reset), and exercised end-to-end via the gametest.
+- Legacy code is unchanged except for the two additive `spawnSingleScaled` methods (PC-3-old).
+- Total new files: ~13 (block, BE, 3 assets, screen + handler + data, 4 packets, gametest, gametest structure).
+- Total LOC: probably ~800-1000.
+- Phase D can now build the V2 spawners that the room will eventually consume in addition to the legacy ones.
 
 ## Phase D — Slimming the spawners (1 PR)
 
@@ -1140,9 +1847,9 @@ Specs deferred until Phase G closes.
 
 | Phase | Status | PR | Last reviewed SHA |
 |---|---|---|---|
-| A | Not started | — | — |
-| B | Not started | — | — |
-| C | Not started | — | — |
+| A | ✅ Complete (PA-1, PA-1.1, PA-2, PA-3, PA-4) | — | `1b226e2` |
+| B | ✅ Complete (PB-1..PB-8, PB-10; PB-9 skipped as redundant) | — | `4717f45` |
+| C | Specified, ready to start | — | — |
 | D | Not specified | — | — |
 | E | Not specified | — | — |
 | F | Not specified | — | — |
@@ -1150,3 +1857,16 @@ Specs deferred until Phase G closes.
 | H | Not specified | — | — |
 
 We update this table as we go.
+
+### Decisions made during execution
+
+These supersede earlier guidance in the plan if they conflict:
+
+- **PB-9 skipped**: per-task codec round-trip tests are already exhaustive; a consolidated meta-test would be pure duplication. Moved straight from PB-8 to PB-10.
+- **Task granularity**: tasks are executed one at a time, not batched. Each gets a full review against acceptance criteria before the next one starts. This adds chat overhead but catches errors early.
+- **Direct commits to `4.0`**: no per-task PRs; commits go straight to the branch. PR-per-phase was a hypothetical for multi-reviewer projects; for a single-author project, direct commits are fine.
+- **`ParticipantStatus` is package-private**: kept narrow on purpose. Widen to public only when an outside-package consumer in Phase E actually needs to reference it.
+- **`DungeonRun` mutators are package-private**: lifecycle code that drives state transitions must live in the `net.ledok.arenas_ld.dungeon.run` package. This is enforced architecturally, not by convention.
+- **Map serialization uses `UUIDUtil.STRING_CODEC` as the key codec**: `UUIDUtil.CODEC` (int-array form) does not work as a NBT map key. The string form is also more debuggable.
+- **NBT redundancy on participants/downedPlayers maps**: each UUID is stored both as the map key AND inside the value record. ~16 bytes per entry of waste, no behavior impact. Filed for future cleanup; not a current concern.
+- **Damage source filter default**: `dungeon_damage_source_filter` defaults to `ALL` in v4.0 config. Players have high HP; fall/lava/drowning scaling is fair.
