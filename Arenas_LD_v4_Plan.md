@@ -707,17 +707,17 @@ public final class DungeonRun {
 
 **Goal of the phase:** introduce the brand-new `RoomController` block. It does not interact with the v4.0 controller or v4.0 DBS yet — those don't exist. The room's `activate(tier)` and `reset()` work against the world directly, spawning/despawning entities by talking to the **legacy** `MobSpawnerBlockEntity` and `DungeonBossSpawnerBlockEntity`. The new V2 spawners replace these in Phase D.
 
-This phase is bigger than Phase B in lines of code, but the structure is well-defined. It contains: the new block + block entity, runtime methods that drive a room's lifecycle, additive methods on legacy spawners so the new room can use them, the admin GUI, and a smoke gametest proving the whole thing works in-world.
+This phase is bigger than Phase B in lines of code, but the structure is well-defined. It contains: the new block + block entity, runtime methods that drive a room's lifecycle, additive methods on legacy spawners so the new room can use them, the admin GUI, and the creative tab entry.
 
-Tasks in this phase (8 total):
+Tasks in this phase (6 active, 2 skipped):
 - **PC-1** — Register the new block + block entity in the registries, with placeholder texture and basic placement.
 - **PC-2** — Block entity data model (fields, getters, admin operations, NBT via codec).
-- **PC-3** — Block entity runtime methods (`activate`, `reset`, `openDoor`, `refreshAliveMobs`).
 - **PC-3-old** — Additive methods on legacy `MobSpawnerBlockEntity` and `DungeonBossSpawnerBlockEntity` so the room can call them.
-- **PC-4** — Admin GUI (screen + handler + packets).
-- **PC-5** — Loom run config for gametests.
-- **PC-6** — Smoke gametest validating spawn/clear/reset/door cycle.
-- **PC-7** — Item registration + lang strings + creative tab entry.
+- **PC-3** — Block entity runtime methods (`activate`, `reset`, `openDoor`, `refreshAliveMobs`).
+- **PC-4** — Admin GUI (screen + handler + packets). Includes PC-4.1 follow-up for i18n.
+- ~~**PC-5** — Loom run config for gametests.~~ **SKIPPED.**
+- ~~**PC-6** — Smoke gametest validating spawn/clear/reset/door cycle.~~ **SKIPPED.**
+- **PC-7** — Creative tab entry (lang strings already shipped in PC-4.1).
 
 After Phase C, the RoomController exists as a fully usable block in-world: admins can place it, configure its spawner list and door via the Linker (Linker support deferred to Phase F, but the data model and methods are ready). It does not yet *do* anything during a run because the v4.0 controller doesn't exist; Phase E wires it up.
 
@@ -1558,7 +1558,14 @@ The exact handler registration mirrors the existing `DungeonControllerPacketHand
 
 ---
 
-### PC-5 — Loom run config for gametests
+### PC-5 — Loom run config for gametests — **SKIPPED**
+
+> **Status: SKIPPED on review.** This task existed only to support PC-6 (which is also skipped). Without a gametest, there is nothing to run. **Codex must not implement this task.** If revisited later, the original spec below is preserved verbatim for reference.
+>
+> **Rationale**: see the *Decisions made during execution* section at the bottom of the plan, under "PC-5/PC-6 skipped".
+
+<details>
+<summary>Original spec (for reference only — do not implement)</summary>
 
 **Goal**: enable `./gradlew runGametest` to launch a server and run our gametests. Without this, PC-6's gametest can't actually run.
 
@@ -1601,9 +1608,18 @@ The `runDir` is set to `build/gametest` so the run output goes into the build di
 
 - Fabric Loom docs on gametest run configs (loom version-specific; check the README of `fabric-loom` for 1.21.1).
 
+</details>
+
 ---
 
-### PC-6 — Smoke gametest
+### PC-6 — Smoke gametest — **SKIPPED**
+
+> **Status: SKIPPED on review.** A live gametest does not earn its keep against the cost: building the structure in-game, exporting `.snbt`, fighting Loom's gametest runner. The first dungeon run after Phase E exercises every code path this gametest would. **Codex must not implement this task.**
+>
+> **Rationale**: see the *Decisions made during execution* section at the bottom of the plan.
+
+<details>
+<summary>Original spec (for reference only — do not implement)</summary>
 
 **Goal**: a single gametest that proves the spawn → clear → reset → door cycle works end-to-end with the legacy MobSpawnerBlockEntity. This is our smoke test for every subsequent Phase C/D/E change.
 
@@ -1721,21 +1737,23 @@ The exact relative coordinates depend on how the structure is built; Codex will 
 - Fabric Gametest examples: typically in the `fabric-gametest-api-v1` README.
 - `GameTestHelper` API for assertions and structure-relative positioning.
 
+</details>
+
 ---
 
-### PC-7 — Lang + creative tab
+### PC-7 — Creative tab entry
 
-**Goal**: hook up the new block's display name and add it to the existing creative tab. Trivial cleanup task that closes Phase C.
+**Goal**: add the Room Controller block to the existing Arenas_LD creative tab. Closes Phase C.
+
+> **Note**: the `block.arenas_ld.room_controller` lang strings (en_us and uk_ua) were already added in PC-4.1. PC-7 is now smaller than originally planned — only the creative tab entry remains.
 
 **Files to modify:**
-- `src/main/resources/assets/arenas_ld/lang/en_us.json` — add `"block.arenas_ld.room_controller": "Room Controller"`.
-- `src/main/resources/assets/arenas_ld/lang/uk_ua.json` — add the Ukrainian translation. If unsure, use `"block.arenas_ld.room_controller": "Контролер кімнати"`.
-- `src/main/java/net/ledok/arenas_ld/registry/ModCreativeModeTabs.java` — add the new block to the existing creative tab.
+- `src/main/java/net/ledok/arenas_ld/registry/ModCreativeModeTabs.java` — add the new block to the existing creative tab in the same style as the other entries.
 
 #### Acceptance
 
-- Block displays the proper name in-game (not `block.arenas_ld.room_controller`).
-- Block appears in the existing Arenas_LD creative tab.
+- Block appears in the existing Arenas_LD creative tab in survival creative inventory.
+- Block displays its display name "Room Controller" (already wired up via PC-4.1).
 - Build passes.
 
 #### Don'ts
@@ -1749,13 +1767,13 @@ The exact relative coordinates depend on how the structure is built; Codex will 
 
 ### Phase C exit criteria
 
-After all 7 tasks (PC-1 → PC-7) complete:
+After all active tasks (PC-1, PC-2, PC-3-old, PC-3, PC-4, PC-4.1, PC-7) complete:
 
-- `./gradlew build test runGametestServer` all pass.
-- A RoomController block can be placed in-world, configured via its GUI (remove spawner / clear door / reset), and exercised end-to-end via the gametest.
+- `./gradlew build test` passes.
+- A RoomController block can be placed in-world, configured via its GUI (remove spawner / clear door / reset), and appears in the creative tab.
 - Legacy code is unchanged except for the two additive `spawnSingleScaled` methods (PC-3-old).
-- Total new files: ~13 (block, BE, 3 assets, screen + handler + data, 4 packets, gametest, gametest structure).
-- Total LOC: probably ~800-1000.
+- Total new files: ~11 (block, BE, 3 assets, screen + handler + data, 4 packets).
+- Total LOC: probably ~700-800.
 - Phase D can now build the V2 spawners that the room will eventually consume in addition to the legacy ones.
 
 ## Phase D — Slimming the spawners (1 PR)
@@ -1849,7 +1867,7 @@ Specs deferred until Phase G closes.
 |---|---|---|---|
 | A | ✅ Complete (PA-1, PA-1.1, PA-2, PA-3, PA-4) | — | `1b226e2` |
 | B | ✅ Complete (PB-1..PB-8, PB-10; PB-9 skipped as redundant) | — | `4717f45` |
-| C | Specified, ready to start | — | — |
+| C | In progress (PC-1, PC-2, PC-3-old, PC-3, PC-4, PC-4.1, PC-5 done; PC-5/PC-6 skipped; PC-7 next) | — | `05fc5f6` |
 | D | Not specified | — | — |
 | E | Not specified | — | — |
 | F | Not specified | — | — |
@@ -1863,6 +1881,15 @@ We update this table as we go.
 These supersede earlier guidance in the plan if they conflict:
 
 - **PB-9 skipped**: per-task codec round-trip tests are already exhaustive; a consolidated meta-test would be pure duplication. Moved straight from PB-8 to PB-10.
+- **PC-5 / PC-6 skipped (live gametest dropped)**: rationale below. The plan originally called for a Loom run config and a smoke gametest. After Phase B + Phase C tasks 1–4 landed cleanly via the review loop, the value of an automated gametest against the cost of building it (in-game structure construction, .snbt export, Loom runner setup, ongoing maintenance) didn't pencil out. The reasons:
+  - This is a single-developer project where the developer is testing in-game between phases anyway.
+  - The first dungeon run after Phase E exercises every code path the gametest would have.
+  - Unit tests in Phase B are cheap and already cover the algorithmic risks (codecs).
+  - The architectural risk in v4.0 ("did we model the new system right?") is what gametests *don't* answer — that's a design-review question, which we already do via this chat loop.
+  - The mod has shipped 3.3.0 with zero gametests; the existing safety nets are sufficient.
+  - If a regression is hard to catch by eye later (likely once Phase E lifecycle code lands), gametests can be added then at low cost.
+  - **Codex must not implement PC-5 or PC-6.** The original specs remain in the plan inside `<details>` blocks for future reference only.
+  - **PC-5 was technically done before this decision** — Codex added the loom block to build.gradle in commit `05fc5f6`. We're leaving that block in place; it's harmless idle config. If we ever want to do gametests later, the infra is ready.
 - **Task granularity**: tasks are executed one at a time, not batched. Each gets a full review against acceptance criteria before the next one starts. This adds chat overhead but catches errors early.
 - **Direct commits to `4.0`**: no per-task PRs; commits go straight to the branch. PR-per-phase was a hypothetical for multi-reviewer projects; for a single-author project, direct commits are fine.
 - **`ParticipantStatus` is package-private**: kept narrow on purpose. Widen to public only when an outside-package consumer in Phase E actually needs to reference it.
@@ -1870,3 +1897,4 @@ These supersede earlier guidance in the plan if they conflict:
 - **Map serialization uses `UUIDUtil.STRING_CODEC` as the key codec**: `UUIDUtil.CODEC` (int-array form) does not work as a NBT map key. The string form is also more debuggable.
 - **NBT redundancy on participants/downedPlayers maps**: each UUID is stored both as the map key AND inside the value record. ~16 bytes per entry of waste, no behavior impact. Filed for future cleanup; not a current concern.
 - **Damage source filter default**: `dungeon_damage_source_filter` defaults to `ALL` in v4.0 config. Players have high HP; fall/lava/drowning scaling is fair.
+- **PC-4.1 follow-up**: PC-4 shipped with hardcoded user-facing strings. PC-4.1 added the i18n translation keys and the `markDirtyAndSync` calls in the new room handlers. Going forward, every user-facing string in new code uses `Component.translatable(...)` from the start.
