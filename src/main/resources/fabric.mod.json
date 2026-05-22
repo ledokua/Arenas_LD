@@ -18,6 +18,9 @@
     ],
     "main": [
       "net.ledok.arenas_ld.ArenasLdMod"
+    ],
+    "fabric-gametest": [
+      "net.ledok.arenas_ld.gametest.ArenasLdGametests"
     ]
   },
 
