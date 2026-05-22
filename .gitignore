@@ -24,6 +24,8 @@ atlassian-ide-plugin.xml
 
 # Package Files #
 *.jar
+# But do commit BusyLib (local dependency, not on a public Maven repo)
+!libs/*.jar
 *.war
 *.nar
 *.ear
