@@ -17,6 +17,18 @@ fabricApi {
     }
 }
 
+loom {
+    runs {
+        gametestServer {
+            server()
+            name "Gametest Server"
+            vmArg "-Dfabric-api.gametest"
+            vmArg "-Dfabric-api.gametest.report-file=${project.buildDir}/gametest-report.xml"
+            runDir "build/gametest"
+        }
+    }
+}
+
 repositories {
     // Add repositories to retrieve artifacts from in here.
     // You should only use this when depending on other mods because
