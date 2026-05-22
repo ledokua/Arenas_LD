@@ -47,7 +47,7 @@ public class RoomControllerBlock extends BaseEntityBlock {
         }
         if (!world.isClientSide) {
             if (!player.isCreative() && !player.hasPermissions(2)) {
-                player.sendSystemMessage(Component.literal("You don't have permission to configure this block.")
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission")
                     .withStyle(ChatFormatting.RED));
                 return InteractionResult.FAIL;
             }

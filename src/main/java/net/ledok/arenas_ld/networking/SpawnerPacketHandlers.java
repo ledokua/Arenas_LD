@@ -249,13 +249,14 @@ final class SpawnerPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
-                    player.sendSystemMessage(Component.literal("You don't have permission to configure this block."));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
                     return;
                 }
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof RoomControllerBlockEntity room) {
                     room.removeSpawner(payload.spawnerPos());
+                    markDirtyAndSync(world, room);
                 }
             });
         });
@@ -264,13 +265,14 @@ final class SpawnerPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
-                    player.sendSystemMessage(Component.literal("You don't have permission to configure this block."));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
                     return;
                 }
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof RoomControllerBlockEntity room) {
                     room.clearSpawners();
+                    markDirtyAndSync(world, room);
                 }
             });
         });
@@ -279,13 +281,14 @@ final class SpawnerPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
-                    player.sendSystemMessage(Component.literal("You don't have permission to configure this block."));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
                     return;
                 }
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof RoomControllerBlockEntity room) {
                     room.setDoorPos(null);
+                    markDirtyAndSync(world, room);
                 }
             });
         });
@@ -294,13 +297,14 @@ final class SpawnerPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
-                    player.sendSystemMessage(Component.literal("You don't have permission to configure this block."));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
                     return;
                 }
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof RoomControllerBlockEntity room && world instanceof ServerLevel serverLevel) {
                     room.reset(serverLevel);
+                    markDirtyAndSync(world, room);
                 }
             });
         });

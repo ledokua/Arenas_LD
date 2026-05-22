@@ -53,7 +53,7 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
         addRenderableWidget(Button.builder(Component.literal("X"), b -> onClose())
             .bounds(x + WIDTH - 22, y + 6, 16, 14).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Clear All"), b -> {
+        addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.room_controller.button.clear_all"), b -> {
             minecraft.setScreen(new ConfirmScreen(
                 ok -> {
                     minecraft.setScreen(this);
@@ -64,18 +64,18 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
                         rebuildWidgets();
                     }
                 },
-                Component.literal("Clear all spawners?"),
-                Component.literal("This removes every linked spawner from this room.")
+                Component.translatable("gui.arenas_ld.room_controller.confirm.clear_title"),
+                Component.translatable("gui.arenas_ld.room_controller.confirm.clear_message")
             ));
         }).bounds(x + WIDTH - 80, y + 117, 72, 16).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Clear Door"), b -> {
+        addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.room_controller.button.clear_door"), b -> {
             ClientPlayNetworking.send(new RoomClearDoorPayload(menu.getBlockPos()));
             doorPos = Optional.empty();
             rebuildWidgets();
         }).bounds(x + WIDTH - 80, y + 142, 72, 16).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Reset Room"), b -> {
+        addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.room_controller.button.reset"), b -> {
             minecraft.setScreen(new ConfirmScreen(
                 ok -> {
                     minecraft.setScreen(this);
@@ -83,8 +83,8 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
                         ClientPlayNetworking.send(new RoomResetPayload(menu.getBlockPos()));
                     }
                 },
-                Component.literal("Reset room now?"),
-                Component.literal("This despawns tracked mobs, clears runtime state, and closes the door.")
+                Component.translatable("gui.arenas_ld.room_controller.confirm.reset_title"),
+                Component.translatable("gui.arenas_ld.room_controller.confirm.reset_message")
             ));
         }).bounds(x + WIDTH - 80, y + 174, 72, 16).build());
 
@@ -93,7 +93,7 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
             int index = scrollOffset + i;
             net.minecraft.core.BlockPos pos = spawnerPositions.get(index);
             int rowY = y + 32 + i * 16;
-            addRenderableWidget(Button.builder(Component.literal("Remove"), b -> {
+            addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.room_controller.button.remove"), b -> {
                 ClientPlayNetworking.send(new RoomRemoveSpawnerPayload(menu.getBlockPos(), pos));
                 spawnerPositions.remove(pos);
                 rebuildWidgets();
@@ -129,8 +129,8 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
 
         int x = leftPos;
         int y = topPos;
-        guiGraphics.drawString(font, "Room Controller", x + 8, y + 8, 0xFFFFFF, false);
-        guiGraphics.drawString(font, "Spawners (use Linker to add):", x + 8, y + 22, 0xC0C8E0, false);
+        guiGraphics.drawString(font, this.title, x + 8, y + 8, 0xFFFFFF, false);
+        guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.room_controller.spawners_label"), x + 8, y + 22, 0xC0C8E0, false);
 
         int visible = Math.min(MAX_ROWS, Math.max(0, spawnerPositions.size() - scrollOffset));
         for (int i = 0; i < visible; i++) {
@@ -140,12 +140,14 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
         }
 
         if (spawnerPositions.isEmpty()) {
-            guiGraphics.drawString(font, "(empty)", x + 10, y + 35, 0x808AA6, false);
+            guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.room_controller.spawners_empty"), x + 10, y + 35, 0x808AA6, false);
         }
 
-        String doorLabel = doorPos.map(p -> p.getX() + ", " + p.getY() + ", " + p.getZ()).orElse("none");
-        guiGraphics.drawString(font, "Door: " + doorLabel, x + 8, y + 144, 0xC0C8E0, false);
-        guiGraphics.drawString(font, "(use Linker to set)", x + 8, y + 154, 0x808AA6, false);
+        Component doorValue = doorPos
+            .<Component>map(p -> Component.literal(p.getX() + ", " + p.getY() + ", " + p.getZ()))
+            .orElse(Component.translatable("gui.arenas_ld.room_controller.door_none"));
+        guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.room_controller.door_label", doorValue), x + 8, y + 144, 0xC0C8E0, false);
+        guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.room_controller.door_hint"), x + 8, y + 154, 0x808AA6, false);
 
         if (!spawnerPositions.isEmpty()) {
             int totalPages = Math.max(1, (int) Math.ceil(spawnerPositions.size() / (double) MAX_ROWS));

@@ -311,7 +311,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
 
     @Override
     public Component getDisplayName() {
-        return Component.literal("Room Controller");
+        return Component.translatable("block.arenas_ld.room_controller");
     }
 
     @Nullable
