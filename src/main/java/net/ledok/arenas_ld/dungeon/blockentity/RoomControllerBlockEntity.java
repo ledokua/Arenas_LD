@@ -3,12 +3,19 @@ package net.ledok.arenas_ld.dungeon.blockentity;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.block.PhaseBlock;
+import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
+import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
+import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
@@ -21,6 +28,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Iterator;
 
 public class RoomControllerBlockEntity extends BlockEntity {
 
@@ -124,6 +132,122 @@ public class RoomControllerBlockEntity extends BlockEntity {
     void untrackSpawnedMob(UUID uuid) {
         aliveMobs.remove(uuid);
         setChanged();
+    }
+
+    /**
+     * Spawn this room's mobs, applying the tier's health multiplier.
+     *
+     * <p>For each {@code BlockPos} in {@link #spawnerPositions}:
+     * <ul>
+     *   <li>If the block entity at that position is a legacy {@code MobSpawnerBlockEntity},
+     *       call {@code spawnSingleScaled(world, tier.healthMultiplier())} on it.</li>
+     *   <li>If it's a legacy {@code DungeonBossSpawnerBlockEntity}, same call on that type.</li>
+     *   <li>Otherwise, log a warning and skip that position.</li>
+     * </ul>
+     *
+     * <p>Sets {@code activated=true} regardless of how many mobs actually spawned.
+     *
+     * <p>If {@code activated} is already true, this is a no-op and returns 0 (defensive against
+     * double-activation in case of a controller bug).
+     *
+     * @return the count of mobs that were spawned and tracked
+     */
+    public int activate(ServerLevel world, TierConfig tier) {
+        if (activated) return 0;
+
+        int spawned = 0;
+        for (BlockPos pos : spawnerPositions) {
+            BlockEntity be = world.getBlockEntity(pos);
+            LivingEntity entity = null;
+            if (be instanceof MobSpawnerBlockEntity mobSpawner) {
+                entity = mobSpawner.spawnSingleScaled(world, tier.healthMultiplier());
+            } else if (be instanceof DungeonBossSpawnerBlockEntity bossSpawner) {
+                entity = bossSpawner.spawnSingleScaled(world, tier.healthMultiplier());
+            } else {
+                ArenasLdMod.LOGGER.warn(
+                    "RoomController at {}: linked position {} is not a spawner (got {})",
+                    worldPosition, pos, be == null ? "null" : be.getClass().getSimpleName());
+                continue;
+            }
+            if (entity != null) {
+                trackSpawnedMob(entity.getUUID());
+                spawned++;
+            }
+        }
+        markActivated();
+        return spawned;
+    }
+
+    /**
+     * Despawn any alive mobs this room spawned, clear runtime state, close the door.
+     * Idempotent: safe to call on a not-yet-activated or already-reset room.
+     */
+    public void reset(ServerLevel world) {
+        for (UUID uuid : new ArrayList<>(aliveMobs)) {
+            Entity entity = world.getEntity(uuid);
+            if (entity != null && entity.isAlive()) {
+                entity.discard();
+            }
+        }
+        clearRuntimeState();
+        closeDoor(world);
+    }
+
+    /**
+     * Open the room's door by setting the phase block's SOLID property to false.
+     * No-op if no door is set, the door position isn't loaded, or the block at that position
+     * isn't a PhaseBlock.
+     */
+    public void openDoor(ServerLevel world) {
+        setDoorSolid(world, false);
+    }
+
+    /**
+     * Close the room's door by setting the phase block's SOLID property to true.
+     * Same no-op conditions as {@link #openDoor(ServerLevel)}.
+     */
+    public void closeDoor(ServerLevel world) {
+        setDoorSolid(world, true);
+    }
+
+    private void setDoorSolid(ServerLevel world, boolean solid) {
+        if (doorPos == null) return;
+        if (!world.isLoaded(doorPos)) return;
+        BlockState state = world.getBlockState(doorPos);
+        if (!(state.getBlock() instanceof PhaseBlock)) {
+            ArenasLdMod.LOGGER.warn(
+                "RoomController at {}: door position {} is not a PhaseBlock (got {})",
+                worldPosition, doorPos, state.getBlock());
+            return;
+        }
+        if (state.getValue(PhaseBlock.SOLID) != solid) {
+            world.setBlock(doorPos, state.setValue(PhaseBlock.SOLID, solid), 3);
+        }
+    }
+
+    /**
+     * Drop any aliveMobs UUIDs whose entities are dead, removed, in another dimension, or unloaded.
+     * Updates {@link #cleared} to true if this leaves {@code aliveMobs} empty (and the room was activated).
+     *
+     * <p>This is intended to be called once per tick by the controller (Phase E) during a run.
+     * It does NOT open the door — that's the controller's job after observing {@code isCleared()}.
+     */
+    public void refreshAliveMobs(ServerLevel world) {
+        Iterator<UUID> it = aliveMobs.iterator();
+        boolean changed = false;
+        while (it.hasNext()) {
+            UUID uuid = it.next();
+            Entity entity = world.getEntity(uuid);
+            if (entity == null || !entity.isAlive() || entity.isRemoved() || entity.level() != world) {
+                it.remove();
+                changed = true;
+            }
+        }
+        if (activated && !cleared && aliveMobs.isEmpty()) {
+            markCleared();
+            return;
+        }
+        if (changed) setChanged();
     }
 
     // ---- NBT ----
