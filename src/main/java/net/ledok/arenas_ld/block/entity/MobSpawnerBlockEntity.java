@@ -265,6 +265,75 @@ public class MobSpawnerBlockEntity extends BlockEntity implements ExtendedScreen
         }
     }
 
+    /**
+     * Spawn a single mob using this spawner's mobId + attributes + equipment, scaled by
+     * the given health multiplier. Used by the v4.0 {@code RoomControllerBlockEntity}.
+     *
+     * <p>This method does not interact with the legacy wave/loot/trigger system on this spawner.
+     * It is purely a "make me one configured mob at this spawner's location" helper for the
+     * new architecture.
+     *
+     * <p>Spawn position: 1 block above the spawner. No spread, no multi-attempt safe-spawn
+     * scan — the new architecture trusts the admin to place spawners in valid spots.
+     *
+     * @param world             the level (must be the spawner's level)
+     * @param healthMultiplier  multiplier applied to max_health when scaling attributes
+     * @return the spawned entity, or null on failure (invalid mobId, level.addFreshEntity returned false)
+     */
+    @Nullable
+    public LivingEntity spawnSingleScaled(ServerLevel world, double healthMultiplier) {
+        Optional<EntityType<?>> entityTypeOpt = EntityType.byString(this.mobId);
+        if (entityTypeOpt.isEmpty()) {
+            ArenasLdMod.LOGGER.warn("RoomController-driven spawn: invalid mob ID {} at {}", mobId, worldPosition);
+            return null;
+        }
+
+        Entity mob = entityTypeOpt.get().create(world);
+        if (!(mob instanceof LivingEntity living)) {
+            ArenasLdMod.LOGGER.warn("RoomController-driven spawn: not a LivingEntity: {}", mobId);
+            return null;
+        }
+
+        for (AttributeData attr : this.attributes) {
+            ResourceLocation attrLoc = ResourceLocation.tryParse(attr.id());
+            if (attrLoc == null) continue;
+            var attrRegistry = world.registryAccess().registryOrThrow(Registries.ATTRIBUTE);
+            ResourceKey<Attribute> key = ResourceKey.create(Registries.ATTRIBUTE, attrLoc);
+            attrRegistry.getHolder(key).ifPresent(holder -> {
+                AttributeInstance inst = living.getAttribute(holder);
+                if (inst != null) {
+                    double value = attr.value();
+                    if ("minecraft:generic.max_health".equals(attr.id())) {
+                        value *= healthMultiplier;
+                    }
+                    inst.setBaseValue(value);
+                }
+            });
+        }
+
+        applyEquipment(living, EquipmentSlot.HEAD, equipment.head);
+        applyEquipment(living, EquipmentSlot.CHEST, equipment.chest);
+        applyEquipment(living, EquipmentSlot.LEGS, equipment.legs);
+        applyEquipment(living, EquipmentSlot.FEET, equipment.feet);
+        applyEquipment(living, EquipmentSlot.MAINHAND, equipment.mainHand);
+        applyEquipment(living, EquipmentSlot.OFFHAND, equipment.offHand);
+
+        living.heal(living.getMaxHealth());
+
+        living.moveTo(
+            worldPosition.getX() + 0.5,
+            worldPosition.getY() + 1,
+            worldPosition.getZ() + 0.5,
+            world.random.nextFloat() * 360.0F,
+            0.0F
+        );
+
+        if (!world.addFreshEntity(living)) {
+            return null;
+        }
+        return living;
+    }
+
 
     private void startBattle(ServerLevel world, BlockPos spawnCenter) {
         Optional<EntityType<?>> entityTypeOpt = EntityType.byString(mobId);
