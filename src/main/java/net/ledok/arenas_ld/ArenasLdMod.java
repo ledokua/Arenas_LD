@@ -25,7 +25,7 @@ public class ArenasLdMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        LOGGER.info("Yggdrasil LD has been initialized!");
+        LOGGER.info("Arenas_LD has been initialized!");
         ItemRegistry.initialize();
         BlockRegistry.initialize();
         BlockEntitiesRegistry.initialize();
