@@ -173,6 +173,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 entity = bossSpawner.spawnSingleScaled(world, tier.healthMultiplier());
             } else if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity newMobSpawner) {
                 entity = newMobSpawner.spawnSingleScaled(world, tier.healthMultiplier());
+            } else if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity newBossSpawner) {
+                entity = newBossSpawner.spawnSingleScaled(world, tier.healthMultiplier());
             } else {
                 ArenasLdMod.LOGGER.warn(
                     "RoomController at {}: linked position {} is not a spawner (got {})",
