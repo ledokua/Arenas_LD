@@ -1776,22 +1776,817 @@ After all active tasks (PC-1, PC-2, PC-3-old, PC-3, PC-4, PC-4.1, PC-7) complete
 - Total LOC: probably ~700-800.
 - Phase D can now build the V2 spawners that the room will eventually consume in addition to the legacy ones.
 
-## Phase D — Slimming the spawners (1 PR)
+## Phase D — V2 Spawners (1 PR)
 
-Goal of the phase: new `MobSpawnerV2` and `DungeonBossSpawnerV2` blocks in the new package, stripped of legacy responsibilities. The old blocks **stay** — both coexist. Phase H deletes the old ones.
+**Goal of the phase:** introduce the brand-new `MobSpawner` and `DungeonBossSpawner` blocks in `net.ledok.arenas_ld.dungeon` — slim, codec-serialized workers that own only what's intrinsic to "a spawner that produces one entity." The legacy spawners under `net.ledok.arenas_ld.block.entity` **stay in place** through this phase. Phase H deletes them.
 
-(Phases D, E, F, G specs to be written in detail when Phase C is closed. Stubs only below to confirm the shape.)
+### Architectural reminder
 
-### PD-1 through PD-?: To be specified after Phase C completes
+The new spawners differ from the legacy ones in what they *don't* carry. From the legacy `MobSpawnerBlockEntity` we drop:
+- `lootTableId` — loot is controller-owned per tier
+- `triggerRadius`, `battleRadius` — no trigger zone; rooms activate spawners directly
+- `regeneration` — no self-heal; bosses get regen via attribute scaling if needed
+- `skillExperiencePerWin` — moves to controller
+- `mobCount`, `mobSpread` — one spawn per call, period
+- `groupId` — party/team logic lives on the controller
+- `linkedSpawners` — the room owns the linking now
+- All runtime fields: `isBattleActive`, `activeMobUuids`, `playerDamageDealt`, `regenerationTickTimer`, `firstTick`, `activeDungeonContext`, `dungeonCleared`, `triggerScanTick`
 
-Planned tasks:
-- `MobSpawnerV2Block` + `BlockEntity` with entity definition only (type + attributes + equipment), GUI for editing.
-- `DungeonBossSpawnerV2Block` + `BlockEntity` similarly, plus entrance position field and room list field.
-- Codec-based NBT.
-- Admin GUI for each.
-- No tier scaling here — the room applies it via PC-3-old's `spawnSingleMobScaled` pattern.
+Same exercise for the legacy `DungeonBossSpawnerBlockEntity` — drops the lot above plus `dungeonCloseTimer`, `dungeonTime`, `lootTableId`, `perPlayerLootTableId`, `exitPosition*`, `tierConfigs`, `activeTier`, `trackedPlayers`, `dungeonStartTick`, all the run-state fields. What survives on the new DBS: `mobId`, `attributes`, `equipment`, `entrancePos`, `entranceDimension`, and an ordered `rooms: List<BlockPos>` list. That's it.
 
-The shape is fully constrained by Phase C, but writing the specs now risks them being wrong against what Phase C actually produces. They will be specified concretely after Phase C lands and is reviewed.
+### Naming
+
+Calling them `MobSpawnerV2` / `DungeonBossSpawnerV2` would be ugly long-term and the "V2" suffix is a temporary scaffolding signal. Since both old and new versions need to coexist until Phase H, we **distinguish them by package**, not by class name:
+
+| Layer | Legacy | New |
+|---|---|---|
+| Block class | `net.ledok.arenas_ld.block.MobSpawnerBlock` | `net.ledok.arenas_ld.dungeon.block.MobSpawnerBlock` |
+| Block entity | `net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity` | `net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity` |
+| Block id | `arenas_ld:mob_spawner` | `arenas_ld:mob_spawner_v2` |
+| BE id | `arenas_ld:mob_spawner_be` | `arenas_ld:mob_spawner_v2_be` |
+| Block class (boss) | `...block.DungeonBossSpawnerBlock` | `...dungeon.block.DungeonBossSpawnerBlock` |
+| BE (boss) | `...block.entity.DungeonBossSpawnerBlockEntity` | `...dungeon.blockentity.DungeonBossSpawnerBlockEntity` |
+| Block id (boss) | `arenas_ld:dungeon_boss_spawner` | `arenas_ld:dungeon_boss_spawner_v2` |
+| BE id (boss) | `arenas_ld:dungeon_boss_spawner_be` | `arenas_ld:dungeon_boss_spawner_v2_be` |
+
+The class names collide across packages but each file imports the specific one it needs. The `_v2` suffix on registry IDs is the only ugly leftover; Phase H reclaims the un-suffixed names by deleting the legacy blocks.
+
+### Tasks in this phase
+
+7 active tasks, in order:
+
+- **PD-1** — Shared `EntityDefinition` record (mobId + attributes + equipment), codec-serialized. Used by both new spawners.
+- **PD-2** — New `MobSpawnerBlock` + `MobSpawnerBlockEntity` in `dungeon.block` / `dungeon.blockentity`. Data model only.
+- **PD-3** — `spawnSingleScaled(ServerLevel, double)` method on the new `MobSpawnerBlockEntity`, mirroring PC-3-old.
+- **PD-4** — Update the room's `activate(...)` method to also dispatch to the new `MobSpawnerBlockEntity` (in addition to the legacy one). This is the cross-cutting change that makes the room consume both old and new spawners.
+- **PD-5** — New `DungeonBossSpawnerBlock` + `DungeonBossSpawnerBlockEntity` in `dungeon.block` / `dungeon.blockentity`. Data model + `spawnSingleScaled` + room list management.
+- **PD-6** — Admin GUIs for both new spawners. Lighter than PC-4 because there's less to configure.
+- **PD-7** — Lang + creative tab entries.
+
+After Phase D, the world has 4 spawner block types coexisting: legacy MobSpawner, legacy DungeonBossSpawner, new MobSpawner, new DungeonBossSpawner. Rooms work with all four. The new ones are dramatically simpler. Phase E builds the controller against the new types. Phase H deletes the legacy ones.
+
+---
+
+### PD-1 — `EntityDefinition` shared record
+
+**Goal**: a single codec-serialized record describing "what entity to spawn and how to configure it." Used by both new spawner block entities, avoiding duplication.
+
+**Files to create:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/blockentity/EntityDefinition.java`
+
+#### Spec
+
+```java
+package net.ledok.arenas_ld.dungeon.blockentity;
+
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.EquipmentData;
+
+import java.util.List;
+
+/**
+ * Immutable description of an entity that a spawner will produce. Pure data; spawning logic
+ * lives on the spawner block entities.
+ *
+ * @param mobId      the entity type's registry id (e.g. "minecraft:husk"). Spawner falls back
+ *                   to logging a warning and producing null if this is invalid.
+ * @param attributes per-instance attribute overrides. Tier scaling (applied at spawn time) is
+ *                   layered on top of these — see {@code MobSpawnerBlockEntity.spawnSingleScaled}.
+ * @param equipment  per-slot item ids with drop chance. Empty strings = no item in that slot.
+ */
+public record EntityDefinition(
+    String mobId,
+    List<AttributeData> attributes,
+    EquipmentData equipment
+) {
+    public static final EntityDefinition DEFAULT =
+        new EntityDefinition("minecraft:husk", List.of(), new EquipmentData());
+
+    public static final Codec<EntityDefinition> CODEC = RecordCodecBuilder.create(i -> i.group(
+        Codec.STRING.fieldOf("mobId").forGetter(EntityDefinition::mobId),
+        AttributeData.CODEC.listOf().fieldOf("attributes").forGetter(EntityDefinition::attributes),
+        EquipmentData.CODEC.fieldOf("equipment").forGetter(EntityDefinition::equipment)
+    ).apply(i, EntityDefinition::new));
+
+    public EntityDefinition withMobId(String newId) {
+        return new EntityDefinition(newId, attributes, equipment);
+    }
+
+    public EntityDefinition withAttributes(List<AttributeData> newAttrs) {
+        return new EntityDefinition(newId(newAttrs), newAttrs, equipment);
+    }
+
+    public EntityDefinition withEquipment(EquipmentData newEquip) {
+        return new EntityDefinition(mobId, attributes, newEquip);
+    }
+
+    private String newId(List<AttributeData> ignore) { return mobId; }  // helper to silence warnings; remove if not needed
+}
+```
+
+#### Pre-flight check Codex must do
+
+`AttributeData.CODEC` and `EquipmentData.CODEC` exist in the legacy `util` package. Codex must verify these codecs exist before writing PD-1. If they don't:
+
+- If `AttributeData` is a record without a codec: add the codec inline in PD-1 next to the EntityDefinition codec, or add it as a one-line static field to the existing `AttributeData` class.
+- Same for `EquipmentData`.
+
+If both classes are records but lack codecs, write a thin codec for each in this commit so PD-1 compiles. They'll be needed by PD-2 anyway.
+
+If the existing codecs *are* present, use them and skip the inline definition.
+
+#### Acceptance
+
+- Record with 3 fields.
+- Public static `DEFAULT` instance.
+- Public static `Codec<EntityDefinition> CODEC` round-tripping cleanly.
+- `with*` builders return new instances, leave the original unchanged.
+- `EntityDefinition.CODEC` parses NBT produced by `EntityDefinition.CODEC.encodeStart(...)` to an equal instance.
+
+#### Don'ts
+
+- Do not store mob spawn count, spread, group ID, loot table, regeneration, or any of the dropped legacy fields. They have no home in v4.0.
+- Do not make `attributes` or `equipment` mutable. The whole record is value-typed.
+- Do not add a `Builder` class — `with*` methods are enough.
+- Do not validate `mobId` format. Spawner does the validation at spawn time.
+- Do not include a `StreamCodec`. EntityDefinition doesn't travel over the network as a unit — admin GUI changes send individual field updates via existing payloads.
+
+#### Unit test
+
+`src/test/java/net/ledok/arenas_ld/dungeon/blockentity/EntityDefinitionTest.java`:
+
+```java
+package net.ledok.arenas_ld.dungeon.blockentity;
+
+import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.EquipmentData;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+
+class EntityDefinitionTest {
+
+    @Test
+    void defaultHasExpectedValues() {
+        assertEquals("minecraft:husk", EntityDefinition.DEFAULT.mobId());
+        assertEquals(List.of(), EntityDefinition.DEFAULT.attributes());
+    }
+
+    @Test
+    void codecRoundTripsPopulatedInstance() {
+        EntityDefinition original = new EntityDefinition(
+            "minecraft:zombie",
+            List.of(new AttributeData("minecraft:generic.max_health", 50.0)),
+            new EquipmentData()
+        );
+        Tag encoded = EntityDefinition.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow();
+        EntityDefinition decoded = EntityDefinition.CODEC.parse(NbtOps.INSTANCE, encoded).getOrThrow();
+        assertEquals(original, decoded);
+    }
+
+    @Test
+    void withMobIdProducesNewInstance() {
+        EntityDefinition a = EntityDefinition.DEFAULT;
+        EntityDefinition b = a.withMobId("minecraft:skeleton");
+        assertNotSame(a, b);
+        assertEquals("minecraft:husk", a.mobId());
+        assertEquals("minecraft:skeleton", b.mobId());
+    }
+}
+```
+
+#### References
+
+- `net.ledok.arenas_ld.util.AttributeData` and `EquipmentData` — read these to verify their structure before writing the codec composition.
+
+---
+
+### PD-2 — New `MobSpawnerBlockEntity` (data model)
+
+**Goal**: register the new block + block entity, with the `EntityDefinition` field, codec NBT, and op-permission `useWithoutItem` opening a GUI (the GUI itself lands in PD-6). No spawning logic yet — PD-3.
+
+**Files to create:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/block/MobSpawnerBlock.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/blockentity/MobSpawnerBlockEntity.java`
+- `src/main/resources/assets/arenas_ld/blockstates/mob_spawner_v2.json`
+- `src/main/resources/assets/arenas_ld/models/block/mob_spawner_v2.json`
+- `src/main/resources/assets/arenas_ld/models/item/mob_spawner_v2.json`
+- `src/main/resources/assets/arenas_ld/textures/block/mob_spawner_v2.png` — 16×16 placeholder, solid cyan `#00FFFF`
+
+**Files to modify:**
+- `BlockRegistry.java` — register as `mob_spawner_v2`
+- `BlockEntitiesRegistry.java` — register as `mob_spawner_v2_be`
+
+#### Block spec
+
+Mirror `RoomControllerBlock`. `BaseEntityBlock`, `simpleCodec`, `newBlockEntity`, `getRenderShape = MODEL`. The `useWithoutItem` opens the GUI (which exists from PD-6's perspective; in PD-2 stub it to a no-op like PC-1).
+
+For PD-2 alone, the `useWithoutItem` body should be:
+
+```java
+@Override
+protected InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player, BlockHitResult hit) {
+    if (player.getMainHandItem().getItem() instanceof LinkerItem || player.getOffhandItem().getItem() instanceof LinkerItem) {
+        return InteractionResult.PASS;
+    }
+    return InteractionResult.SUCCESS;  // GUI lands in PD-6
+}
+```
+
+Don't add the op check or `openMenu` here yet — PD-6 wires those in.
+
+#### Block entity spec
+
+```java
+package net.ledok.arenas_ld.dungeon.blockentity;
+
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+
+public class MobSpawnerBlockEntity extends BlockEntity {
+
+    private EntityDefinition entityDefinition = EntityDefinition.DEFAULT;
+
+    public MobSpawnerBlockEntity(BlockPos pos, BlockState state) {
+        super(BlockEntitiesRegistry.MOB_SPAWNER_V2_BLOCK_ENTITY, pos, state);
+    }
+
+    public EntityDefinition getEntityDefinition() {
+        return entityDefinition;
+    }
+
+    public void setEntityDefinition(EntityDefinition def) {
+        this.entityDefinition = def;
+        setChanged();
+    }
+
+    // NBT via codec
+    private static final Codec<MobSpawnerBlockEntity.State> STATE_CODEC =
+        RecordCodecBuilder.create(i -> i.group(
+            EntityDefinition.CODEC.fieldOf("entity").forGetter(State::entity)
+        ).apply(i, State::new));
+
+    private record State(EntityDefinition entity) {}
+
+    @Override
+    protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
+        super.saveAdditional(nbt, registries);
+        STATE_CODEC.encodeStart(NbtOps.INSTANCE, new State(entityDefinition))
+            .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
+                "Failed to save MobSpawner at {}: {}", worldPosition, err))
+            .ifPresent(tag -> nbt.put("State", tag));
+    }
+
+    @Override
+    protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
+        super.loadAdditional(nbt, registries);
+        if (nbt.contains("State")) {
+            STATE_CODEC.parse(NbtOps.INSTANCE, nbt.get("State"))
+                .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
+                    "Failed to load MobSpawner at {}: {}", worldPosition, err))
+                .ifPresent(state -> this.entityDefinition = state.entity());
+        }
+    }
+}
+```
+
+#### Acceptance
+
+- Block places, renders as solid cyan.
+- Block entity persists `entityDefinition` across save/load.
+- `setEntityDefinition` calls `setChanged()`.
+- `getEntityDefinition()` returns a non-null value (defaults to `EntityDefinition.DEFAULT`).
+- Build passes.
+
+#### Don'ts
+
+- No GUI yet — PD-6.
+- No spawning method yet — PD-3.
+- No tick method.
+- No `ExtendedScreenHandlerFactory` implementation — PD-6.
+- Do not flatten `entityDefinition` into the BE's top-level NBT (i.e. don't write `mobId` directly into the BE tag). Keep it nested under `State.entity` so the codec is one atomic unit.
+
+#### References
+
+- PC-1 + PC-2 — same shape, different fields.
+
+---
+
+### PD-3 — `spawnSingleScaled` on new MobSpawner
+
+**Goal**: add the spawn method to the new `MobSpawnerBlockEntity`, mirroring PC-3-old's signature.
+
+**Files to modify:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/blockentity/MobSpawnerBlockEntity.java`
+
+#### Method spec
+
+```java
+/**
+ * Spawn one mob using this spawner's EntityDefinition, scaled by the given health multiplier.
+ * Called by the v4.0 RoomController.
+ *
+ * @return the spawned entity, or null on failure
+ */
+@Nullable
+public LivingEntity spawnSingleScaled(ServerLevel world, double healthMultiplier) {
+    // Same body as the legacy MobSpawnerBlockEntity.spawnSingleScaled, except:
+    // - source the mobId, attributes, and equipment from `entityDefinition`
+    // - use the legacy applyEquipment helper or inline equivalent (NO drop chance — same as legacy MobSpawnerBlockEntity)
+    // - log warns referencing "MobSpawner (v4.0)" so admins can tell where it came from
+}
+```
+
+The detailed body is a near-verbatim copy of PC-3-old's `MobSpawnerBlockEntity.spawnSingleScaled` method body, with field accesses changed:
+- `this.mobId` → `this.entityDefinition.mobId()`
+- `this.attributes` → `this.entityDefinition.attributes()`
+- `this.equipment.head` → `this.entityDefinition.equipment().head` (and same for chest/legs/feet/mainHand/offHand)
+
+#### Equipment helper note
+
+The legacy `MobSpawnerBlockEntity` has a private `applyEquipment(LivingEntity, EquipmentSlot, String)` method. We can't call it from the new class (it's private and in a different class). Two options:
+
+- **Option A (use the boss's helper)**: call `EntityEquipmentHelper.applyEquipment(living, slot, itemId, 0.0F)` with drop chance 0 — gives the regular-mob behavior. This is what I'd do.
+- **Option B (inline the implementation)**: copy the 5-line body into a private method on the new BE.
+
+Pick option A. The drop chance of 0 means equipped items won't drop on death, matching legacy behavior.
+
+#### Acceptance
+
+- Method added.
+- Returns null + WARN log on invalid mobId.
+- Returns null + WARN log when entity isn't a `LivingEntity`.
+- Scales `minecraft:generic.max_health` only.
+- Equipment applied via `EntityEquipmentHelper.applyEquipment(..., 0.0F)`.
+- Healed to full.
+- Spawn position: spawner center + 1 Y, random yaw.
+
+#### Don'ts
+
+- Do not introduce per-call overrides (extra attributes, etc.). The signature is `(ServerLevel, double)`.
+- Do not call legacy MobSpawnerBlockEntity methods.
+- Do not add team-assignment.
+- Do not retry spawning on failure.
+
+#### References
+
+- `MobSpawnerBlockEntity.spawnSingleScaled` (legacy) — the template, just with field accesses through `entityDefinition`.
+- `EntityEquipmentHelper.applyEquipment(LivingEntity, EquipmentSlot, String, float)` — the helper to use.
+
+---
+
+### PD-4 — Teach `RoomController` to dispatch to new MobSpawner
+
+**Goal**: extend `RoomControllerBlockEntity.activate(...)` to recognize the new `MobSpawnerBlockEntity` in addition to the legacy one. Without this, rooms can't drive the v4.0 spawners.
+
+**Files to modify:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/blockentity/RoomControllerBlockEntity.java`
+
+#### Spec
+
+In the `activate(ServerLevel world, TierConfig tier)` method's loop, add a third `instanceof` arm:
+
+```java
+for (BlockPos pos : spawnerPositions) {
+    BlockEntity be = world.getBlockEntity(pos);
+    LivingEntity entity = null;
+    if (be instanceof net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity legacyMob) {
+        entity = legacyMob.spawnSingleScaled(world, tier.healthMultiplier());
+    } else if (be instanceof net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity legacyBoss) {
+        entity = legacyBoss.spawnSingleScaled(world, tier.healthMultiplier());
+    } else if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity newMob) {
+        entity = newMob.spawnSingleScaled(world, tier.healthMultiplier());
+    } else {
+        // ... existing warn-and-skip
+    }
+    // ... existing tracking
+}
+```
+
+The new arm goes AFTER the two legacy arms so the order is "legacy first, new second." Order doesn't actually matter for correctness (the classes are mutually exclusive), but legacy-first reads as "support old code, then new."
+
+Imports to add: there will be a name collision because both legacy and new `MobSpawnerBlockEntity` types exist. Codex must use **fully-qualified class names** in this method body (as shown above with `net.ledok.arenas_ld.block.entity...` and `net.ledok.arenas_ld.dungeon.blockentity...`) OR alias one of them via import statement order — but fully-qualified is clearer here. Don't try to import both unqualified.
+
+#### Acceptance
+
+- The `activate` method now has three `instanceof` arms (legacy MobSpawner, legacy DBS, new MobSpawner — DBS new is added in PD-5).
+- Existing behavior unchanged for legacy spawners.
+- The new MobSpawner can be linked to a room and spawned by `activate`.
+
+#### Don'ts
+
+- Do not refactor the if/else chain into a polymorphic dispatch (interface, visitor pattern, etc). The 4-class case is the entire universe; switch-expression-by-instance is fine for 4 cases.
+- Do not extract the spawn-and-track logic into a helper method. The chain is straightforward and changing it now means re-touching this file in PD-5.
+- Do not add the new DBS arm yet — PD-5 does that.
+
+#### References
+
+- PC-3's `activate` method (the current state).
+
+---
+
+### PD-5 — New `DungeonBossSpawnerBlockEntity`
+
+**Goal**: a new DBS in `dungeon.block` + `dungeon.blockentity`, owning `EntityDefinition`, entrance position, and room list. With `spawnSingleScaled`. With `RoomController.activate` extended to recognize it.
+
+**Files to create:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/block/DungeonBossSpawnerBlock.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/blockentity/DungeonBossSpawnerBlockEntity.java`
+- `src/main/resources/assets/arenas_ld/blockstates/dungeon_boss_spawner_v2.json`
+- `src/main/resources/assets/arenas_ld/models/block/dungeon_boss_spawner_v2.json`
+- `src/main/resources/assets/arenas_ld/models/item/dungeon_boss_spawner_v2.json`
+- `src/main/resources/assets/arenas_ld/textures/block/dungeon_boss_spawner_v2.png` — 16×16 placeholder, solid red `#FF0000`
+
+**Files to modify:**
+- `BlockRegistry.java` — register `dungeon_boss_spawner_v2`
+- `BlockEntitiesRegistry.java` — register `dungeon_boss_spawner_v2_be`
+- `RoomControllerBlockEntity.java` — add a 4th `instanceof` arm in `activate`
+
+#### Block spec
+
+Same shape as PD-2's MobSpawnerBlock: `BaseEntityBlock` + `simpleCodec` + `getRenderShape = MODEL` + `useWithoutItem` returning SUCCESS (GUI in PD-6).
+
+#### Block entity spec
+
+Fields:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `entityDefinition` | `EntityDefinition` | boss's mob/attrs/equipment (same shape as MobSpawner) |
+| `entrancePos` | `BlockPos` | where players spawn when this dungeon instance is selected |
+| `entranceDimension` | `ResourceKey<Level>` | dimension for the entrance |
+| `rooms` | `List<BlockPos>` | ordered list of RoomController positions; rooms[last] is the boss room (it'll reference *this* DBS as its spawner) |
+
+```java
+package net.ledok.arenas_ld.dungeon.blockentity;
+
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+
+public class DungeonBossSpawnerBlockEntity extends BlockEntity {
+
+    private EntityDefinition entityDefinition = EntityDefinition.DEFAULT
+        .withMobId("minecraft:zombie");
+    private BlockPos entrancePos = BlockPos.ZERO;
+    private ResourceKey<Level> entranceDimension = Level.OVERWORLD;
+    private final List<BlockPos> rooms = new ArrayList<>();
+
+    public DungeonBossSpawnerBlockEntity(BlockPos pos, BlockState state) {
+        super(BlockEntitiesRegistry.DUNGEON_BOSS_SPAWNER_V2_BLOCK_ENTITY, pos, state);
+    }
+
+    public EntityDefinition getEntityDefinition() { return entityDefinition; }
+    public void setEntityDefinition(EntityDefinition def) {
+        this.entityDefinition = def;
+        setChanged();
+    }
+    public BlockPos getEntrancePos() { return entrancePos; }
+    public ResourceKey<Level> getEntranceDimension() { return entranceDimension; }
+    public void setEntrance(BlockPos pos, ResourceKey<Level> dim) {
+        this.entrancePos = pos;
+        this.entranceDimension = dim;
+        setChanged();
+    }
+    public List<BlockPos> getRooms() { return Collections.unmodifiableList(rooms); }
+
+    public boolean addRoom(BlockPos pos) {
+        if (rooms.contains(pos)) return false;
+        rooms.add(pos);
+        setChanged();
+        return true;
+    }
+
+    public boolean removeRoom(BlockPos pos) {
+        boolean removed = rooms.remove(pos);
+        if (removed) setChanged();
+        return removed;
+    }
+
+    public boolean moveRoom(int from, int to) {
+        if (from < 0 || from >= rooms.size() || to < 0 || to >= rooms.size()) return false;
+        if (from == to) return false;
+        BlockPos moved = rooms.remove(from);
+        rooms.add(to, moved);
+        setChanged();
+        return true;
+    }
+
+    public void clearRooms() {
+        if (!rooms.isEmpty()) {
+            rooms.clear();
+            setChanged();
+        }
+    }
+
+    // --- spawnSingleScaled (mirrors PD-3) ---
+    // Same body as PD-3 but uses entityDefinition.equipment().dropChance for the drop chance
+    // (a boss is special; equipment drop chance comes from the equipment record).
+    //
+    // NOTE: this is the key difference from PD-3. Boss equipment drops with the equipment's
+    // configured chance, regular mobs do not drop equipped items.
+
+    // --- NBT ---
+
+    private record State(
+        EntityDefinition entity,
+        BlockPos entrancePos,
+        ResourceKey<Level> entranceDim,
+        List<BlockPos> rooms
+    ) {
+        static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
+            EntityDefinition.CODEC.fieldOf("entity").forGetter(State::entity),
+            BlockPos.CODEC.fieldOf("entrancePos").forGetter(State::entrancePos),
+            ResourceKey.codec(Registries.DIMENSION).fieldOf("entranceDim").forGetter(State::entranceDim),
+            BlockPos.CODEC.listOf().fieldOf("rooms").forGetter(State::rooms)
+        ).apply(i, State::new));
+    }
+
+    @Override
+    protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
+        super.saveAdditional(nbt, registries);
+        State.CODEC.encodeStart(NbtOps.INSTANCE,
+            new State(entityDefinition, entrancePos, entranceDimension, rooms))
+            .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
+                "Failed to save DungeonBossSpawner at {}: {}", worldPosition, err))
+            .ifPresent(tag -> nbt.put("State", tag));
+    }
+
+    @Override
+    protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
+        super.loadAdditional(nbt, registries);
+        if (nbt.contains("State")) {
+            State.CODEC.parse(NbtOps.INSTANCE, nbt.get("State"))
+                .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
+                    "Failed to load DungeonBossSpawner at {}: {}", worldPosition, err))
+                .ifPresent(state -> {
+                    this.entityDefinition = state.entity();
+                    this.entrancePos = state.entrancePos();
+                    this.entranceDimension = state.entranceDim();
+                    this.rooms.clear();
+                    this.rooms.addAll(state.rooms());
+                });
+        }
+    }
+}
+```
+
+#### Room dispatch update
+
+Add the 4th arm in `RoomControllerBlockEntity.activate`:
+
+```java
+} else if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity newBoss) {
+    entity = newBoss.spawnSingleScaled(world, tier.healthMultiplier());
+}
+```
+
+Place it after the new MobSpawner arm from PD-4. So the order is: legacy mob, legacy boss, new mob, new boss.
+
+#### Acceptance
+
+- Block places, renders solid red, persists across save/load.
+- Block entity round-trips `entityDefinition`, `entrancePos`, `entranceDimension`, `rooms`.
+- `addRoom` deduplicates and returns false on duplicate.
+- `moveRoom(from, to)` reorders correctly. Returns false on invalid indices.
+- `clearRooms` no-ops on empty.
+- `spawnSingleScaled` produces a boss-like entity with equipment-drop-chance applied.
+- `RoomController.activate` correctly dispatches to the new DBS.
+
+#### Don'ts
+
+- Do not add fields beyond the four listed. No `closeTimer`, no `dungeonTime`, no loot — that's the controller's job in Phase E.
+- Do not store backreferences to controllers. The controller knows the DBS (via its instance list); the DBS doesn't know about controllers. Top-down ownership.
+- Do not add a `groupId`. Party logic is the controller's job.
+- Do not add `setRoomsOrdered(List<BlockPos>)` — modify the list via add/remove/move only. Bulk-set will be useful in Phase F for the Linker, can be added then if needed.
+
+#### References
+
+- PD-2 (new MobSpawner) — same shape, more fields.
+- PC-2 (RoomController) — same `add/remove/clear` pattern.
+- PD-3 — `spawnSingleScaled` template (with the equipment dropChance variant).
+
+---
+
+### PD-6 — Admin GUIs for the new spawners
+
+**Goal**: GUIs for both new spawners. They're admin-only screens for editing the `EntityDefinition`. The new DBS GUI also lets admins set the entrance position, view/manage the rooms list.
+
+This is the largest task in Phase D in lines of code. Two screens, two handlers, two data records, and several C2S payloads.
+
+**Files to create (MobSpawner GUI):**
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/MobSpawnerScreen.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/MobSpawnerScreenHandler.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/MobSpawnerData.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/UpdateMobSpawnerEntityDefPayload.java`
+
+**Files to create (DungeonBossSpawner GUI):**
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/DungeonBossSpawnerScreen.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/DungeonBossSpawnerScreenHandler.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/DungeonBossSpawnerData.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/UpdateDbsEntityDefPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/UpdateDbsEntrancePayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/DbsRemoveRoomPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/DbsMoveRoomPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/DbsClearRoomsPayload.java`
+
+**Files to modify:**
+- `MobSpawnerBlockEntity.java` (new) — implement `ExtendedScreenHandlerFactory<MobSpawnerData>`
+- `DungeonBossSpawnerBlockEntity.java` (new) — implement `ExtendedScreenHandlerFactory<DungeonBossSpawnerData>`
+- `MobSpawnerBlock.java` (new) and `DungeonBossSpawnerBlock.java` (new) — fill in `useWithoutItem` with op gate + open menu
+- `ModScreenHandlers.java` — register both new handler types
+- `ArenasLdClient.java` — register both screen factories
+- `ModPacketTypeRegistry.java` — register 6 new C2S payload types
+- `SpawnerPacketHandlers.java` — add 6 new C2S handlers
+- Both lang files — add translation keys
+
+#### MobSpawner screen content
+
+Single column, ~250×220:
+
+```
++----------------------------------+
+| Mob Spawner                  [X] |
++----------------------------------+
+| Mob ID: [text field            ] |
++----------------------------------+
+| [ Edit Attributes... ]           |
+| [ Edit Equipment...  ]           |
++----------------------------------+
+| (status indicator if needed)     |
++----------------------------------+
+```
+
+The mob ID text field is server-synced on change (typical pattern: EditBox.setResponder sends a payload). The "Edit Attributes" and "Edit Equipment" buttons open the **existing** legacy screens (`MobAttributesScreen`, `EquipmentScreen`) — they're generic and tied to `AttributeProvider` / `EquipmentProvider` interfaces.
+
+The new `MobSpawnerBlockEntity` therefore needs to implement those interfaces:
+
+```java
+public class MobSpawnerBlockEntity extends BlockEntity
+        implements AttributeProvider, EquipmentProvider, ExtendedScreenHandlerFactory<MobSpawnerData> {
+    // ...
+    @Override public List<AttributeData> getAttributes() { return entityDefinition.attributes(); }
+    @Override public void setAttributes(List<AttributeData> attrs) {
+        setEntityDefinition(entityDefinition.withAttributes(attrs));
+    }
+    @Override public EquipmentData getEquipment() { return entityDefinition.equipment(); }
+    @Override public void setEquipment(EquipmentData eq) {
+        setEntityDefinition(entityDefinition.withEquipment(eq));
+    }
+}
+```
+
+That's enough to wire into the existing `UpdateAttributesPayload` and `UpdateEquipmentPayload` handlers in `SpawnerPacketHandlers`.
+
+Similar for the new DBS — it implements `AttributeProvider` and `EquipmentProvider` too, sourcing/setting through `entityDefinition`.
+
+#### DBS screen content
+
+Two-column wider screen, ~340×260:
+
+```
++--------------------------------------+
+| Dungeon Boss Spawner             [X] |
++--------------------------------------+
+| Mob ID:    [text field            ]  |
+| [ Attributes ] [ Equipment ]         |
++--------------------------------------+
+| Entrance: [x] [y] [z]  Dim: [overw.] |
+| [ Set to player's position ]         |
++--------------------------------------+
+| Rooms:                          [+]  |
+|  1. [x, y, z]  [↑] [↓] [✗]           |
+|  2. [x, y, z]  [↑] [↓] [✗]           |
+|  3. [x, y, z]  [↑] [↓] [✗]           |
+|                          [Clear All] |
++--------------------------------------+
+```
+
+The "Set to player's position" button captures the player's current location (server-side, on payload receipt) — useful because admins typically place the DBS, walk to the entrance spot, and want one click to set it.
+
+The rooms list shows ordered positions with reorder (`↑` / `↓`), remove (`✗`), and a Clear All button. No inline add — Linker only (Phase F).
+
+#### Acceptance
+
+- Both screens open for ops; non-ops get the permission message.
+- Mob ID edit syncs to server.
+- Attributes/Equipment buttons open the existing generic screens, which save back through the new BE's AttributeProvider/EquipmentProvider impl.
+- DBS entrance fields edit (each typed change sends a payload after a brief debounce, OR an "Apply" button — pick the simpler pattern, debounce is fine if it matches the existing screens).
+- "Set to player's position" button captures the player's pos+dim and writes it server-side.
+- Room reorder/remove/clear-all all work and persist.
+
+#### Don'ts
+
+- Do not write a custom AttributesScreen / EquipmentScreen for the new spawners. Reuse the existing generic ones.
+- Do not store the AttributesScreen / EquipmentScreen entry positions in this BE. The generic screens hold a back-reference via the data payload they were opened with — let them.
+- Do not allow inline room adding from the GUI.
+- Do not validate mob IDs in the GUI. Server-side spawn handles invalid IDs gracefully.
+- Do not auto-refresh either screen as the BE changes. Snapshot-on-open like PC-4.
+- Do not include the BE's `entityDefinition` in the screen's title or display — just the static "Mob Spawner" / "Dungeon Boss Spawner" label.
+
+#### References
+
+- PC-4 — RoomController GUI pattern.
+- Legacy `MobSpawnerScreen` and `DungeonBossSpawnerScreen` — old patterns, especially how they reach into `MobAttributesScreen` / `EquipmentScreen`. The new screens follow the same approach.
+
+---
+
+### PD-7 — Lang + creative tab
+
+**Goal**: add display names for both new blocks and the GUI keys, plus creative tab entries.
+
+**Files to modify:**
+- `src/main/resources/assets/arenas_ld/lang/en_us.json`
+- `src/main/resources/assets/arenas_ld/lang/uk_ua.json`
+- `src/main/java/net/ledok/arenas_ld/registry/ModCreativeModeTabs.java`
+
+#### Translation keys to add
+
+Both files need:
+
+```json
+"block.arenas_ld.mob_spawner_v2": "Mob Spawner (v2)",
+"block.arenas_ld.dungeon_boss_spawner_v2": "Dungeon Boss Spawner (v2)",
+"gui.arenas_ld.mob_spawner_v2.title": "Mob Spawner",
+"gui.arenas_ld.dungeon_boss_spawner_v2.title": "Dungeon Boss Spawner",
+"gui.arenas_ld.spawner_v2.mob_id": "Mob ID:",
+"gui.arenas_ld.spawner_v2.attributes_button": "Attributes...",
+"gui.arenas_ld.spawner_v2.equipment_button": "Equipment...",
+"gui.arenas_ld.dungeon_boss_spawner_v2.entrance": "Entrance:",
+"gui.arenas_ld.dungeon_boss_spawner_v2.entrance_dim": "Dim:",
+"gui.arenas_ld.dungeon_boss_spawner_v2.use_player_pos": "Set to my position",
+"gui.arenas_ld.dungeon_boss_spawner_v2.rooms_label": "Rooms (use Linker to add):",
+"gui.arenas_ld.dungeon_boss_spawner_v2.rooms_empty": "(empty — use Linker to add)",
+"gui.arenas_ld.dungeon_boss_spawner_v2.button.clear_rooms": "Clear All",
+"message.arenas_ld.spawner_v2.no_permission": "You don't have permission to configure this block."
+```
+
+Ukrainian translations follow the same pattern as PC-4.1.
+
+The "(v2)" suffix on the block names is a temporary signal so admins can distinguish them in creative inventory. Phase H removes the legacy versions and we'll drop the suffix then.
+
+#### Creative tab
+
+Add both blocks to `ModCreativeModeTabs.java`, placed near the existing spawner entries. Use the same `entries.accept(...)` pattern.
+
+#### Acceptance
+
+- Both new blocks have proper display names in-game.
+- Both appear in the Arenas_LD creative tab.
+- All listed translation keys exist in both lang files.
+- Build passes.
+
+#### Don'ts
+
+- Do not remove the legacy spawner entries from the creative tab. They stay until Phase H.
+- Do not add "(v1)" or any suffix to the legacy spawner names. They're still the canonical names from a user's perspective today.
+
+---
+
+### Phase D exit criteria
+
+After all 7 tasks:
+
+- `./gradlew build test` passes.
+- 4 spawner block types coexist: legacy MobSpawner, legacy DungeonBossSpawner, new MobSpawner, new DungeonBossSpawner.
+- The room's `activate(...)` correctly dispatches to all 4.
+- Both new spawners have working admin GUIs with the existing Attributes / Equipment screens reused.
+- Both new spawners support full save/load via codec.
+- Both new blocks are in the creative tab and have proper display names.
+- Legacy code is unchanged except for one thing: PC-3-old's two `spawnSingleScaled` methods on the legacy spawners stay; the new spawners have their own copies.
+- Total new files: ~17 (2 blocks, 2 BEs, 1 EntityDefinition, 6 assets, 2 screens + 2 handlers + 2 data, 6 packets).
+- Total LOC: probably ~1200-1500.
+- Phase E can now build the controller against `dungeon.blockentity.DungeonBossSpawnerBlockEntity` (new).
 
 ---
 
@@ -1867,8 +2662,8 @@ Specs deferred until Phase G closes.
 |---|---|---|---|
 | A | ✅ Complete (PA-1, PA-1.1, PA-2, PA-3, PA-4) | — | `1b226e2` |
 | B | ✅ Complete (PB-1..PB-8, PB-10; PB-9 skipped as redundant) | — | `4717f45` |
-| C | In progress (PC-1, PC-2, PC-3-old, PC-3, PC-4, PC-4.1, PC-5 done; PC-5/PC-6 skipped; PC-7 next) | — | `05fc5f6` |
-| D | Not specified | — | — |
+| C | ✅ Complete (PC-1, PC-2, PC-3-old, PC-3, PC-4, PC-4.1, PC-5, PC-7; PC-6 skipped; in-game smoke verified) | — | `e0ba2e5` |
+| D | Specified, ready to start | — | — |
 | E | Not specified | — | — |
 | F | Not specified | — | — |
 | G | Not specified | — | — |
