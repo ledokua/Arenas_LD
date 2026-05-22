@@ -2,6 +2,8 @@ package net.ledok.arenas_ld.screen;
 
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerType;
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.dungeon.screen.RoomControllerData;
+import net.ledok.arenas_ld.dungeon.screen.RoomControllerScreenHandler;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -45,6 +47,10 @@ public class ModScreenHandlers {
     public static final MenuType<RaidControllerScreenHandler> RAID_CONTROLLER_SCREEN_HANDLER =
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_controller"),
                     new ExtendedScreenHandlerType<>(RaidControllerScreenHandler::new, RaidControllerData.STREAM_CODEC));
+
+    public static final MenuType<RoomControllerScreenHandler> ROOM_CONTROLLER_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":room_controller"),
+                    new ExtendedScreenHandlerType<>(RoomControllerScreenHandler::new, RoomControllerData.STREAM_CODEC));
 
     public static void initialize() {
     }

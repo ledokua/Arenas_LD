@@ -1,6 +1,10 @@
 package net.ledok.arenas_ld.networking;
 
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
+import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
+import net.ledok.arenas_ld.dungeon.packet.RoomRemoveSpawnerPayload;
+import net.ledok.arenas_ld.dungeon.packet.RoomResetPayload;
 
 import static net.ledok.arenas_ld.networking.ModPackets.*;
 
@@ -45,6 +49,10 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(UpdateDungeonControllerAdminSettingsPayload.TYPE, UpdateDungeonControllerAdminSettingsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateRaidControllerAdminSettingsPayload.TYPE, UpdateRaidControllerAdminSettingsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobArenaControllerSettingsPayload.TYPE, UpdateMobArenaControllerSettingsPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RoomRemoveSpawnerPayload.TYPE, RoomRemoveSpawnerPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RoomClearSpawnersPayload.TYPE, RoomClearSpawnersPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RoomClearDoorPayload.TYPE, RoomClearDoorPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RoomResetPayload.TYPE, RoomResetPayload.STREAM_CODEC);
     }
 
     static void registerS2CTypes() {

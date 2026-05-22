@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.client;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
+import net.ledok.arenas_ld.dungeon.screen.RoomControllerScreen;
 import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.screen.*;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -42,6 +43,7 @@ public class ArenasLdClient implements ClientModInitializer {
         MenuScreens.register(ModScreenHandlers.MOB_ARENA_CONTROLLER_SCREEN_HANDLER, MobArenaControllerScreen::new);
         MenuScreens.register(ModScreenHandlers.DUNGEON_CONTROLLER_SCREEN_HANDLER, DungeonControllerScreen::new);
         MenuScreens.register(ModScreenHandlers.RAID_CONTROLLER_SCREEN_HANDLER, RaidControllerScreen::new);
+        MenuScreens.register(ModScreenHandlers.ROOM_CONTROLLER_SCREEN_HANDLER, RoomControllerScreen::new);
 
         BlockRenderLayerMap.INSTANCE.putBlock(BlockRegistry.PHASE_BLOCK, RenderType.translucent());
     }

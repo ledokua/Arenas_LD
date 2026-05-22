@@ -6,6 +6,11 @@ import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
+import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
+import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
+import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
+import net.ledok.arenas_ld.dungeon.packet.RoomRemoveSpawnerPayload;
+import net.ledok.arenas_ld.dungeon.packet.RoomResetPayload;
 import net.ledok.arenas_ld.item.LinkerItem;
 import net.ledok.arenas_ld.item.SpawnerConfiguratorItem;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
@@ -19,8 +24,11 @@ import net.ledok.arenas_ld.util.RaidTierConfig;
 import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
 import net.ledok.arenas_ld.util.TierConfig;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -233,6 +241,66 @@ final class SpawnerPacketHandlers {
 
                     SpawnerConfiguratorItem.Mode mode = SpawnerConfiguratorItem.Mode.values()[newMode];
                     context.player().sendSystemMessage(net.minecraft.network.chat.Component.translatable("message.arenas_ld.configurator.mode_changed", mode.getName()));
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(RoomRemoveSpawnerPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.literal("You don't have permission to configure this block."));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof RoomControllerBlockEntity room) {
+                    room.removeSpawner(payload.spawnerPos());
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(RoomClearSpawnersPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.literal("You don't have permission to configure this block."));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof RoomControllerBlockEntity room) {
+                    room.clearSpawners();
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(RoomClearDoorPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.literal("You don't have permission to configure this block."));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof RoomControllerBlockEntity room) {
+                    room.setDoorPos(null);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(RoomResetPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.literal("You don't have permission to configure this block."));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof RoomControllerBlockEntity room && world instanceof ServerLevel serverLevel) {
+                    room.reset(serverLevel);
                 }
             });
         });

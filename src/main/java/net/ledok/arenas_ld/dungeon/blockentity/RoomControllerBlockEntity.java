@@ -2,20 +2,28 @@ package net.ledok.arenas_ld.dungeon.blockentity;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.PhaseBlock;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
+import net.ledok.arenas_ld.dungeon.screen.RoomControllerData;
+import net.ledok.arenas_ld.dungeon.screen.RoomControllerScreenHandler;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
@@ -30,7 +38,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.Iterator;
 
-public class RoomControllerBlockEntity extends BlockEntity {
+public class RoomControllerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<RoomControllerData> {
 
     // ---- Fields ----
 
@@ -299,5 +307,21 @@ public class RoomControllerBlockEntity extends BlockEntity {
                     cleared = state.cleared();
                 });
         }
+    }
+
+    @Override
+    public Component getDisplayName() {
+        return Component.literal("Room Controller");
+    }
+
+    @Nullable
+    @Override
+    public AbstractContainerMenu createMenu(int syncId, Inventory playerInventory, Player player) {
+        return new RoomControllerScreenHandler(syncId, playerInventory, this);
+    }
+
+    @Override
+    public RoomControllerData getScreenOpeningData(ServerPlayer player) {
+        return new RoomControllerData(worldPosition, getSpawnerPositions(), Optional.ofNullable(getDoorPos()));
     }
 }
