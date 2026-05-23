@@ -15,6 +15,7 @@ import net.ledok.arenas_ld.dungeon.packet.SetLobbyVisibilityPayload;
 import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -191,7 +192,11 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             if (shown >= 5) break;
             if (lobby.visibility() != LobbyVisibility.PUBLIC) continue;
             guiGraphics.drawString(font,
-                lobby.ownerName() + " (" + lobby.members().size() + "/" + menu.getMaxPartySize() + ") " + lobby.selectedTier().name(),
+                Component.translatable("gui.arenas_ld.dungeon_controller.lobby_summary",
+                    lobby.ownerName(),
+                    lobby.members().size(),
+                    menu.getMaxPartySize(),
+                    lobby.selectedTier().name()),
                 x + 10,
                 rowY,
                 0xE0E0E0,
@@ -229,12 +234,18 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
             false);
 
         int memberY = y + 78;
+        int memberRow = 0;
+        int maxMembers = menu.getMaxPartySize();
         for (UUID member : lobby.members()) {
+            if (memberRow >= maxMembers) break;
             String name = lobby.memberNames().getOrDefault(member, member.toString().substring(0, 8));
-            String ready = lobby.readyMembers().contains(member) ? "READY" : "PENDING";
-            guiGraphics.drawString(font, "- " + name + " [" + ready + "]", x + 10, memberY, 0xE0E0E0, false);
+            Component statusComponent = lobby.readyMembers().contains(member)
+                ? Component.translatable("gui.arenas_ld.dungeon_controller.status.ready").withStyle(ChatFormatting.GREEN)
+                : Component.translatable("gui.arenas_ld.dungeon_controller.status.pending").withStyle(ChatFormatting.GRAY);
+            Component memberLine = Component.translatable("gui.arenas_ld.dungeon_controller.member_line", name, statusComponent);
+            guiGraphics.drawString(font, memberLine, x + 10, memberY, 0xE0E0E0, false);
             memberY += 12;
-            if (memberY > y + 110) break;
+            memberRow++;
         }
 
         guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dungeon_controller.tier", lobby.selectedTier().name()), x + 8, y + 118, 0xC0C8E0, false);
