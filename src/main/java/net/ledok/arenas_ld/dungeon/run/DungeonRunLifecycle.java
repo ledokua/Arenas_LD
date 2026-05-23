@@ -10,6 +10,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -188,10 +189,36 @@ public final class DungeonRunLifecycle {
     }
 
     static void handleLoss(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, DungeonOutcome reason) {
+        BlockEntity dbsBe = world.getBlockEntity(run.dbsPos());
+        if (dbsBe instanceof DungeonBossSpawnerBlockEntity dbs && !dbs.getRooms().isEmpty() && run.currentRoomIndex() < dbs.getRooms().size()) {
+            BlockPos lastRoomPos = dbs.getRooms().get(dbs.getRooms().size() - 1);
+            BlockEntity bossRoomBe = world.getBlockEntity(lastRoomPos);
+            if (bossRoomBe instanceof RoomControllerBlockEntity bossRoom) {
+                for (UUID bossUuid : new ArrayList<>(bossRoom.getAliveMobs())) {
+                    Entity entity = world.getEntity(bossUuid);
+                    if (entity != null && entity.isAlive()) {
+                        entity.discard();
+                    }
+                }
+            }
+        }
+
+        String messageKey = switch (reason) {
+            case LOSS_TIMEOUT -> "message.arenas_ld.dungeon.loss_timeout";
+            case LOSS_ABANDONED -> "message.arenas_ld.dungeon.loss_abandoned";
+            case LOSS_FORCED -> "message.arenas_ld.dungeon.loss_forced";
+            default -> "message.arenas_ld.dungeon.loss_timeout";
+        };
+        for (UUID uuid : run.participants().keySet()) {
+            ServerPlayer participant = world.getServer().getPlayerList().getPlayer(uuid);
+            if (participant != null) {
+                participant.sendSystemMessage(Component.translatable(messageKey));
+            }
+        }
+
         run.setOutcome(reason);
         run.setPhase(DungeonPhase.CLOSING);
         run.setCloseTimerTicks(controller.getCloseTimerSeconds() * 20);
-        // TODO PE-9: boss despawn.
     }
 
     static void finalize(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
