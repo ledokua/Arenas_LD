@@ -314,19 +314,21 @@ public class DungeonControllerAdminScreen extends AbstractContainerScreen<Dungeo
         guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dungeon_controller_admin.tier.hardcore"), x + 10, y + 142, 0xC0C8E0, false);
 
         guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dungeon_controller_admin.leaderboard"), x + 10, y + 162, 0xC0C8E0, false);
-        List<LeaderboardEntry> top10 = leaderboards.getOrDefault(tier, List.of()).stream()
+        // Display the fastest entries for this tier. Layout caps at 4 rows due to screen height;
+        // the full leaderboard can be retrieved server-side via /data or a future command.
+        List<LeaderboardEntry> topEntries = leaderboards.getOrDefault(tier, List.of()).stream()
             .sorted(Comparator.comparingInt(LeaderboardEntry::timeSeconds))
-            .limit(10)
+            .limit(4)
             .toList();
 
-        if (top10.isEmpty()) {
+        if (topEntries.isEmpty()) {
             guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dungeon_controller_admin.leaderboard.empty"), x + 10, y + 174, 0x808AA6, false);
             return;
         }
 
         int rowY = y + 174;
-        for (int i = 0; i < top10.size() && i < 4; i++) {
-            LeaderboardEntry entry = top10.get(i);
+        for (int i = 0; i < topEntries.size(); i++) {
+            LeaderboardEntry entry = topEntries.get(i);
             guiGraphics.drawString(font,
                 Component.literal((i + 1) + ". " + entry.playerName() + " - " + entry.timeSeconds() + "s"),
                 x + 10,
