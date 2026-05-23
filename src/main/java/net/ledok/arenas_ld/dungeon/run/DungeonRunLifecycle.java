@@ -10,13 +10,16 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -140,6 +143,7 @@ public final class DungeonRunLifecycle {
             }
         }
 
+        detectPlayerDeaths(world, controller, run);
         tickDownedPlayers(world, controller, run);
         updateDungeonTimeBossBar(world, run);
     }
@@ -256,7 +260,16 @@ public final class DungeonRunLifecycle {
     }
 
     private static void tickDownedPlayers(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
-        // TODO PE-10: downed-player ticking and hardcore handling.
+        Map<UUID, DownedPlayer> downedCopy = new HashMap<>(run.downedPlayers());
+        for (Map.Entry<UUID, DownedPlayer> entry : downedCopy.entrySet()) {
+            DownedPlayer ticked = entry.getValue().tick();
+            if (ticked.isReadyToRespawn()) {
+                respawnDownedPlayer(world, controller, run, entry.getKey());
+                run.clearDowned(entry.getKey());
+            } else {
+                run.setDowned(ticked);
+            }
+        }
     }
 
     private static void updateDungeonTimeBossBar(ServerLevel world, DungeonRun run) {
@@ -275,6 +288,65 @@ public final class DungeonRunLifecycle {
         ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
         bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(lootTableId));
         return bundle;
+    }
+
+    private static void detectPlayerDeaths(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+        Map<UUID, RunParticipant> participantsCopy = new HashMap<>(run.participants());
+        for (Map.Entry<UUID, RunParticipant> entry : participantsCopy.entrySet()) {
+            RunParticipant participant = entry.getValue();
+            if (participant.status() != ParticipantStatus.ACTIVE) {
+                continue;
+            }
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
+            if (player == null) {
+                continue;
+            }
+            if (player.isDeadOrDying() || player.getHealth() <= 0.0F) {
+                handlePlayerDown(world, controller, run, player);
+            }
+        }
+    }
+
+    private static void handlePlayerDown(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, ServerPlayer player) {
+        RunParticipant participant = run.participants().get(player.getUUID());
+        if (participant == null) {
+            return;
+        }
+        if (run.hardcoreEnabled()) {
+            run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, world.getGameTime()));
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.hardcore_death").withStyle(ChatFormatting.RED));
+            return;
+        }
+
+        run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
+        run.setDowned(new DownedPlayer(player.getUUID(), 40));
+        player.setGameMode(GameType.SPECTATOR);
+        player.setHealth(1.0F);
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.you_are_downed"));
+    }
+
+    private static void respawnDownedPlayer(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, UUID uuid) {
+        ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+        if (player == null) {
+            return;
+        }
+
+        BlockEntity dbsBe = world.getBlockEntity(run.dbsPos());
+        if (dbsBe instanceof DungeonBossSpawnerBlockEntity dbs) {
+            ServerLevel target = world.getServer().getLevel(dbs.getEntranceDimension());
+            if (target == null) {
+                target = world;
+            }
+            BlockPos entrance = dbs.getEntrancePos();
+            player.setGameMode(GameType.SURVIVAL);
+            player.setHealth(player.getMaxHealth() * 0.5F);
+            player.teleportTo(target, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0F, 0.0F);
+        }
+
+        RunParticipant participant = run.participants().get(uuid);
+        if (participant != null) {
+            run.updateParticipant(participant.withStatus(ParticipantStatus.ACTIVE, world.getGameTime()));
+        }
     }
 
     public static void forceLoadChunksForRun(ServerLevel world, BlockPos dbsPos) {

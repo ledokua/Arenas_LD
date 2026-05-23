@@ -22,6 +22,8 @@
   "message.arenas_ld.dungeon.loss_timeout": "Провал підземелля — час вичерпано.",
   "message.arenas_ld.dungeon.loss_abandoned": "Провал підземелля — не залишилося учасників.",
   "message.arenas_ld.dungeon.loss_forced": "Підземелля завершено адміністратором.",
+  "message.arenas_ld.dungeon.hardcore_death": "Ви загинули в хардкорі. Вас виключено з підземелля.",
+  "message.arenas_ld.dungeon.you_are_downed": "Ви ослаблені. Скоро відродитеся...",
 
   "gui.arenas_ld.mob_id": "ID моба",
   "gui.arenas_ld.loot_table_id": "ID таблиці здобичі",
