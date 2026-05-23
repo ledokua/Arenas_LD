@@ -60,6 +60,10 @@ public class ModScreenHandlers {
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_boss_spawner_v2"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerScreenHandler::new, net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerData.STREAM_CODEC));
 
+    public static final MenuType<net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreenHandler> DUNGEON_CONTROLLER_V2_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller_v2"),
+                    new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreenHandler::new, net.ledok.arenas_ld.dungeon.screen.DungeonControllerData.STREAM_CODEC));
+
     public static void initialize() {
     }
 }

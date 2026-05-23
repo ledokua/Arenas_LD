@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.dungeon.blockentity;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
@@ -10,12 +11,18 @@ import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
+import net.ledok.arenas_ld.dungeon.screen.DungeonControllerData;
+import net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreenHandler;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -30,7 +37,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.Optional;
 
-public class DungeonControllerBlockEntity extends BlockEntity {
+public class DungeonControllerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<DungeonControllerData> {
     private static final int DEFAULT_COOLDOWN_TICKS = 5 * 60 * 20;
     private static final int DEFAULT_CLOSE_TIMER_SECONDS = 30;
     private static final int DEFAULT_MAX_PARTY_SIZE = 4;
@@ -421,6 +428,20 @@ public class DungeonControllerBlockEntity extends BlockEntity {
         return available;
     }
 
+    public boolean joinLobby(ServerPlayer player, UUID lobbyId) {
+        if (findLobbyByMember(player.getUUID()).isPresent()) return false;
+        Optional<Lobby> lobbyOpt = findLobbyById(lobbyId);
+        if (lobbyOpt.isEmpty()) return false;
+        Lobby lobby = lobbyOpt.get();
+        if (lobby.visibility() != LobbyVisibility.PUBLIC) return false;
+        if (lobby.status() == LobbyStatus.IN_RUN || lobby.status() == LobbyStatus.DISBANDED) return false;
+        if (lobby.isFull(maxPartySize)) return false;
+
+        Lobby updated = recomputeLobbyReadiness(lobby.withMemberAdded(player.getUUID(), player.getGameProfile().getName()));
+        replaceLobby(updated);
+        return true;
+    }
+
     private boolean allMembersOnline(ServerPlayer sourcePlayer, Lobby lobby) {
         for (UUID memberUuid : lobby.members()) {
             if (sourcePlayer.serverLevel().getServer().getPlayerList().getPlayer(memberUuid) == null) {
@@ -480,6 +501,41 @@ public class DungeonControllerBlockEntity extends BlockEntity {
         for (PendingInvite invite : toRemove) {
             removeInvite(invite.lobbyId(), invite.invitedUuid());
         }
+    }
+
+    private boolean isLobbyVisibleTo(Lobby lobby, UUID playerUuid) {
+        return switch (lobby.visibility()) {
+            case PUBLIC -> true;
+            // TODO: replace with real friend checks when/if friend system exists.
+            case FRIENDS -> true;
+            case PRIVATE -> lobby.isMember(playerUuid);
+        };
+    }
+
+    @Override
+    public Component getDisplayName() {
+        return Component.translatable("block.arenas_ld.dungeon_controller_v2");
+    }
+
+    @Override
+    public DungeonControllerData getScreenOpeningData(ServerPlayer player) {
+        UUID playerUuid = player.getUUID();
+        List<Lobby> visible = lobbies.stream()
+            .filter(lobby -> lobby.status() != LobbyStatus.DISBANDED)
+            .filter(lobby -> isLobbyVisibleTo(lobby, playerUuid))
+            .toList();
+        Optional<Lobby> own = lobbies.stream()
+            .filter(lobby -> lobby.isMember(playerUuid))
+            .findFirst();
+        List<PendingInvite> myInvites = pendingInvites.stream()
+            .filter(invite -> invite.invitedUuid().equals(playerUuid))
+            .toList();
+        return new DungeonControllerData(worldPosition, visible, own, myInvites, maxPartySize, tierConfigs);
+    }
+
+    @Override
+    public AbstractContainerMenu createMenu(int syncId, Inventory playerInventory, Player player) {
+        return new DungeonControllerScreenHandler(syncId, playerInventory, this);
     }
 
     private record InstanceCooldown(BlockPos pos, int ticks) {

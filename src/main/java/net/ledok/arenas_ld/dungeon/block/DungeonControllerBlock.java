@@ -42,6 +42,13 @@ public class DungeonControllerBlock extends BaseEntityBlock {
         if (player.getMainHandItem().getItem() instanceof LinkerItem || player.getOffhandItem().getItem() instanceof LinkerItem) {
             return InteractionResult.PASS;
         }
+        if (!world.isClientSide) {
+            BlockEntity be = world.getBlockEntity(pos);
+            if (be instanceof DungeonControllerBlockEntity controller) {
+                player.openMenu(controller);
+                return InteractionResult.CONSUME;
+            }
+        }
         return InteractionResult.SUCCESS;
     }
 }
