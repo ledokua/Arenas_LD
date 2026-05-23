@@ -4,10 +4,20 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.ledok.arenas_ld.dungeon.packet.DbsClearRoomsPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsMoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsRemoveRoomPayload;
+import net.ledok.arenas_ld.dungeon.packet.AcceptInvitePayload;
+import net.ledok.arenas_ld.dungeon.packet.CreateLobbyPayload;
+import net.ledok.arenas_ld.dungeon.packet.DeclineInvitePayload;
+import net.ledok.arenas_ld.dungeon.packet.InvitePlayerPayload;
+import net.ledok.arenas_ld.dungeon.packet.KickFromLobbyPayload;
+import net.ledok.arenas_ld.dungeon.packet.LeaveLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomRemoveSpawnerPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomResetPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetLobbyTierPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetLobbyVisibilityPayload;
+import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
+import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntrancePayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
@@ -65,6 +75,16 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(DbsRemoveRoomPayload.TYPE, DbsRemoveRoomPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(DbsMoveRoomPayload.TYPE, DbsMoveRoomPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(DbsClearRoomsPayload.TYPE, DbsClearRoomsPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(CreateLobbyPayload.TYPE, CreateLobbyPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(InvitePlayerPayload.TYPE, InvitePlayerPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(AcceptInvitePayload.TYPE, AcceptInvitePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(DeclineInvitePayload.TYPE, DeclineInvitePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(LeaveLobbyPayload.TYPE, LeaveLobbyPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(KickFromLobbyPayload.TYPE, KickFromLobbyPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(SetLobbyTierPayload.TYPE, SetLobbyTierPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(SetLobbyVisibilityPayload.TYPE, SetLobbyVisibilityPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(ToggleReadyPayload.TYPE, ToggleReadyPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(StartRunPayload.TYPE, StartRunPayload.STREAM_CODEC);
     }
 
     static void registerS2CTypes() {

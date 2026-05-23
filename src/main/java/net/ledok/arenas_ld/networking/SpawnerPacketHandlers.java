@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.networking;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity;
@@ -10,11 +11,21 @@ import net.minecraft.ChatFormatting;
 import net.ledok.arenas_ld.dungeon.packet.DbsClearRoomsPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsMoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsRemoveRoomPayload;
+import net.ledok.arenas_ld.dungeon.packet.AcceptInvitePayload;
+import net.ledok.arenas_ld.dungeon.packet.CreateLobbyPayload;
+import net.ledok.arenas_ld.dungeon.packet.DeclineInvitePayload;
+import net.ledok.arenas_ld.dungeon.packet.InvitePlayerPayload;
+import net.ledok.arenas_ld.dungeon.packet.KickFromLobbyPayload;
+import net.ledok.arenas_ld.dungeon.packet.LeaveLobbyPayload;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomRemoveSpawnerPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomResetPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetLobbyTierPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetLobbyVisibilityPayload;
+import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
+import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntrancePayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
@@ -422,6 +433,127 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
                     spawner.clearRooms();
                     markDirtyAndSync(world, spawner);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(CreateLobbyPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.createLobby(player);
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(InvitePlayerPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.invitePlayer(player, payload.inviteeUuid());
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(AcceptInvitePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.acceptInvite(player, payload.lobbyId());
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(DeclineInvitePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.declineInvite(player, payload.lobbyId());
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(LeaveLobbyPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.leaveLobby(player);
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(KickFromLobbyPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.kickFromLobby(player, payload.targetUuid());
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(SetLobbyTierPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.setLobbyTier(player, payload.tier());
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(SetLobbyVisibilityPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.setLobbyVisibility(player, payload.visibility());
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(ToggleReadyPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.toggleReady(player);
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(StartRunPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.startRun(player).ifPresent(instancePos ->
+                        ArenasLdMod.LOGGER.info("Run would start at instance {}", instancePos));
+                    markDirtyAndSync(world, controller);
                 }
             });
         });
