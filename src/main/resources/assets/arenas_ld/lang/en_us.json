@@ -18,6 +18,10 @@
 
   "message.arenas_ld.raid_start": "%1$s has started a raid against %2$s!",
   "message.arenas_ld.room_controller.no_permission": "You don't have permission to configure this block.",
+  "message.arenas_ld.dungeon.win": "You won the dungeon! Time: %s seconds.",
+  "message.arenas_ld.dungeon.loss_timeout": "Dungeon failed — out of time.",
+  "message.arenas_ld.dungeon.loss_abandoned": "Dungeon failed — no participants remaining.",
+  "message.arenas_ld.dungeon.loss_forced": "Dungeon ended by admin.",
 
   "gui.arenas_ld.mob_id": "Mob ID",
   "gui.arenas_ld.loot_table_id": "Loot Table ID",

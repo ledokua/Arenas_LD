@@ -209,7 +209,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         setChanged();
     }
 
-    void addLeaderboardEntry(DifficultyTier tier, LeaderboardEntry entry) {
+    public void addLeaderboardEntry(DifficultyTier tier, LeaderboardEntry entry) {
         leaderboards.computeIfAbsent(tier, unused -> new ArrayList<>()).add(entry);
         setChanged();
     }

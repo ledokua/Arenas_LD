@@ -3,10 +3,15 @@ package net.ledok.arenas_ld.dungeon.run;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
+import net.ledok.arenas_ld.registry.DataComponentRegistry;
+import net.ledok.arenas_ld.registry.ItemRegistry;
+import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jetbrains.annotations.Nullable;
 
@@ -147,10 +152,39 @@ public final class DungeonRunLifecycle {
     }
 
     static void handleWin(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+        long runDurationTicks = world.getGameTime() - run.startTick();
+        int runDurationSeconds = (int) (runDurationTicks / 20);
+        String lootTableId = run.resolvedTierConfig().perPlayerLootTable();
+
+        for (UUID uuid : run.lootEligibleUuids()) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            if (player == null) {
+                continue;
+            }
+
+            controller.addLeaderboardEntry(
+                run.tier(),
+                new LeaderboardEntry(player.getGameProfile().getName(), runDurationSeconds, System.currentTimeMillis())
+            );
+
+            if (!lootTableId.isEmpty()) {
+                ItemStack bundle = createLootBundle(lootTableId);
+                if (!player.getInventory().add(bundle)) {
+                    player.drop(bundle, false);
+                }
+            }
+        }
+
+        for (UUID uuid : run.participants().keySet()) {
+            ServerPlayer participant = world.getServer().getPlayerList().getPlayer(uuid);
+            if (participant != null) {
+                participant.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.win", runDurationSeconds));
+            }
+        }
+
         run.setOutcome(DungeonOutcome.WIN);
         run.setPhase(DungeonPhase.CLOSING);
         run.setCloseTimerTicks(controller.getCloseTimerSeconds() * 20);
-        // TODO PE-8: loot and leaderboard.
     }
 
     static void handleLoss(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, DungeonOutcome reason) {
@@ -208,6 +242,12 @@ public final class DungeonRunLifecycle {
 
     private static void hideBossBars(DungeonRun run) {
         // TODO PE-6.1: boss bar implementation.
+    }
+
+    private static ItemStack createLootBundle(String lootTableId) {
+        ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
+        bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(lootTableId));
+        return bundle;
     }
 
     public static void forceLoadChunksForRun(ServerLevel world, BlockPos dbsPos) {
