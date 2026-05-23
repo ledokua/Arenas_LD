@@ -22,7 +22,7 @@
   "message.arenas_ld.dungeon.loss_timeout": "Dungeon failed — out of time.",
   "message.arenas_ld.dungeon.loss_abandoned": "Dungeon failed — no participants remaining.",
   "message.arenas_ld.dungeon.loss_forced": "Dungeon ended by admin.",
-  "message.arenas_ld.dungeon.hardcore_death": "You died in hardcore mode. You've been removed from the run.",
+  "message.arenas_ld.dungeon.hardcore_death": "Hardcore mode: you fell. You've been removed from the run.",
   "message.arenas_ld.dungeon.you_are_downed": "You're downed. Respawning shortly...",
 
   "gui.arenas_ld.mob_id": "Mob ID",

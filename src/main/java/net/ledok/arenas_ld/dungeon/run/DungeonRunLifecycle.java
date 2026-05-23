@@ -313,7 +313,25 @@ public final class DungeonRunLifecycle {
             return;
         }
         if (run.hardcoreEnabled()) {
+            PlayerReturnPoint returnPoint = run.returnPoints().get(player.getUUID());
             run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, world.getGameTime()));
+            player.setHealth(player.getMaxHealth());
+            player.setGameMode(GameType.SURVIVAL);
+            if (returnPoint != null) {
+                ServerLevel target = world.getServer().getLevel(returnPoint.dimension());
+                if (target == null) {
+                    target = world;
+                }
+                player.teleportTo(
+                    target,
+                    returnPoint.pos().x(),
+                    returnPoint.pos().y(),
+                    returnPoint.pos().z(),
+                    returnPoint.yaw(),
+                    returnPoint.pitch()
+                );
+            }
+            run.removeReturnPoint(player.getUUID());
             player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.hardcore_death").withStyle(ChatFormatting.RED));
             return;
         }
