@@ -1,11 +1,17 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
+import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
+import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
+import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -21,7 +27,9 @@ public record DungeonControllerAdminData(
     int cooldownTicks,
     int closeTimerSeconds,
     int maxPartySize,
-    int inviteExpiryTicks
+    int inviteExpiryTicks,
+    Map<DifficultyTier, TierConfig> tierConfigs,
+    Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards
 ) {
     public static final StreamCodec<RegistryFriendlyByteBuf, DungeonControllerAdminData> STREAM_CODEC = StreamCodec.of(
         DungeonControllerAdminData::encode,
@@ -56,6 +64,21 @@ public record DungeonControllerAdminData(
         buf.writeVarInt(data.closeTimerSeconds());
         buf.writeVarInt(data.maxPartySize());
         buf.writeVarInt(data.inviteExpiryTicks());
+
+        buf.writeVarInt(data.tierConfigs().size());
+        for (Map.Entry<DifficultyTier, TierConfig> entry : data.tierConfigs().entrySet()) {
+            DifficultyTier.STREAM_CODEC.encode(buf, entry.getKey());
+            buf.writeNbt((CompoundTag) TierConfig.CODEC.encodeStart(NbtOps.INSTANCE, entry.getValue()).getOrThrow());
+        }
+
+        buf.writeVarInt(data.topLeaderboards().size());
+        for (Map.Entry<DifficultyTier, List<LeaderboardEntry>> entry : data.topLeaderboards().entrySet()) {
+            DifficultyTier.STREAM_CODEC.encode(buf, entry.getKey());
+            buf.writeVarInt(entry.getValue().size());
+            for (LeaderboardEntry leaderboardEntry : entry.getValue()) {
+                buf.writeNbt((CompoundTag) LeaderboardEntry.CODEC.encodeStart(NbtOps.INSTANCE, leaderboardEntry).getOrThrow());
+            }
+        }
     }
 
     private static DungeonControllerAdminData decode(RegistryFriendlyByteBuf buf) {
@@ -92,6 +115,31 @@ public record DungeonControllerAdminData(
         int maxPartySize = buf.readVarInt();
         int inviteExpiryTicks = buf.readVarInt();
 
+        int tierConfigSize = buf.readVarInt();
+        Map<DifficultyTier, TierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
+        for (int i = 0; i < tierConfigSize; i++) {
+            DifficultyTier tier = DifficultyTier.STREAM_CODEC.decode(buf);
+            CompoundTag tag = buf.readNbt();
+            if (tag != null) {
+                tierConfigs.put(tier, TierConfig.CODEC.parse(NbtOps.INSTANCE, tag).getOrThrow());
+            }
+        }
+
+        int leaderboardMapSize = buf.readVarInt();
+        Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards = new EnumMap<>(DifficultyTier.class);
+        for (int i = 0; i < leaderboardMapSize; i++) {
+            DifficultyTier tier = DifficultyTier.STREAM_CODEC.decode(buf);
+            int entrySize = buf.readVarInt();
+            List<LeaderboardEntry> entries = new ArrayList<>(entrySize);
+            for (int j = 0; j < entrySize; j++) {
+                CompoundTag tag = buf.readNbt();
+                if (tag != null) {
+                    entries.add(LeaderboardEntry.CODEC.parse(NbtOps.INSTANCE, tag).getOrThrow());
+                }
+            }
+            topLeaderboards.put(tier, entries);
+        }
+
         return new DungeonControllerAdminData(
             blockPos,
             instances,
@@ -101,7 +149,9 @@ public record DungeonControllerAdminData(
             cooldownTicks,
             closeTimerSeconds,
             maxPartySize,
-            inviteExpiryTicks
+            inviteExpiryTicks,
+            tierConfigs,
+            topLeaderboards
         );
     }
 }

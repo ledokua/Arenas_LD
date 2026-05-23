@@ -1,6 +1,9 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
+import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
+import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
+import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.screen.ModScreenHandlers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Inventory;
@@ -22,6 +25,8 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     private final int closeTimerSeconds;
     private final int maxPartySize;
     private final int inviteExpiryTicks;
+    private final Map<DifficultyTier, TierConfig> tierConfigs;
+    private final Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerAdminData data) {
         super(ModScreenHandlers.DUNGEON_CONTROLLER_V2_ADMIN_SCREEN_HANDLER, syncId);
@@ -34,6 +39,8 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.closeTimerSeconds = data.closeTimerSeconds();
         this.maxPartySize = data.maxPartySize();
         this.inviteExpiryTicks = data.inviteExpiryTicks();
+        this.tierConfigs = Map.copyOf(data.tierConfigs());
+        this.topLeaderboards = Map.copyOf(data.topLeaderboards());
     }
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerBlockEntity controller) {
@@ -46,7 +53,9 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
             controller.getCooldownTicks(),
             controller.getCloseTimerSeconds(),
             controller.getMaxPartySize(),
-            controller.getInviteExpiryTicks()
+            controller.getInviteExpiryTicks(),
+            controller.getTierConfigs(),
+            Map.of()
         ));
     }
 
@@ -59,6 +68,8 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     public int getCloseTimerSeconds() { return closeTimerSeconds; }
     public int getMaxPartySize() { return maxPartySize; }
     public int getInviteExpiryTicks() { return inviteExpiryTicks; }
+    public Map<DifficultyTier, TierConfig> getTierConfigs() { return tierConfigs; }
+    public Map<DifficultyTier, List<LeaderboardEntry>> getTopLeaderboards() { return topLeaderboards; }
 
     @Override
     public ItemStack quickMoveStack(Player player, int index) {

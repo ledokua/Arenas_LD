@@ -33,6 +33,7 @@ import net.ledok.arenas_ld.dungeon.packet.SetCloseTimerSecondsPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetCooldownTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetInviteExpiryTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
+import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
 import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntrancePayload;
@@ -738,6 +739,21 @@ final class SpawnerPacketHandlers {
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
                             .withStyle(ChatFormatting.YELLOW));
                     }
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(SetTierConfigPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.controllerPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.setTierConfig(payload.tier(), payload.config());
                     markDirtyAndSync(world, controller);
                 }
             });
