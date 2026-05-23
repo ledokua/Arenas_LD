@@ -11,6 +11,7 @@ import net.minecraft.ChatFormatting;
 import net.ledok.arenas_ld.dungeon.packet.DbsClearRoomsPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsMoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsRemoveRoomPayload;
+import net.ledok.arenas_ld.dungeon.packet.AddDungeonInstancePayload;
 import net.ledok.arenas_ld.dungeon.packet.AcceptInvitePayload;
 import net.ledok.arenas_ld.dungeon.packet.CreateLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.DeclineInvitePayload;
@@ -18,6 +19,8 @@ import net.ledok.arenas_ld.dungeon.packet.InvitePlayerPayload;
 import net.ledok.arenas_ld.dungeon.packet.JoinLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.KickFromLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.LeaveLobbyPayload;
+import net.ledok.arenas_ld.dungeon.packet.MoveDungeonInstancePayload;
+import net.ledok.arenas_ld.dungeon.packet.RemoveDungeonInstancePayload;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
@@ -26,6 +29,10 @@ import net.ledok.arenas_ld.dungeon.packet.RoomResetPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetLobbyTierPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetLobbyHardcorePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetLobbyVisibilityPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetCloseTimerSecondsPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetCooldownTicksPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetInviteExpiryTicksPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntrancePayload;
@@ -606,6 +613,115 @@ final class SpawnerPacketHandlers {
                             ArenasLdMod.LOGGER.warn("startRun failed for lobby {}", lobby.lobbyId());
                         }
                     });
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(AddDungeonInstancePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.controllerPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.addInstance(payload.instancePos());
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(RemoveDungeonInstancePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.controllerPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    boolean removed = controller.removeInstance(payload.instancePos());
+                    if (removed && controller.getPendingInstanceRemovals().contains(payload.instancePos())) {
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.pending_removal")
+                            .withStyle(ChatFormatting.YELLOW));
+                    }
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(MoveDungeonInstancePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.controllerPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.moveInstance(payload.fromIndex(), payload.toIndex());
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(SetCooldownTicksPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.controllerPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.setCooldownTicks(payload.ticks());
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(SetCloseTimerSecondsPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.controllerPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.setCloseTimerSeconds(payload.seconds());
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(SetMaxPartySizePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.controllerPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.setMaxPartySize(payload.size());
+                    markDirtyAndSync(world, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(SetInviteExpiryTicksPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.controllerPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.setInviteExpiryTicks(payload.ticks());
                     markDirtyAndSync(world, controller);
                 }
             });

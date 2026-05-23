@@ -9,6 +9,7 @@ import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.config.ArenasLdConfig;
+import net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminMenuProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.ChatFormatting;
@@ -70,6 +71,22 @@ public class CommandRegistry {
                                     return 0;
                                 })))
                 .then(literal("dungeon")
+                        .then(literal("admin")
+                                .requires(source -> source.hasPermission(2))
+                                .executes(context -> {
+                                    ServerPlayer player = context.getSource().getPlayerOrException();
+                                    HitResult hitResult = player.pick(10.0D, 0.0F, false);
+                                    if (hitResult.getType() != HitResult.Type.BLOCK || !(hitResult instanceof BlockHitResult hit)) {
+                                        context.getSource().sendFailure(Component.translatable("gui.arenas_ld.dungeon_controller_admin.command.failure.not_looking"));
+                                        return 0;
+                                    }
+                                    if (!(player.level().getBlockEntity(hit.getBlockPos()) instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller)) {
+                                        context.getSource().sendFailure(Component.translatable("gui.arenas_ld.dungeon_controller_admin.command.failure.wrong_block"));
+                                        return 0;
+                                    }
+                                    player.openMenu(new DungeonControllerAdminMenuProvider(controller));
+                                    return 1;
+                                }))
                         .then(literal("register")
                                 .requires(source -> source.hasPermission(2))
                                 .then(argument("name", StringArgumentType.word())
