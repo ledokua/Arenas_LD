@@ -9,6 +9,8 @@ import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
+import net.ledok.arenas_ld.dungeon.run.DungeonRun;
+import net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.dungeon.screen.DungeonControllerData;
@@ -19,10 +21,12 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -33,6 +37,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Optional;
@@ -54,6 +59,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private final Map<DifficultyTier, List<LeaderboardEntry>> leaderboards = new EnumMap<>(DifficultyTier.class);
     private final List<Lobby> lobbies = new ArrayList<>();
     private final List<PendingInvite> pendingInvites = new ArrayList<>();
+    private final Map<BlockPos, DungeonRun> activeRuns = new HashMap<>();
 
     public DungeonControllerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.DUNGEON_CONTROLLER_V2_BLOCK_ENTITY, pos, state);
@@ -117,6 +123,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         return Collections.unmodifiableList(pendingInvites);
     }
 
+    public Map<BlockPos, DungeonRun> getActiveRuns() {
+        return Collections.unmodifiableMap(activeRuns);
+    }
+
     public void setTierConfig(DifficultyTier tier, TierConfig config) {
         tierConfigs.put(tier, config);
         setChanged();
@@ -174,12 +184,11 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         return true;
     }
 
-    // Active run tracking arrives in PE-6.
     private boolean isInstanceInActiveRun(BlockPos pos) {
-        return false;
+        return activeRuns.containsKey(pos);
     }
 
-    void startInstanceCooldown(BlockPos pos) {
+    public void startInstanceCooldown(BlockPos pos) {
         instanceCooldownTimers.put(pos, cooldownTicks);
         setChanged();
     }
@@ -210,7 +219,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         setChanged();
     }
 
-    void executePendingRemoval(BlockPos pos) {
+    public void executePendingRemoval(BlockPos pos) {
         pendingInstanceRemovals.remove(pos);
         instances.remove(pos);
         setChanged();
@@ -538,11 +547,56 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         return new DungeonControllerScreenHandler(syncId, playerInventory, this);
     }
 
+    void startRun(DungeonRun run) {
+        activeRuns.put(run.dbsPos(), run);
+        setChanged();
+    }
+
+    public void removeRun(BlockPos dbsPos) {
+        activeRuns.remove(dbsPos);
+        setChanged();
+    }
+
+    public static void tick(Level world, BlockPos pos, BlockState state, DungeonControllerBlockEntity be) {
+        if (world.isClientSide || !(world instanceof ServerLevel serverLevel)) {
+            return;
+        }
+
+        Iterator<Map.Entry<BlockPos, Integer>> cdIter = be.instanceCooldownTimers.entrySet().iterator();
+        while (cdIter.hasNext()) {
+            Map.Entry<BlockPos, Integer> entry = cdIter.next();
+            int remaining = entry.getValue() - 1;
+            if (remaining <= 0) {
+                cdIter.remove();
+                be.setChanged();
+            } else {
+                entry.setValue(remaining);
+                be.setChanged();
+            }
+        }
+
+        long currentTick = serverLevel.getGameTime();
+        if (be.pendingInvites.removeIf(invite -> invite.expiresAtTick() <= currentTick)) {
+            be.setChanged();
+        }
+
+        for (DungeonRun run : new ArrayList<>(be.activeRuns.values())) {
+            DungeonRunLifecycle.tick(serverLevel, be, run);
+        }
+    }
+
     private record InstanceCooldown(BlockPos pos, int ticks) {
         static final Codec<InstanceCooldown> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.fieldOf("pos").forGetter(InstanceCooldown::pos),
             Codec.INT.fieldOf("ticks").forGetter(InstanceCooldown::ticks)
         ).apply(i, InstanceCooldown::new));
+    }
+
+    private record InstanceRunEntry(BlockPos pos, DungeonRun run) {
+        static final Codec<InstanceRunEntry> CODEC = RecordCodecBuilder.create(i -> i.group(
+            BlockPos.CODEC.fieldOf("pos").forGetter(InstanceRunEntry::pos),
+            DungeonRun.CODEC.fieldOf("run").forGetter(InstanceRunEntry::run)
+        ).apply(i, InstanceRunEntry::new));
     }
 
     private record State(
@@ -553,6 +607,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         int maxPartySize,
         int inviteExpiryTicks,
         List<InstanceCooldown> instanceCooldowns,
+        List<InstanceRunEntry> activeRuns,
         List<BlockPos> pendingInstanceRemovals,
         Map<DifficultyTier, List<LeaderboardEntry>> leaderboards,
         List<Lobby> lobbies,
@@ -566,6 +621,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             Codec.INT.fieldOf("maxPartySize").forGetter(State::maxPartySize),
             Codec.INT.fieldOf("inviteExpiryTicks").forGetter(State::inviteExpiryTicks),
             InstanceCooldown.CODEC.listOf().fieldOf("instanceCooldowns").forGetter(State::instanceCooldowns),
+            InstanceRunEntry.CODEC.listOf().fieldOf("activeRuns").forGetter(State::activeRuns),
             BlockPos.CODEC.listOf().fieldOf("pendingInstanceRemovals").forGetter(State::pendingInstanceRemovals),
             Codec.unboundedMap(DifficultyTier.CODEC, LeaderboardEntry.CODEC.listOf()).fieldOf("leaderboards").forGetter(State::leaderboards),
             Lobby.CODEC.listOf().fieldOf("lobbies").forGetter(State::lobbies),
@@ -579,6 +635,9 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         List<InstanceCooldown> cooldowns = instanceCooldownTimers.entrySet().stream()
             .map(e -> new InstanceCooldown(e.getKey(), e.getValue()))
             .toList();
+        List<InstanceRunEntry> runs = activeRuns.entrySet().stream()
+            .map(e -> new InstanceRunEntry(e.getKey(), e.getValue()))
+            .toList();
         State state = new State(
             instances,
             tierConfigs,
@@ -587,6 +646,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             maxPartySize,
             inviteExpiryTicks,
             cooldowns,
+            runs,
             new ArrayList<>(pendingInstanceRemovals),
             leaderboards,
             lobbies,
@@ -615,6 +675,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                     instanceCooldownTimers.clear();
                     for (InstanceCooldown c : state.instanceCooldowns()) {
                         instanceCooldownTimers.put(c.pos(), c.ticks());
+                    }
+                    activeRuns.clear();
+                    for (InstanceRunEntry runEntry : state.activeRuns()) {
+                        activeRuns.put(runEntry.pos(), runEntry.run());
                     }
                     pendingInstanceRemovals.clear();
                     pendingInstanceRemovals.addAll(state.pendingInstanceRemovals());

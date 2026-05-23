@@ -3,11 +3,14 @@ package net.ledok.arenas_ld.dungeon.block;
 import com.mojang.serialization.MapCodec;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.item.LinkerItem;
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -35,6 +38,15 @@ public class DungeonControllerBlock extends BaseEntityBlock {
     @Override
     public RenderShape getRenderShape(BlockState state) {
         return RenderShape.MODEL;
+    }
+
+    @Nullable
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
+        if (level.isClientSide) {
+            return null;
+        }
+        return createTickerHelper(type, BlockEntitiesRegistry.DUNGEON_CONTROLLER_V2_BLOCK_ENTITY, DungeonControllerBlockEntity::tick);
     }
 
     @Override
