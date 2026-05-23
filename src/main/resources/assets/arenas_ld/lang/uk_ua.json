@@ -9,6 +9,8 @@
   "block.arenas_ld.respawn_point": "Точка відродження",
   "block.arenas_ld.phase_block": "Фазовий блок",
   "block.arenas_ld.room_controller": "Контролер кімнати",
+  "block.arenas_ld.mob_spawner_v2": "Спавнер мобів (v2)",
+  "block.arenas_ld.dungeon_boss_spawner_v2": "Спавнер боса підземелля (v2)",
   "item.arenas_ld.linker": "Зв'язувач",
   "item.arenas_ld.loot_bundle": "Набір здобичі",
   "item.arenas_ld.spawner_configurator": "Конфігуратор спавнера",
