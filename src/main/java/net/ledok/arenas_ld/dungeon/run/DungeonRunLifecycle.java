@@ -4,13 +4,17 @@ import net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public final class DungeonRunLifecycle {
@@ -26,6 +30,58 @@ public final class DungeonRunLifecycle {
                 // Should be removed from controller already.
             }
         }
+    }
+
+    @Nullable
+    public static DungeonRun startRun(
+        ServerLevel world,
+        DungeonControllerBlockEntity controller,
+        BlockPos dbsPos,
+        List<UUID> partyUuids,
+        DifficultyTier tier,
+        boolean hardcore
+    ) {
+        if (controller.getActiveRuns().containsKey(dbsPos)) return null;
+        if (controller.getInstanceCooldownTimers().containsKey(dbsPos)) return null;
+
+        BlockEntity dbsBe = world.getBlockEntity(dbsPos);
+        if (!(dbsBe instanceof DungeonBossSpawnerBlockEntity dbs)) return null;
+
+        forceLoadChunksForRun(world, dbsPos);
+
+        TierConfig tierConfig = controller.getTierConfigs().getOrDefault(tier, TierConfig.defaultFor(tier));
+        DungeonRun run = new DungeonRun(tier, tierConfig, hardcore, dbsPos, world.dimension(), world.getGameTime());
+
+        ServerLevel targetLevel = world.getServer().getLevel(dbs.getEntranceDimension());
+        if (targetLevel == null) {
+            targetLevel = world;
+        }
+
+        for (UUID uuid : partyUuids) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            if (player == null) continue;
+
+            run.addParticipant(new RunParticipant(
+                uuid,
+                player.getGameProfile().getName(),
+                ParticipantStatus.ACTIVE,
+                world.getGameTime()
+            ));
+            run.setReturnPoint(uuid, PlayerReturnPoint.capture(player));
+
+            BlockPos entrance = dbs.getEntrancePos();
+            player.teleportTo(targetLevel, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0f, 0.0f);
+        }
+
+        for (BlockPos roomPos : dbs.getRooms()) {
+            BlockEntity roomBe = world.getBlockEntity(roomPos);
+            if (roomBe instanceof RoomControllerBlockEntity roomController) {
+                roomController.reset(world);
+            }
+        }
+
+        controller.startRun(dbsPos, run);
+        return run;
     }
 
     private static void tickStarting(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
@@ -135,6 +191,7 @@ public final class DungeonRunLifecycle {
                 }
             }
         }
+        unforceChunksForRun(world, run.dbsPos());
     }
 
     private static void tickDownedPlayers(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
@@ -151,5 +208,44 @@ public final class DungeonRunLifecycle {
 
     private static void hideBossBars(DungeonRun run) {
         // TODO PE-6.1: boss bar implementation.
+    }
+
+    public static void forceLoadChunksForRun(ServerLevel world, BlockPos dbsPos) {
+        Set<ChunkPos> chunks = collectRunChunks(world, dbsPos);
+        for (ChunkPos chunkPos : chunks) {
+            world.setChunkForced(chunkPos.x, chunkPos.z, true);
+        }
+    }
+
+    private static void unforceChunksForRun(ServerLevel world, BlockPos dbsPos) {
+        Set<ChunkPos> chunks = collectRunChunks(world, dbsPos);
+        for (ChunkPos chunkPos : chunks) {
+            world.setChunkForced(chunkPos.x, chunkPos.z, false);
+        }
+    }
+
+    private static Set<ChunkPos> collectRunChunks(ServerLevel world, BlockPos dbsPos) {
+        Set<ChunkPos> chunks = new HashSet<>();
+        chunks.add(new ChunkPos(dbsPos));
+
+        BlockEntity dbsBe = world.getBlockEntity(dbsPos);
+        if (!(dbsBe instanceof DungeonBossSpawnerBlockEntity dbs)) {
+            return chunks;
+        }
+
+        for (BlockPos roomPos : dbs.getRooms()) {
+            chunks.add(new ChunkPos(roomPos));
+            BlockEntity roomBe = world.getBlockEntity(roomPos);
+            if (roomBe instanceof RoomControllerBlockEntity roomController) {
+                for (BlockPos spawnerPos : roomController.getSpawnerPositions()) {
+                    chunks.add(new ChunkPos(spawnerPos));
+                }
+                BlockPos doorPos = roomController.getDoorPos();
+                if (doorPos != null) {
+                    chunks.add(new ChunkPos(doorPos));
+                }
+            }
+        }
+        return chunks;
     }
 }

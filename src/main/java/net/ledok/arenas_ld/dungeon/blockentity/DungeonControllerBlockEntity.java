@@ -547,8 +547,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         return new DungeonControllerScreenHandler(syncId, playerInventory, this);
     }
 
-    void startRun(DungeonRun run) {
-        activeRuns.put(run.dbsPos(), run);
+    public void startRun(BlockPos dbsPos, DungeonRun run) {
+        activeRuns.put(dbsPos, run);
         setChanged();
     }
 

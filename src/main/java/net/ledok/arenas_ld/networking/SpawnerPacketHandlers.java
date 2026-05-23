@@ -31,6 +31,9 @@ import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntrancePayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
+import net.ledok.arenas_ld.dungeon.lobby.Lobby;
+import net.ledok.arenas_ld.dungeon.run.DungeonRun;
+import net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle;
 import net.ledok.arenas_ld.item.LinkerItem;
 import net.ledok.arenas_ld.item.SpawnerConfiguratorItem;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
@@ -53,6 +56,10 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 import static net.ledok.arenas_ld.networking.ModPackets.*;
 
@@ -576,9 +583,29 @@ final class SpawnerPacketHandlers {
                 ServerPlayer player = context.player();
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
-                    controller.startRun(player).ifPresent(instancePos ->
-                        ArenasLdMod.LOGGER.info("Run would start at instance {}", instancePos));
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller
+                    && world instanceof ServerLevel serverLevel) {
+                    controller.startRun(player).ifPresent(instancePos -> {
+                        Lobby lobby = controller.getLobbies().stream()
+                            .filter(l -> l.isOwner(player.getUUID()))
+                            .findFirst()
+                            .orElse(null);
+                        if (lobby == null) {
+                            return;
+                        }
+                        List<UUID> party = new ArrayList<>(lobby.members());
+                        DungeonRun run = DungeonRunLifecycle.startRun(
+                            serverLevel,
+                            controller,
+                            instancePos,
+                            party,
+                            lobby.selectedTier(),
+                            lobby.hardcoreEnabled()
+                        );
+                        if (run == null) {
+                            ArenasLdMod.LOGGER.warn("startRun failed for lobby {}", lobby.lobbyId());
+                        }
+                    });
                     markDirtyAndSync(world, controller);
                 }
             });
