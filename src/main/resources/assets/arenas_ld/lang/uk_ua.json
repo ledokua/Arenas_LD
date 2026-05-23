@@ -25,6 +25,7 @@
   "message.arenas_ld.dungeon.hardcore_death": "Хардкор: ви впали. Вас виключено з підземелля.",
   "message.arenas_ld.dungeon.you_are_downed": "Ви ослаблені. Скоро відродитеся...",
   "message.arenas_ld.dungeon_controller_admin.pending_removal": "Інстанс запущено. Видалення буде виконано після завершення забігу.",
+  "message.arenas_ld.dungeon_controller_admin.invalid_value": "Невірне значення — змінення не застосовано.",
 
   "gui.arenas_ld.mob_id": "ID моба",
   "gui.arenas_ld.loot_table_id": "ID таблиці здобичі",

@@ -132,28 +132,32 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         setChanged();
     }
 
-    public void setCooldownTicks(int cooldownTicks) {
-        if (cooldownTicks < 0) return;
+    public boolean setCooldownTicks(int cooldownTicks) {
+        if (cooldownTicks < 0) return false;
         this.cooldownTicks = cooldownTicks;
         setChanged();
+        return true;
     }
 
-    public void setCloseTimerSeconds(int closeTimerSeconds) {
-        if (closeTimerSeconds <= 0) return;
+    public boolean setCloseTimerSeconds(int closeTimerSeconds) {
+        if (closeTimerSeconds <= 0) return false;
         this.closeTimerSeconds = closeTimerSeconds;
         setChanged();
+        return true;
     }
 
-    public void setMaxPartySize(int maxPartySize) {
-        if (maxPartySize < 1 || maxPartySize > 16) return;
+    public boolean setMaxPartySize(int maxPartySize) {
+        if (maxPartySize < 1 || maxPartySize > 16) return false;
         this.maxPartySize = maxPartySize;
         setChanged();
+        return true;
     }
 
-    public void setInviteExpiryTicks(int ticks) {
-        if (ticks <= 0) return;
+    public boolean setInviteExpiryTicks(int ticks) {
+        if (ticks <= 0) return false;
         this.inviteExpiryTicks = ticks;
         setChanged();
+        return true;
     }
 
     public boolean addInstance(BlockPos pos) {

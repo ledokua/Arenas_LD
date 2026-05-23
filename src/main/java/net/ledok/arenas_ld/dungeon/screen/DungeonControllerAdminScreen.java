@@ -85,15 +85,29 @@ public class DungeonControllerAdminScreen extends AbstractContainerScreen<Dungeo
         for (int i = 0; i < instances.size() && i < 7; i++) {
             final int index = i;
             final net.minecraft.core.BlockPos pos = instances.get(i);
-            addRenderableWidget(Button.builder(Component.literal("^"), b ->
-                ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), index, Math.max(0, index - 1))))
-                .bounds(x + WIDTH - 56, rowY - 2, 14, 14).build()).active = index > 0;
-            addRenderableWidget(Button.builder(Component.literal("v"), b ->
-                ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), index, Math.min(instances.size() - 1, index + 1))))
-                .bounds(x + WIDTH - 40, rowY - 2, 14, 14).build()).active = index < instances.size() - 1;
-            addRenderableWidget(Button.builder(Component.literal("X"), b ->
-                ClientPlayNetworking.send(new RemoveDungeonInstancePayload(menu.getBlockPos(), pos)))
-                .bounds(x + WIDTH - 24, rowY - 2, 14, 14).build());
+            addRenderableWidget(Button.builder(Component.literal("^"), b -> {
+                int target = Math.max(0, index - 1);
+                if (target != index) {
+                    ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), index, target));
+                    net.minecraft.core.BlockPos moved = instances.remove(index);
+                    instances.add(target, moved);
+                    rebuildWidgets();
+                }
+            }).bounds(x + WIDTH - 56, rowY - 2, 14, 14).build()).active = index > 0;
+            addRenderableWidget(Button.builder(Component.literal("v"), b -> {
+                int target = Math.min(instances.size() - 1, index + 1);
+                if (target != index) {
+                    ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), index, target));
+                    net.minecraft.core.BlockPos moved = instances.remove(index);
+                    instances.add(target, moved);
+                    rebuildWidgets();
+                }
+            }).bounds(x + WIDTH - 40, rowY - 2, 14, 14).build()).active = index < instances.size() - 1;
+            addRenderableWidget(Button.builder(Component.literal("X"), b -> {
+                ClientPlayNetworking.send(new RemoveDungeonInstancePayload(menu.getBlockPos(), pos));
+                instances.remove(index);
+                rebuildWidgets();
+            }).bounds(x + WIDTH - 24, rowY - 2, 14, 14).build());
             rowY += 18;
         }
     }

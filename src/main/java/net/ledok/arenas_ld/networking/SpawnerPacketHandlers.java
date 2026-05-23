@@ -676,7 +676,11 @@ final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.controllerPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
-                    controller.setCooldownTicks(payload.ticks());
+                    boolean accepted = controller.setCooldownTicks(payload.ticks());
+                    if (!accepted) {
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
+                            .withStyle(ChatFormatting.YELLOW));
+                    }
                     markDirtyAndSync(world, controller);
                 }
             });
@@ -691,7 +695,11 @@ final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.controllerPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
-                    controller.setCloseTimerSeconds(payload.seconds());
+                    boolean accepted = controller.setCloseTimerSeconds(payload.seconds());
+                    if (!accepted) {
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
+                            .withStyle(ChatFormatting.YELLOW));
+                    }
                     markDirtyAndSync(world, controller);
                 }
             });
@@ -706,7 +714,11 @@ final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.controllerPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
-                    controller.setMaxPartySize(payload.size());
+                    boolean accepted = controller.setMaxPartySize(payload.size());
+                    if (!accepted) {
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
+                            .withStyle(ChatFormatting.YELLOW));
+                    }
                     markDirtyAndSync(world, controller);
                 }
             });
@@ -721,7 +733,11 @@ final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.controllerPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
-                    controller.setInviteExpiryTicks(payload.ticks());
+                    boolean accepted = controller.setInviteExpiryTicks(payload.ticks());
+                    if (!accepted) {
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
+                            .withStyle(ChatFormatting.YELLOW));
+                    }
                     markDirtyAndSync(world, controller);
                 }
             });
