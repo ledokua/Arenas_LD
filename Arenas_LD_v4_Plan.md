@@ -2590,69 +2590,1338 @@ After all 7 tasks:
 
 ---
 
-## Phase E — The new Controller (1 PR — the big one)
+## Phase E — Controller + Run lifecycle (1 PR)
 
-Will include:
-- New `DungeonControllerV2` block + BE.
-- `DungeonRun.tick()`, `handleWin()`, `handleLoss()`, `handlePhaseTransition()` logic.
-- Admin tabs GUI (Instances, Normal, Hard, Hell, General).
-- Lobby system ported from old controller, cleaned up.
-- Per-player `LootBundle` distribution on win.
-- Leaderboard storage and display.
-- Per-instance cooldown.
-- Integration with `DungeonManagerV2`.
+**Goal of the phase**: build the new `DungeonController` block in the new package, port the legacy lobby system into it (with cleanup), and implement the centerpiece of v4.0 — the run lifecycle: starting runs, ticking them, transitioning phases, handling win/loss, distributing loot, updating leaderboards.
 
-Specs deferred until Phase D closes.
+After Phase E, players can right-click the new controller block, create a party (or run solo), pick a tier, start a dungeon instance, see the dungeon timer + close timer boss bars, fight through rooms, defeat the boss, get per-player loot, see the leaderboard update. The full v4.0 dungeon experience exists.
 
----
+The legacy controller block stays in parallel. Phase G (was Phase H) deletes it.
 
-## Phase F — Linker modes for the new blocks (1 PR)
+### Architectural reminder
 
-Will include:
-- Linker "Set Controller Instance" mode: click controller → click DBSes to add as instances.
-- Linker "Set DBS Rooms" mode: click DBS → click RoomControllers in desired order.
-- Linker "Set Room Spawners" mode: click RoomController → click MobSpawnerV2s / DBS to add.
-- Linker "Set Room Door" mode: click RoomController → click PhaseBlock.
-- Visual feedback / tooltip updates.
+The controller is the brain. It owns:
 
-Specs deferred until Phase E closes.
+- **Admin config (NBT)**: list of instance refs (DBS positions), tier configs per `DifficultyTier`, max party size, cooldown ticks, leaderboard maps per tier.
+- **Lobby state (NBT)**: active lobbies (party formation pre-run).
+- **Active runs (NBT)**: `Map<BlockPos, DungeonRun>` keyed by DBS position. NBT-persisted so server restart resumes runs — phase + outcome decide what happens on load.
+- **Cooldown state (NBT)**: per-instance cooldown remaining ticks.
 
----
+The controller drives everything per server tick via `RoomController.refreshAliveMobs(world)` calls into rooms, observation of `isCleared()`, advancement of `currentRoomIndex`, decrement of timers, etc.
 
-## Phase G — Mixin + manager integration (1 PR)
+### Decisions locked in for Phase E
 
-Will include:
-- `DungeonManagerV2` replacing `DungeonBossManager`, with `getRunForPlayer(player)` API.
-- `LivingEntityMixin` updated to ask the manager for runs, not spawners.
-- `BusyStateCompat` integration via the run, not the spawner.
-- `ServerPlayConnectionEvents.JOIN/DISCONNECT` handlers.
-- The disconnect grace period: a participant stays in the run for N minutes after disconnect; rejoin reactivates them; timeout removes them.
+These came up during planning; pinned here so individual tasks don't re-litigate:
 
-Specs deferred until Phase F closes.
+- **Lobby = port-with-cleanup from legacy.** We copy the legacy lobby code from `DungeonControllerBlockEntity` and clean up while pasting. We don't redesign the lobby; we move it. Lobbies are tied to runs: starting a run dissolves the lobby into a run; participants can't join other lobbies until the run ends. The existing `BusyStateCompat` integration handles this in legacy.
+- **Loot eligibility at win = "online right now."** Every UUID in `run.participants` with `status != REMOVED` is checked: if `world.getPlayerByUUID(uuid) != null` → gets a bundle; if offline → forfeits. Simple, removes need for pending-rewards persistence.
+- **Tier configs are snapshotted at run start.** `DungeonRun.resolvedTierConfig` is the snapshot; admin edits to the controller's tier configs during the run don't affect that run.
+- **Mid-run admin edits to instances.** Adding instances is fine. Removing the instance an active run is using is **deferred** — the controller marks it "pending deletion" and removes it in run finalization. Tracked via a Set field on the controller.
+- **Static `CONTROLLERS` set lives in the `DungeonManager` singleton in Phase F, not on the BE.** For Phase E, the new controller keeps its own *instance method* registration to a TBD location. The mixin integration that needs cross-controller lookup is Phase F.
+- **Block + BE naming**: new controller block is `arenas_ld:dungeon_controller_v2`, BE is `arenas_ld:dungeon_controller_v2_be`. Class names in `net.ledok.arenas_ld.dungeon.block.DungeonControllerBlock` and `net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity`. Same pattern as the v2 spawners. Phase G renames everything when legacy is deleted.
+- **Boss bars**: two per run, attached to participants only. `ServerBossEvent` instances created and destroyed by the run.
+  - Dungeon time bar (blue): visible during STARTING + RUNNING phase.
+  - Close timer bar (red): visible during CLOSING phase.
+  - No boss HP bar (deferred).
+- **Save-and-restart resilience**: an active run persisted across server restart resumes in its saved phase. The run's tick logic handles "did anything change while we were down?" naturally — refresh aliveMobs in current room, check timer, etc.
+- **One run per controller at a time, multi-instance.** Wait — actually multi-run. A controller can have N instances; each instance can have an active run independently. So the active-runs map is `Map<BlockPos, DungeonRun>` keyed by DBS position. Two parties can simultaneously run different instances of the same dungeon.
 
----
+### Tasks in this phase
 
-## Phase H — Migration cliff & cleanup (1 PR)
+12 active tasks. Order matters for several pairs (each task lists prerequisites).
 
-Will include:
-- Delete all old dungeon files: `DungeonBossSpawnerBlockEntity`, `DungeonBossSpawnerBlock`, `DungeonControllerBlockEntity`, `DungeonControllerBlock`, `DungeonBossManager`, old `MobSpawner*`, old `PhaseBlock` (or keep PhaseBlock — it's reused).
-- Remove the corresponding entries from `BlockRegistry`, `BlockEntitiesRegistry`, `ModScreenHandlers`, `ModPackets`, `CommandRegistry`.
-- Remove the `util` package classes superseded: `DungeonContext`, `DungeonInstanceRef` (or move into new package), `InstanceState`, `InstanceStatus`, `LeaderboardEntry`, `Lobby`, `LobbyStatus`, `LobbyVisibility`, `DungeonLeaderboardEntry`, `LinkableSpawner`, `LinkerDataComponent`, `LinkerModeDataComponent`.
-- Update commands: `/arenasld dungeon` subcommands rewritten for new system.
-- Bump `mod_version` to `4.0.0` in `gradle.properties`.
-- Update `en_us.json` and `uk_ua.json`, removing dead keys, adding new ones.
-- Final integration gametest: build a 3-room dungeon, run start to finish.
-
-Specs deferred until Phase G closes.
+- **PE-1** — New `DungeonControllerBlock` + skeleton `DungeonControllerBlockEntity`. Empty BE, just registration. Same shape as PC-1 / PD-2.
+- **PE-2** — `DungeonControllerBlockEntity` data model (instances, tier configs, cooldown timers, leaderboard, pendingDeletions). NBT via codec. No lobby, no runs yet.
+- **PE-3** — Port lobby data structures (`Lobby`, `LobbyStatus`, `LobbyVisibility`) into `net.ledok.arenas_ld.dungeon.lobby`. Add codecs. New file location, same field shape as legacy. Update `DungeonControllerBlockEntity` to hold a `List<Lobby>`.
+- **PE-4** — Lobby operations as methods on `DungeonControllerBlockEntity`: create/invite/accept/decline/leave/kick/disband/visibility/transferOrDissolve. New C2S packets where needed.
+- **PE-5** — Lobby admin/player GUI. Tabbed: "Lobbies" tab listing active lobbies, "My Lobby" tab if the player is in one.
+- **PE-6** — `DungeonRun.tick(ServerLevel)` method + phase transition logic. Pure state machine, no GUI yet, no real loot. Drives rooms via `refreshAliveMobs` + `isCleared`. Calls into stubs for `handleWin` / `handleLoss`.
+- **PE-7** — `DungeonRun.startRun(ServerLevel, List<UUID> party, DifficultyTier, boolean hardcore)`. Capture return points, force-load chunks, reset rooms, teleport players, kick off room[0], start the boss bar. Returns true on success.
+- **PE-8** — `DungeonRun.handleWin()`. Roll per-player loot from `tier.perPlayerLootTable`, distribute to online lootEligible UUIDs, upsert leaderboard, transition to CLOSING. (`finalize` is part of phase tick — already covered in PE-6.)
+- **PE-9** — `DungeonRun.handleLoss(reason)`. Despawn boss, teleport players to their return points, transition to CLOSING with outcome.
+- **PE-10** — Downed player tick + hardcore death handling. Wires into the existing mixin.
+- **PE-11** — Admin GUI: Instances tab + General tab.
+- **PE-12** — Admin GUI: per-tier tabs (NORMAL / HARD / HELL).
 
 ---
 
-## What's not in this plan
+### PE-1 — New `DungeonControllerBlock` + skeleton BE
 
-- **NeoForge port.** Out of scope for v4.0 core. Track separately.
-- **Raid and Arena systems.** They have the same architectural problems but solving them is a v4.1+ effort. Touched only minimally in Phase H (removing dead utility classes that they shared).
-- **Phase 5 gameplay features.** Disconnect resilience UX, post-run summary screen, lava-floor boss room, secret rooms, branching, modifiers — all deferred to v4.1 work.
-- **Migration of old worlds.** Will not work; not implemented.
+**Goal**: registration plumbing for the new controller block. No data, no logic. Smallest task, proves the plumbing.
+
+**Files to create:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/block/DungeonControllerBlock.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/blockentity/DungeonControllerBlockEntity.java` (empty stub, fields land in PE-2)
+- `src/main/resources/assets/arenas_ld/blockstates/dungeon_controller_v2.json`
+- `src/main/resources/assets/arenas_ld/models/block/dungeon_controller_v2.json`
+- `src/main/resources/assets/arenas_ld/models/item/dungeon_controller_v2.json`
+- `src/main/resources/assets/arenas_ld/textures/block/dungeon_controller_v2.png` — 16×16 placeholder, solid green `#00FF00`
+
+**Files to modify:**
+- `BlockRegistry.java` — register as `dungeon_controller_v2`
+- `BlockEntitiesRegistry.java` — register as `dungeon_controller_v2_be`
+
+#### Block spec
+
+Mirror `DungeonBossSpawnerBlock` from PD-5: `BaseEntityBlock` with `simpleCodec`, `getRenderShape = MODEL`, `useWithoutItem` with the PD-2 no-op form (PASS on Linker, otherwise SUCCESS — PE-5 fills in the GUI open).
+
+#### Block entity spec (PE-1 stub)
+
+Just enough to compile:
+
+```java
+package net.ledok.arenas_ld.dungeon.blockentity;
+
+import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+
+public class DungeonControllerBlockEntity extends BlockEntity {
+    public DungeonControllerBlockEntity(BlockPos pos, BlockState state) {
+        super(BlockEntitiesRegistry.DUNGEON_CONTROLLER_V2_BLOCK_ENTITY, pos, state);
+    }
+}
+```
+
+#### Acceptance
+
+- Block places, renders solid green.
+- BE persists empty NBT.
+- `./gradlew build` passes.
+
+#### Don'ts
+
+- No fields yet. PE-2.
+- No GUI, no `useWithoutItem` body beyond the PD-2 stub. PE-5.
+- No `ExtendedScreenHandlerFactory` impl.
+- No ticker. PE-6 adds it.
+
+---
+
+### PE-2 — `DungeonControllerBlockEntity` data model
+
+**Goal**: fields, getters, admin setters, codec NBT. Pure data. Lobby + runs land in PE-3 and PE-6.
+
+**Files to modify:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/blockentity/DungeonControllerBlockEntity.java`
+
+#### Field design
+
+| Field | Type | Purpose |
+|---|---|---|
+| `instances` | `List<BlockPos>` | DBS positions registered as dungeon instances |
+| `tierConfigs` | `Map<DifficultyTier, TierConfig>` | per-tier config; defaults populated on creation |
+| `cooldownTicks` | `int` | configured cooldown per instance, applies post-finalize |
+| `closeTimerSeconds` | `int` | configured close-timer length after win/loss |
+| `maxPartySize` | `int` | maximum players in a lobby/run |
+| `instanceCooldownTimers` | `Map<BlockPos, Integer>` | current cooldown remaining per instance |
+| `pendingInstanceRemovals` | `Set<BlockPos>` | instances marked for deletion mid-run; removed at run finalize |
+| `leaderboards` | `Map<DifficultyTier, List<LeaderboardEntry>>` | per-tier leaderboard, append-only |
+
+The `tierConfigs` map is initialized to `Map.of(NORMAL, NORMAL_DEFAULT, HARD, HARD_DEFAULT, HELL, HELL_DEFAULT)` on first construction. The `cooldownTicks` defaults to `5 * 60 * 20` (5 minutes). `closeTimerSeconds` defaults to 30. `maxPartySize` defaults to 4. Other maps start empty.
+
+#### Public getters
+
+All fields exposed via getters. Map/list getters return unmodifiable views.
+
+#### Public setters (op-callable)
+
+- `setTierConfig(DifficultyTier, TierConfig)` — overwrites one tier
+- `setCooldownTicks(int)` — must be ≥ 0
+- `setCloseTimerSeconds(int)` — must be > 0
+- `setMaxPartySize(int)` — must be 1..16
+- `addInstance(BlockPos)` — deduplicates, returns false on duplicate
+- `removeInstance(BlockPos)` — returns false if not present; if there's an active run for this instance, mark for deletion (`pendingInstanceRemovals.add(pos)`) and return true without actually removing from `instances`. Caller checks state to know which happened.
+- `moveInstance(int from, int to)` — reorder, returns false on invalid indices
+
+#### Package-private mutators (called by Run lifecycle in PE-6+)
+
+- `startInstanceCooldown(BlockPos)` — sets the cooldown to `cooldownTicks`
+- `decrementInstanceCooldown(BlockPos)` — used in tick
+- `clearInstanceCooldown(BlockPos)`
+- `addLeaderboardEntry(DifficultyTier, LeaderboardEntry)` — appends to that tier's leaderboard
+- `clearPendingRemoval(BlockPos)` — removes from `pendingInstanceRemovals` after `instances.remove()` succeeds
+- `executePendingRemoval(BlockPos)` — atomic: `pendingInstanceRemovals.remove(pos)` + `instances.remove(pos)`. Called from run `finalize()`.
+
+#### NBT codec
+
+Internal `State` record with all fields, codec via `RecordCodecBuilder`. Map codecs:
+- `Codec.unboundedMap(DifficultyTier.CODEC, TierConfig.CODEC)` for tier configs and leaderboards
+- `Codec.unboundedMap(BlockPos.CODEC, Codec.INT)` for cooldown timers — **BUT** map keys must be string-form, not BlockPos. Use `BlockPos.CODEC.xmap(...)` to string-encode, or wrap in a record list.
+
+Actually: for `instanceCooldownTimers` and `leaderboards`, easier to use a `List<Pair>`-style codec:
+
+```java
+record InstanceCooldown(BlockPos pos, int ticks) { ... }
+private static final Codec<InstanceCooldown> COOLDOWN_CODEC = ...;
+// in State CODEC:
+COOLDOWN_CODEC.listOf().fieldOf("instanceCooldowns").forGetter(state -> 
+    state.instanceCooldowns.entrySet().stream()
+        .map(e -> new InstanceCooldown(e.getKey(), e.getValue()))
+        .toList()
+)
+```
+
+Or use `Codec.unboundedMap(BlockPos.CODEC, Codec.INT)` if NBT allows BlockPos-as-key — try the simpler form first; if it fails to encode, fall back to the list-of-pairs pattern.
+
+For `leaderboards: Map<DifficultyTier, List<LeaderboardEntry>>`, `Codec.unboundedMap(DifficultyTier.CODEC, LeaderboardEntry.CODEC.listOf())` should work since DifficultyTier serializes to a string.
+
+#### Acceptance
+
+- All fields present with the visibility shown.
+- Defaults populated on first BE creation (NORMAL/HARD/HELL tier configs, 5-minute cooldown, 30-second close timer, 4 party max).
+- All setters work with their validation rules.
+- `addInstance` dedups; `removeInstance` properly handles the pending-removal flow.
+- Codec round-trips a populated BE.
+- `setChanged()` called from every mutator (public + package-private).
+- Build passes.
+
+#### Don'ts
+
+- No lobby fields. PE-3.
+- No `Map<BlockPos, DungeonRun>` field for active runs. PE-6.
+- No tick method. PE-6.
+- No GUI. PE-11.
+- No validation of `BlockPos` pointing at a real DBS. Admins can typo; runtime handles missing instances.
+- Do not add `ExtendedScreenHandlerFactory`. PE-5 / PE-11.
+
+#### References
+
+- PC-2 for the State-record codec pattern.
+- PD-5 for an example with multiple fields.
+- Legacy `DungeonControllerBlockEntity` lines 60–230 for the field shape (and what NOT to copy).
+
+---
+
+### PE-3 — Port lobby data structures
+
+**Goal**: bring the lobby data classes into the new package with codecs. Field shape preserved; cleaned up where it's safe.
+
+**Files to create:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/lobby/Lobby.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/lobby/LobbyStatus.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/lobby/LobbyVisibility.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/lobby/PendingInvite.java`
+
+**Files to modify:**
+- `DungeonControllerBlockEntity.java` — add a `List<Lobby>` field, getter, mutator, NBT.
+
+#### `LobbyStatus` enum
+
+Same values as legacy: `FORMING`, `READY`, `IN_RUN`, `DISBANDED`. Plus a `Codec<LobbyStatus>` fail-safe to `DISBANDED`.
+
+#### `LobbyVisibility` enum
+
+Same as legacy: `PUBLIC`, `FRIENDS`, `PRIVATE`. Codec fail-safe to `PRIVATE`.
+
+#### `Lobby` record
+
+Read the legacy `Lobby` class first. Re-create as a record (legacy is likely a mutable class). Fields:
+
+```java
+public record Lobby(
+    UUID lobbyId,
+    UUID ownerUuid,
+    String ownerName,
+    Set<UUID> members,             // includes the owner
+    Map<UUID, String> memberNames, // cached for display when offline
+    Set<UUID> readyMembers,
+    DifficultyTier selectedTier,
+    boolean hardcoreEnabled,
+    LobbyVisibility visibility,
+    LobbyStatus status,
+    long createdAtTick
+) {
+    public static final Codec<Lobby> CODEC = ...;
+
+    public Lobby withMemberAdded(UUID uuid, String name) { ... }
+    public Lobby withMemberRemoved(UUID uuid) { ... }
+    public Lobby withReady(UUID uuid) { ... }
+    public Lobby withUnready(UUID uuid) { ... }
+    public Lobby withOwner(UUID newOwner) { ... }
+    public Lobby withStatus(LobbyStatus newStatus) { ... }
+    public Lobby withTier(DifficultyTier tier) { ... }
+    public Lobby withHardcore(boolean hardcore) { ... }
+    public Lobby withVisibility(LobbyVisibility v) { ... }
+
+    public boolean isFull(int maxSize) { ... }
+    public boolean isOwner(UUID uuid) { ... }
+    public boolean isMember(UUID uuid) { ... }
+    public boolean allReady() { ... }
+}
+```
+
+The record is immutable; `with*` methods return new instances. Operations in PE-4 use these.
+
+#### `PendingInvite` record
+
+```java
+public record PendingInvite(
+    UUID lobbyId,
+    UUID invitedUuid,
+    UUID inviterUuid,
+    long expiresAtTick
+) {
+    public static final Codec<PendingInvite> CODEC = ...;
+}
+```
+
+Lobby invite expiry: legacy code uses ~30 seconds. Configurable via the controller's `inviteExpiryTicks` field (added to PE-2's spec retroactively — see below).
+
+#### Update PE-2
+
+Add to `DungeonControllerBlockEntity`:
+
+```java
+private final List<Lobby> lobbies = new ArrayList<>();
+private final List<PendingInvite> pendingInvites = new ArrayList<>();
+private int inviteExpiryTicks = 30 * 20; // 30 seconds
+
+public List<Lobby> getLobbies() { return Collections.unmodifiableList(lobbies); }
+public List<PendingInvite> getPendingInvites() { return Collections.unmodifiableList(pendingInvites); }
+public int getInviteExpiryTicks() { return inviteExpiryTicks; }
+public void setInviteExpiryTicks(int ticks) { ... }
+
+// package-private mutators
+void addLobby(Lobby l) { ... }
+void replaceLobby(Lobby l) { ... } // matches by lobbyId
+void removeLobby(UUID lobbyId) { ... }
+void addInvite(PendingInvite invite) { ... }
+void removeInvite(UUID lobbyId, UUID invitedUuid) { ... }
+```
+
+NBT: extend the codec to include the new fields.
+
+#### Acceptance
+
+- Three enum / record types in the new lobby package.
+- Codecs round-trip cleanly.
+- `Lobby.with*` methods return new instances with the field changed.
+- `Lobby.allReady()` true only when every member is in `readyMembers`.
+- BE has the new lists + invites + expiry config, codec extended.
+
+#### Don'ts
+
+- Do not port the lobby manipulation **logic** here. Just data structures + state. PE-4 has the operations.
+- Do not reference the new BE from inside `Lobby` (no `lobby.startRun(controller, ...)` method). Logic lives on the controller.
+- Do not implement equality based on member identity comparison — record's auto-generated `equals` on the full state is fine.
+
+---
+
+### PE-4 — Lobby operations
+
+**Goal**: port lobby manipulation logic from legacy onto the new controller. Each operation is a method on the controller. New C2S packets for each player-initiated action.
+
+**Files to create (operation packets):**
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/CreateLobbyPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/InvitePlayerPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/AcceptInvitePayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/DeclineInvitePayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/LeaveLobbyPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/KickFromLobbyPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/SetLobbyTierPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/SetLobbyVisibilityPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/ToggleReadyPayload.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/packet/StartRunPayload.java`
+
+**Files to modify:**
+- `DungeonControllerBlockEntity.java` — add lobby operation methods.
+- `ModPacketTypeRegistry.java` — register the 10 new payload types.
+- `SpawnerPacketHandlers.java` — add server handlers (rename to `DungeonPacketHandlers` if it's getting too large — but only if Codex wants to; otherwise leave it).
+
+#### Operations on `DungeonControllerBlockEntity`
+
+Each is a server-side method. Validation + side effects + return code. None of them call `setChanged()` directly — the mutators on `Lobby` do that (via the controller's `replaceLobby(...)` mutator after a `with*` call).
+
+```java
+/**
+ * @return the newly created lobby UUID, or empty if the player is already in a lobby on this controller.
+ */
+public Optional<UUID> createLobby(ServerPlayer player) { ... }
+
+/** @return true on success. */
+public boolean invitePlayer(ServerPlayer inviter, UUID inviteeUuid) { ... }
+
+/** @return true on success. */
+public boolean acceptInvite(ServerPlayer invitee, UUID lobbyId) { ... }
+
+/** @return true on success (always true unless the invite didn't exist). */
+public boolean declineInvite(ServerPlayer invitee, UUID lobbyId) { ... }
+
+/** @return true on success. Owner leaving triggers transferOrDissolve. */
+public boolean leaveLobby(ServerPlayer player) { ... }
+
+/** @return true on success. Owner-only operation. */
+public boolean kickFromLobby(ServerPlayer kicker, UUID targetUuid) { ... }
+
+/** Owner-only. */
+public boolean setLobbyTier(ServerPlayer player, DifficultyTier tier) { ... }
+
+/** Owner-only. */
+public boolean setLobbyHardcore(ServerPlayer player, boolean hardcore) { ... }
+
+/** Owner-only. */
+public boolean setLobbyVisibility(ServerPlayer player, LobbyVisibility v) { ... }
+
+/** Toggle the player's own ready state. Anyone in the lobby can call. */
+public boolean toggleReady(ServerPlayer player) { ... }
+
+/** Owner-only. Requires all members ready and an available instance. @return Instance BlockPos that the run will use, or empty if blocked. */
+public Optional<BlockPos> startRun(ServerPlayer player) { ... }
+```
+
+#### Validation rules
+
+These mirror the legacy code (read it):
+- A player can only be in one lobby on this controller at a time.
+- Invites expire after `inviteExpiryTicks` ticks (cleanup in tick — PE-6).
+- Invites can only be sent by lobby owner.
+- Invites can only be sent to players who aren't already in a lobby on this controller.
+- Lobby owner leaving: ownership transfers to the longest-tenured remaining member; if no other members, the lobby disbands.
+- A lobby can't be modified once status is `IN_RUN`.
+- `startRun` requirements: status is `READY` or `FORMING` with all-ready, all members online, at least one instance available (not in cooldown, not in active run, not in pending removal), members ≤ maxPartySize.
+
+#### Server handlers
+
+Each packet has a corresponding `ServerPlayNetworking.registerGlobalReceiver` block:
+1. Server.execute()
+2. Resolve BE from `payload.blockPos()`
+3. Verify it's a `DungeonControllerBlockEntity`
+4. **Permission**: ops only? No — these are player-facing operations. Anyone can use them. The validation logic in each method enforces party membership/ownership.
+5. Call the corresponding method on the BE.
+6. After mutation, call `markDirtyAndSync(world, be)`.
+
+The `StartRunPayload` handler is special — on success, the lobby method returns the instance BlockPos and the handler calls `DungeonRun.startRun(...)` which doesn't exist yet (PE-7). For PE-4, the handler can be:
+
+```java
+if (be instanceof DungeonControllerBlockEntity controller) {
+    Optional<BlockPos> instance = controller.startRun(player);
+    if (instance.isPresent()) {
+        // TODO PE-7: actually start the run
+        ArenasLdMod.LOGGER.info("Run would start at instance {}", instance.get());
+    }
+    markDirtyAndSync(world, controller);
+}
+```
+
+#### Acceptance
+
+- All 10 packets exist with codecs and types.
+- All 10 operation methods exist on the controller with the validation rules.
+- Server handlers wire each packet to its method, op-gate-less (player-facing), with markDirtyAndSync.
+- Leaving the lobby as owner correctly transfers or disbands.
+- Cannot be in two lobbies on the same controller.
+- Cannot start a run unless every member is ready AND an instance is available.
+
+#### Don'ts
+
+- Do not actually start the run. PE-7. StartRunPayload handler logs intent only for now.
+- Do not S2C-broadcast lobby changes to every player on the server. The lobby list will be polled in the GUI when opened, and the player joining/leaving gets a chat message.
+- Do not add an admin lobby-management API (force disband, force kick). Out of scope; admins can `/data merge` if needed.
+- Do not modify `ServerPlayConnectionEvents` here. The disconnect grace period is Phase F.
+- Do not store the `ServerPlayer` reference on a `Lobby`. Players come and go; UUIDs are durable. Look up `ServerPlayer` via `world.getPlayerByUUID(uuid)` whenever needed.
+
+#### References
+
+- Legacy `DungeonControllerBlockEntity` lines 539-767 for the operations.
+- Each operation's existing chat messages — port the translation keys; add new ones if needed.
+
+---
+
+### PE-5 — Lobby GUI
+
+**Goal**: a player-facing GUI for lobby operations. Two tabs: "Lobbies" (browse + create + join via invite) and "My Lobby" (configure + invite + ready + start).
+
+**Files to create:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/DungeonControllerScreen.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/DungeonControllerScreenHandler.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/DungeonControllerData.java`
+- (translation keys in both lang files for tab titles, button labels, status messages)
+
+**Files to modify:**
+- `DungeonControllerBlockEntity.java` — implement `ExtendedScreenHandlerFactory<DungeonControllerData>`.
+- `DungeonControllerBlock.java` — wire `useWithoutItem` to open the menu.
+- `ModScreenHandlers.java` — register.
+- `ArenasLdClient.java` — register screen factory.
+
+#### Screen layout
+
+```
++--------------------------------------------+
+| Dungeon Controller             [Tab: Lobby]|
++--------------------------------------------+
+| [ Lobbies ] [ My Lobby ]                   |
++--------------------------------------------+
+| (Lobbies tab content OR My Lobby content)  |
++--------------------------------------------+
+```
+
+**Lobbies tab** lists all visible lobbies on this controller:
+
+```
+| Public lobbies:                            |
+|   Steve's party (2/4)  [Hard]  [Hardcore]  |
+|     [ Request invite ]                     |
+|   Alice's party (1/4)  [Normal]            |
+|     [ Request invite ]                     |
+| You have invites:                          |
+|   from Bob (Hard)  [ Accept ]  [ Decline ] |
+| [ Create new lobby ]                       |
+```
+
+"Request invite" sends a chat message to the lobby owner; owner approves via... actually no, simplest: anyone with a public lobby can be joined directly. The "Request invite" button only appears for `FRIENDS` lobbies and sends a "Player X wants to join" message to owner. For `PUBLIC` it's a "Join" button.
+
+Actually, even simpler: leave "request invite" as legacy behavior — it's a join-request message to the owner. Don't redesign.
+
+**My Lobby tab** (only if player is in a lobby):
+
+```
+| Lobby: Steve's party                       |
+| Owner: Steve                               |
+| Members (2/4):                             |
+|   Steve  [READY]   (you, owner)            |
+|   Alice  [pending]                         |
+| Tier: [Normal] [Hard] [Hell]               |
+| Visibility: [Public] [Friends] [Private]   |
+| Hardcore: [On] [Off]                       |
+| [ Ready / Unready ]                        |
+| [ Invite Player... ]                       |
+| [ Start Run ]  (disabled if not all ready) |
+| [ Leave Lobby ]                            |
+```
+
+#### `DungeonControllerData` shape
+
+```java
+public record DungeonControllerData(
+    BlockPos blockPos,
+    List<Lobby> visibleLobbies,            // filtered by visibility for this player
+    Optional<Lobby> ownLobby,              // the player's current lobby on this controller
+    List<PendingInvite> myInvites,         // invites for this player
+    int maxPartySize,
+    Map<DifficultyTier, TierConfig> tiers  // for display: time, hardcore default
+) { ... }
+```
+
+The data is computed server-side at `getScreenOpeningData` time using the player's UUID to filter.
+
+#### Acceptance
+
+- Player can open the controller and see lobbies.
+- Player can create a lobby; their tab becomes "My Lobby."
+- Owner can invite a player; the invitee gets a chat message linking back to the controller.
+- Invitee can accept/decline; on accept they join the lobby.
+- Owner can toggle tier / visibility / hardcore.
+- Any member can toggle ready.
+- Owner can start the run (button disabled until all ready and instance available).
+- Player can leave; owner-leaving triggers transfer.
+- Tab navigation works.
+
+#### Don'ts
+
+- Do not show admin-only fields (instance list, leaderboard, tier configs editing). Admin GUI is PE-11/12.
+- Do not auto-refresh the screen on every tick. Snapshot on open. Player closes/reopens for fresh data.
+- Do not display lobbies from other controllers. Each controller manages its own lobbies.
+- Do not let the screen mutate `Lobby` records client-side. All mutations go through C2S packets.
+
+---
+
+### PE-6 — `DungeonRun.tick` + phase transitions
+
+**Goal**: the centerpiece. The state machine that drives a run from STARTING through DONE.
+
+**Files to create:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/run/DungeonRunLifecycle.java` — static utility class containing `tick`, `startRun`, `handleWin`, `handleLoss`, `finalize` methods that operate on a `DungeonRun` + `DungeonControllerBlockEntity`. **Why a static utility class?** `DungeonRun` is in `dungeon.run`, `DungeonControllerBlockEntity` is in `dungeon.blockentity`. Putting lifecycle methods *on* `DungeonRun` would require the run to know about the controller (circular dependency, or the controller in `dungeon.run` package which we don't want). Static helpers in `dungeon.run` package can use the package-private mutators on `DungeonRun` without exposing them publicly. **Note**: lifecycle methods package-private (not public) so they can only be called from same-package + tests.
+
+**Files to modify:**
+- `DungeonControllerBlockEntity.java` — add `Map<BlockPos, DungeonRun> activeRuns` field with codec, getter, package-private mutators (`startRun`, `removeRun`). Add ticker via `BlockEntityTicker` that calls into `DungeonRunLifecycle.tick(...)` for each active run.
+
+#### `DungeonControllerBlockEntity.tick`
+
+```java
+public static void tick(Level world, BlockPos pos, BlockState state, DungeonControllerBlockEntity be) {
+    if (world.isClientSide || !(world instanceof ServerLevel sl)) return;
+
+    // Tick instance cooldowns
+    Iterator<Map.Entry<BlockPos, Integer>> cdIter = be.instanceCooldownTimers.entrySet().iterator();
+    while (cdIter.hasNext()) {
+        var e = cdIter.next();
+        int remaining = e.getValue() - 1;
+        if (remaining <= 0) {
+            cdIter.remove();
+            be.setChanged();
+        } else {
+            e.setValue(remaining);
+        }
+    }
+
+    // Tick lobbies: expire invites
+    long currentTick = sl.getGameTime();
+    be.pendingInvites.removeIf(invite -> invite.expiresAtTick() <= currentTick);
+
+    // Tick each active run
+    for (DungeonRun run : new ArrayList<>(be.activeRuns.values())) {
+        DungeonRunLifecycle.tick(sl, be, run);
+    }
+}
+```
+
+Register the ticker via `getTicker` on the block.
+
+#### `DungeonRunLifecycle.tick`
+
+```java
+static void tick(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+    switch (run.phase()) {
+        case STARTING -> tickStarting(world, controller, run);
+        case RUNNING -> tickRunning(world, controller, run);
+        case CLOSING -> tickClosing(world, controller, run);
+        case DONE -> { /* shouldn't tick; remove via controller */ }
+    }
+}
+
+private static void tickStarting(...) {
+    // STARTING is brief. Should immediately transition to RUNNING after startRun completes.
+    // Defensive: if we land here on a tick, transition to RUNNING.
+    run.setPhase(DungeonPhase.RUNNING);
+}
+
+private static void tickRunning(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+    // 1. Decrement timer
+    run.setDungeonTimerTicks(run.dungeonTimerTicks() - 1);
+    if (run.dungeonTimerTicks() <= 0) {
+        handleLoss(world, controller, run, DungeonOutcome.LOSS_TIMEOUT);
+        return;
+    }
+
+    // 2. Check abandonment (no online participants)
+    boolean anyOnline = run.participants().keySet().stream()
+        .anyMatch(uuid -> world.getPlayerByUUID(uuid) != null);
+    if (!anyOnline) {
+        handleLoss(world, controller, run, DungeonOutcome.LOSS_ABANDONED);
+        return;
+    }
+
+    // 3. Drive the current room
+    DungeonBossSpawnerBlockEntity dbs = (DungeonBossSpawnerBlockEntity)
+        world.getBlockEntity(run.dbsPos());
+    if (dbs == null) {
+        // DBS unloaded or removed. Hard fail.
+        handleLoss(world, controller, run, DungeonOutcome.LOSS_FORCED);
+        return;
+    }
+
+    List<BlockPos> rooms = dbs.getRooms();
+    if (run.currentRoomIndex() >= rooms.size()) {
+        // No more rooms; this means the last (boss) room cleared. Win.
+        // Actually we should have detected this when room cleared. Defensive.
+        handleWin(world, controller, run);
+        return;
+    }
+
+    BlockPos currentRoomPos = rooms.get(run.currentRoomIndex());
+    RoomControllerBlockEntity room = (RoomControllerBlockEntity)
+        world.getBlockEntity(currentRoomPos);
+    if (room == null) {
+        // Room unloaded. Skip this tick; chunk-load will re-engage.
+        return;
+    }
+
+    if (!room.isActivated()) {
+        room.activate(world, run.resolvedTierConfig());
+    } else {
+        room.refreshAliveMobs(world);
+        if (room.isCleared()) {
+            room.openDoor(world);
+            int next = run.currentRoomIndex() + 1;
+            if (next >= rooms.size()) {
+                handleWin(world, controller, run);
+            } else {
+                run.setCurrentRoomIndex(next);
+            }
+        }
+    }
+
+    // 4. Tick downed players
+    tickDownedPlayers(world, controller, run);
+
+    // 5. Update boss bar
+    updateDungeonTimeBossBar(world, run);
+}
+
+private static void tickClosing(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+    run.setCloseTimerTicks(run.closeTimerTicks() - 1);
+    updateCloseTimerBossBar(world, run);
+    if (run.closeTimerTicks() <= 0) {
+        finalize(world, controller, run);
+    }
+}
+
+static void finalize(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+    // Teleport all online players to their return points
+    for (Map.Entry<UUID, PlayerReturnPoint> e : run.returnPoints().entrySet()) {
+        ServerPlayer p = world.getServer().getPlayerList().getPlayer(e.getKey());
+        if (p != null) {
+            PlayerReturnPoint rp = e.getValue();
+            ServerLevel target = world.getServer().getLevel(rp.dimension());
+            if (target != null) {
+                p.teleportTo(target, rp.pos().x, rp.pos().y, rp.pos().z, rp.yaw(), rp.pitch());
+            }
+        }
+    }
+    // Hide boss bars
+    hideBossBars(run);
+    // Clear participants from busy state (BusyStateCompat — Phase F)
+    // For PE-6, skip; Phase F integrates.
+    // Mark phase DONE
+    run.setPhase(DungeonPhase.DONE);
+    // Remove from controller
+    controller.removeRun(run.dbsPos());
+    // Start cooldown on the instance
+    controller.startInstanceCooldown(run.dbsPos());
+    // Execute pending removal if applicable
+    if (controller.getPendingInstanceRemovals().contains(run.dbsPos())) {
+        controller.executePendingRemoval(run.dbsPos());
+    }
+    // Discard rooms
+    DungeonBossSpawnerBlockEntity dbs = (DungeonBossSpawnerBlockEntity) world.getBlockEntity(run.dbsPos());
+    if (dbs != null) {
+        for (BlockPos roomPos : dbs.getRooms()) {
+            BlockEntity be = world.getBlockEntity(roomPos);
+            if (be instanceof RoomControllerBlockEntity rc) {
+                rc.reset(world);
+            }
+        }
+    }
+}
+```
+
+For PE-6, `handleWin` and `handleLoss` are stubs that just transition phase + set outcome + start the close timer. PE-8 and PE-9 fill them in.
+
+```java
+static void handleWin(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+    run.setOutcome(DungeonOutcome.WIN);
+    run.setPhase(DungeonPhase.CLOSING);
+    run.setCloseTimerTicks(controller.getCloseTimerSeconds() * 20);
+    // PE-8: loot, leaderboard
+}
+
+static void handleLoss(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, DungeonOutcome reason) {
+    run.setOutcome(reason);
+    run.setPhase(DungeonPhase.CLOSING);
+    run.setCloseTimerTicks(controller.getCloseTimerSeconds() * 20);
+    // PE-9: despawn boss
+}
+```
+
+#### Acceptance
+
+- Controller's BE ticker is registered and fires.
+- Cooldowns decrement and expire.
+- Pending invites expire by tick time.
+- For each active run: phase machine runs, rooms activate in order, dungeon timer counts down, win condition reached when last room clears, loss triggers on timeout / abandonment.
+- Build passes (lots of stubs but compiles).
+
+#### Don'ts
+
+- Do not implement loot. PE-8.
+- Do not implement boss despawn on loss. PE-9.
+- Do not implement downed player tick. PE-10. The `tickDownedPlayers` call is a stub.
+- Do not implement boss bars yet. The `updateDungeonTimeBossBar` / `updateCloseTimerBossBar` calls are stubs.
+- Do not integrate `BusyStateCompat`. Phase F.
+
+---
+
+### PE-7 — `DungeonRun.startRun`
+
+**Goal**: the `startRun` method. Capture return points, force-load chunks, reset rooms, teleport players, push `DungeonRun` into the controller's `activeRuns`.
+
+**Files to modify:**
+- `DungeonRunLifecycle.java`
+
+#### Spec
+
+```java
+/**
+ * @return the new DungeonRun on success, or null if the instance is busy or chunks can't load.
+ */
+@Nullable
+static DungeonRun startRun(
+    ServerLevel world,
+    DungeonControllerBlockEntity controller,
+    BlockPos dbsPos,
+    List<UUID> partyUuids,
+    DifficultyTier tier,
+    boolean hardcore
+) {
+    // Validation
+    if (controller.getActiveRuns().containsKey(dbsPos)) return null;
+    if (controller.getInstanceCooldownTimers().containsKey(dbsPos)) return null;
+
+    DungeonBossSpawnerBlockEntity dbs = (DungeonBossSpawnerBlockEntity) world.getBlockEntity(dbsPos);
+    if (dbs == null) return null;
+
+    // Force-load chunks for DBS and every room
+    forceLoadChunks(world, dbsPos, dbs.getRooms());
+
+    // Resolve tier
+    TierConfig tierConfig = controller.getTierConfigs().getOrDefault(tier, TierConfig.defaultFor(tier));
+
+    // Create the run
+    DungeonRun run = new DungeonRun(tier, tierConfig, hardcore, dbsPos, world.dimension(), world.getGameTime());
+
+    // For each party member: add as participant, capture return point, teleport
+    for (UUID uuid : partyUuids) {
+        ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+        if (player == null) continue; // skip offline
+        run.addParticipant(new RunParticipant(uuid, player.getGameProfile().getName(), ParticipantStatus.ACTIVE, world.getGameTime()));
+        run.setReturnPoint(uuid, PlayerReturnPoint.capture(player));
+
+        ServerLevel targetLevel = world.getServer().getLevel(dbs.getEntranceDimension());
+        if (targetLevel == null) targetLevel = world; // fallback
+        BlockPos entrance = dbs.getEntrancePos();
+        player.teleportTo(targetLevel, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0f, 0f);
+    }
+
+    // Reset all rooms
+    for (BlockPos roomPos : dbs.getRooms()) {
+        BlockEntity be = world.getBlockEntity(roomPos);
+        if (be instanceof RoomControllerBlockEntity rc) {
+            rc.reset(world);
+        }
+    }
+
+    // Push into controller
+    controller.startRun(dbsPos, run);
+
+    // Phase machine takes over from here on next tick
+    return run;
+}
+
+private static void forceLoadChunks(ServerLevel world, BlockPos dbsPos, List<BlockPos> roomPositions) {
+    Set<ChunkPos> chunks = new HashSet<>();
+    chunks.add(new ChunkPos(dbsPos));
+    for (BlockPos r : roomPositions) chunks.add(new ChunkPos(r));
+    // Also chunks for spawner positions and doors within each room.
+    for (BlockPos r : roomPositions) {
+        if (world.getBlockEntity(r) instanceof RoomControllerBlockEntity rc) {
+            for (BlockPos sp : rc.getSpawnerPositions()) chunks.add(new ChunkPos(sp));
+            BlockPos door = rc.getDoorPos();
+            if (door != null) chunks.add(new ChunkPos(door));
+        }
+    }
+    for (ChunkPos cp : chunks) {
+        world.setChunkForced(cp.x, cp.z, true);
+    }
+}
+```
+
+Chunk *unloading* on finalize: track the chunks in the run state or recompute from the DBS+rooms; un-force them in `finalize()`. Simplest: store `Set<ChunkPos> forcedChunks` as a transient field on `DungeonRun` (not codec-serialized; recomputed on save/load if needed).
+
+Wait — that doesn't work for save-restart resilience. If we save the run mid-tick and restart, the chunks aren't force-loaded anymore.
+
+**Two options:**
+
+- **A**: serialize `forcedChunks` in `DungeonRun` NBT. On load, the controller re-applies `setChunkForced(true)` for each.
+- **B**: don't store; recompute from DBS+rooms on load, re-force at that moment.
+
+Pick **B**. It's data we can always derive. Add to `DungeonControllerBlockEntity.loadAdditional` (or its NBT loaded path): for each active run, recompute and re-force chunks.
+
+Update `startRun` and the load path accordingly. Add a `forceLoadChunksForRun(...)` static helper that both paths call.
+
+Same idea for un-forcing in `finalize`: recompute the set and call `setChunkForced(false)`.
+
+#### Wire to PE-4's StartRunPayload handler
+
+Update the handler to actually call `DungeonRunLifecycle.startRun(...)` and remove the TODO log line.
+
+#### Acceptance
+
+- `startRun` returns a working `DungeonRun` instance and pushes it into the controller's active runs map.
+- All party members are teleported to the DBS entrance.
+- Return points captured per player.
+- All rooms reset before the run starts.
+- Chunks force-loaded so rooms can be ticked even if no players are nearby.
+- `StartRunPayload` handler invokes this.
+- Build passes.
+
+#### Don'ts
+
+- Do not start the run on the client. Server-side only.
+- Do not validate hardcore mode permissions here. The lobby owner already approved hardcore via their toggle.
+- Do not bypass the tier config snapshot. `run.resolvedTierConfig()` is the immutable snapshot for this run.
+
+---
+
+### PE-8 — `DungeonRun.handleWin`
+
+**Goal**: per-player loot distribution, leaderboard upsert.
+
+**Files to modify:**
+- `DungeonRunLifecycle.java`
+
+#### Spec
+
+```java
+private static void handleWin(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+    long runDurationTicks = world.getGameTime() - run.startTick();
+    int runDurationSeconds = (int) (runDurationTicks / 20);
+
+    // Roll per-player loot
+    String lootTableId = run.resolvedTierConfig().perPlayerLootTable();
+    ResourceLocation lootLoc = lootTableId.isEmpty() ? null : ResourceLocation.tryParse(lootTableId);
+    LootTable lootTable = null;
+    if (lootLoc != null) {
+        ResourceKey<LootTable> key = ResourceKey.create(Registries.LOOT_TABLE, lootLoc);
+        lootTable = world.getServer().reloadableRegistries().getLootTable(key);
+    }
+
+    for (UUID uuid : run.lootEligibleUuids()) {
+        ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+        if (player == null) continue; // offline = forfeit
+
+        // Add leaderboard entry per player
+        controller.addLeaderboardEntry(run.tier(),
+            new LeaderboardEntry(player.getGameProfile().getName(), runDurationSeconds, System.currentTimeMillis()));
+
+        // Deliver loot bundle (if loot table is configured)
+        if (lootTable != null) {
+            ItemStack bundle = createLootBundle(lootLoc.toString());
+            if (!player.getInventory().add(bundle)) {
+                player.drop(bundle, false);
+            }
+        }
+    }
+
+    // Show "you won" message to all online participants
+    for (UUID uuid : run.participants().keySet()) {
+        ServerPlayer p = world.getServer().getPlayerList().getPlayer(uuid);
+        if (p != null) {
+            p.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.win", runDurationSeconds));
+        }
+    }
+
+    // Phase + close timer
+    run.setOutcome(DungeonOutcome.WIN);
+    run.setPhase(DungeonPhase.CLOSING);
+    run.setCloseTimerTicks(controller.getCloseTimerSeconds() * 20);
+}
+
+private static ItemStack createLootBundle(String lootTableId) {
+    ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
+    // Set the loot table component (existing LootBundleDataComponent)
+    bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(lootTableId));
+    return bundle;
+}
+```
+
+Wait: the existing `LOOT_BUNDLE` item already has a `right-click to roll` behavior. The bundle is a *deferred* loot roll, not an immediate one. So we don't actually roll the loot at win — we hand the player a bundle item, they roll it themselves later.
+
+That simplifies a lot. We don't even need to verify the loot table exists at win-time. We just hand out the bundle item with the table ID stamped on it. If the table doesn't exist when they open the bundle, the bundle's right-click code logs and disappears.
+
+Updated body:
+
+```java
+private static void handleWin(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+    long runDurationTicks = world.getGameTime() - run.startTick();
+    int runDurationSeconds = (int) (runDurationTicks / 20);
+    String lootTableId = run.resolvedTierConfig().perPlayerLootTable();
+
+    for (UUID uuid : run.lootEligibleUuids()) {
+        ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+        if (player == null) continue;
+
+        controller.addLeaderboardEntry(run.tier(),
+            new LeaderboardEntry(player.getGameProfile().getName(), runDurationSeconds, System.currentTimeMillis()));
+
+        if (!lootTableId.isEmpty()) {
+            ItemStack bundle = createLootBundle(lootTableId);
+            if (!player.getInventory().add(bundle)) {
+                player.drop(bundle, false);
+            }
+        }
+    }
+
+    for (UUID uuid : run.participants().keySet()) {
+        ServerPlayer p = world.getServer().getPlayerList().getPlayer(uuid);
+        if (p != null) {
+            p.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.win", runDurationSeconds));
+        }
+    }
+
+    run.setOutcome(DungeonOutcome.WIN);
+    run.setPhase(DungeonPhase.CLOSING);
+    run.setCloseTimerTicks(controller.getCloseTimerSeconds() * 20);
+}
+```
+
+#### Translation keys to add
+
+```json
+"message.arenas_ld.dungeon.win": "You won the dungeon! Time: %s seconds.",
+"message.arenas_ld.dungeon.loss_timeout": "Dungeon failed — out of time.",
+"message.arenas_ld.dungeon.loss_abandoned": "Dungeon failed — no participants remaining.",
+"message.arenas_ld.dungeon.loss_forced": "Dungeon ended by admin."
+```
+
+(Ukrainian translations too.)
+
+#### Acceptance
+
+- On boss room clear (last room), `handleWin` fires.
+- Online eligible participants get a loot bundle.
+- Offline eligible participants get nothing.
+- Online eligible participants get a leaderboard entry.
+- Run transitions to CLOSING with the close timer.
+- All participants get a win message.
+
+#### Don'ts
+
+- Do not roll the loot table at win-time. Hand out the deferred bundle.
+- Do not write the leaderboard for non-online players. Offline = forfeit means everything: no loot, no leaderboard.
+- Do not drop the bundle on the ground if inventory is full — `player.drop(bundle, false)` makes it fall toward the player (false = no throw). That's correct.
+
+---
+
+### PE-9 — `DungeonRun.handleLoss`
+
+**Goal**: despawn the boss if alive; teleport players to their return points immediately (not on close timer). Trigger close timer for the message phase, then `finalize()` cleans up.
+
+Wait — earlier I said teleport happens in `finalize`. Let me reconcile:
+
+- On win: close timer counts down with players still in the dungeon (looking around, gathering loot from the bundle), then `finalize` teleports them out.
+- On loss: arguably we want immediate teleport-out because they just died. But that's a UX call.
+
+I'll go with **finalize handles teleport in both cases.** Loss just shows a sad message during the close timer. Players can run around for those 30 seconds. Simpler model.
+
+```java
+private static void handleLoss(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, DungeonOutcome reason) {
+    // Despawn the active boss if any (in the last room)
+    DungeonBossSpawnerBlockEntity dbs = (DungeonBossSpawnerBlockEntity) world.getBlockEntity(run.dbsPos());
+    if (dbs != null && run.currentRoomIndex() < dbs.getRooms().size()) {
+        BlockPos lastRoomPos = dbs.getRooms().get(dbs.getRooms().size() - 1);
+        BlockEntity bossRoomBe = world.getBlockEntity(lastRoomPos);
+        if (bossRoomBe instanceof RoomControllerBlockEntity bossRoom) {
+            // Discard alive boss(es) in the boss room — same as reset for that room
+            // But don't fully reset — that's finalize's job
+            for (UUID bossUuid : new ArrayList<>(bossRoom.getAliveMobs())) {
+                Entity entity = world.getEntity(bossUuid);
+                if (entity != null && entity.isAlive()) {
+                    entity.discard();
+                }
+            }
+        }
+    }
+
+    // Notify
+    String messageKey = switch (reason) {
+        case LOSS_TIMEOUT -> "message.arenas_ld.dungeon.loss_timeout";
+        case LOSS_ABANDONED -> "message.arenas_ld.dungeon.loss_abandoned";
+        case LOSS_FORCED -> "message.arenas_ld.dungeon.loss_forced";
+        default -> "message.arenas_ld.dungeon.loss_timeout";
+    };
+    for (UUID uuid : run.participants().keySet()) {
+        ServerPlayer p = world.getServer().getPlayerList().getPlayer(uuid);
+        if (p != null) {
+            p.sendSystemMessage(Component.translatable(messageKey));
+        }
+    }
+
+    run.setOutcome(reason);
+    run.setPhase(DungeonPhase.CLOSING);
+    run.setCloseTimerTicks(controller.getCloseTimerSeconds() * 20);
+}
+```
+
+#### Acceptance
+
+- Loss path discards the boss (if any) from the boss room.
+- Loss message sent to participants (translatable).
+- Run transitions to CLOSING; finalize handles teleport-out after close timer.
+
+#### Don'ts
+
+- Do not teleport players immediately on loss. `finalize` handles that.
+- Do not despawn mobs in other rooms (the rooms `reset` in finalize does that).
+- Do not do anything for `LOSS_ABANDONED` differently — same close-timer flow.
+
+---
+
+### PE-10 — Downed players + hardcore handling
+
+**Goal**: wire `ParticipantStatus.DOWNED` lifecycle. When a player's HP hits 0:
+- Hardcore mode → `ParticipantStatus.REMOVED`, player respawns at their world spawn, kicked from run.
+- Non-hardcore → `ParticipantStatus.DOWNED`, spectator mode, `DownedPlayer` countdown ticks; on expiry, respawn at DBS entrance at 50% HP, status back to `ACTIVE`.
+
+The mixin (`LivingEntityMixin`) currently lives in the legacy mod and applies tier damage scaling. For PE-10, we need a mixin (or event listener) that catches player death and routes through the run.
+
+**Cleanest approach**: an `arenasLd$onPlayerDeath(ServerPlayer)` static method in a helper class. The mixin invokes it on player death; the helper looks up the player's run via `DungeonManager.getRunForPlayer(player)` (Phase F)... wait. Phase F adds the DungeonManager.
+
+For PE-10, we use a stopgap: each tick, iterate `controller.getActiveRuns()` and check each participant's HP. If `ACTIVE` and HP <= 0 → handle down/death. Inefficient (polls every tick) but correct, and Phase F replaces it with a death event hook.
+
+**Spec:**
+
+In `DungeonRunLifecycle`:
+
+```java
+private static void tickRunning(...) {
+    // ... existing logic ...
+    detectPlayerDeaths(world, controller, run);
+    tickDownedPlayers(world, controller, run);
+}
+
+private static void detectPlayerDeaths(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+    for (Map.Entry<UUID, RunParticipant> e : new HashMap<>(run.participants()).entrySet()) {
+        if (e.getValue().status() != ParticipantStatus.ACTIVE) continue;
+        ServerPlayer p = world.getServer().getPlayerList().getPlayer(e.getKey());
+        if (p == null) continue;
+        if (p.isDeadOrDying() || p.getHealth() <= 0.0F) {
+            handlePlayerDown(world, controller, run, p);
+        }
+    }
+}
+
+private static void handlePlayerDown(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, ServerPlayer player) {
+    if (run.hardcoreEnabled()) {
+        // Remove from run; player respawns vanilla-style at world spawn
+        run.updateParticipant(run.participants().get(player.getUUID())
+            .withStatus(ParticipantStatus.REMOVED, world.getGameTime()));
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.hardcore_death")
+            .withStyle(ChatFormatting.RED));
+    } else {
+        // Set to spectator, start countdown
+        run.updateParticipant(run.participants().get(player.getUUID())
+            .withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
+        run.setDowned(new DownedPlayer(player.getUUID(), 40)); // 40 ticks = 2 seconds
+        player.setGameMode(GameType.SPECTATOR);
+        player.setHealth(1.0F); // prevent death respawn screen
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.you_are_downed"));
+    }
+}
+
+private static void tickDownedPlayers(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+    Map<UUID, DownedPlayer> downed = new HashMap<>(run.downedPlayers());
+    for (Map.Entry<UUID, DownedPlayer> e : downed.entrySet()) {
+        DownedPlayer dp = e.getValue().tick();
+        if (dp.isReadyToRespawn()) {
+            respawnDownedPlayer(world, controller, run, e.getKey());
+            run.clearDowned(e.getKey());
+        } else {
+            run.setDowned(dp);
+        }
+    }
+}
+
+private static void respawnDownedPlayer(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, UUID uuid) {
+    ServerPlayer p = world.getServer().getPlayerList().getPlayer(uuid);
+    if (p == null) return;
+
+    // Teleport to DBS entrance
+    DungeonBossSpawnerBlockEntity dbs = (DungeonBossSpawnerBlockEntity) world.getBlockEntity(run.dbsPos());
+    if (dbs != null) {
+        ServerLevel target = world.getServer().getLevel(dbs.getEntranceDimension());
+        if (target == null) target = world;
+        BlockPos entrance = dbs.getEntrancePos();
+        p.setGameMode(GameType.SURVIVAL); // or whatever the player's pre-dungeon mode was; for now SURVIVAL
+        p.setHealth(p.getMaxHealth() * 0.5F);
+        p.teleportTo(target, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0f, 0f);
+    }
+
+    // Status back to ACTIVE
+    run.updateParticipant(run.participants().get(uuid)
+        .withStatus(ParticipantStatus.ACTIVE, world.getGameTime()));
+}
+```
+
+Sticky issue: `p.setGameMode(GameType.SURVIVAL)` assumes survival was the previous mode. If the player was creative/spectator before the run, we'd be lying. Use the `PlayerReturnPoint` if we capture gamemode there... but we don't. Add `gameMode: GameType` to `PlayerReturnPoint`? That changes the record signature.
+
+**Decision**: do NOT add gamemode to PlayerReturnPoint. The risk of "I was creative and the dungeon put me in survival on respawn" is small (admins testing). For the v4.0 release, players in survival is the assumed case. If admins need to do funky stuff, they can fix their gamemode after.
+
+#### Translation keys
+
+```json
+"message.arenas_ld.dungeon.hardcore_death": "You died in hardcore mode. You've been removed from the run.",
+"message.arenas_ld.dungeon.you_are_downed": "You're downed. Respawning shortly..."
+```
+
+#### Acceptance
+
+- Player HP hitting 0 during RUNNING phase triggers down/death.
+- Hardcore → REMOVED, kicked from run, vanilla respawn handles it.
+- Non-hardcore → DOWNED status, spectator mode, set health to 1 (no death screen).
+- After 40 ticks → respawn at DBS entrance, 50% HP, ACTIVE status.
+
+#### Don'ts
+
+- Do not modify the existing `LivingEntityMixin`. PE-10 is poll-based for now; Phase F adds a proper death event.
+- Do not save the player's gamemode in the return point.
+- Do not apply hardcore to losses (timeout/abandoned). Hardcore only kicks the individual player on death.
+- Do not change `currentRoomIndex` when a player dies. The room state is independent of individual players.
+
+---
+
+### PE-11 — Admin GUI: Instances + General tabs
+
+**Goal**: the tabbed admin screen, two tabs landing in this task.
+
+The "Lobby" GUI is already the player-facing screen from PE-5 (DungeonControllerScreen). The "Admin" version is a separate screen opened by ops with a different intent. This is a design call — separate screen or extra tabs?
+
+**Decision: separate screen, opened via different command.** Add a command `/arenasld dungeon admin` (or similar) that opens the admin GUI for the controller the player is looking at. Players don't get an "admin button" in the player GUI; admins use the command.
+
+This is cleaner than mixing player and admin tabs in one screen, and matches how a lot of mods handle it.
+
+**Files to create:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/DungeonControllerAdminScreen.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/DungeonControllerAdminScreenHandler.java`
+- `src/main/java/net/ledok/arenas_ld/dungeon/screen/DungeonControllerAdminData.java`
+- Several new packets for admin operations: `AddDungeonInstancePayload`, `RemoveDungeonInstancePayload`, `MoveDungeonInstancePayload`, `SetCooldownTicksPayload`, `SetCloseTimerSecondsPayload`, `SetMaxPartySizePayload`.
+
+**Files to modify:**
+- `CommandRegistry.java` (or whichever file has commands) — add `/arenasld dungeon admin`.
+- `ModScreenHandlers.java` — register.
+- `ModPacketTypeRegistry.java` — register.
+- `SpawnerPacketHandlers.java` — handlers (op-gated).
+
+#### Layout
+
+Two-tab GUI (Instances / General). Per-tier tabs come in PE-12.
+
+**Instances tab:**
+
+```
++--------------------------------------------+
+| Admin: Dungeon Controller                  |
+| [Instances] [General] [Normal] [Hard] [Hell]|
++--------------------------------------------+
+| Active runs: 2 / 5 instances               |
+| Cooldown: 0 | Pending removal: 0           |
+| Instances:                                 |
+|  1. [123, 64, -500]  RUNNING  [Up][Down][X]|
+|  2. [120, 64, -510]  IDLE     [Up][Down][X]|
+|  3. [125, 64, -515]  COOLDOWN (3:21)       |
+|                              [Up][Down][X] |
+| (use Linker to add)                        |
+|                          [Clear All]       |
++--------------------------------------------+
+```
+
+**General tab:**
+
+```
+| Cooldown: [300] seconds  [Apply]           |
+| Close timer: [30] seconds  [Apply]         |
+| Max party size: [4]  [Apply]               |
+| Invite expiry: [30] seconds  [Apply]       |
+```
+
+#### Acceptance
+
+- `/arenasld dungeon admin` opens the screen, op-only.
+- Instances tab shows live status of each instance (idle/running/cooldown).
+- General tab edits all four numeric configs with Apply buttons.
+- Remove button on a running instance correctly enqueues pending removal with a yellow warning chat message; the instance stays in the list with "PENDING REMOVAL" badge.
+- Add via Linker only — no inline add.
+
+#### Don'ts
+
+- Do not open the admin GUI on right-click. Command-only.
+- Do not let non-ops use the command.
+- Do not show admin status in the player GUI from PE-5.
+- Do not auto-refresh the screen. Re-open for fresh data.
+
+---
+
+### PE-12 — Admin GUI: per-tier tabs
+
+**Goal**: the three tier tabs (Normal/Hard/Hell). Each edits one `TierConfig`.
+
+**Files to modify:**
+- `DungeonControllerAdminScreen.java`
+- Add a `SetTierConfigPayload` payload.
+
+#### Tier tab layout
+
+```
+| Normal tier:                               |
+| Health multiplier: [1.0]    [Apply]        |
+| Damage multiplier: [1.0]    [Apply]        |
+| Loot table:       [arenas_ld:dungeon/...]  |
+|                                  [Apply]   |
+| Dungeon time:     [600] seconds  [Apply]   |
+| Hardcore default: [Off]          [Toggle]  |
++--------------------------------------------+
+| Leaderboard (Normal):                      |
+|   1. Steve   132s                          |
+|   2. Alice   145s                          |
+|   ... (top 10)                             |
++--------------------------------------------+
+```
+
+Repeat for Hard and Hell.
+
+#### Acceptance
+
+- Each tier tab edits its `TierConfig` independently.
+- Per-tier leaderboard shows top 10 entries sorted by time ascending.
+- Apply buttons send one packet per field — or one consolidated packet per Apply per tier (simpler).
+
+#### Don'ts
+
+- Do not validate that loot table IDs exist. Server checks at win-time.
+- Do not let admins reset the leaderboard from this GUI. Add a `/arenasld dungeon clearLeaderboard <tier>` command if/when needed; out of scope.
+- Do not snapshot tier configs into active runs on edit. The snapshot happens at `startRun`. Edits here affect future runs only.
+
+---
+
+### Phase E exit criteria
+
+After all 12 tasks:
+
+- `./gradlew build test` passes.
+- New dungeon controller block placeable, op-configurable via `/arenasld dungeon admin`.
+- Players can right-click to see lobbies, create one, invite others, configure tier, start a run.
+- Running a dungeon: rooms activate in order, mobs spawn with tier scaling, boss room triggers, loot bundles delivered to online winners, leaderboard updates.
+- Per-instance cooldown after each run.
+- Hardcore mode removes dying players from the run.
+- Non-hardcore mode downs them, respawns at entrance.
+- Dungeon timer triggers loss on timeout.
+- All-offline triggers loss on abandonment.
+- Legacy controller still works in parallel (unchanged).
+- Total new files: ~30+. Total LOC: ~2000-2500.
+
+---
+
+## Phase F — Linker + Manager (1 PR)
+
+**Status: not specified.** Will include:
+
+- New Linker modes for the new blocks: "controller → DBS instance", "DBS → rooms", "room → spawners", "room → phase block door".
+- `DungeonManager` singleton with weak-reference controller registry. Replaces the static `CONTROLLERS` set pattern.
+- `getRunForPlayer(player)` API on the manager. Used by the mixin replacement.
+- Update `LivingEntityMixin` to ask the manager (instead of polling).
+- `ServerPlayConnectionEvents.JOIN/DISCONNECT` for grace-period reconnect support.
+- `BusyStateCompat` integration for the new lobby/run flow.
+
+Specs deferred until Phase E is closed.
+
+---
+
+## Phase G — Migration cliff & cleanup (1 PR)
+
+**Status: not specified.** Was originally Phase H. Will include:
+
+- Delete every file in `net.ledok.arenas_ld.block.entity.*` for the old dungeon system.
+- Delete the corresponding blocks in `net.ledok.arenas_ld.block.*`.
+- Remove from `BlockRegistry`, `BlockEntitiesRegistry`, `ModScreenHandlers`, networking registrations.
+- Remove dead utility classes from `net.ledok.arenas_ld.util.*`.
+- Drop the `_v2` suffix from registry IDs — `arenas_ld:dungeon_controller_v2` becomes `arenas_ld:dungeon_controller`.
+- Drop the "(v2)" suffix from block display names.
+- Rewrite `/arenasld dungeon` subcommands for the new system.
+- Bump `mod_version` to `4.0.0`.
+- Final cleanup pass on lang files (remove dead keys).
+
+Specs deferred until Phase F is closed.
 
 ---
 
@@ -2662,12 +3931,11 @@ Specs deferred until Phase G closes.
 |---|---|---|---|
 | A | ✅ Complete (PA-1, PA-1.1, PA-2, PA-3, PA-4) | — | `1b226e2` |
 | B | ✅ Complete (PB-1..PB-8, PB-10; PB-9 skipped as redundant) | — | `4717f45` |
-| C | ✅ Complete (PC-1, PC-2, PC-3-old, PC-3, PC-4, PC-4.1, PC-5, PC-7; PC-6 skipped; in-game smoke verified) | — | `e0ba2e5` |
-| D | Specified, ready to start | — | — |
-| E | Not specified | — | — |
-| F | Not specified | — | — |
-| G | Not specified | — | — |
-| H | Not specified | — | — |
+| C | ✅ Complete (PC-1, PC-2, PC-3-old, PC-3, PC-4, PC-4.1, PC-5, PC-7; PC-6 skipped) | — | `e0ba2e5` |
+| D | ✅ Complete (PD-1..PD-7, PD-6.1) | — | `965831a` |
+| E | Specified, ready to start (PE-1..PE-12) | — | — |
+| F | Not specified (was old F + G combined) | — | — |
+| G | Not specified (was old H) | — | — |
 
 We update this table as we go.
 
@@ -2693,3 +3961,7 @@ These supersede earlier guidance in the plan if they conflict:
 - **NBT redundancy on participants/downedPlayers maps**: each UUID is stored both as the map key AND inside the value record. ~16 bytes per entry of waste, no behavior impact. Filed for future cleanup; not a current concern.
 - **Damage source filter default**: `dungeon_damage_source_filter` defaults to `ALL` in v4.0 config. Players have high HP; fall/lava/drowning scaling is fair.
 - **PC-4.1 follow-up**: PC-4 shipped with hardcoded user-facing strings. PC-4.1 added the i18n translation keys and the `markDirtyAndSync` calls in the new room handlers. Going forward, every user-facing string in new code uses `Component.translatable(...)` from the start.
+- **Codec conventions (PD-1 onwards)**:
+  - **`optionalFieldOf("key", default)` over `fieldOf("key")`** wherever a reasonable default exists. Lets old saves load when fields are added/removed in future. Especially for any field on a class that already exists in legacy saves.
+  - **Add `equals` + `hashCode` to any non-record class that gets a codec.** Codec round-trip tests use `assertEquals`, and consumers may use the instances as map keys / set members. The two changes are inseparable in practice. Records get this for free; plain classes don't.
+- **`EntityEquipmentHelper.applyEquipment` signature (corrected during PD-3)**: the 4th parameter is `boolean dropChance`, not `float`. `false` = regular mob (no drops on death). `true` = boss-style (drops at full chance, since `EquipmentData.dropChance` is itself a boolean). My PD-3 spec wrongly said "0.0F" — the corrected pattern is what's actually in PD-3's commit.

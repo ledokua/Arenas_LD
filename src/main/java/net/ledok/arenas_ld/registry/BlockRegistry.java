@@ -52,6 +52,9 @@ public class BlockRegistry {
     public static final Block DUNGEON_BOSS_SPAWNER_V2_BLOCK = registerBlock("dungeon_boss_spawner_v2",
             new net.ledok.arenas_ld.dungeon.block.DungeonBossSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));
 
+    public static final Block DUNGEON_CONTROLLER_V2_BLOCK = registerBlock("dungeon_controller_v2",
+            new net.ledok.arenas_ld.dungeon.block.DungeonControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));
+
     private static Block registerBlock(String name, Block block) {
         registerBlockItem(name, block);
         return Registry.register(BuiltInRegistries.BLOCK, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":" + name), block);

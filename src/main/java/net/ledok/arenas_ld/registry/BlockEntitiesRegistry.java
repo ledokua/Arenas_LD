@@ -71,6 +71,11 @@ public class BlockEntitiesRegistry {
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_boss_spawner_v2_be"),
                     BlockEntityType.Builder.of(net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity::new, BlockRegistry.DUNGEON_BOSS_SPAWNER_V2_BLOCK).build(null));
 
+    public static final BlockEntityType<net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity> DUNGEON_CONTROLLER_V2_BLOCK_ENTITY =
+            Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
+                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller_v2_be"),
+                    BlockEntityType.Builder.of(net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity::new, BlockRegistry.DUNGEON_CONTROLLER_V2_BLOCK).build(null));
+
     public static void initialize() {
     }
 }
