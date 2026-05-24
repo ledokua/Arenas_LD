@@ -2,9 +2,9 @@ package net.ledok.arenas_ld.networking;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.block.entity.RaidControllerBlockEntity;
+import net.ledok.arenas_ld.block.entity.RaidControllerBlockEntity.LobbyStatus;
+import net.ledok.arenas_ld.block.entity.RaidControllerBlockEntity.LobbyVisibility;
 import net.ledok.arenas_ld.util.InstanceStatus;
-import net.ledok.arenas_ld.util.LobbyStatus;
-import net.ledok.arenas_ld.util.LobbyVisibility;
 import net.ledok.arenas_ld.util.RaidDifficulty;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;

@@ -1,11 +1,11 @@
 package net.ledok.arenas_ld.screen;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.ledok.arenas_ld.block.entity.RaidControllerBlockEntity.LobbyStatus;
+import net.ledok.arenas_ld.block.entity.RaidControllerBlockEntity.LobbyVisibility;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.util.RaidDifficulty;
 import net.ledok.arenas_ld.util.RaidLeaderboardEntry;
-import net.ledok.arenas_ld.util.LobbyStatus;
-import net.ledok.arenas_ld.util.LobbyVisibility;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;

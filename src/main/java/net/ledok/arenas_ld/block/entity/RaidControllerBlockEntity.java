@@ -6,8 +6,6 @@ import net.ledok.arenas_ld.screen.RaidControllerData;
 import net.ledok.arenas_ld.screen.RaidControllerScreenHandler;
 import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.util.InstanceStatus;
-import net.ledok.arenas_ld.util.LobbyStatus;
-import net.ledok.arenas_ld.util.LobbyVisibility;
 import net.ledok.arenas_ld.util.RaidDifficulty;
 import net.ledok.arenas_ld.util.RaidLeaderboardEntry;
 import net.ledok.arenas_ld.util.RaidRunCallback;
@@ -43,6 +41,17 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class RaidControllerBlockEntity extends BlockEntity implements RaidRunCallback, ExtendedScreenHandlerFactory<RaidControllerData> {
     public record ControllerKey(BlockPos pos, ResourceKey<Level> dimension) {}
+
+    public enum LobbyStatus {
+        OPEN,
+        QUEUED,
+        IN_DUNGEON
+    }
+
+    public enum LobbyVisibility {
+        OPEN,
+        INVITE_ONLY
+    }
 
     public static final class Lobby {
         public UUID id = UUID.randomUUID();
