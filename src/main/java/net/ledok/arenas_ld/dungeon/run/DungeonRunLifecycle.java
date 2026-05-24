@@ -1,5 +1,6 @@
 package net.ledok.arenas_ld.dungeon.run;
 
+import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
@@ -77,6 +78,7 @@ public final class DungeonRunLifecycle {
                 world.getGameTime()
             ));
             run.setReturnPoint(uuid, PlayerReturnPoint.capture(player));
+            ArenasLdMod.DUNGEON_MANAGER.registerParticipant(uuid, run);
 
             BlockPos entrance = dbs.getEntrancePos();
             player.teleportTo(targetLevel, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0f, 0.0f);
@@ -98,6 +100,28 @@ public final class DungeonRunLifecycle {
     }
 
     private static void tickRunning(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+        if (!run.participants().isEmpty()) {
+            UUID anyUuid = run.participants().keySet().iterator().next();
+            if (ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(anyUuid) == null) {
+                for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
+                    if (entry.getValue().status() != ParticipantStatus.REMOVED) {
+                        ArenasLdMod.DUNGEON_MANAGER.registerParticipant(entry.getKey(), run);
+                    }
+                }
+                BlockEntity bootstrapDbsBe = world.getBlockEntity(run.dbsPos());
+                if (bootstrapDbsBe instanceof DungeonBossSpawnerBlockEntity bootstrapDbs) {
+                    for (BlockPos roomPos : bootstrapDbs.getRooms()) {
+                        BlockEntity roomBe = world.getBlockEntity(roomPos);
+                        if (roomBe instanceof RoomControllerBlockEntity roomController) {
+                            for (UUID mobUuid : roomController.getAliveMobs()) {
+                                ArenasLdMod.DUNGEON_MANAGER.registerMob(mobUuid, run);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         run.setDungeonTimerTicks(run.dungeonTimerTicks() - 1);
         if (run.dungeonTimerTicks() <= 0) {
             handleLoss(world, controller, run, DungeonOutcome.LOSS_TIMEOUT);
@@ -130,6 +154,9 @@ public final class DungeonRunLifecycle {
 
         if (!room.isActivated()) {
             room.activate(world, run.resolvedTierConfig());
+            for (UUID uuid : room.getAliveMobs()) {
+                ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
+            }
         } else {
             room.refreshAliveMobs(world);
             if (room.isCleared()) {
@@ -226,6 +253,21 @@ public final class DungeonRunLifecycle {
     }
 
     static void finalize(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+        for (UUID uuid : run.participants().keySet()) {
+            ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
+        }
+        BlockEntity managerDbsBe = world.getBlockEntity(run.dbsPos());
+        if (managerDbsBe instanceof DungeonBossSpawnerBlockEntity managerDbs) {
+            for (BlockPos roomPos : managerDbs.getRooms()) {
+                BlockEntity roomBe = world.getBlockEntity(roomPos);
+                if (roomBe instanceof RoomControllerBlockEntity roomController) {
+                    for (UUID mobUuid : roomController.getAliveMobs()) {
+                        ArenasLdMod.DUNGEON_MANAGER.unregisterMob(mobUuid);
+                    }
+                }
+            }
+        }
+
         for (Map.Entry<UUID, PlayerReturnPoint> entry : run.returnPoints().entrySet()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
             if (player == null) {
@@ -332,6 +374,7 @@ public final class DungeonRunLifecycle {
                 );
             }
             run.removeReturnPoint(player.getUUID());
+            ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(player.getUUID());
             player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.hardcore_death").withStyle(ChatFormatting.RED));
             return;
         }

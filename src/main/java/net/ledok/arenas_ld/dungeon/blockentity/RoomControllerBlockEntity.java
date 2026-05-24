@@ -200,6 +200,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             if (entity != null && entity.isAlive()) {
                 entity.discard();
             }
+            ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);
         }
         clearRuntimeState();
         closeDoor(world);
@@ -252,6 +253,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             Entity entity = world.getEntity(uuid);
             if (entity == null || !entity.isAlive() || entity.isRemoved() || entity.level() != world) {
                 it.remove();
+                ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);
                 changed = true;
             }
         }

@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.dungeon.manager;
 
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
+import net.ledok.arenas_ld.dungeon.run.DungeonRun;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -12,6 +13,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Server-side singleton tracking all v4.0 dungeon controllers. Provides cross-controller
@@ -26,6 +28,10 @@ public final class DungeonManager {
 
     /** Controllers registered by their dimension + position. */
     private final Map<ResourceKey<Level>, Set<BlockPos>> controllersByDimension = new HashMap<>();
+    /** Player UUID -> run they're in (active OR closing). */
+    private final Map<UUID, DungeonRun> runByPlayer = new HashMap<>();
+    /** Mob UUID -> run that spawned it. */
+    private final Map<UUID, DungeonRun> runByMob = new HashMap<>();
 
     public DungeonManager() {
     }
@@ -72,8 +78,34 @@ public final class DungeonManager {
         return controllersByDimension.getOrDefault(dim, Set.of());
     }
 
+    public void registerParticipant(UUID uuid, DungeonRun run) {
+        runByPlayer.put(uuid, run);
+    }
+
+    public void unregisterParticipant(UUID uuid) {
+        runByPlayer.remove(uuid);
+    }
+
+    public DungeonRun getRunForPlayer(UUID uuid) {
+        return runByPlayer.get(uuid);
+    }
+
+    public void registerMob(UUID uuid, DungeonRun run) {
+        runByMob.put(uuid, run);
+    }
+
+    public void unregisterMob(UUID uuid) {
+        runByMob.remove(uuid);
+    }
+
+    public DungeonRun getRunForEntity(UUID uuid) {
+        return runByMob.get(uuid);
+    }
+
     /** Clear all state on server stop. Re-population happens organically as controllers load. */
     public void clearForServerStop() {
         controllersByDimension.clear();
+        runByPlayer.clear();
+        runByMob.clear();
     }
 }
