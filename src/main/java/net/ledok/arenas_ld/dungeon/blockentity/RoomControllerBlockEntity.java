@@ -45,8 +45,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
 
     // ---- Fields ----
 
-    private final List<BlockPos> spawnerPositions = new ArrayList<>();
-    @Nullable private BlockPos doorPos = null;
+    private final List<BlockPos> spawnerOffsets = new ArrayList<>();
+    @Nullable private BlockPos doorOffset = null;
     private final Set<UUID> aliveMobs = new HashSet<>();
     private boolean activated = false;
     private boolean cleared = false;
@@ -60,12 +60,25 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     // ---- Getters ----
 
     public List<BlockPos> getSpawnerPositions() {
-        return Collections.unmodifiableList(spawnerPositions);
+        List<BlockPos> absoluteSpawners = new ArrayList<>(spawnerOffsets.size());
+        for (BlockPos spawnerOffset : spawnerOffsets) {
+            absoluteSpawners.add(worldPosition.offset(spawnerOffset));
+        }
+        return Collections.unmodifiableList(absoluteSpawners);
+    }
+
+    public List<BlockPos> getSpawnerOffsets() {
+        return Collections.unmodifiableList(spawnerOffsets);
     }
 
     @Nullable
     public BlockPos getDoorPos() {
-        return doorPos;
+        return doorOffset == null ? null : worldPosition.offset(doorOffset);
+    }
+
+    @Nullable
+    public BlockPos getDoorOffset() {
+        return doorOffset;
     }
 
     public Set<UUID> getAliveMobs() {
@@ -83,18 +96,20 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     // ---- Admin / Linker operations ----
 
     /** Returns true if the spawner was added (false if already present). */
-    public boolean addSpawner(BlockPos pos) {
-        if (spawnerPositions.contains(pos)) {
+    public boolean addSpawner(BlockPos absolutePos) {
+        BlockPos spawnerOffset = absolutePos.subtract(worldPosition);
+        if (spawnerOffsets.contains(spawnerOffset)) {
             return false;
         }
-        spawnerPositions.add(pos);
+        spawnerOffsets.add(spawnerOffset);
         setChanged();
         return true;
     }
 
     /** Returns true if the spawner was removed (false if not present). */
-    public boolean removeSpawner(BlockPos pos) {
-        boolean removed = spawnerPositions.remove(pos);
+    public boolean removeSpawner(BlockPos absolutePos) {
+        BlockPos spawnerOffset = absolutePos.subtract(worldPosition);
+        boolean removed = spawnerOffsets.remove(spawnerOffset);
         if (removed) {
             setChanged();
         }
@@ -102,15 +117,16 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     }
 
     public void clearSpawners() {
-        if (!spawnerPositions.isEmpty()) {
-            spawnerPositions.clear();
+        if (!spawnerOffsets.isEmpty()) {
+            spawnerOffsets.clear();
             setChanged();
         }
     }
 
-    public void setDoorPos(@Nullable BlockPos pos) {
-        if (!Objects.equals(doorPos, pos)) {
-            this.doorPos = pos;
+    public void setDoorPos(@Nullable BlockPos absolutePos) {
+        BlockPos newDoorOffset = absolutePos == null ? null : absolutePos.subtract(worldPosition);
+        if (!Objects.equals(doorOffset, newDoorOffset)) {
+            this.doorOffset = newDoorOffset;
             setChanged();
         }
     }
@@ -148,7 +164,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     /**
      * Spawn this room's mobs, applying the tier's health multiplier.
      *
-     * <p>For each {@code BlockPos} in {@link #spawnerPositions}:
+     * <p>For each {@code BlockPos} in {@link #spawnerOffsets}:
      * <ul>
      *   <li>If the block entity at that position is a legacy {@code MobSpawnerBlockEntity},
      *       call {@code spawnSingleScaled(world, tier.healthMultiplier())} on it.</li>
@@ -167,8 +183,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         if (activated) return 0;
 
         int spawned = 0;
-        for (BlockPos pos : spawnerPositions) {
-            BlockEntity be = world.getBlockEntity(pos);
+        for (BlockPos absolutePos : getSpawnerPositions()) {
+            BlockEntity be = world.getBlockEntity(absolutePos);
             LivingEntity entity = null;
             if (be instanceof MobSpawnerBlockEntity mobSpawner) {
                 entity = mobSpawner.spawnSingleScaled(world, tier.healthMultiplier());
@@ -181,7 +197,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             } else {
                 ArenasLdMod.LOGGER.warn(
                     "RoomController at {}: linked position {} is not a spawner (got {})",
-                    worldPosition, pos, be == null ? "null" : be.getClass().getSimpleName());
+                    worldPosition, absolutePos, be == null ? "null" : be.getClass().getSimpleName());
                 continue;
             }
             if (entity != null) {
@@ -227,18 +243,19 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     }
 
     private void setDoorSolid(ServerLevel world, boolean solid) {
-        if (doorPos == null) return;
-        if (!world.isLoaded(doorPos)) return;
-        BlockState state = world.getBlockState(doorPos);
+        if (doorOffset == null) return;
+        BlockPos doorAbsolute = worldPosition.offset(doorOffset);
+        if (!world.isLoaded(doorAbsolute)) return;
+        BlockState state = world.getBlockState(doorAbsolute);
         if (!(state.getBlock() instanceof PhaseBlock)) {
             ArenasLdMod.LOGGER.warn(
                 "RoomController at {}: door position {} is not a PhaseBlock (got {})",
-                worldPosition, doorPos, state.getBlock());
+                worldPosition, doorAbsolute, state.getBlock());
             return;
         }
         if (state.getValue(PhaseBlock.SOLID) != solid) {
-            world.setBlock(doorPos, state.setValue(PhaseBlock.SOLID, solid), 3);
-            if (world.getBlockEntity(doorPos) instanceof net.ledok.arenas_ld.block.entity.PhaseBlockEntity phaseBlock) {
+            world.setBlock(doorAbsolute, state.setValue(PhaseBlock.SOLID, solid), 3);
+            if (world.getBlockEntity(doorAbsolute) instanceof net.ledok.arenas_ld.block.entity.PhaseBlockEntity phaseBlock) {
                 phaseBlock.propagateState(solid, new java.util.ArrayList<>());
             }
         }
@@ -274,15 +291,15 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
 
     // Internal serialization record; never exposed outside the class.
     private record State(
-        List<BlockPos> spawners,
-        Optional<BlockPos> door,
+        List<BlockPos> spawnerOffsets,
+        Optional<BlockPos> doorOffset,
         Set<UUID> aliveMobs,
         boolean activated,
         boolean cleared
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
-            BlockPos.CODEC.listOf().fieldOf("spawners").forGetter(State::spawners),
-            BlockPos.CODEC.optionalFieldOf("door").forGetter(State::door),
+            BlockPos.CODEC.listOf().fieldOf("spawnerOffsets").forGetter(State::spawnerOffsets),
+            BlockPos.CODEC.optionalFieldOf("doorOffset").forGetter(State::doorOffset),
             UUIDUtil.CODEC.listOf()
                 .xmap((List<UUID> list) -> (Set<UUID>) new HashSet<>(list),
                       (Set<UUID> set) -> new ArrayList<>(set))
@@ -295,7 +312,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
-        State state = new State(spawnerPositions, Optional.ofNullable(doorPos), aliveMobs, activated, cleared);
+        State state = new State(spawnerOffsets, Optional.ofNullable(doorOffset), aliveMobs, activated, cleared);
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save RoomController at {}: {}", worldPosition, err))
@@ -310,9 +327,9 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                     "Failed to load RoomController at {}: {}", worldPosition, err))
                 .ifPresent(state -> {
-                    spawnerPositions.clear();
-                    spawnerPositions.addAll(state.spawners());
-                    doorPos = state.door().orElse(null);
+                    spawnerOffsets.clear();
+                    spawnerOffsets.addAll(state.spawnerOffsets());
+                    doorOffset = state.doorOffset().orElse(null);
                     aliveMobs.clear();
                     aliveMobs.addAll(state.aliveMobs());
                     activated = state.activated();
