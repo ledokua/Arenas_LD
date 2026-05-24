@@ -700,4 +700,16 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             initializeDefaults();
         }
     }
+
+    @Override
+    public void clearRemoved() {
+        super.clearRemoved();
+        ArenasLdMod.DUNGEON_MANAGER.registerController(this);
+    }
+
+    @Override
+    public void setRemoved() {
+        super.setRemoved();
+        ArenasLdMod.DUNGEON_MANAGER.unregisterController(this);
+    }
 }

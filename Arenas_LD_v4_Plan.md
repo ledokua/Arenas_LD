@@ -3892,20 +3892,862 @@ After all 12 tasks:
 
 ---
 
-## Phase F — Linker + Manager (1 PR)
+## Phase F — Linker + DungeonManager (1 PR)
 
-**Status: not specified.** Will include:
+**Goal of the phase**: make the v4.0 dungeon system fully usable end-to-end without `/data` commands.
 
-- New Linker modes for the new blocks: "controller → DBS instance", "DBS → rooms", "room → spawners", "room → phase block door".
-- `DungeonManager` singleton with weak-reference controller registry. Replaces the static `CONTROLLERS` set pattern.
-- `getRunForPlayer(player)` API on the manager. Used by the mixin replacement.
-- Update `LivingEntityMixin` to ask the manager (instead of polling).
-- `ServerPlayConnectionEvents.JOIN/DISCONNECT` for grace-period reconnect support.
-- `BusyStateCompat` integration for the new lobby/run flow.
+After Phase E, the controller exists with admin/lobby/run logic, but linking blocks together (controller↔DBS, DBS↔rooms, room↔spawners, room↔door) requires manually editing NBT via `/data merge`. Phase F adds proper Linker modes for the new blocks.
 
-Specs deferred until Phase E is closed.
+Phase F also introduces the **DungeonManager**, a server-level singleton that:
+- Tracks all v4.0 controllers across all dimensions
+- Maintains an O(1) `UUID → DungeonRun` lookup (for both participants and mobs spawned by runs)
+- Replaces the legacy static `CONTROLLERS` set pattern, which leaked memory across chunk unloads
+- Provides the integration point for the `LivingEntityMixin` (damage scaling) and `ServerLivingEntityEvents.AFTER_DEATH` (death detection), replacing PE-10's poll-based death detection
+
+Finally, Phase F integrates `BusyStateCompat` for the new run lifecycle so v4.0 dungeons participate in the busy-state system as legacy dungeons did.
+
+After Phase F, an admin can place a v4.0 controller, configure tiers via the admin GUI, use the Linker to set up instances/rooms/spawners/doors, and players can run dungeons end-to-end without ever touching `/data`.
+
+### Decisions locked in for Phase F
+
+These were settled during the spec discussion:
+
+- **DungeonManager is a static singleton on `ArenasLdMod`** (e.g. `ArenasLdMod.DUNGEON_MANAGER`). Cleared on `ServerLifecycleEvents.SERVER_STOPPING`. Matches existing patterns.
+- **No `WeakReference` for controllers.** Instead the manager stores `Map<ResourceKey<Level>, Set<BlockPos>>` and looks up BE via `level.getBlockEntity(pos)` on demand. Simpler, no stale-ref risk.
+- **`Map<UUID, DungeonRun>` for participants AND mobs.** Maintained by lifecycle code via `manager.registerParticipant(uuid, run)` / `registerMob(uuid, run)` and their unregister counterparts. O(1) mixin queries.
+- **Append new `LinkerMode` enum values** at the end. Legacy modes stay unchanged. New modes: `CONTROLLER_INSTANCE`, `DBS_ROOM`, `ROOM_SPAWNER`, `ROOM_DOOR`. These names use simpler labels than legacy modes — admin's mental model is "I'm setting X on Y."
+- **Replace poll-based death detection from PE-10 with `ServerLivingEntityEvents.AFTER_DEATH` listener.** The listener routes through `DungeonManager.getRunForPlayer(uuid)` to find the run, then calls into `DungeonRunLifecycle.handlePlayerDown` (which gets promoted from private to package-visible-via-manager). Poll-based code in PE-10's `detectPlayerDeaths` is removed.
+- **`LivingEntityMixin` gets a v4.0 path.** Existing legacy logic stays. New path: ask `DungeonManager.getRunForEntity(uuid)` → if non-null, get the resolved tier config, apply damage scaling. Same shape as legacy mixin, different data source.
+- **`BusyStateCompat.setBusy(player)` on run start, `setNotBusy(player)` on finalize.** Wraps existing v4.0 lifecycle calls. Both for legacy AND v4.0 runs. Legacy already does this; v4.0 needs the calls added.
+- **Disconnect handling**: a `ServerPlayConnectionEvents.DISCONNECT` listener marks the player DOWNED in any active run they're in, with a grace period. Reconnect within grace = restored to ACTIVE. Grace period default 5 minutes (`6000` ticks), configurable.
+
+### Tasks in this phase
+
+7 tasks:
+
+- **PF-1** — `DungeonManager` skeleton: singleton, controller registry, lifecycle hooks (server stop clears it). No participant/mob lookup yet.
+- **PF-2** — Participant + mob registration. `manager.registerParticipant`, `manager.registerMob`, `getRunForPlayer`, `getRunForEntity`. Lifecycle code wires in.
+- **PF-3** — New Linker modes (4 of them). Linker code recognizes new blocks and dispatches to the right BE operation.
+- **PF-4** — `LivingEntityMixin` v4.0 path. Damage scaling for v4.0 mobs.
+- **PF-5** — `ServerLivingEntityEvents.AFTER_DEATH` listener. Replaces poll-based death detection.
+- **PF-6** — Disconnect/reconnect handling with grace period. Updates participant status on connection events.
+- **PF-7** — `BusyStateCompat` integration on v4.0 start/finalize.
+
+After Phase F, end-to-end gameplay works without `/data`. Phase G can begin removing legacy code.
 
 ---
+
+### PF-1 — `DungeonManager` skeleton
+
+**Goal**: introduce the manager class with the controller registry. No participant/mob lookups yet — those land in PF-2.
+
+**Files to create:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/manager/DungeonManager.java`
+
+**Files to modify:**
+- `src/main/java/net/ledok/arenas_ld/ArenasLdMod.java` — instantiate `DUNGEON_MANAGER` static field; hook `SERVER_STARTING` and `SERVER_STOPPING` lifecycle events.
+- `src/main/java/net/ledok/arenas_ld/dungeon/blockentity/DungeonControllerBlockEntity.java` — register/unregister with manager in `clearRemoved` and `setRemoved`.
+
+#### `DungeonManager` spec
+
+```java
+package net.ledok.arenas_ld.dungeon.manager;
+
+import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Server-side singleton tracking all v4.0 dungeon controllers. Provides cross-controller
+ * lookup APIs used by the mixin, death listener, and admin commands.
+ *
+ * <p>Lifecycle: instance is created at mod init; state is cleared on server stop via
+ * {@link #clearForServerStop()}. Per-server state is rebuilt as controllers load.
+ *
+ * <p>Threading: all mutators are server-thread-only. No synchronization.
+ */
+public final class DungeonManager {
+
+    /** Controllers registered by their dimension + position. */
+    private final Map<ResourceKey<Level>, Set<BlockPos>> controllersByDimension = new HashMap<>();
+
+    public DungeonManager() {
+        // No-op constructor. Lifecycle events drive the rest.
+    }
+
+    // ---- Controller registry ----
+
+    public void registerController(DungeonControllerBlockEntity be) {
+        Level level = be.getLevel();
+        if (!(level instanceof ServerLevel sl)) return;
+        ResourceKey<Level> dim = sl.dimension();
+        controllersByDimension.computeIfAbsent(dim, k -> new HashSet<>()).add(be.getBlockPos());
+    }
+
+    public void unregisterController(DungeonControllerBlockEntity be) {
+        Level level = be.getLevel();
+        if (!(level instanceof ServerLevel sl)) return;
+        ResourceKey<Level> dim = sl.dimension();
+        Set<BlockPos> set = controllersByDimension.get(dim);
+        if (set != null) {
+            set.remove(be.getBlockPos());
+            if (set.isEmpty()) controllersByDimension.remove(dim);
+        }
+    }
+
+    /**
+     * Look up a controller BE by (dimension, position). Returns null if the chunk isn't loaded
+     * or no controller exists at that position.
+     */
+    public DungeonControllerBlockEntity getController(MinecraftServer server, ResourceKey<Level> dim, BlockPos pos) {
+        ServerLevel level = server.getLevel(dim);
+        if (level == null) return null;
+        BlockEntity be = level.getBlockEntity(pos);
+        return be instanceof DungeonControllerBlockEntity controller ? controller : null;
+    }
+
+    /** All registered controller positions in the given dimension. */
+    public Set<BlockPos> getControllersIn(ResourceKey<Level> dim) {
+        return controllersByDimension.getOrDefault(dim, Set.of());
+    }
+
+    // ---- Lifecycle ----
+
+    /** Clear all state on server stop. Re-population happens organically as controllers load. */
+    public void clearForServerStop() {
+        controllersByDimension.clear();
+    }
+}
+```
+
+#### `ArenasLdMod` changes
+
+Add a public static `DUNGEON_MANAGER` field, initialized at mod init:
+
+```java
+public static final DungeonManager DUNGEON_MANAGER = new DungeonManager();
+```
+
+Hook `ServerLifecycleEvents.SERVER_STOPPING`:
+
+```java
+ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+    DUNGEON_MANAGER.clearForServerStop();
+});
+```
+
+No `SERVER_STARTING` hook needed — the manager starts empty and fills as controllers load their chunks.
+
+#### `DungeonControllerBlockEntity` changes
+
+Override `clearRemoved` and `setRemoved`:
+
+```java
+@Override
+public void clearRemoved() {
+    super.clearRemoved();
+    ArenasLdMod.DUNGEON_MANAGER.registerController(this);
+}
+
+@Override
+public void setRemoved() {
+    super.setRemoved();
+    ArenasLdMod.DUNGEON_MANAGER.unregisterController(this);
+}
+```
+
+`clearRemoved` is called when the BE is added to the world (load or place). `setRemoved` is called when the BE is removed (chunk unload, block break). This matches the legacy pattern's invocations but routes through the manager instead of a static set.
+
+#### Acceptance
+
+- `DungeonManager` exists in the new package with controller registry methods.
+- `ArenasLdMod.DUNGEON_MANAGER` is the singleton; `clearForServerStop` is called on server stop.
+- `DungeonControllerBlockEntity.clearRemoved/setRemoved` register/unregister with the manager.
+- Build passes.
+- Placing two controllers in the world, opening one's admin GUI, then breaking and replacing one: no leaks, both still discoverable via the manager.
+
+#### Don'ts
+
+- Do not add `Map<UUID, DungeonRun>` yet. PF-2.
+- Do not add WeakReferences. The (dim, pos) + `level.getBlockEntity(pos)` lookup pattern is enough.
+- Do not synchronize access — manager is server-thread-only.
+- Do not replace the legacy `CONTROLLERS` set on the legacy `DungeonControllerBlockEntity` — leave it untouched. Phase G deletes the legacy file entirely.
+
+#### References
+
+- Legacy `DungeonControllerBlockEntity.CONTROLLERS` — the pattern we're replacing.
+- `ServerLifecycleEvents` from `fabric-lifecycle-events-v1` for the server stop hook.
+
+---
+
+### PF-2 — Participant + mob registration
+
+**Goal**: add the `UUID → DungeonRun` maps to the manager, with O(1) lookup APIs. Lifecycle code wires registrations in.
+
+**Files to modify:**
+- `DungeonManager.java`
+- `DungeonRunLifecycle.java` — register/unregister at the right transitions.
+- `RoomControllerBlockEntity.java` — register mobs when they spawn; unregister when room resets or refreshAliveMobs prunes a dead UUID.
+
+#### `DungeonManager` additions
+
+```java
+/** Player UUID → run they're in (active OR closing). Removed on run finalize. */
+private final Map<UUID, DungeonRun> runByPlayer = new HashMap<>();
+
+/** Entity UUID (mobs) → run they were spawned by. Removed on mob death or room reset. */
+private final Map<UUID, DungeonRun> runByMob = new HashMap<>();
+
+public void registerParticipant(UUID uuid, DungeonRun run) {
+    runByPlayer.put(uuid, run);
+}
+
+public void unregisterParticipant(UUID uuid) {
+    runByPlayer.remove(uuid);
+}
+
+public DungeonRun getRunForPlayer(UUID uuid) {
+    return runByPlayer.get(uuid);
+}
+
+public void registerMob(UUID uuid, DungeonRun run) {
+    runByMob.put(uuid, run);
+}
+
+public void unregisterMob(UUID uuid) {
+    runByMob.remove(uuid);
+}
+
+public DungeonRun getRunForEntity(UUID uuid) {
+    return runByMob.get(uuid);
+}
+
+// Update clearForServerStop:
+public void clearForServerStop() {
+    controllersByDimension.clear();
+    runByPlayer.clear();
+    runByMob.clear();
+}
+```
+
+#### `DungeonRunLifecycle.startRun` additions
+
+After the run is constructed and pushed to the controller:
+
+```java
+for (UUID uuid : partyUuids) {
+    // ... existing teleport + capture logic ...
+    ArenasLdMod.DUNGEON_MANAGER.registerParticipant(uuid, run);
+}
+```
+
+#### `DungeonRunLifecycle.finalize` additions
+
+Before any teleport / cleanup:
+
+```java
+// Unregister all participants from the manager
+for (UUID uuid : run.participants().keySet()) {
+    ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
+}
+// Unregister any tracked mobs (room reset will discard them anyway, but be defensive)
+DungeonBossSpawnerBlockEntity dbs = (DungeonBossSpawnerBlockEntity) world.getBlockEntity(run.dbsPos());
+if (dbs != null) {
+    for (BlockPos roomPos : dbs.getRooms()) {
+        if (world.getBlockEntity(roomPos) instanceof RoomControllerBlockEntity rc) {
+            for (UUID mobUuid : rc.getAliveMobs()) {
+                ArenasLdMod.DUNGEON_MANAGER.unregisterMob(mobUuid);
+            }
+        }
+    }
+}
+```
+
+#### `DungeonRunLifecycle.handlePlayerDown` (hardcore branch)
+
+The hardcore branch removes the player from the run. Also unregister them:
+
+```java
+if (run.hardcoreEnabled()) {
+    // ... existing code ...
+    run.removeReturnPoint(player.getUUID());
+    ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(player.getUUID());  // ADD THIS
+    player.sendSystemMessage(...);
+    return;
+}
+```
+
+#### `RoomControllerBlockEntity.activate` change
+
+When a mob is spawned and tracked, also register with the manager. But the room doesn't know what run it's in. **Two options:**
+
+- **A**: The `activate(...)` method's caller (lifecycle's `tickRunning`) passes the run, and the room registers each spawned mob. Cleanest but couples Room to Run.
+- **B**: Lifecycle code does the registration after calling `activate`. Lifecycle already has the run, has the room reference, has access to `room.getAliveMobs()`. Just walk the freshly-populated alive mobs and register each.
+
+**Pick B.** No new coupling on the Room.
+
+In `tickRunning`, after calling `room.activate(world, tier)`:
+
+```java
+if (!room.isActivated()) {
+    room.activate(world, run.resolvedTierConfig());
+    // Register all freshly-spawned mobs with the manager
+    for (UUID uuid : room.getAliveMobs()) {
+        ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
+    }
+}
+```
+
+#### `RoomControllerBlockEntity.refreshAliveMobs` — unregister dead mobs
+
+The current `refreshAliveMobs` prunes UUIDs whose entities are dead/missing. When that prune happens, ALSO unregister from the manager:
+
+```java
+// In refreshAliveMobs:
+while (it.hasNext()) {
+    UUID uuid = it.next();
+    Entity entity = world.getEntity(uuid);
+    if (entity == null || !entity.isAlive() || entity.isRemoved() || entity.level() != world) {
+        it.remove();
+        ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);   // ADD THIS
+        changed = true;
+    }
+}
+```
+
+Adds a dependency from the room to `ArenasLdMod`, which is fine — `ArenasLdMod` is the singleton entry point.
+
+#### `RoomControllerBlockEntity.reset` — unregister all mobs before discarding
+
+The current `reset` iterates `aliveMobs` and discards each entity. Also unregister:
+
+```java
+// In reset:
+for (UUID uuid : new ArrayList<>(aliveMobs)) {
+    Entity entity = world.getEntity(uuid);
+    if (entity != null && entity.isAlive()) {
+        entity.discard();
+    }
+    ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);   // ADD THIS — regardless of whether entity was alive
+}
+clearRuntimeState();
+closeDoor(world);
+```
+
+#### Acceptance
+
+- Manager has two new maps, four public getters/registers/unregisters, and the lookups (`getRunForPlayer`, `getRunForEntity`).
+- `clearForServerStop` clears all three maps.
+- Run start populates `runByPlayer` for every party member.
+- Run finalize clears `runByPlayer` for every participant.
+- Hardcore death clears `runByPlayer` for the dying player.
+- Room activate registers spawned mobs.
+- Room refresh + reset unregister cleared/discarded mobs.
+- Build passes.
+
+#### Don'ts
+
+- Do not call `registerParticipant` for downed players — they're already registered.
+- Do not register OFFLINE party members (the startRun loop already skips them via the `player == null` check).
+- Do not store entire DungeonRun in NBT for these maps. They're transient state, rebuilt on demand.
+- Do not iterate the manager's maps from the lifecycle — only mutate.
+
+#### References
+
+- PE-7's startRun for the existing iteration pattern.
+- PE-6's finalize for the existing cleanup pattern.
+
+---
+
+### PF-3 — New Linker modes
+
+**Goal**: 4 new Linker modes that wire v4.0 blocks together via right-click sequences.
+
+The existing Linker (read its current code first) likely uses a `LinkerMode` enum stored in the item's NBT, a "current selection" stored in the item's NBT, and a per-mode dispatch when the player right-clicks a target block.
+
+PF-3 adds 4 new modes:
+
+- **`CONTROLLER_INSTANCE`**: source = controller, target = DBS → `controller.addInstance(dbsPos)`
+- **`DBS_ROOM`**: source = DBS, target = room → `dbs.addRoom(roomPos)`
+- **`ROOM_SPAWNER`**: source = room, target = mob spawner OR DBS → `room.addSpawner(targetPos)`
+- **`ROOM_DOOR`**: source = room, target = phase block → `room.setDoorPos(targetPos)`
+
+Each mode has the same UX: right-click source (becomes "selected"), right-click target (link is established). Chat feedback on success/failure.
+
+**Files to modify:**
+- `src/main/java/net/ledok/arenas_ld/item/LinkerItem.java` (or wherever the Linker code lives) — add the 4 new enum values and the dispatch logic.
+- `src/main/resources/assets/arenas_ld/lang/en_us.json` + `uk_ua.json` — labels for the 4 new modes + success/failure messages.
+
+#### Mode dispatch logic
+
+```java
+case CONTROLLER_INSTANCE -> {
+    if (sourceBe instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller
+        && targetBe instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity) {
+        boolean added = controller.addInstance(targetPos);
+        sendFeedback(player, added
+            ? "message.arenas_ld.linker.controller_instance.added"
+            : "message.arenas_ld.linker.controller_instance.duplicate");
+        markDirtyAndSync(world, controller);
+    } else {
+        sendFailure(player, "message.arenas_ld.linker.controller_instance.wrong_blocks");
+    }
+}
+// ... 3 more cases
+```
+
+#### Translation keys (need both lang files)
+
+```json
+"item.arenas_ld.linker.mode.controller_instance": "Controller → Instance",
+"item.arenas_ld.linker.mode.dbs_room": "DBS → Room",
+"item.arenas_ld.linker.mode.room_spawner": "Room → Spawner",
+"item.arenas_ld.linker.mode.room_door": "Room → Door",
+
+"message.arenas_ld.linker.controller_instance.added": "Instance added to controller.",
+"message.arenas_ld.linker.controller_instance.duplicate": "This instance is already registered.",
+"message.arenas_ld.linker.controller_instance.wrong_blocks": "Linker mode requires a v4.0 Controller as source and a v4.0 Dungeon Boss Spawner as target.",
+
+"message.arenas_ld.linker.dbs_room.added": "Room added to DBS.",
+"message.arenas_ld.linker.dbs_room.duplicate": "This room is already in the DBS's list.",
+"message.arenas_ld.linker.dbs_room.wrong_blocks": "Linker mode requires a v4.0 DBS as source and a v4.0 Room Controller as target.",
+
+"message.arenas_ld.linker.room_spawner.added": "Spawner added to room.",
+"message.arenas_ld.linker.room_spawner.duplicate": "This spawner is already in the room's list.",
+"message.arenas_ld.linker.room_spawner.wrong_blocks": "Linker mode requires a v4.0 Room as source and a v4.0 Mob Spawner or DBS as target.",
+
+"message.arenas_ld.linker.room_door.set": "Door set on room.",
+"message.arenas_ld.linker.room_door.cleared_first": "Replaced previous door on room.",
+"message.arenas_ld.linker.room_door.wrong_blocks": "Linker mode requires a v4.0 Room as source and a Phase Block as target."
+```
+
+Ukrainian translations follow the same patterns as previous lang work.
+
+#### Op-gating
+
+The Linker is already op-gated in legacy (verify). The new modes inherit the same op-gate — they're admin tools.
+
+#### Source-block storage
+
+The Linker likely stores the "first selected" block in the item's NBT. The 4 new modes use the same storage mechanism — no new fields needed.
+
+#### Mode-cycle behavior
+
+The Linker probably has shift+right-click or a similar input to cycle modes. The new 4 modes are appended to the cycle. Pre-existing legacy modes still cycle in their original order.
+
+#### Acceptance
+
+- 4 new `LinkerMode` enum values appended.
+- Each mode has its dispatch case in the Linker's right-click handler.
+- Mode display name (in tooltip/HUD) shows the translated label.
+- Success/failure chat messages are translatable.
+- After a successful link, the source BE's data persists across save/load.
+- Wrong block combinations produce a failure message and don't change state.
+- Op-only.
+- Build passes.
+
+#### Don'ts
+
+- Do not replace any existing legacy Linker mode.
+- Do not add `removeInstance` or `removeRoom` modes — those use the admin GUI's X button. The Linker is for *adding*.
+- Do not add a "set entrance" mode for the DBS — entrance is handled via the DBS's GUI (PD-6's "Set to my position" button). Linker stays focused on positional linking.
+- Do not support cross-dimension links. Each link is within one dimension; admin must place all blocks in the same world.
+- Do not add a Linker mode for "linker controller→room" or "linker room→spawner+door at once" — keep each mode atomic.
+
+#### References
+
+- Existing `LinkerItem.java` — read first; mirror the existing pattern.
+
+---
+
+### PF-4 — `LivingEntityMixin` v4.0 path
+
+**Goal**: apply damage scaling to mobs in v4.0 runs, parallel to the existing legacy behavior.
+
+**Files to modify:**
+- `src/main/java/net/ledok/arenas_ld/mixin/LivingEntityMixin.java`
+
+#### Current behavior (legacy)
+
+The existing mixin scales damage for entities in active legacy dungeons. It walks `DungeonControllerBlockEntity.CONTROLLERS`, finds the matching dungeon, applies the damage multiplier.
+
+#### New behavior (v4.0)
+
+In the existing mixin's damage-modification method, BEFORE the legacy code runs:
+
+```java
+// v4.0 path: check if the entity is in a v4.0 dungeon run
+LivingEntity self = (LivingEntity) (Object) this;
+DungeonRun run = ArenasLdMod.DUNGEON_MANAGER.getRunForEntity(self.getUUID());
+if (run != null) {
+    TierConfig tier = run.resolvedTierConfig();
+    // Apply v4.0 damage multiplier
+    float scaled = damage * (float) tier.damageMultiplier();
+    // ... apply scaled damage following the same approach as legacy ...
+    return scaled;
+}
+
+// Legacy path: existing code, unmodified
+// ...
+```
+
+Exact integration depends on what the existing mixin does. Codex needs to read the existing mixin first and decide whether to:
+- Add a check at the top of the existing method (returns early if v4.0 match)
+- Refactor the legacy logic into a helper method, call the appropriate one
+- Insert the v4.0 check via the same `@Inject` callback
+
+Pick the approach with the **smallest diff to the existing mixin**.
+
+#### Acceptance
+
+- Mobs in v4.0 runs take damage scaled by their run's `tier.damageMultiplier()`.
+- Mobs in legacy runs still take legacy damage scaling.
+- Mobs in neither take un-scaled damage.
+- Build passes.
+
+#### Don'ts
+
+- Do not modify the legacy mixin path.
+- Do not change the damage formula — just multiply by `tier.damageMultiplier()`.
+- Do not apply damage scaling to players in dungeons. Only to MOBS spawned BY dungeons. Players take full damage from mobs (the mob's damage is what's scaled).
+
+#### References
+
+- Existing `LivingEntityMixin.java` — start by reading.
+
+---
+
+### PF-5 — Death event listener (replaces PE-10's poll)
+
+**Goal**: replace poll-based death detection in `DungeonRunLifecycle.detectPlayerDeaths` with an event-driven listener.
+
+**Files to create:**
+- `src/main/java/net/ledok/arenas_ld/event/DungeonDeathListener.java`
+
+**Files to modify:**
+- `src/main/java/net/ledok/arenas_ld/ArenasLdMod.java` — register the listener.
+- `src/main/java/net/ledok/arenas_ld/dungeon/run/DungeonRunLifecycle.java` — remove `detectPlayerDeaths`; promote `handlePlayerDown` to package-public so listener can call it.
+
+#### Spec
+
+```java
+package net.ledok.arenas_ld.event;
+
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLivingEntityEvents;
+import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.dungeon.run.DungeonRun;
+import net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+
+public final class DungeonDeathListener {
+
+    public static void register() {
+        ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
+            if (!(entity instanceof ServerPlayer player)) return;
+            DungeonRun run = ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(player.getUUID());
+            if (run == null) return;
+            if (!(player.level() instanceof ServerLevel sl)) return;
+
+            // Find the controller for this run; route through handlePlayerDown
+            // ... look up controller by run.dbsPos() (need to know the controller's pos somehow)
+        });
+    }
+}
+```
+
+Wait — this is tricky. The listener fires for player death. It needs to find the right `DungeonControllerBlockEntity` to pass to `handlePlayerDown`. But `DungeonRun` doesn't directly store the controller's position; it stores `dbsPos`. The controller is "the one that has this dbsPos in its instances list."
+
+The cleanest fix: **add `controllerPos` to `DungeonRun`** as a new field. This is added at run-start time and gives us a direct controller reference. Backward-compat consideration: old saves don't have this field, so codec defaults to `BlockPos.ZERO` or similar. We then have to validate it.
+
+Better alternative: **the manager tracks `Map<DungeonRun, DungeonControllerBlockEntity>`** so we can look up the controller given a run. Simpler — the controller registers the run when it's started, and that registration includes a back-reference.
+
+Even simpler: **iterate `manager.getControllersIn(player.level().dimension())` and find the one whose `getActiveRuns()` contains the run.**
+
+```java
+DungeonControllerBlockEntity controller = null;
+for (BlockPos pos : ArenasLdMod.DUNGEON_MANAGER.getControllersIn(sl.dimension())) {
+    BlockEntity be = sl.getBlockEntity(pos);
+    if (be instanceof DungeonControllerBlockEntity c && c.getActiveRuns().containsValue(run)) {
+        controller = c;
+        break;
+    }
+}
+if (controller == null) return; // shouldn't happen
+DungeonRunLifecycle.handlePlayerDown(sl, controller, run, player);
+```
+
+Looking through N controllers per death is O(N) but N is typically small (≤10). Fine.
+
+Promote `handlePlayerDown` from private to package-visible-via-static-utility — it can stay in `DungeonRunLifecycle` but with package or public access so the listener can call it.
+
+Actually, since `DungeonDeathListener` is in a *different* package (`net.ledok.arenas_ld.event` vs `net.ledok.arenas_ld.dungeon.run`), package-visible won't work. **Promote `handlePlayerDown` to public.**
+
+Or — move `DungeonDeathListener` to the `dungeon.run` package so it stays package-visible. Slightly hacky but cleaner architecturally.
+
+**Recommendation**: keep `handlePlayerDown` package-visible-static (no `private`). Move the listener to `dungeon.run` package. This way the listener is colocated with the lifecycle code that's its real implementation partner.
+
+**Files to create (revised):**
+- `src/main/java/net/ledok/arenas_ld/dungeon/run/DungeonDeathListener.java`
+
+#### Remove `detectPlayerDeaths` from `tickRunning`
+
+The poll-based detection is now obsolete. Remove the `detectPlayerDeaths` private method and the call site in `tickRunning`. Keep `tickDownedPlayers` (the countdown ticker is still poll-based; deaths are now event-driven).
+
+#### Acceptance
+
+- A player dying in a v4.0 run triggers `handlePlayerDown` via the event listener (not poll).
+- `detectPlayerDeaths` is removed.
+- Hardcore and non-hardcore branches both still work.
+- Build passes.
+
+#### Don'ts
+
+- Do not listen for entity (non-player) death events here. The room's `refreshAliveMobs` already handles mob death.
+- Do not implement `AFTER_DEATH` for legacy dungeons. The legacy mixin has its own death handling.
+- Do not move `handlePlayerDown` out of `DungeonRunLifecycle`. Just change its visibility.
+
+#### References
+
+- `ServerLivingEntityEvents.AFTER_DEATH` from `fabric-lifecycle-events-v1`.
+- PE-10 for the existing `handlePlayerDown` body.
+
+---
+
+### PF-6 — Disconnect / reconnect with grace period
+
+**Goal**: when a player disconnects mid-run, mark them DOWNED with a grace period. Reconnect within grace restores them to ACTIVE. After grace expires, they're REMOVED from the run.
+
+**Files to create:**
+- `src/main/java/net/ledok/arenas_ld/dungeon/run/DungeonConnectionListener.java`
+
+**Files to modify:**
+- `DungeonControllerBlockEntity.java` — add `disconnectGraceTicks` config field (default 6000 = 5 minutes), with codec.
+- `DungeonRun.java` — track `Map<UUID, Long> disconnectedAtTick` (player → tick they disconnected); package-private mutators `markDisconnected`, `clearDisconnected`.
+- `DungeonRunLifecycle.tickRunning` — tick disconnected players; remove from run if grace expired.
+
+#### Listener spec
+
+```java
+public final class DungeonConnectionListener {
+
+    public static void register() {
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+            ServerPlayer player = handler.player;
+            UUID uuid = player.getUUID();
+            DungeonRun run = ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(uuid);
+            if (run == null) return;
+            // Mark as disconnected at current game tick
+            if (player.level() instanceof ServerLevel sl) {
+                run.markDisconnected(uuid, sl.getGameTime());
+            }
+        });
+
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            ServerPlayer player = handler.player;
+            UUID uuid = player.getUUID();
+            DungeonRun run = ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(uuid);
+            if (run == null) return;
+            // Clear disconnect marker; player is back
+            run.clearDisconnected(uuid);
+            // Send "welcome back" message
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.reconnected"));
+        });
+    }
+}
+```
+
+#### `DungeonRun` additions
+
+```java
+private final Map<UUID, Long> disconnectedAt = new HashMap<>();
+
+void markDisconnected(UUID uuid, long tick) {
+    disconnectedAt.put(uuid, tick);
+}
+
+void clearDisconnected(UUID uuid) {
+    disconnectedAt.remove(uuid);
+}
+
+public Map<UUID, Long> disconnectedAt() {
+    return Collections.unmodifiableMap(disconnectedAt);
+}
+```
+
+Plus codec extension to persist `disconnectedAt` across save/load.
+
+#### `DungeonRunLifecycle.tickRunning` additions
+
+After the existing tick logic, add a `tickDisconnectedPlayers` call:
+
+```java
+private static void tickDisconnectedPlayers(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+    long now = world.getGameTime();
+    int grace = controller.getDisconnectGraceTicks();
+    for (Map.Entry<UUID, Long> e : new HashMap<>(run.disconnectedAt()).entrySet()) {
+        if (now - e.getValue() > grace) {
+            // Grace expired; remove from run
+            UUID uuid = e.getKey();
+            RunParticipant p = run.participants().get(uuid);
+            if (p != null) {
+                run.updateParticipant(p.withStatus(ParticipantStatus.REMOVED, now));
+            }
+            run.clearDisconnected(uuid);
+            ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
+        }
+    }
+}
+```
+
+Add the call in `tickRunning` after `tickDownedPlayers`.
+
+#### `DungeonControllerBlockEntity` additions
+
+Add field, getter, setter (with validation), and extend the codec:
+
+```java
+private int disconnectGraceTicks = 6000; // 5 minutes
+
+public int getDisconnectGraceTicks() { return disconnectGraceTicks; }
+
+public boolean setDisconnectGraceTicks(int ticks) {
+    if (ticks < 0) return false;  // 0 means "no grace, kick immediately"
+    this.disconnectGraceTicks = ticks;
+    setChanged();
+    return true;
+}
+```
+
+Update the State codec to include this field.
+
+Also add this to the admin GUI's General tab in PE-11's screen — actually that's already shipped. We need a separate follow-up to add this field to the admin GUI, OR we leave it as a `/data` config for now.
+
+**Decision**: leave it as a `/data` config for v4.0. Admins who want to change the grace period can edit NBT. Adding a 5th General-tab field is a layout problem; defer.
+
+#### Translation key
+
+```json
+"message.arenas_ld.dungeon.reconnected": "Reconnected — welcome back to the run!"
+```
+
+Ukrainian:
+```json
+"message.arenas_ld.dungeon.reconnected": "Ви повернулися — раді бачити вас знову в підземеллі!"
+```
+
+#### Acceptance
+
+- Disconnecting mid-run marks the player in `disconnectedAt` map.
+- Reconnecting clears the marker and sends a welcome-back message.
+- After `disconnectGraceTicks` (default 6000 = 5 min), grace expires; player is REMOVED, unregistered.
+- The participant remains in `run.participants()` with REMOVED status (consistent with hardcore death's pattern).
+- Save/load round-trips the `disconnectedAt` map.
+- Build passes.
+
+#### Don'ts
+
+- Do not teleport disconnected players anywhere. They're offline — there's nothing to teleport.
+- Do not modify the player's gamemode on disconnect.
+- Do not unregister mobs on player disconnect. The room's `refreshAliveMobs` handles mob lifecycle independently.
+- Do not add a chat message broadcast for "player X disconnected" — keeps signal:noise high. Quietly mark them.
+- Do not extend the abandonment check to "all players are disconnected." Abandonment is still "no online participants" (already covered).
+
+#### References
+
+- `ServerPlayConnectionEvents` from `fabric-networking-api-v1`.
+
+---
+
+### PF-7 — `BusyStateCompat` integration
+
+**Goal**: v4.0 runs participate in `BusyStateCompat` so the existing busy-state system knows the player is in a dungeon.
+
+**Files to modify:**
+- `DungeonRunLifecycle.java` — `setBusy` on each party member at run start; `setNotBusy` at finalize.
+
+#### Spec
+
+In `startRun`, after the participant teleport loop:
+
+```java
+for (UUID uuid : partyUuids) {
+    ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+    if (player == null) continue;
+    // ... existing teleport/capture logic ...
+    BusyStateCompat.setBusy(player);
+}
+```
+
+In `finalize`, before the teleport-out loop OR after it (either works; the busy state should be cleared once the player is no longer "in a dungeon"):
+
+```java
+for (Map.Entry<UUID, PlayerReturnPoint> e : run.returnPoints().entrySet()) {
+    ServerPlayer p = world.getServer().getPlayerList().getPlayer(e.getKey());
+    if (p != null) {
+        // ... existing teleport ...
+        BusyStateCompat.setNotBusy(p);
+    }
+}
+```
+
+Also in the hardcore branch of `handlePlayerDown`:
+
+```java
+if (run.hardcoreEnabled()) {
+    // ... existing teleport + unregister ...
+    BusyStateCompat.setNotBusy(player);  // ADD THIS
+    player.sendSystemMessage(...);
+    return;
+}
+```
+
+#### Acceptance
+
+- Starting a v4.0 run calls `BusyStateCompat.setBusy(player)` for each online party member.
+- Finalizing a run calls `BusyStateCompat.setNotBusy(player)` for each online return-point holder.
+- Hardcore death clears the busy state for the dying player.
+- Build passes.
+
+#### Don'ts
+
+- Do not call `setBusy` on disconnected players (the startRun loop already skips them).
+- Do not check `BusyStateCompat` BEFORE starting a run — that's the responsibility of the lobby system, not the lifecycle.
+- Do not refactor `BusyStateCompat` — it's a stable external API.
+
+#### References
+
+- `BusyStateCompat` — existing legacy compat layer (search the codebase for `BusyStateCompat`).
+- Legacy `DungeonBossSpawnerBlockEntity.startBattle` — pattern of `setBusy` call.
+
+---
+
+### Phase F exit criteria
+
+After all 7 tasks:
+
+- `DungeonManager` exists and registers controllers via clearRemoved/setRemoved.
+- O(1) participant + mob lookups available.
+- Linker has 4 new modes wired up for the v4.0 block topology.
+- Mixin applies tier damage scaling to v4.0 mobs.
+- Death events drive participant transitions (no poll).
+- Disconnect/reconnect with grace period works.
+- `BusyStateCompat` integration parallels legacy behavior.
+- Build passes.
+- Total new files: ~5 (manager, death listener, connection listener, +2-3 helper files).
+- Total LOC: ~700-900.
+- End-to-end gameplay possible without `/data`: place blocks, link via Linker, start run, complete dungeon.
+
+After Phase F, Phase G (formerly H) deletes legacy code and renames `_v2` → canonical.
 
 ## Phase G — Migration cliff & cleanup (1 PR)
 
@@ -3933,8 +4775,8 @@ Specs deferred until Phase F is closed.
 | B | ✅ Complete (PB-1..PB-8, PB-10; PB-9 skipped as redundant) | — | `4717f45` |
 | C | ✅ Complete (PC-1, PC-2, PC-3-old, PC-3, PC-4, PC-4.1, PC-5, PC-7; PC-6 skipped) | — | `e0ba2e5` |
 | D | ✅ Complete (PD-1..PD-7, PD-6.1) | — | `965831a` |
-| E | Specified, ready to start (PE-1..PE-12) | — | — |
-| F | Not specified (was old F + G combined) | — | — |
+| E | ✅ Complete (PE-1..PE-12, +PE-5.1, +PE-10.1, +PE-11.1, +PE-12.1) | — | `716f73a` |
+| F | Specified, ready to start (PF-1..PF-7) | — | — |
 | G | Not specified (was old H) | — | — |
 
 We update this table as we go.
