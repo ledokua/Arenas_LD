@@ -176,7 +176,6 @@ public final class DungeonRunLifecycle {
             }
         }
 
-        detectPlayerDeaths(world, controller, run);
         tickDownedPlayers(world, controller, run);
         updateDungeonTimeBossBar(world, run);
     }
@@ -411,24 +410,7 @@ public final class DungeonRunLifecycle {
         return bundle;
     }
 
-    private static void detectPlayerDeaths(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
-        Map<UUID, RunParticipant> participantsCopy = new HashMap<>(run.participants());
-        for (Map.Entry<UUID, RunParticipant> entry : participantsCopy.entrySet()) {
-            RunParticipant participant = entry.getValue();
-            if (participant.status() != ParticipantStatus.ACTIVE) {
-                continue;
-            }
-            ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
-            if (player == null) {
-                continue;
-            }
-            if (player.isDeadOrDying() || player.getHealth() <= 0.0F) {
-                handlePlayerDown(world, controller, run, player);
-            }
-        }
-    }
-
-    private static void handlePlayerDown(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, ServerPlayer player) {
+    public static void handlePlayerDown(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, ServerPlayer player) {
         RunParticipant participant = run.participants().get(player.getUUID());
         if (participant == null) {
             return;

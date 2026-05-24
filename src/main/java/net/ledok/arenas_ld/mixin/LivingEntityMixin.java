@@ -38,14 +38,20 @@ public abstract class LivingEntityMixin {
             index = 1
     )
     private float arenasLd$applyDungeonTierDamageMultiplier(float amount) {
-        LivingEntity self = (LivingEntity) (Object) this;
-        DungeonRun run = ArenasLdMod.DUNGEON_MANAGER.getRunForEntity(self.getUUID());
-        if (run != null) {
-            return (float) (amount * run.resolvedTierConfig().damageMultiplier());
-        }
-
         if (!((Object) this instanceof ServerPlayer player)) {
             return amount;
+        }
+
+        DungeonRun v4Run = ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(player.getUUID());
+        if (v4Run != null) {
+            if (!arenasLd$matchesDungeonDamageFilter(this.arenasLd$currentDamageSource)) {
+                return amount;
+            }
+            double multiplier = v4Run.resolvedTierConfig().damageMultiplier();
+            if (multiplier == 1.0) {
+                return amount;
+            }
+            return (float) (amount * multiplier);
         }
 
         DungeonBossSpawnerBlockEntity dungeonSpawner = ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player);
@@ -92,6 +98,14 @@ public abstract class LivingEntityMixin {
     @Inject(method = "setHealth", at = @At("HEAD"), cancellable = true)
     private void onSetHealth(float health, CallbackInfo ci) {
         if ((Object) this instanceof ServerPlayer player) {
+            if (health <= 0.0F) {
+                DungeonRun v4Run = ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(player.getUUID());
+                if (v4Run != null && player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
+                    arenasLd$handleV4PlayerDown(player, v4Run);
+                    ci.cancel();
+                    return;
+                }
+            }
             DungeonBossSpawnerBlockEntity dungeonSpawner = ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player);
             if (health <= 0.0F && dungeonSpawner != null) {
                 if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
@@ -141,6 +155,12 @@ public abstract class LivingEntityMixin {
     @Inject(method = "die", at = @At("HEAD"), cancellable = true)
     private void onDie(DamageSource source, CallbackInfo ci) {
         if ((Object) this instanceof ServerPlayer player) {
+            DungeonRun v4Run = ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(player.getUUID());
+            if (v4Run != null && player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
+                arenasLd$handleV4PlayerDown(player, v4Run);
+                ci.cancel();
+                return;
+            }
             DungeonBossSpawnerBlockEntity dungeonSpawner = ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player);
             if (dungeonSpawner != null) {
                 if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
@@ -184,5 +204,25 @@ public abstract class LivingEntityMixin {
                 }
             }
         }
+    }
+
+    @Unique
+    private void arenasLd$handleV4PlayerDown(ServerPlayer player, DungeonRun run) {
+        if (!(player.level() instanceof net.minecraft.server.level.ServerLevel sl)) {
+            return;
+        }
+        net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller = null;
+        for (net.minecraft.core.BlockPos pos : ArenasLdMod.DUNGEON_MANAGER.getControllersIn(sl.dimension())) {
+            if (sl.getBlockEntity(pos) instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity c) {
+                if (c.getActiveRuns().containsValue(run)) {
+                    controller = c;
+                    break;
+                }
+            }
+        }
+        if (controller == null) {
+            return;
+        }
+        net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle.handlePlayerDown(sl, controller, run, player);
     }
 }
