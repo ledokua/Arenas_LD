@@ -6,6 +6,7 @@ import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
+import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ChunkPos;
@@ -28,6 +29,8 @@ import java.util.Set;
 import java.util.UUID;
 
 public final class DungeonRunLifecycle {
+    private static final String BUSY_REASON = "arenas_ld:dungeon_v2";
+
     private DungeonRunLifecycle() {
     }
 
@@ -79,6 +82,7 @@ public final class DungeonRunLifecycle {
             ));
             run.setReturnPoint(uuid, PlayerReturnPoint.capture(player));
             ArenasLdMod.DUNGEON_MANAGER.registerParticipant(uuid, run);
+            BusyStateCompat.setBusy(uuid, BUSY_REASON);
 
             BlockPos entrance = dbs.getAbsoluteEntrancePos();
             player.teleportTo(targetLevel, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0f, 0.0f);
@@ -255,6 +259,7 @@ public final class DungeonRunLifecycle {
     static void finalize(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
         for (UUID uuid : run.participants().keySet()) {
             ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
+            BusyStateCompat.clearBusy(uuid, BUSY_REASON);
         }
         BlockEntity managerDbsBe = world.getBlockEntity(run.dbsPos());
         if (managerDbsBe instanceof DungeonBossSpawnerBlockEntity managerDbs) {
@@ -375,6 +380,7 @@ public final class DungeonRunLifecycle {
             }
             run.removeReturnPoint(player.getUUID());
             ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(player.getUUID());
+            BusyStateCompat.clearBusy(player.getUUID(), BUSY_REASON);
             player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.hardcore_death").withStyle(ChatFormatting.RED));
             return;
         }

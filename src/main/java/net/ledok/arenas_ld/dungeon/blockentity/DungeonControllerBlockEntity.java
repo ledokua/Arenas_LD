@@ -16,6 +16,7 @@ import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.dungeon.screen.DungeonControllerData;
 import net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreenHandler;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
+import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -269,6 +270,9 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     public Optional<UUID> createLobby(ServerPlayer player) {
         UUID playerUuid = player.getUUID();
+        if (BusyStateCompat.isBusy(playerUuid)) {
+            return Optional.empty();
+        }
         if (findLobbyByMember(playerUuid).isPresent()) {
             return Optional.empty();
         }
@@ -302,6 +306,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         Lobby lobby = lobbyOpt.get();
         if (!lobby.isOwner(inviter.getUUID())) return false;
         if (lobby.status() == LobbyStatus.IN_RUN) return false;
+        if (BusyStateCompat.isBusy(inviteeUuid)) return false;
         if (findLobbyByMember(inviteeUuid).isPresent()) return false;
         if (lobby.isFull(maxPartySize)) return false;
 
@@ -315,6 +320,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     }
 
     public boolean acceptInvite(ServerPlayer invitee, UUID lobbyId) {
+        if (BusyStateCompat.isBusy(invitee.getUUID())) return false;
         long now = invitee.serverLevel().getGameTime();
         Optional<PendingInvite> inviteOpt = findInvite(lobbyId, invitee.getUUID());
         if (inviteOpt.isEmpty()) return false;
@@ -440,11 +446,12 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         Optional<BlockPos> available = firstAvailableInstance();
         if (available.isEmpty()) return Optional.empty();
 
-        replaceLobby(lobby.withStatus(LobbyStatus.IN_RUN));
+        removeLobby(lobby.lobbyId());
         return available;
     }
 
     public boolean joinLobby(ServerPlayer player, UUID lobbyId) {
+        if (BusyStateCompat.isBusy(player.getUUID())) return false;
         if (findLobbyByMember(player.getUUID()).isPresent()) return false;
         Optional<Lobby> lobbyOpt = findLobbyById(lobbyId);
         if (lobbyOpt.isEmpty()) return false;
