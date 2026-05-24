@@ -3,6 +3,7 @@ package net.ledok.arenas_ld.mixin;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
+import net.ledok.arenas_ld.dungeon.run.DungeonRun;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
@@ -37,6 +38,12 @@ public abstract class LivingEntityMixin {
             index = 1
     )
     private float arenasLd$applyDungeonTierDamageMultiplier(float amount) {
+        LivingEntity self = (LivingEntity) (Object) this;
+        DungeonRun run = ArenasLdMod.DUNGEON_MANAGER.getRunForEntity(self.getUUID());
+        if (run != null) {
+            return (float) (amount * run.resolvedTierConfig().damageMultiplier());
+        }
+
         if (!((Object) this instanceof ServerPlayer player)) {
             return amount;
         }
