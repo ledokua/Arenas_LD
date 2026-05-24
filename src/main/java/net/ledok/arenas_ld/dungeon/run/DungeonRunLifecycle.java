@@ -11,7 +11,9 @@ import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.BossEvent;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.ChatFormatting;
@@ -220,7 +222,9 @@ public final class DungeonRunLifecycle {
 
         run.setOutcome(DungeonOutcome.WIN);
         run.setPhase(DungeonPhase.CLOSING);
-        run.setCloseTimerTicks(controller.getCloseTimerSeconds() * 20);
+        int closeTicks = controller.getCloseTimerSeconds() * 20;
+        run.setInitialCloseTimerTicks(closeTicks);
+        run.setCloseTimerTicks(closeTicks);
     }
 
     static void handleLoss(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, DungeonOutcome reason) {
@@ -253,7 +257,9 @@ public final class DungeonRunLifecycle {
 
         run.setOutcome(reason);
         run.setPhase(DungeonPhase.CLOSING);
-        run.setCloseTimerTicks(controller.getCloseTimerSeconds() * 20);
+        int closeTicks = controller.getCloseTimerSeconds() * 20;
+        run.setInitialCloseTimerTicks(closeTicks);
+        run.setCloseTimerTicks(closeTicks);
     }
 
     static void finalize(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
@@ -320,15 +326,83 @@ public final class DungeonRunLifecycle {
     }
 
     private static void updateDungeonTimeBossBar(ServerLevel world, DungeonRun run) {
-        // TODO PE-6.1: boss bar implementation.
+        ServerBossEvent bar = run.getDungeonTimeBossBar();
+        if (bar == null) {
+            bar = new ServerBossEvent(
+                Component.translatable("boss_bar.arenas_ld.dungeon_time"),
+                BossEvent.BossBarColor.BLUE,
+                BossEvent.BossBarOverlay.PROGRESS
+            );
+            run.setDungeonTimeBossBar(bar);
+        }
+        int totalTicks = run.resolvedTierConfig().dungeonTimeSeconds() * 20;
+        float progress = totalTicks > 0
+            ? Math.max(0.0F, Math.min(1.0F, (float) run.dungeonTimerTicks() / (float) totalTicks))
+            : 0.0F;
+        bar.setProgress(progress);
+        syncBarViewers(world, run, bar);
     }
 
     private static void updateCloseTimerBossBar(ServerLevel world, DungeonRun run) {
-        // TODO PE-6.1: boss bar implementation.
+        ServerBossEvent bar = run.getCloseTimerBossBar();
+        if (bar == null) {
+            bar = new ServerBossEvent(
+                Component.translatable("boss_bar.arenas_ld.close_timer"),
+                BossEvent.BossBarColor.RED,
+                BossEvent.BossBarOverlay.PROGRESS
+            );
+            run.setCloseTimerBossBar(bar);
+        }
+        int totalTicks = run.initialCloseTimerTicks();
+        float progress = totalTicks > 0
+            ? Math.max(0.0F, Math.min(1.0F, (float) run.closeTimerTicks() / (float) totalTicks))
+            : 0.0F;
+        bar.setProgress(progress);
+        syncBarViewers(world, run, bar);
+
+        ServerBossEvent dungeonBar = run.getDungeonTimeBossBar();
+        if (dungeonBar != null) {
+            dungeonBar.removeAllPlayers();
+            run.setDungeonTimeBossBar(null);
+        }
     }
 
     private static void hideBossBars(DungeonRun run) {
-        // TODO PE-6.1: boss bar implementation.
+        ServerBossEvent dungeonBar = run.getDungeonTimeBossBar();
+        if (dungeonBar != null) {
+            dungeonBar.removeAllPlayers();
+            run.setDungeonTimeBossBar(null);
+        }
+        ServerBossEvent closeBar = run.getCloseTimerBossBar();
+        if (closeBar != null) {
+            closeBar.removeAllPlayers();
+            run.setCloseTimerBossBar(null);
+        }
+    }
+
+    private static void syncBarViewers(ServerLevel world, DungeonRun run, ServerBossEvent bar) {
+        Set<ServerPlayer> targetViewers = new HashSet<>();
+        for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
+            if (entry.getValue().status() == ParticipantStatus.REMOVED) {
+                continue;
+            }
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
+            if (player != null) {
+                targetViewers.add(player);
+            }
+        }
+
+        Set<ServerPlayer> currentViewers = new HashSet<>(bar.getPlayers());
+        for (ServerPlayer existing : currentViewers) {
+            if (!targetViewers.contains(existing)) {
+                bar.removePlayer(existing);
+            }
+        }
+        for (ServerPlayer target : targetViewers) {
+            if (!currentViewers.contains(target)) {
+                bar.addPlayer(target);
+            }
+        }
     }
 
     private static ItemStack createLootBundle(String lootTableId) {

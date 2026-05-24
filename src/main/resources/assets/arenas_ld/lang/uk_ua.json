@@ -24,6 +24,8 @@
   "message.arenas_ld.dungeon.loss_forced": "Підземелля завершено адміністратором.",
   "message.arenas_ld.dungeon.hardcore_death": "Хардкор: ви впали. Вас виключено з підземелля.",
   "message.arenas_ld.dungeon.you_are_downed": "Ви ослаблені. Скоро відродитеся...",
+  "boss_bar.arenas_ld.dungeon_time": "Час підземелля",
+  "boss_bar.arenas_ld.close_timer": "Закриття",
   "message.arenas_ld.dungeon_controller_admin.pending_removal": "Інстанс запущено. Видалення буде виконано після завершення забігу.",
   "message.arenas_ld.dungeon_controller_admin.invalid_value": "Невірне значення — змінення не застосовано.",
 

@@ -6,7 +6,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.world.level.Level;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -47,10 +49,13 @@ public final class DungeonRun {
     private int currentRoomIndex;
     private int dungeonTimerTicks;
     private int closeTimerTicks;
+    private int initialCloseTimerTicks;
     private final long startTick;
     private final Map<UUID, RunParticipant> participants;
     private final Map<UUID, PlayerReturnPoint> returnPoints;
     private final Map<UUID, DownedPlayer> downedPlayers;
+    @Nullable private transient ServerBossEvent dungeonTimeBossBar;
+    @Nullable private transient ServerBossEvent closeTimerBossBar;
 
     // ---- Constructors ----
 
@@ -84,10 +89,13 @@ public final class DungeonRun {
         this.currentRoomIndex = 0;
         this.dungeonTimerTicks = resolvedTierConfig.dungeonTimeSeconds() * 20;
         this.closeTimerTicks = 0;
+        this.initialCloseTimerTicks = 0;
         this.startTick = startTick;
         this.participants = new LinkedHashMap<>();
         this.returnPoints = new HashMap<>();
         this.downedPlayers = new HashMap<>();
+        this.dungeonTimeBossBar = null;
+        this.closeTimerBossBar = null;
     }
 
     /**
@@ -105,6 +113,7 @@ public final class DungeonRun {
         int currentRoomIndex,
         int dungeonTimerTicks,
         int closeTimerTicks,
+        int initialCloseTimerTicks,
         long startTick,
         Map<UUID, RunParticipant> participants,
         Map<UUID, PlayerReturnPoint> returnPoints,
@@ -120,10 +129,13 @@ public final class DungeonRun {
         this.currentRoomIndex = currentRoomIndex;
         this.dungeonTimerTicks = dungeonTimerTicks;
         this.closeTimerTicks = closeTimerTicks;
+        this.initialCloseTimerTicks = initialCloseTimerTicks;
         this.startTick = startTick;
         this.participants = new LinkedHashMap<>(participants);
         this.returnPoints = new HashMap<>(returnPoints);
         this.downedPlayers = new HashMap<>(downedPlayers);
+        this.dungeonTimeBossBar = null;
+        this.closeTimerBossBar = null;
     }
 
     // ---- Public getters ----
@@ -138,7 +150,10 @@ public final class DungeonRun {
     public int currentRoomIndex() { return currentRoomIndex; }
     public int dungeonTimerTicks() { return dungeonTimerTicks; }
     public int closeTimerTicks() { return closeTimerTicks; }
+    public int initialCloseTimerTicks() { return initialCloseTimerTicks; }
     public long startTick() { return startTick; }
+    @Nullable public ServerBossEvent getDungeonTimeBossBar() { return dungeonTimeBossBar; }
+    @Nullable public ServerBossEvent getCloseTimerBossBar() { return closeTimerBossBar; }
 
     public Map<UUID, RunParticipant> participants() {
         return Collections.unmodifiableMap(participants);
@@ -157,6 +172,9 @@ public final class DungeonRun {
     void setCurrentRoomIndex(int index) { this.currentRoomIndex = index; }
     void setDungeonTimerTicks(int ticks) { this.dungeonTimerTicks = ticks; }
     void setCloseTimerTicks(int ticks) { this.closeTimerTicks = ticks; }
+    void setInitialCloseTimerTicks(int ticks) { this.initialCloseTimerTicks = ticks; }
+    void setDungeonTimeBossBar(@Nullable ServerBossEvent bar) { this.dungeonTimeBossBar = bar; }
+    void setCloseTimerBossBar(@Nullable ServerBossEvent bar) { this.closeTimerBossBar = bar; }
 
     void addParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void updateParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
@@ -205,6 +223,7 @@ public final class DungeonRun {
             Codec.INT.fieldOf("currentRoomIndex").forGetter(DungeonRun::currentRoomIndex),
             Codec.INT.fieldOf("dungeonTimerTicks").forGetter(DungeonRun::dungeonTimerTicks),
             Codec.INT.fieldOf("closeTimerTicks").forGetter(DungeonRun::closeTimerTicks),
+            Codec.INT.optionalFieldOf("initialCloseTimerTicks", 0).forGetter(DungeonRun::initialCloseTimerTicks),
             Codec.LONG.fieldOf("startTick").forGetter(DungeonRun::startTick),
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, RunParticipant.CODEC)
                 .fieldOf("participants").forGetter(DungeonRun::participants),
