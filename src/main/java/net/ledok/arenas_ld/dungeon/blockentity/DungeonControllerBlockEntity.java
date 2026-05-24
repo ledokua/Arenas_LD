@@ -68,7 +68,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private final Map<BlockPos, DungeonRun> activeRuns = new HashMap<>();
 
     public DungeonControllerBlockEntity(BlockPos pos, BlockState state) {
-        super(BlockEntitiesRegistry.DUNGEON_CONTROLLER_V2_BLOCK_ENTITY, pos, state);
+        super(BlockEntitiesRegistry.DUNGEON_CONTROLLER_BLOCK_ENTITY, pos, state);
         initializeDefaults();
     }
 
@@ -550,7 +550,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     @Override
     public Component getDisplayName() {
-        return Component.translatable("block.arenas_ld.dungeon_controller_v2");
+        return Component.translatable("block.arenas_ld.dungeon_controller");
     }
 
     @Override

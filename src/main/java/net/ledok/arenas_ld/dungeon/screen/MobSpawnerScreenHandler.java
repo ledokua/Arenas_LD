@@ -12,7 +12,7 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
     private final String mobId;
 
     public MobSpawnerScreenHandler(int syncId, Inventory playerInventory, MobSpawnerData data) {
-        super(ModScreenHandlers.MOB_SPAWNER_V2_SCREEN_HANDLER, syncId);
+        super(ModScreenHandlers.MOB_SPAWNER_SCREEN_HANDLER, syncId);
         this.blockPos = data.blockPos();
         this.mobId = data.mobId();
     }

@@ -90,7 +90,7 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
                     rebuildWidgets();
                 }
             }, Component.translatable("gui.arenas_ld.room_controller.confirm.clear_title"),
-                Component.translatable("gui.arenas_ld.dbs_v2.clear_rooms_confirm")));
+                Component.translatable("gui.arenas_ld.dbs.clear_rooms_confirm")));
         }).bounds(x + WIDTH - 84, y + 230, 74, 16).build());
 
         int visible = Math.min(MAX_ROOMS_VISIBLE, Math.max(0, rooms.size() - roomOffset));
@@ -154,8 +154,8 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
         int y = topPos;
         guiGraphics.drawString(font, title, x + 8, y + 8, 0xFFFFFF, false);
         guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.mob_id"), x + 12, y + 29, 0xC0C8E0, false);
-        guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dbs_v2.entrance_hint"), x + 12, y + 84, 0xC0C8E0, false);
-        guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dbs_v2.rooms"), x + 12, y + 130, 0xC0C8E0, false);
+        guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dbs.entrance_hint"), x + 12, y + 84, 0xC0C8E0, false);
+        guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dbs.rooms"), x + 12, y + 130, 0xC0C8E0, false);
 
         int visible = Math.min(MAX_ROOMS_VISIBLE, Math.max(0, rooms.size() - roomOffset));
         for (int i = 0; i < visible; i++) {

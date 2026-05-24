@@ -29,7 +29,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     private final Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerAdminData data) {
-        super(ModScreenHandlers.DUNGEON_CONTROLLER_V2_ADMIN_SCREEN_HANDLER, syncId);
+        super(ModScreenHandlers.DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER, syncId);
         this.blockPos = data.blockPos();
         this.instances = List.copyOf(data.instances());
         this.activeRunInstances = Set.copyOf(data.activeRunInstances());

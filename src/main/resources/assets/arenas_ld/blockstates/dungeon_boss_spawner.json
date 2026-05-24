@@ -1,5 +1,7 @@
 {
   "variants": {
-    "": { "model": "arenas_ld:block/dungeon_boss_spawner" }
+    "": {
+      "model": "arenas_ld:block/dungeon_boss_spawner"
+    }
   }
 }

@@ -46,7 +46,7 @@ public class DungeonControllerBlock extends BaseEntityBlock {
         if (level.isClientSide) {
             return null;
         }
-        return createTickerHelper(type, BlockEntitiesRegistry.DUNGEON_CONTROLLER_V2_BLOCK_ENTITY, DungeonControllerBlockEntity::tick);
+        return createTickerHelper(type, BlockEntitiesRegistry.DUNGEON_CONTROLLER_BLOCK_ENTITY, DungeonControllerBlockEntity::tick);
     }
 
     @Override

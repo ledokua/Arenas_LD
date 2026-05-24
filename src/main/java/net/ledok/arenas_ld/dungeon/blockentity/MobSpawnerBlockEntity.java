@@ -46,7 +46,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
     private EntityDefinition entityDefinition = EntityDefinition.DEFAULT;
 
     public MobSpawnerBlockEntity(BlockPos pos, BlockState state) {
-        super(BlockEntitiesRegistry.MOB_SPAWNER_V2_BLOCK_ENTITY, pos, state);
+        super(BlockEntitiesRegistry.MOB_SPAWNER_BLOCK_ENTITY, pos, state);
     }
 
     public EntityDefinition getEntityDefinition() {
@@ -177,7 +177,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
 
     @Override
     public Component getDisplayName() {
-        return Component.translatable("gui.arenas_ld.mob_spawner_v2.title");
+        return Component.translatable("gui.arenas_ld.mob_spawner.title");
     }
 
     @Nullable

@@ -13,7 +13,7 @@ public class DungeonBossSpawnerScreenHandler extends AbstractContainerMenu {
     private final DungeonBossSpawnerData data;
 
     public DungeonBossSpawnerScreenHandler(int syncId, Inventory playerInventory, DungeonBossSpawnerData data) {
-        super(ModScreenHandlers.DUNGEON_BOSS_SPAWNER_V2_SCREEN_HANDLER, syncId);
+        super(ModScreenHandlers.DUNGEON_BOSS_SPAWNER_SCREEN_HANDLER, syncId);
         this.data = data;
     }
 

@@ -42,7 +42,7 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         int maxPartySize,
         Map<DifficultyTier, TierConfig> tiers
     ) {
-        super(ModScreenHandlers.DUNGEON_CONTROLLER_V2_SCREEN_HANDLER, syncId);
+        super(ModScreenHandlers.DUNGEON_CONTROLLER_SCREEN_HANDLER, syncId);
         this.blockPos = blockPos;
         this.visibleLobbies = List.copyOf(visibleLobbies);
         this.ownLobby = ownLobby;

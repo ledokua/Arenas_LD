@@ -52,7 +52,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
     private final List<BlockPos> roomOffsets = new ArrayList<>();
 
     public DungeonBossSpawnerBlockEntity(BlockPos pos, BlockState state) {
-        super(BlockEntitiesRegistry.DUNGEON_BOSS_SPAWNER_V2_BLOCK_ENTITY, pos, state);
+        super(BlockEntitiesRegistry.DUNGEON_BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
     }
 
     public EntityDefinition getEntityDefinition() { return entityDefinition; }
@@ -245,7 +245,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
 
     @Override
     public Component getDisplayName() {
-        return Component.translatable("gui.arenas_ld.dungeon_boss_spawner_v2.title");
+        return Component.translatable("gui.arenas_ld.dungeon_boss_spawner.title");
     }
 
     @Nullable

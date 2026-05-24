@@ -46,20 +46,20 @@ public class BlockEntitiesRegistry {
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":room_controller_be"),
                     BlockEntityType.Builder.of(RoomControllerBlockEntity::new, BlockRegistry.ROOM_CONTROLLER_BLOCK).build(null));
 
-    public static final BlockEntityType<net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity> MOB_SPAWNER_V2_BLOCK_ENTITY =
+    public static final BlockEntityType<net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity> MOB_SPAWNER_BLOCK_ENTITY =
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
-                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_spawner_v2_be"),
-                    BlockEntityType.Builder.of(net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity::new, BlockRegistry.MOB_SPAWNER_V2_BLOCK).build(null));
+                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_spawner_be"),
+                    BlockEntityType.Builder.of(net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity::new, BlockRegistry.MOB_SPAWNER_BLOCK).build(null));
 
-    public static final BlockEntityType<net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity> DUNGEON_BOSS_SPAWNER_V2_BLOCK_ENTITY =
+    public static final BlockEntityType<net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity> DUNGEON_BOSS_SPAWNER_BLOCK_ENTITY =
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
-                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_boss_spawner_v2_be"),
-                    BlockEntityType.Builder.of(net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity::new, BlockRegistry.DUNGEON_BOSS_SPAWNER_V2_BLOCK).build(null));
+                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_boss_spawner_be"),
+                    BlockEntityType.Builder.of(net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity::new, BlockRegistry.DUNGEON_BOSS_SPAWNER_BLOCK).build(null));
 
-    public static final BlockEntityType<net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity> DUNGEON_CONTROLLER_V2_BLOCK_ENTITY =
+    public static final BlockEntityType<net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity> DUNGEON_CONTROLLER_BLOCK_ENTITY =
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
-                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller_v2_be"),
-                    BlockEntityType.Builder.of(net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity::new, BlockRegistry.DUNGEON_CONTROLLER_V2_BLOCK).build(null));
+                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller_be"),
+                    BlockEntityType.Builder.of(net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity::new, BlockRegistry.DUNGEON_CONTROLLER_BLOCK).build(null));
 
     public static void initialize() {
     }

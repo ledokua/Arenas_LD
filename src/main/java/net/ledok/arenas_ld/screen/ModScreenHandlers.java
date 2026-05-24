@@ -37,20 +37,20 @@ public class ModScreenHandlers {
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":room_controller"),
                     new ExtendedScreenHandlerType<>(RoomControllerScreenHandler::new, RoomControllerData.STREAM_CODEC));
 
-    public static final MenuType<net.ledok.arenas_ld.dungeon.screen.MobSpawnerScreenHandler> MOB_SPAWNER_V2_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_spawner_v2"),
+    public static final MenuType<net.ledok.arenas_ld.dungeon.screen.MobSpawnerScreenHandler> MOB_SPAWNER_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_spawner"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.dungeon.screen.MobSpawnerScreenHandler::new, net.ledok.arenas_ld.dungeon.screen.MobSpawnerData.STREAM_CODEC));
 
-    public static final MenuType<net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerScreenHandler> DUNGEON_BOSS_SPAWNER_V2_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_boss_spawner_v2"),
+    public static final MenuType<net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerScreenHandler> DUNGEON_BOSS_SPAWNER_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_boss_spawner"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerScreenHandler::new, net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerData.STREAM_CODEC));
 
-    public static final MenuType<net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreenHandler> DUNGEON_CONTROLLER_V2_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller_v2"),
+    public static final MenuType<net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreenHandler> DUNGEON_CONTROLLER_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreenHandler::new, net.ledok.arenas_ld.dungeon.screen.DungeonControllerData.STREAM_CODEC));
 
-    public static final MenuType<net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreenHandler> DUNGEON_CONTROLLER_V2_ADMIN_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller_v2_admin"),
+    public static final MenuType<net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreenHandler> DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller_admin"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreenHandler::new, net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminData.STREAM_CODEC));
 
     public static void initialize() {

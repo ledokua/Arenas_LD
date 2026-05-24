@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:block/cube_all",
-  "textures": {
-    "all": "arenas_ld:block/dungeon_controller_v2"
-  }
-}
