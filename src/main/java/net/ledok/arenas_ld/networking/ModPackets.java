@@ -1120,7 +1120,6 @@ public class ModPackets {
     public static void registerC2SPackets() {
         ModPacketTypeRegistry.registerC2STypes();
         RaidPacketHandlers.register();
-        DungeonPacketHandlers.register();
         SpawnerPacketHandlers.register();
         ArenaPacketHandlers.register();
 
@@ -1128,7 +1127,6 @@ public class ModPackets {
 
     static boolean isPlayerInActiveGame(ServerPlayer player) {
         if (ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) return true;
-        if (ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player) != null) return true;
         return false;
     }
 
@@ -1140,17 +1138,6 @@ public class ModPackets {
             return true;
         }
         return isPlayerInActiveGame(player);
-    }
-
-    static List<DungeonLeaderboardEntry> resolveLeaderboardForTier(
-            DungeonControllerBlockEntity controller,
-            DifficultyTier tier,
-            MinecraftServer server
-    ) {
-        if (controller == null || tier == null || server == null) {
-            return List.of();
-        }
-        return new ArrayList<>(controller.getLeaderboardForTier(tier));
     }
 
     static List<RaidLeaderboardEntry> resolveRaidLeaderboardForDifficulty(
@@ -1178,19 +1165,6 @@ public class ModPackets {
                 }
             }
         }
-        for (DungeonControllerBlockEntity.ControllerKey key : DungeonControllerBlockEntity.getControllers()) {
-            ServerLevel level = server.getLevel(key.dimension());
-            if (level == null) continue;
-            BlockEntity be = level.getBlockEntity(key.pos());
-            if (be instanceof DungeonControllerBlockEntity controller) {
-                if (level.dimension().equals(currentControllerDim) && controller.getBlockPos().equals(currentControllerPos)) {
-                    continue;
-                }
-                if (controller.getLobbyByMember(player.getUUID()) != null) {
-                    controller.leaveLobby(player.getUUID());
-                }
-            }
-        }
         for (RaidControllerBlockEntity.ControllerKey key : RaidControllerBlockEntity.getControllers()) {
             ServerLevel level = server.getLevel(key.dimension());
             if (level == null) continue;
@@ -1204,20 +1178,6 @@ public class ModPackets {
                 }
             }
         }
-    }
-
-    static DungeonControllerBlockEntity findDungeonControllerByLobbyId(net.minecraft.server.MinecraftServer server, UUID lobbyId) {
-        for (DungeonControllerBlockEntity.ControllerKey key : DungeonControllerBlockEntity.getControllers()) {
-            ServerLevel level = server.getLevel(key.dimension());
-            if (level == null) {
-                continue;
-            }
-            BlockEntity be = level.getBlockEntity(key.pos());
-            if (be instanceof DungeonControllerBlockEntity controller && controller.getLobbyById(lobbyId) != null) {
-                return controller;
-            }
-        }
-        return null;
     }
 
     static RaidControllerBlockEntity findRaidControllerByLobbyId(net.minecraft.server.MinecraftServer server, UUID lobbyId) {

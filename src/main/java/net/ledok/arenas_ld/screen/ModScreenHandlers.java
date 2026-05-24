@@ -8,21 +8,10 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.MenuType;
-
-
 public class ModScreenHandlers {
-
     public static final MenuType<BossSpawnerScreenHandler> BOSS_SPAWNER_SCREEN_HANDLER =
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":boss_spawner"),
                     new ExtendedScreenHandlerType<>(BossSpawnerScreenHandler::new, BossSpawnerData.CODEC));
-
-    public static final MenuType<DungeonBossSpawnerScreenHandler> DUNGEON_BOSS_SPAWNER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_boss_spawner"),
-                    new ExtendedScreenHandlerType<>(DungeonBossSpawnerScreenHandler::new, BossSpawnerData.CODEC));
-
-    public static final MenuType<MobSpawnerScreenHandler> MOB_SPAWNER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_spawner"),
-                    new ExtendedScreenHandlerType<>(MobSpawnerScreenHandler::new, MobSpawnerData.CODEC));
 
     public static final MenuType<MobArenaSpawnerScreenHandler> MOB_ARENA_SPAWNER_SCREEN_HANDLER =
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_arena_spawner"),
@@ -39,10 +28,6 @@ public class ModScreenHandlers {
     public static final MenuType<MobArenaControllerScreenHandler> MOB_ARENA_CONTROLLER_SCREEN_HANDLER =
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_arena_controller"),
                     new ExtendedScreenHandlerType<>(MobArenaControllerScreenHandler::new, MobArenaControllerData.STREAM_CODEC));
-
-    public static final MenuType<DungeonControllerScreenHandler> DUNGEON_CONTROLLER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller"),
-                    new ExtendedScreenHandlerType<>(DungeonControllerScreenHandler::new, DungeonControllerData.STREAM_CODEC));
 
     public static final MenuType<RaidControllerScreenHandler> RAID_CONTROLLER_SCREEN_HANDLER =
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_controller"),

@@ -5,8 +5,6 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.PhaseBlock;
-import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
-import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.dungeon.screen.RoomControllerData;
 import net.ledok.arenas_ld.dungeon.screen.RoomControllerScreenHandler;
@@ -186,11 +184,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         for (BlockPos absolutePos : getSpawnerPositions()) {
             BlockEntity be = world.getBlockEntity(absolutePos);
             LivingEntity entity = null;
-            if (be instanceof MobSpawnerBlockEntity mobSpawner) {
-                entity = mobSpawner.spawnSingleScaled(world, tier.healthMultiplier());
-            } else if (be instanceof DungeonBossSpawnerBlockEntity bossSpawner) {
-                entity = bossSpawner.spawnSingleScaled(world, tier.healthMultiplier());
-            } else if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity newMobSpawner) {
+            if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity newMobSpawner) {
                 entity = newMobSpawner.spawnSingleScaled(world, tier.healthMultiplier());
             } else if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity newBossSpawner) {
                 entity = newBossSpawner.spawnSingleScaled(world, tier.healthMultiplier());

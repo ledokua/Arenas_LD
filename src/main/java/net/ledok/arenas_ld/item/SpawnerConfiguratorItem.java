@@ -1,7 +1,6 @@
 package net.ledok.arenas_ld.item;
 
 import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
-import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
@@ -67,7 +66,6 @@ public class SpawnerConfiguratorItem extends Item {
 
         if (player.isShiftKeyDown()) {
             if (clickedBlockEntity instanceof BossSpawnerBlockEntity
-                || clickedBlockEntity instanceof DungeonBossSpawnerBlockEntity
                 || clickedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity
                 || clickedBlockEntity instanceof MobArenaSpawnerBlockEntity) {
                 stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(data.mode(), Optional.of(clickedPos), Optional.of(world.dimension())));
@@ -96,7 +94,6 @@ public class SpawnerConfiguratorItem extends Item {
         BlockEntity selectedBlockEntity = spawnerWorld.getBlockEntity(selectedSpawnerPos);
 
         if (!(selectedBlockEntity instanceof BossSpawnerBlockEntity)
-            && !(selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity)
             && !(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity)
             && !(selectedBlockEntity instanceof MobArenaSpawnerBlockEntity)) {
             player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.invalid_spawner"));
@@ -113,8 +110,6 @@ public class SpawnerConfiguratorItem extends Item {
                 if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
                     bossSpawner.exitPosition = clickedPos;
                     bossSpawner.exitDimension = clickedDimension;
-                } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
-                    dungeonBossSpawner.setExitPositionCoords(clickedPos, clickedDimension);
                 } else if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
                     mobArenaSpawner.setExitPosition(relativePos, clickedDimension);
                 }
@@ -123,8 +118,6 @@ public class SpawnerConfiguratorItem extends Item {
             case ENTRANCE_POSITION:
                 if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
                     mobArenaSpawner.setArenaEntrancePosition(relativePos, clickedDimension);
-                } else if (selectedBlockEntity instanceof DungeonBossSpawnerBlockEntity dungeonBossSpawner) {
-                    dungeonBossSpawner.setEntrancePosition(relativePos, clickedDimension);
                 } else if (selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity newDbs) {
                     newDbs.setEntrancePosition(clickedPos, clickedDimension);
                 } else if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {

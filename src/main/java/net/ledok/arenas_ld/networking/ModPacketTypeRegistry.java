@@ -40,9 +40,6 @@ final class ModPacketTypeRegistry {
     static void registerC2STypes() {
         PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerTierConfigsPayload.TYPE, UpdateBossSpawnerTierConfigsPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateDungeonBossSpawnerPayload.TYPE, UpdateDungeonBossSpawnerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateDungeonTierConfigsPayload.TYPE, UpdateDungeonTierConfigsPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerPayload.TYPE, UpdateMobSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobArenaSpawnerPayload.TYPE, UpdateMobArenaSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobArenaMobsPayload.TYPE, UpdateMobArenaMobsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobArenaRewardsPayload.TYPE, UpdateMobArenaRewardsPayload.STREAM_CODEC);
@@ -51,27 +48,16 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(CycleConfiguratorModePayload.TYPE, CycleConfiguratorModePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(MobArenaControllerActionPayload.TYPE, MobArenaControllerActionPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(DungeonControllerActionPayload.TYPE, DungeonControllerActionPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidControllerActionPayload.TYPE, RaidControllerActionPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(JoinDungeonLobbyPayload.TYPE, JoinDungeonLobbyPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(JoinRaidLobbyPayload.TYPE, JoinRaidLobbyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RespondDungeonLobbyInvitePayload.TYPE, RespondDungeonLobbyInvitePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RespondRaidLobbyInvitePayload.TYPE, RespondRaidLobbyInvitePayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(CreateDungeonLobbyPayload.TYPE, CreateDungeonLobbyPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(CreateRaidLobbyPayload.TYPE, CreateRaidLobbyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(DisbandDungeonLobbyPayload.TYPE, DisbandDungeonLobbyPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(DisbandRaidLobbyPayload.TYPE, DisbandRaidLobbyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(InviteDungeonLobbyPlayerPayload.TYPE, InviteDungeonLobbyPlayerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(InviteRaidLobbyPlayerPayload.TYPE, InviteRaidLobbyPlayerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(KickDungeonLobbyPlayerPayload.TYPE, KickDungeonLobbyPlayerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RequestDungeonControllerInfoPayload.TYPE, RequestDungeonControllerInfoPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RequestRaidControllerInfoPayload.TYPE, RequestRaidControllerInfoPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RequestMobArenaControllerInfoPayload.TYPE, RequestMobArenaControllerInfoPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateDungeonControllerSettingsPayload.TYPE, UpdateDungeonControllerSettingsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateRaidControllerSettingsPayload.TYPE, UpdateRaidControllerSettingsPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateDungeonLobbyVisibilityPayload.TYPE, UpdateDungeonLobbyVisibilityPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateRaidLobbyVisibilityPayload.TYPE, UpdateRaidLobbyVisibilityPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateDungeonControllerAdminSettingsPayload.TYPE, UpdateDungeonControllerAdminSettingsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateRaidControllerAdminSettingsPayload.TYPE, UpdateRaidControllerAdminSettingsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobArenaControllerSettingsPayload.TYPE, UpdateMobArenaControllerSettingsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomRemoveSpawnerPayload.TYPE, RoomRemoveSpawnerPayload.STREAM_CODEC);
@@ -106,7 +92,6 @@ final class ModPacketTypeRegistry {
     }
 
     static void registerS2CTypes() {
-        PayloadTypeRegistry.playS2C().register(DungeonControllerInfoPayload.TYPE, DungeonControllerInfoPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RaidControllerInfoPayload.TYPE, RaidControllerInfoPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(MobArenaControllerInfoPayload.TYPE, MobArenaControllerInfoPayload.STREAM_CODEC);
     }

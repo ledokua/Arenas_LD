@@ -3,10 +3,9 @@ package net.ledok.arenas_ld.networking;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
-import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
-import net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
-import net.ledok.arenas_ld.block.entity.MobSpawnerBlockEntity;
+import net.ledok.arenas_ld.dungeon.lobby.Lobby;
+import net.ledok.arenas_ld.dungeon.run.DungeonRun;
 import net.minecraft.ChatFormatting;
 import net.ledok.arenas_ld.dungeon.packet.DbsClearRoomsPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsMoveRoomPayload;
@@ -38,26 +37,20 @@ import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
-import net.ledok.arenas_ld.dungeon.lobby.Lobby;
-import net.ledok.arenas_ld.dungeon.run.DungeonRun;
 import net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle;
 import net.ledok.arenas_ld.item.LinkerItem;
 import net.ledok.arenas_ld.item.SpawnerConfiguratorItem;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.AttributeProvider;
-import net.ledok.arenas_ld.util.DifficultyTier;
-import net.ledok.arenas_ld.util.DungeonInstanceRef;
 import net.ledok.arenas_ld.util.EquipmentProvider;
 import net.ledok.arenas_ld.util.LinkerModeDataComponent;
 import net.ledok.arenas_ld.util.RaidDifficulty;
 import net.ledok.arenas_ld.util.RaidTierConfig;
 import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
-import net.ledok.arenas_ld.util.TierConfig;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -109,76 +102,6 @@ final class SpawnerPacketHandlers {
                         }
                         blockEntity.getTierConfigs().put(tier, config);
                     }
-                    markDirtyAndSync(world, blockEntity);
-                }
-            });
-        });
-
-        ServerPlayNetworking.registerGlobalReceiver(UpdateDungeonBossSpawnerPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                Level world = context.player().level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (be instanceof DungeonBossSpawnerBlockEntity blockEntity) {
-                    blockEntity.applyConfig(
-                            payload.mobId(),
-                            payload.respawnTime(),
-                            payload.dungeonCloseTimer(),
-                            payload.dungeonTime(),
-                            payload.lootTable(),
-                            payload.perPlayerLootTable(),
-                            payload.exitPositionCoords(),
-                            ResourceKey.create(Registries.DIMENSION, payload.exitDimension()),
-                            payload.triggerRadius(),
-                            payload.battleRadius(),
-                            payload.regeneration(),
-                            payload.skillExperiencePerWin(),
-                            payload.groupId()
-                    );
-                    if (world instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-                        DungeonControllerBlockEntity.updateControllerRespawnTimeForSpawner(
-                                serverLevel.getServer(),
-                                new DungeonInstanceRef(payload.pos(), serverLevel.dimension()),
-                                payload.respawnTime()
-                        );
-                    }
-                    markDirtyAndSync(world, blockEntity);
-                }
-            });
-        });
-
-        ServerPlayNetworking.registerGlobalReceiver(UpdateDungeonTierConfigsPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                Level world = context.player().level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (be instanceof DungeonBossSpawnerBlockEntity blockEntity) {
-                    CompoundTag tierConfigsTag = payload.tierConfigs();
-                    blockEntity.getTierConfigs().clear();
-                    for (DifficultyTier tier : DifficultyTier.values()) {
-                        TierConfig config = new TierConfig();
-                        if (tierConfigsTag.contains(tier.name(), net.minecraft.nbt.Tag.TAG_COMPOUND)) {
-                            config = TierConfig.fromNbt(tierConfigsTag.getCompound(tier.name()));
-                        }
-                        blockEntity.getTierConfigs().put(tier, config);
-                    }
-                    markDirtyAndSync(world, blockEntity);
-                }
-            });
-        });
-
-        ServerPlayNetworking.registerGlobalReceiver(UpdateMobSpawnerPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                Level world = context.player().level();
-                if (world.getBlockEntity(payload.pos()) instanceof MobSpawnerBlockEntity blockEntity) {
-                    blockEntity.mobId = payload.mobId();
-                    blockEntity.respawnTime = payload.respawnTime();
-                    blockEntity.lootTableId = payload.lootTable();
-                    blockEntity.triggerRadius = payload.triggerRadius();
-                    blockEntity.battleRadius = payload.battleRadius();
-                    blockEntity.regeneration = payload.regeneration();
-                    blockEntity.skillExperiencePerWin = payload.skillExperience();
-                    blockEntity.mobCount = payload.mobCount();
-                    blockEntity.mobSpread = payload.mobSpread();
-                    blockEntity.groupId = payload.groupId();
                     markDirtyAndSync(world, blockEntity);
                 }
             });
@@ -563,14 +486,14 @@ final class SpawnerPacketHandlers {
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller
                     && world instanceof ServerLevel serverLevel) {
+                    Lobby lobby = controller.getLobbies().stream()
+                        .filter(l -> l.isOwner(player.getUUID()))
+                        .findFirst()
+                        .orElse(null);
+                    if (lobby == null) {
+                        return;
+                    }
                     controller.startRun(player).ifPresent(instancePos -> {
-                        Lobby lobby = controller.getLobbies().stream()
-                            .filter(l -> l.isOwner(player.getUUID()))
-                            .findFirst()
-                            .orElse(null);
-                        if (lobby == null) {
-                            return;
-                        }
                         List<UUID> party = new ArrayList<>(lobby.members());
                         DungeonRun run = DungeonRunLifecycle.startRun(
                             serverLevel,

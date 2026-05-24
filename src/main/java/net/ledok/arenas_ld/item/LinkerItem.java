@@ -36,7 +36,6 @@ public class LinkerItem extends Item {
         SPAWNER_LINKING("item.arenas_ld.linker.mode.spawner_linking"),
         PHASE_BLOCK_LINKING("item.arenas_ld.linker.mode.phase_block_linking"),
         ARENA_CONTROLLER_LINKING("item.arenas_ld.linker.mode.arena_controller_linking"),
-        DUNGEON_CONTROLLER_LINKING("item.arenas_ld.linker.mode.dungeon_controller_linking"),
         RAID_CONTROLLER_LINKING("item.arenas_ld.linker.mode.raid_controller_linking"),
         RESPAWN_POINT_LINKING("item.arenas_ld.linker.mode.respawn_point_linking"),
         CONTROLLER_INSTANCE("item.arenas_ld.linker.mode.controller_instance"),
@@ -84,8 +83,6 @@ public class LinkerItem extends Item {
             return handlePhaseBlockLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
         } else if (currentMode == Mode.ARENA_CONTROLLER_LINKING) {
             return handleArenaControllerLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
-        } else if (currentMode == Mode.DUNGEON_CONTROLLER_LINKING) {
-            return handleDungeonControllerLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
         } else if (currentMode == Mode.RAID_CONTROLLER_LINKING) {
             return handleRaidControllerLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
         } else if (currentMode == Mode.RESPAWN_POINT_LINKING) {
@@ -104,35 +101,7 @@ public class LinkerItem extends Item {
     }
 
     private InteractionResult handleGroupConfig(Level world, BlockPos pos, BlockState state, Player player, ItemStack stack, BlockEntity blockEntity, boolean isShiftDown) {
-        if (blockEntity instanceof MobSpawnerBlockEntity spawner) {
-            if (isShiftDown) {
-                String groupId = spawner.getGroupId();
-                stack.set(DataComponentRegistry.LINKER_DATA, new LinkerDataComponent(groupId));
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
-                return InteractionResult.SUCCESS;
-            } else {
-                LinkerDataComponent data = stack.get(DataComponentRegistry.LINKER_DATA);
-                if (data != null) {
-                    spawner.setGroupId(data.groupId());
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.pasted_group_id", data.groupId()));
-                    return InteractionResult.SUCCESS;
-                }
-            }
-        } else if (blockEntity instanceof DungeonBossSpawnerBlockEntity spawner) {
-            if (isShiftDown) {
-                String groupId = spawner.getGroupId();
-                stack.set(DataComponentRegistry.LINKER_DATA, new LinkerDataComponent(groupId));
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.copied_group_id", groupId));
-                return InteractionResult.SUCCESS;
-            } else {
-                LinkerDataComponent data = stack.get(DataComponentRegistry.LINKER_DATA);
-                if (data != null) {
-                    spawner.setGroupId(data.groupId());
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.pasted_group_id", data.groupId()));
-                    return InteractionResult.SUCCESS;
-                }
-            }
-        } else if (blockEntity instanceof BossSpawnerBlockEntity spawner) {
+        if (blockEntity instanceof BossSpawnerBlockEntity spawner) {
             if (isShiftDown) {
                 String groupId = spawner.getGroupId();
                 stack.set(DataComponentRegistry.LINKER_DATA, new LinkerDataComponent(groupId));
@@ -251,7 +220,7 @@ public class LinkerItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        if (blockEntity instanceof MobSpawnerBlockEntity || blockEntity instanceof BossSpawnerBlockEntity || blockEntity instanceof DungeonBossSpawnerBlockEntity) {
+        if (blockEntity instanceof BossSpawnerBlockEntity) {
             if (mainPosOpt.isPresent()) {
                 BlockPos mainPos = mainPosOpt.get();
                 ServerLevel mainWorld = world.getServer().getLevel(modeData.mainSpawnerDimension().get());
@@ -355,82 +324,6 @@ public class LinkerItem extends Item {
 
             controller.setLinkedSpawner(pos, world.dimension());
             player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.linked_controller_to_spawner", controllerPos.toShortString(), pos.toShortString()));
-            return InteractionResult.SUCCESS;
-        }
-
-        return InteractionResult.PASS;
-    }
-
-    private InteractionResult handleDungeonControllerLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, boolean isShiftDown, LinkerModeDataComponent modeData) {
-        Optional<BlockPos> mainPosOpt = modeData.mainSpawnerPos();
-
-        if (blockEntity instanceof DungeonControllerBlockEntity controller) {
-            if (mainPosOpt.isEmpty() || modeData.mainSpawnerDimension().isEmpty() || !mainPosOpt.get().equals(pos) || !modeData.mainSpawnerDimension().get().equals(world.dimension())) {
-                // Select controller first.
-                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_controller_selected", pos.toShortString()));
-                return InteractionResult.SUCCESS;
-            }
-
-            // Selected controller clicked again: list instances.
-            if (controller.getInstances().isEmpty()) {
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_dungeon_instances"));
-            } else {
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_instances"));
-                for (var instance : controller.getInstances()) {
-                    int cooldownSec = (instance.cooldownTicksRemaining() + 19) / 20;
-                    String suffix = instance.status() == net.ledok.arenas_ld.util.InstanceStatus.COOLDOWN
-                            ? ", " + String.format("%02d:%02d", cooldownSec / 60, cooldownSec % 60)
-                            : "";
-                    player.sendSystemMessage(Component.translatable(
-                            "message.arenas_ld.linker.dungeon_instance_entry",
-                            instance.ref().spawnerPos().toShortString(),
-                            instance.ref().dimension().location().toString(),
-                            instance.status().name() + suffix
-                    ));
-                }
-            }
-            return InteractionResult.SUCCESS;
-        }
-
-        if (blockEntity instanceof DungeonBossSpawnerBlockEntity) {
-            if (mainPosOpt.isEmpty() || modeData.mainSpawnerDimension().isEmpty()) {
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.no_dungeon_controller_selected"));
-                return InteractionResult.SUCCESS;
-            }
-
-            BlockPos controllerPos = mainPosOpt.get();
-            ServerLevel controllerWorld = world.getServer().getLevel(modeData.mainSpawnerDimension().get());
-            if (controllerWorld == null) {
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_controller_invalid"));
-                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
-                return InteractionResult.FAIL;
-            }
-
-            BlockEntity controllerBe = controllerWorld.getBlockEntity(controllerPos);
-            if (!(controllerBe instanceof DungeonControllerBlockEntity controller)) {
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_controller_invalid"));
-                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty()));
-                return InteractionResult.FAIL;
-            }
-
-            var ref = new net.ledok.arenas_ld.util.DungeonInstanceRef(pos, world.dimension());
-            if (isShiftDown) {
-                boolean removed = controller.removeInstance(ref);
-                if (removed) {
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_instance_removed", pos.toShortString(), controllerPos.toShortString()));
-                } else {
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_instance_not_linked"));
-                }
-                return InteractionResult.SUCCESS;
-            }
-
-            boolean added = controller.addInstance(ref);
-            if (added) {
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_instance_added", pos.toShortString(), controllerPos.toShortString()));
-                return InteractionResult.SUCCESS;
-            }
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_instance_add_failed"));
             return InteractionResult.SUCCESS;
         }
 
@@ -760,7 +653,6 @@ public class LinkerItem extends Item {
                 if (Mode.values()[modeData.mode()] == Mode.SPAWNER_LINKING
                         || Mode.values()[modeData.mode()] == Mode.PHASE_BLOCK_LINKING
                         || Mode.values()[modeData.mode()] == Mode.ARENA_CONTROLLER_LINKING
-                        || Mode.values()[modeData.mode()] == Mode.DUNGEON_CONTROLLER_LINKING
                         || Mode.values()[modeData.mode()] == Mode.RAID_CONTROLLER_LINKING
                         || Mode.values()[modeData.mode()] == Mode.RESPAWN_POINT_LINKING
                         || Mode.values()[modeData.mode()] == Mode.CONTROLLER_INSTANCE
@@ -790,7 +682,6 @@ public class LinkerItem extends Item {
         } else if (currentMode == Mode.PHASE_BLOCK_LINKING && modeData.mainSpawnerPos().isPresent()) {
             tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.main_phase_block", modeData.mainSpawnerPos().get().toShortString()).withStyle(net.minecraft.ChatFormatting.GOLD));
         } else if ((currentMode == Mode.ARENA_CONTROLLER_LINKING
-                || currentMode == Mode.DUNGEON_CONTROLLER_LINKING
                 || currentMode == Mode.RAID_CONTROLLER_LINKING
                 || currentMode == Mode.RESPAWN_POINT_LINKING
                 || currentMode == Mode.CONTROLLER_INSTANCE

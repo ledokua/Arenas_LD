@@ -19,20 +19,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class PlayerListMixin {
     @Inject(method = "placeNewPlayer", at = @At("TAIL"))
     private void onPlayerConnect(Connection connection, ServerPlayer player, CommonListenerCookie cookie, CallbackInfo ci) {
-        var dungeonExit = ArenasLdMod.DUNGEON_BOSS_MANAGER.getDisconnectedDungeonInfo(player.getUUID());
-        if (dungeonExit != null) {
-            ServerLevel exitLevel = player.server.getLevel(dungeonExit.dimension());
-            if (exitLevel != null) {
-                BlockPos exitPos = dungeonExit.pos();
-                var chunkPos = new net.minecraft.world.level.ChunkPos(exitPos);
-                exitLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
-                player.setGameMode(GameType.SURVIVAL);
-                player.teleportTo(exitLevel, exitPos.getX() + 0.5, exitPos.getY(), exitPos.getZ() + 0.5, player.getYRot(), player.getXRot());
-                exitLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
-            }
-            ArenasLdMod.DUNGEON_BOSS_MANAGER.removeDisconnectedDungeonPlayer(player.getUUID());
-        }
-
         MobArenaManager.ArenaInfo arenaInfo = ArenasLdMod.MOB_ARENA_MANAGER.getDisconnectedArenaInfo(player.getUUID());
         if (arenaInfo != null) {
             ServerLevel world = player.server.getLevel(arenaInfo.dimension());
@@ -55,19 +41,6 @@ public class PlayerListMixin {
     private void onPlayerDisconnect(ServerPlayer player, CallbackInfo ci) {
         var server = player.server;
         if (server != null) {
-            for (var key : net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity.getControllers()) {
-                ServerLevel level = server.getLevel(key.dimension());
-                if (level == null) continue;
-                var be = level.getBlockEntity(key.pos());
-                if (!(be instanceof net.ledok.arenas_ld.block.entity.DungeonControllerBlockEntity controller)) continue;
-                var lobby = controller.getLobbyByMember(player.getUUID());
-                if (lobby == null) continue;
-                if (lobby.ownerUuid.equals(player.getUUID())) {
-                    controller.disbandLobby(player.getUUID());
-                } else {
-                    controller.leaveLobby(player.getUUID());
-                }
-            }
             for (var key : net.ledok.arenas_ld.block.entity.MobArenaControllerBlockEntity.getControllers()) {
                 ServerLevel level = server.getLevel(key.dimension());
                 if (level == null) continue;

@@ -69,16 +69,8 @@ public class PhaseBlockEntity extends BlockEntity {
                 return false;
             }
             BlockEntity spawnerEntity = level.getBlockEntity(spawnerPos);
-            if (spawnerEntity instanceof MobSpawnerBlockEntity mobSpawner) {
-                if (!mobSpawner.isDungeonCleared()) {
-                    return false;
-                }
-            } else if (spawnerEntity instanceof BossSpawnerBlockEntity bossSpawner) {
+            if (spawnerEntity instanceof BossSpawnerBlockEntity bossSpawner) {
                 if (bossSpawner.isBattleActive) {
-                    return false;
-                }
-            } else if (spawnerEntity instanceof DungeonBossSpawnerBlockEntity dungeonSpawner) {
-                if (dungeonSpawner.isDungeonRunning()) {
                     return false;
                 }
             } else {

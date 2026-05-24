@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.mixin;
 
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
-import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.run.DungeonRun;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -54,29 +53,15 @@ public abstract class LivingEntityMixin {
             return (float) (amount * multiplier);
         }
 
-        DungeonBossSpawnerBlockEntity dungeonSpawner = ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player);
-        if (dungeonSpawner == null) {
-            BossSpawnerBlockEntity raidSpawner = ArenasLdMod.RAID_BOSS_MANAGER.getSpawnerForPlayer(player);
-            if (raidSpawner == null) {
-                return amount;
-            }
-            double raidDamageMultiplier = raidSpawner.getEffectiveDamageMultiplier();
-            if (raidDamageMultiplier == 1.0) {
-                return amount;
-            }
-            return (float) (amount * raidDamageMultiplier);
-        }
-
-        if (!arenasLd$matchesDungeonDamageFilter(this.arenasLd$currentDamageSource)) {
+        BossSpawnerBlockEntity raidSpawner = ArenasLdMod.RAID_BOSS_MANAGER.getSpawnerForPlayer(player);
+        if (raidSpawner == null) {
             return amount;
         }
-
-        double damageMultiplier = dungeonSpawner.getEffectiveDamageMultiplier();
-        if (damageMultiplier == 1.0) {
+        double raidDamageMultiplier = raidSpawner.getEffectiveDamageMultiplier();
+        if (raidDamageMultiplier == 1.0) {
             return amount;
         }
-
-        return (float) (amount * damageMultiplier);
+        return (float) (amount * raidDamageMultiplier);
     }
 
     private boolean arenasLd$matchesDungeonDamageFilter(DamageSource source) {
@@ -102,18 +87,6 @@ public abstract class LivingEntityMixin {
                 DungeonRun v4Run = ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(player.getUUID());
                 if (v4Run != null && player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
                     arenasLd$handleV4PlayerDown(player, v4Run);
-                    ci.cancel();
-                    return;
-                }
-            }
-            DungeonBossSpawnerBlockEntity dungeonSpawner = ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player);
-            if (health <= 0.0F && dungeonSpawner != null) {
-                if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
-                    if (dungeonSpawner.isHardcoreEnabled()) {
-                        dungeonSpawner.handlePlayerHardcoreDeath(player);
-                    } else {
-                        dungeonSpawner.handlePlayerDown(player);
-                    }
                     ci.cancel();
                     return;
                 }
@@ -160,18 +133,6 @@ public abstract class LivingEntityMixin {
                 arenasLd$handleV4PlayerDown(player, v4Run);
                 ci.cancel();
                 return;
-            }
-            DungeonBossSpawnerBlockEntity dungeonSpawner = ArenasLdMod.DUNGEON_BOSS_MANAGER.getSpawnerForPlayer(player);
-            if (dungeonSpawner != null) {
-                if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
-                    if (dungeonSpawner.isHardcoreEnabled()) {
-                        dungeonSpawner.handlePlayerHardcoreDeath(player);
-                    } else {
-                        dungeonSpawner.handlePlayerDown(player);
-                    }
-                    ci.cancel();
-                    return;
-                }
             }
             BossSpawnerBlockEntity raidSpawner = ArenasLdMod.RAID_BOSS_MANAGER.getSpawnerForPlayer(player);
             if (raidSpawner != null) {
