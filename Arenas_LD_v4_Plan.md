@@ -4749,21 +4749,441 @@ After all 7 tasks:
 
 After Phase F, Phase G (formerly H) deletes legacy code and renames `_v2` → canonical.
 
-## Phase G — Migration cliff & cleanup (1 PR)
+## Phase G — Migration cliff & cleanup (sequential PRs)
 
-**Status: not specified.** Was originally Phase H. Will include:
+**Goal**: delete every line of legacy dungeon code, drop `_v2` suffixes from new dungeon registry IDs and class/file names, bump `mod_version` to 4.0.0.
 
-- Delete every file in `net.ledok.arenas_ld.block.entity.*` for the old dungeon system.
-- Delete the corresponding blocks in `net.ledok.arenas_ld.block.*`.
-- Remove from `BlockRegistry`, `BlockEntitiesRegistry`, `ModScreenHandlers`, networking registrations.
-- Remove dead utility classes from `net.ledok.arenas_ld.util.*`.
-- Drop the `_v2` suffix from registry IDs — `arenas_ld:dungeon_controller_v2` becomes `arenas_ld:dungeon_controller`.
-- Drop the "(v2)" suffix from block display names.
-- Rewrite `/arenasld dungeon` subcommands for the new system.
-- Bump `mod_version` to `4.0.0`.
-- Final cleanup pass on lang files (remove dead keys).
+**The point of no return.** After Phase G lands, the only dungeon implementation in the mod is the v4.0 one. Pre-v4.0 dungeon save data (legacy controller blocks placed in worlds) becomes unrecognized and silently dropped on load. The `_v2` test dungeons from your dev sessions become the canonical configuration once the suffix is removed.
 
-Specs deferred until Phase F is closed.
+### Phase G is NOT a single PR
+
+A naïve "delete everything legacy + rename v2 to canonical" approach would produce a 2000-3000 line diff across 50+ files. Impossible to review carefully. Phase G is **split into 6 sequential tasks**, each one a reviewable unit with its own acceptance criteria.
+
+The order matters — each task removes a dependency the next task needs gone.
+
+### Scope: dungeon system ONLY
+
+The mod has four independent legacy systems:
+1. **Dungeon** (`DungeonControllerBlockEntity`, `DungeonBossSpawnerBlockEntity`, `MobSpawnerBlockEntity` in legacy locations, plus `DungeonBossManager`)
+2. **Mob Arena** (`MobArenaControllerBlockEntity`, `MobArenaSpawnerBlockEntity`)
+3. **Raid** (`RaidControllerBlockEntity`)
+4. **Boss Spawner** (standalone `BossSpawnerBlockEntity`, used outside dungeons)
+
+**Phase G only touches the dungeon system.** Arena, raid, and standalone boss spawner code remains untouched. Their packet handlers (`ArenaPacketHandlers`, `RaidPacketHandlers`), screen files, manager classes, and registrations are out of scope.
+
+What gets deleted: anything whose **sole purpose** was to support the legacy dungeon system. What stays: shared utilities, the PhaseBlock (reused by v4.0), screens shared with other systems, code paths shared with arena/raid.
+
+### Decisions locked in for Phase G
+
+These came up during scoping:
+
+- **Sequential tasks, not single PR.** 6 tasks (PG-1 through PG-6), each reviewable.
+- **`PhaseBlock` and `PhaseBlockEntity` STAY.** Phase blocks are reused by the new Room system (PC-3). They're not "legacy dungeon code" — they're shared infrastructure.
+- **`DungeonBossManager` GOES.** It exists exclusively for legacy dungeon support.
+- **`LinkerItem` legacy modes GO.** Modes that link only legacy blocks (`MOB_SPAWNER_BOSS_LINK`, etc.) are deleted. Linker keeps the 4 v4.0 modes from PF-3 as its full mode set.
+- **`SpawnerConfiguratorItem` STAYS** — it serves arena/raid/standalone boss too. Only the dungeon-related branches (which became the v4.0 DBS entrance) need cleanup if they're now redundant.
+- **`AttributesScreen` / `EquipmentScreen` STAY.** They serve both legacy (other systems) and v4.0 (via AttributeProvider/EquipmentProvider interfaces). Already shared.
+- **Legacy `Lobby`, `LobbyStatus`, `LobbyVisibility` in `util/` — GO.** Phase E (PE-3) ported them to `dungeon.lobby/` package. The util-package versions are obsolete.
+- **Rename strategy: rename in place via Git.** Don't copy-paste-delete; use `git mv` so history is preserved. Codex can simulate this via `git rm` + new file creation if needed.
+- **The v2 rename happens AFTER legacy deletion.** PG-1..PG-3 delete legacy; PG-4 renames `_v2` → canonical. This avoids any moment where two blocks compete for the same ID.
+- **Mod version bump is PG-6, last.** No use bumping until everything compiles and tests pass.
+
+### Tasks in this phase
+
+- **PG-1** — Delete legacy block entity + block + manager files (the actual class files). Update registrations. Likely leaves the build broken — that's OK; PG-2 + PG-3 fix it.
+- **PG-2** — Delete legacy networking (the dungeon-related parts of `ModPackets.java`, `SpawnerPacketHandlers.java`, `DungeonPacketHandlers.java`) and screens.
+- **PG-3** — Delete legacy `Lobby`/`LobbyStatus`/`LobbyVisibility` in `util/`, legacy command subcommands, legacy lang keys, legacy mixin branches.
+- **PG-4** — Rename `_v2` → canonical. Drops the v2 suffix from registry IDs, class names, lang keys, display strings.
+- **PG-5** — Clean up `LinkerItem` legacy modes. Keep only the 4 v4.0 modes from PF-3.
+- **PG-6** — Bump `mod_version` to `4.0.0`. Update mod metadata. Final smoke test.
+
+After Phase G, the codebase has one dungeon implementation, `arenas_ld:dungeon_controller` is the v4.0 block, and `mod_version` is `4.0.0`.
+
+---
+
+### PG-1 — Delete legacy block + BE + manager files
+
+**Goal**: remove the actual class files for legacy dungeon-only blocks, BEs, and the manager. Update registrations so the project at least *knows* they're gone. Build will likely break — that's expected; PG-2 fixes the network/screen leftovers.
+
+**Files to DELETE:**
+
+```
+src/main/java/net/ledok/arenas_ld/block/DungeonControllerBlock.java
+src/main/java/net/ledok/arenas_ld/block/DungeonBossSpawnerBlock.java
+src/main/java/net/ledok/arenas_ld/block/MobSpawnerBlock.java
+src/main/java/net/ledok/arenas_ld/block/entity/DungeonControllerBlockEntity.java
+src/main/java/net/ledok/arenas_ld/block/entity/DungeonBossSpawnerBlockEntity.java
+src/main/java/net/ledok/arenas_ld/block/entity/MobSpawnerBlockEntity.java
+src/main/java/net/ledok/arenas_ld/manager/DungeonBossManager.java
+```
+
+Use `git rm` if Codex supports it; otherwise file deletion + commit. **DO NOT delete:**
+- `BossSpawnerBlockEntity.java` (standalone boss, not dungeon)
+- `MobArenaSpawnerBlockEntity.java` (arena system)
+- `RaidControllerBlockEntity.java` (raid system)
+- `PhaseBlockEntity.java` / `PhaseBlock.java` (reused by v4.0)
+- `RespawnPointBlockEntity.java` / `RespawnPointBlock.java`
+- The textures or assets for legacy blocks (PG-4 will retarget v2 textures to canonical names; legacy textures can be removed in PG-4 too)
+
+**Files to MODIFY:**
+
+- `src/main/java/net/ledok/arenas_ld/registry/BlockRegistry.java` — remove these registrations:
+  - `DUNGEON_CONTROLLER_BLOCK`
+  - `DUNGEON_BOSS_SPAWNER_BLOCK`
+  - `MOB_SPAWNER_BLOCK`
+- `src/main/java/net/ledok/arenas_ld/registry/BlockEntitiesRegistry.java` — remove these registrations:
+  - `DUNGEON_CONTROLLER_BLOCK_ENTITY`
+  - `DUNGEON_BOSS_SPAWNER_BLOCK_ENTITY`
+  - `MOB_SPAWNER_BLOCK_ENTITY`
+- `src/main/java/net/ledok/arenas_ld/registry/ModCreativeModeTabs.java` — remove legacy entries for the 3 deleted blocks. Keep v2 entries (PG-4 will rename them).
+- `src/main/java/net/ledok/arenas_ld/ArenasLdMod.java` — remove `DUNGEON_BOSS_MANAGER` static field, `initialize()` call, any registration of its events. **Do NOT** remove `DUNGEON_MANAGER` (the v4.0 one).
+
+#### Acceptance
+
+- Files listed above are deleted from disk.
+- Registry files compile (because they no longer reference deleted classes).
+- **Build may fail** elsewhere — that's expected. PG-2 fixes the cascade.
+- `git status` shows the 7 deletions plus the 4 modifications.
+
+#### Don'ts
+
+- Do NOT try to "delete everything that imports the deleted classes" in this task. That cascade is PG-2's job. PG-1 is just the surgical deletion of the BE files and their direct registrations.
+- Do NOT delete the `PhaseBlock` or `PhaseBlockEntity`.
+- Do NOT delete the `block/entity/BossSpawnerBlockEntity.java` (standalone — not dungeon).
+- Do NOT touch `LinkerItem.java`, `LivingEntityMixin.java`, networking files, or screens. PG-2/3.
+
+#### Expected breakage
+
+After PG-1, files importing the deleted classes will fail to compile:
+- `LinkerItem.java` (legacy modes)
+- `LivingEntityMixin.java` (legacy dungeon branch)
+- `ModPackets.java`, `SpawnerPacketHandlers.java`, `DungeonPacketHandlers.java`
+- `CommandRegistry.java` (legacy dungeon subcommands)
+- Various screen files
+
+This is fine. PG-2/3 cleans them up.
+
+---
+
+### PG-2 — Delete legacy networking and screens
+
+**Goal**: remove all networking handlers and screen files that exclusively served the legacy dungeon system. Restore build.
+
+**Files to DELETE:**
+
+```
+src/main/java/net/ledok/arenas_ld/screen/DungeonBossSpawnerScreen.java
+src/main/java/net/ledok/arenas_ld/screen/DungeonBossSpawnerScreenHandler.java
+src/main/java/net/ledok/arenas_ld/screen/DungeonControllerScreen.java
+src/main/java/net/ledok/arenas_ld/screen/DungeonControllerScreenHandler.java
+src/main/java/net/ledok/arenas_ld/screen/DungeonControllerData.java
+src/main/java/net/ledok/arenas_ld/screen/MobSpawnerScreen.java
+src/main/java/net/ledok/arenas_ld/screen/MobSpawnerScreenHandler.java
+src/main/java/net/ledok/arenas_ld/screen/MobSpawnerData.java
+src/main/java/net/ledok/arenas_ld/screen/BossSpawnerData.java
+src/main/java/net/ledok/arenas_ld/screen/BossSpawnerScreen.java
+src/main/java/net/ledok/arenas_ld/screen/BossSpawnerScreenHandler.java
+src/main/java/net/ledok/arenas_ld/networking/DungeonPacketHandlers.java
+```
+
+Wait — `BossSpawnerData/Screen/ScreenHandler` might be the standalone boss spawner, NOT dungeon. **Codex MUST verify** by reading these files first. If they reference `BossSpawnerBlockEntity` (not `DungeonBossSpawnerBlockEntity`), they're the standalone boss screens and **SHOULD NOT BE DELETED**.
+
+A safer file list for PG-2 (definitely dungeon-only):
+
+```
+src/main/java/net/ledok/arenas_ld/screen/DungeonBossSpawnerScreen.java
+src/main/java/net/ledok/arenas_ld/screen/DungeonBossSpawnerScreenHandler.java
+src/main/java/net/ledok/arenas_ld/screen/DungeonControllerScreen.java
+src/main/java/net/ledok/arenas_ld/screen/DungeonControllerScreenHandler.java
+src/main/java/net/ledok/arenas_ld/screen/DungeonControllerData.java
+src/main/java/net/ledok/arenas_ld/screen/MobSpawnerScreen.java
+src/main/java/net/ledok/arenas_ld/screen/MobSpawnerScreenHandler.java
+src/main/java/net/ledok/arenas_ld/screen/MobSpawnerData.java
+src/main/java/net/ledok/arenas_ld/networking/DungeonPacketHandlers.java
+```
+
+For `BossSpawnerData/Screen/ScreenHandler`, Codex inspects and decides — if `BossSpawnerBlockEntity` still exists (it does — we kept it in PG-1), these stay.
+
+**Files to MODIFY:**
+
+- `src/main/java/net/ledok/arenas_ld/networking/ModPackets.java` — search for blocks of code that import or instantiate the legacy dungeon types. Remove **only those blocks**. Keep arena/raid/MobArena packet handlers. **Read carefully line by line; this file is 1263 lines.**
+- `src/main/java/net/ledok/arenas_ld/networking/SpawnerPacketHandlers.java` — same approach. Keep arena/standalone-boss handlers. Remove dungeon ones.
+- `src/main/java/net/ledok/arenas_ld/networking/ModPacketTypeRegistry.java` — remove registrations for deleted payload types. (Note: v4.0 payloads stay; only legacy dungeon ones go.)
+- `src/main/java/net/ledok/arenas_ld/screen/ModScreenHandlers.java` — remove registrations for the deleted legacy dungeon screen handlers.
+- `src/main/java/net/ledok/arenas_ld/client/ArenasLdClient.java` — remove screen factory registrations for the deleted screens.
+
+#### Acceptance
+
+- Files listed are deleted.
+- `BossSpawnerData/Screen/ScreenHandler` were inspected by Codex; if they belonged to standalone boss, they STAYED.
+- Build passes.
+- `LivingEntityMixin.java` still has legacy DBS branches (NOT removed yet — that's PG-3's job). It compiles because PG-1 only removed the class FILES; if the mixin references them, the build is still broken until PG-3.
+
+Hmm — wait. If PG-1 deletes the legacy classes and PG-3 is what removes the mixin's references, then PG-2 won't actually compile cleanly. Let me reorder:
+
+**Revised PG ordering:**
+- PG-1 deletes block + BE + manager files
+- **PG-2 deletes legacy mixin/command/lifecycle code** (anything that imports the deleted classes). Build passes here.
+- **PG-3 deletes legacy networking and screens** (cleanup that doesn't depend on classes).
+
+Actually re-thinking: if the mixin uses `import net.ledok.arenas_ld.block.entity.DungeonBossSpawnerBlockEntity;` and that file is deleted in PG-1, then after PG-1 the mixin **fails to compile**. The cascade must be cleared before build can pass again. So PG-2 needs to fix the build — which means deleting from networking, mixin, command registry, and screens **in one task**.
+
+Let me re-scope PG-2 to be "restore the build after PG-1":
+
+**Revised PG-2: Restore build after deletions** — cleans up every file that referenced the deleted classes.
+
+#### Don'ts
+
+- Do not delete `BossSpawnerBlockEntity.java`-related screens (they serve the standalone boss spawner, which is NOT a dungeon component).
+- Do not delete `EquipmentScreen.java`, `MobAttributesScreen.java`, or related Data files — these are shared with v4.0.
+- Do not delete `MobArenaControllerScreen.java` family — arena system.
+- Do not delete `RaidControllerScreen.java` family — raid system.
+
+#### Sub-task: PG-2 actual file list (restore-build)
+
+Since after PG-1 the build is broken, PG-2 must touch ALL files that reference the now-deleted classes. This is a bigger task than I initially scoped. Let me simplify by combining PG-2 and PG-3 into a single "restore build" task, and split based on direction (networking-side vs everything-else):
+
+---
+
+### PG-2 (revised) — Restore build: remove all references to deleted legacy classes
+
+**Goal**: after PG-1's deletion, fix all the compilation errors by removing every reference to the deleted types.
+
+**Files to MODIFY (mass cleanup):**
+
+- `LinkerItem.java` — remove all legacy mode cases (search for references to deleted BE classes; remove the case blocks and the corresponding `LinkerMode` enum values).
+- `LivingEntityMixin.java` — remove the legacy DBS branch from damage scaling. Remove the legacy DBS branch from death capture in `onSetHealth` / `onDie`. The legacy branches use `DUNGEON_BOSS_MANAGER` (already gone in PG-1) so they're dead code.
+- `CommandRegistry.java` — remove dungeon subcommand branches that use the deleted classes. Keep arena/raid commands.
+- `ArenasLdMod.java` — remove all `DUNGEON_BOSS_MANAGER` references.
+- `networking/ModPackets.java` — remove legacy dungeon payloads + handlers. **Surgical, file is large.**
+- `networking/SpawnerPacketHandlers.java` — remove legacy dungeon handlers.
+- `networking/DungeonPacketHandlers.java` — entire file gone, but check it isn't called from elsewhere first.
+- `networking/ModPacketTypeRegistry.java` — remove deleted payload registrations.
+- `screen/ModScreenHandlers.java` — remove deleted screen handler registrations.
+- `client/ArenasLdClient.java` — remove deleted screen factory registrations.
+
+**Files to DELETE (legacy screens):**
+
+- `screen/DungeonBossSpawnerScreen.java`
+- `screen/DungeonBossSpawnerScreenHandler.java`
+- `screen/DungeonControllerScreen.java`
+- `screen/DungeonControllerScreenHandler.java`
+- `screen/DungeonControllerData.java`
+- `screen/MobSpawnerScreen.java`
+- `screen/MobSpawnerScreenHandler.java`
+- `screen/MobSpawnerData.java`
+- `networking/DungeonPacketHandlers.java`
+
+**Files to LEAVE ALONE:**
+
+- `util/Lobby.java`, `util/LobbyStatus.java`, `util/LobbyVisibility.java` — legacy lobby utilities. PG-3 deletes them.
+- `assets/arenas_ld/lang/*.json` — legacy lang keys. PG-3.
+- Anything `_v2` — that's still the active code.
+
+#### Acceptance
+
+- All files listed are modified or deleted as specified.
+- `./gradlew build` passes.
+- `LivingEntityMixin` still works for v4.0 dungeons + arena + raid (legacy DBS branches gone).
+- No references to deleted classes anywhere in the codebase.
+
+#### Don'ts
+
+- Do not also delete the legacy `Lobby`/`LobbyStatus`/`LobbyVisibility` from `util/` here. PG-3.
+- Do not touch lang files yet. PG-3.
+- Do not rename `_v2` anything. PG-4.
+
+---
+
+### PG-3 — Delete legacy lobby utils, command subcommands, lang keys
+
+**Goal**: now that the build compiles without legacy classes, finish cleaning up the secondary remnants.
+
+**Files to DELETE:**
+
+```
+src/main/java/net/ledok/arenas_ld/util/Lobby.java
+src/main/java/net/ledok/arenas_ld/util/LobbyStatus.java
+src/main/java/net/ledok/arenas_ld/util/LobbyVisibility.java
+```
+
+**Files to MODIFY:**
+
+- `CommandRegistry.java` — remove any remaining legacy dungeon subcommands (e.g., `/arenasld lobby accept`, `/arenasld lobby decline` if they referenced the legacy Lobby util).
+- `src/main/resources/assets/arenas_ld/lang/en_us.json` — remove every key that references the deleted legacy systems. Codex must walk through the file and identify dead keys. Look for keys starting with `gui.arenas_ld.dungeon_controller.*` (without `_v2`), `gui.arenas_ld.mob_spawner.*` (without `_v2`), `gui.arenas_ld.dungeon_boss_spawner.*` (without `_v2`), `message.arenas_ld.lobby.*` if those came from legacy.
+- `src/main/resources/assets/arenas_ld/lang/uk_ua.json` — same.
+
+**Important**: do NOT remove v4.0 lang keys that happen to use these prefixes. The v4.0 ones use `_v2` suffix in their keys: `gui.arenas_ld.dungeon_controller_v2.*`. Anything WITHOUT `_v2` is legacy. After PG-4 renames v2 → canonical, the prefix returns to no-suffix; PG-4 handles those lang renames.
+
+#### Acceptance
+
+- `util/Lobby.java`, `util/LobbyStatus.java`, `util/LobbyVisibility.java` deleted.
+- No code in the project imports those classes.
+- Legacy commands removed (or their bodies replaced with no-ops if needed for compat).
+- Both lang files cleaned of dead keys.
+- Build passes.
+
+#### Don'ts
+
+- Do not rename anything `_v2`. PG-4.
+- Do not bump version yet. PG-6.
+- Do not delete `dungeon.lobby/` package classes — those are the v4.0 ports.
+
+---
+
+### PG-4 — Rename `_v2` → canonical
+
+**Goal**: now that no legacy class blocks the canonical names, drop the `_v2` suffix from registry IDs, class names, file names, lang keys, and display strings.
+
+This is **the rename task**. It's substantial because the suffix appears in many places.
+
+#### Registry ID renames
+
+- `arenas_ld:dungeon_controller_v2` → `arenas_ld:dungeon_controller`
+- `arenas_ld:dungeon_controller_v2_be` → `arenas_ld:dungeon_controller_be`
+- `arenas_ld:dungeon_boss_spawner_v2` → `arenas_ld:dungeon_boss_spawner`
+- `arenas_ld:dungeon_boss_spawner_v2_be` → `arenas_ld:dungeon_boss_spawner_be`
+- `arenas_ld:mob_spawner_v2` → `arenas_ld:mob_spawner`
+- `arenas_ld:mob_spawner_v2_be` → `arenas_ld:mob_spawner_be`
+
+**Side effect**: dev test dungeons built before PG-4 use the v2 registry IDs. After PG-4, those blocks become unrecognized in saves. **You'll need to rebuild test dungeons.** Acceptable cost; v4.0 isn't released.
+
+#### Asset renames
+
+- `blockstates/dungeon_controller_v2.json` → `blockstates/dungeon_controller.json`
+- `models/block/dungeon_controller_v2.json` → `models/block/dungeon_controller.json`
+- `models/item/dungeon_controller_v2.json` → `models/item/dungeon_controller.json`
+- `textures/block/dungeon_controller_v2.png` → `textures/block/dungeon_controller.png`
+
+Same for `dungeon_boss_spawner_v2.*` and `mob_spawner_v2.*`. 12 file renames total (4 per block × 3 blocks).
+
+#### Static field renames in `BlockRegistry.java` and `BlockEntitiesRegistry.java`
+
+- `DUNGEON_CONTROLLER_V2_BLOCK` → `DUNGEON_CONTROLLER_BLOCK`
+- `DUNGEON_CONTROLLER_V2_BLOCK_ENTITY` → `DUNGEON_CONTROLLER_BLOCK_ENTITY`
+- (etc. — 6 static fields renamed)
+
+#### Lang key renames
+
+- `gui.arenas_ld.dungeon_controller_v2.*` → `gui.arenas_ld.dungeon_controller.*`
+- `gui.arenas_ld.dungeon_controller_admin.*` — STAYS (no v2 collision since legacy never had this concept; admin GUI is v4.0-only)
+- `gui.arenas_ld.mob_spawner_v2.*` → `gui.arenas_ld.mob_spawner.*`
+- `gui.arenas_ld.dungeon_boss_spawner_v2.*` → `gui.arenas_ld.dungeon_boss_spawner.*`
+- `block.arenas_ld.dungeon_controller_v2` → `block.arenas_ld.dungeon_controller`
+- (etc.)
+
+Both lang files.
+
+#### Display name updates
+
+- `"block.arenas_ld.dungeon_controller_v2": "Dungeon Controller (v2)"` → `"block.arenas_ld.dungeon_controller": "Dungeon Controller"`
+
+Remove the `(v2)` suffix from the display strings now that there's no legacy counterpart.
+
+#### Class names: KEEP `_v2` suffix or rename?
+
+The class files are at:
+- `dungeon/block/DungeonControllerBlock.java` (no _v2 suffix in class/file name)
+- `dungeon/block/DungeonBossSpawnerBlock.java` (no _v2)
+- `dungeon/block/MobSpawnerBlock.java` (no _v2)
+- `dungeon/blockentity/*.java` — same
+
+**Class/file names DON'T have the `_v2` suffix.** Only registry IDs and lang keys do. So no Java class renames are needed in PG-4 — they're already canonically named (since legacy classes were in different packages: `block/` vs `dungeon/block/`).
+
+Phew. The Java class rename was a phantom worry. PG-4 is registry IDs + assets + lang only.
+
+#### Files to MODIFY
+
+- `BlockRegistry.java` — rename the 6 static fields and update their string IDs.
+- `BlockEntitiesRegistry.java` — rename the 3 BE registrations and update their string IDs.
+- All callers of those static fields (~10-15 files) — Codex does a global find-replace `BlockRegistry.DUNGEON_CONTROLLER_V2_BLOCK` → `BlockRegistry.DUNGEON_CONTROLLER_BLOCK` (etc.).
+- Both lang files — update keys.
+- `ModCreativeModeTabs.java` — update field references.
+
+#### Files to RENAME
+
+The 12 asset files (3 blockstates + 3 block models + 3 item models + 3 textures). Use `git mv` for history.
+
+#### Acceptance
+
+- All v2 registry IDs are gone from the codebase.
+- All v2 lang keys are gone.
+- All assets are renamed to canonical names.
+- Display names dropped the "(v2)" suffix.
+- Build passes.
+- Loading a world with v2-named test dungeons gracefully drops them (vanilla behavior for unknown blocks).
+
+#### Don'ts
+
+- Do not rename Java class names — they already don't have `_v2`.
+- Do not touch package paths — `dungeon.block`, `dungeon.blockentity` are correct.
+- Do not rename anything in arena/raid/standalone-boss systems.
+
+---
+
+### PG-5 — Linker cleanup (remove legacy modes)
+
+**Goal**: trim `LinkerItem.java` down to ONLY the 4 v4.0 modes from PF-3.
+
+PG-2's cleanup should already have done most of this (it removed legacy mode cases that referenced deleted BE classes). PG-5 finishes the job: confirm the enum has exactly 4 values and they correspond to the 4 v4.0 modes. Remove any leftover legacy switch-case branches, helper methods, lang keys, etc.
+
+**Files to MODIFY:**
+
+- `LinkerItem.java` — final pass; ensure clean state.
+- `assets/arenas_ld/lang/*.json` — verify no leftover `item.arenas_ld.linker.mode.*` keys for legacy modes.
+
+#### Acceptance
+
+- `LinkerMode` enum has exactly 4 values: `CONTROLLER_INSTANCE`, `DBS_ROOM`, `ROOM_SPAWNER`, `ROOM_DOOR`.
+- Mode-cycle wraps cleanly through 4 modes.
+- No dead branches or unreachable code.
+- All lang keys for the 4 modes present in both locales.
+- Build passes.
+
+#### Don'ts
+
+- Do not delete `LinkerItem.java` itself — it's still used (for v4.0 modes).
+- Do not change the v4.0 mode semantics or names.
+
+---
+
+### PG-6 — Version bump and final smoke test
+
+**Goal**: bump the mod version to `4.0.0` and verify everything works end-to-end.
+
+**Files to MODIFY:**
+
+- `gradle.properties` — change `mod_version` to `4.0.0` (verify exact property name).
+- `src/main/resources/fabric.mod.json` — update version field if it doesn't read from gradle.
+
+#### Acceptance
+
+- Build passes with mod_version 4.0.0.
+- In-game: mod info menu shows version 4.0.0.
+- Smoke test: build a complete dungeon (controller + DBS + rooms + spawners + doors), link via Linker, run as player, win, lose, disconnect/reconnect — all of Phase F's features still work.
+- No exceptions in log on world load.
+
+#### Don'ts
+
+- Do not bump to `4.0.0` until PG-1..PG-5 are all done.
+- Do not change the mod ID (`arenas_ld` stays).
+- Do not change author/license metadata.
+
+---
+
+### Phase G exit criteria
+
+After all 6 tasks:
+
+- No legacy dungeon code in the repo.
+- Canonical registry IDs (no `_v2`).
+- Linker has 4 modes, all v4.0.
+- mod_version is `4.0.0`.
+- Build passes.
+- End-to-end gameplay still works as expected.
+- The branch `4.0` can be merged to `main` and tagged as a release.
+
+Estimated total: ~50 files changed, ~2500 net deletions, ~30 net additions (the rename diff is roughly even).
 
 ---
 
@@ -4776,8 +5196,8 @@ Specs deferred until Phase F is closed.
 | C | ✅ Complete (PC-1, PC-2, PC-3-old, PC-3, PC-4, PC-4.1, PC-5, PC-7; PC-6 skipped) | — | `e0ba2e5` |
 | D | ✅ Complete (PD-1..PD-7, PD-6.1) | — | `965831a` |
 | E | ✅ Complete (PE-1..PE-12, +PE-5.1, +PE-10.1, +PE-11.1, +PE-12.1) | — | `716f73a` |
-| F | Specified, ready to start (PF-1..PF-7) | — | — |
-| G | Not specified (was old H) | — | — |
+| F | ✅ Complete (PF-1..PF-4, PF-6, +follow-ups PE-4.1/PC-3.1/PF-3.5/PF-3.5b/PE-4.2/PE-6.1/PF-4.1; PF-5 + PF-7 superseded) | — | `7f8924b` |
+| G | Specified (PG-1..PG-6, sequential PRs) | — | — |
 
 We update this table as we go.
 
@@ -4807,3 +5227,4 @@ These supersede earlier guidance in the plan if they conflict:
   - **`optionalFieldOf("key", default)` over `fieldOf("key")`** wherever a reasonable default exists. Lets old saves load when fields are added/removed in future. Especially for any field on a class that already exists in legacy saves.
   - **Add `equals` + `hashCode` to any non-record class that gets a codec.** Codec round-trip tests use `assertEquals`, and consumers may use the instances as map keys / set members. The two changes are inseparable in practice. Records get this for free; plain classes don't.
 - **`EntityEquipmentHelper.applyEquipment` signature (corrected during PD-3)**: the 4th parameter is `boolean dropChance`, not `float`. `false` = regular mob (no drops on death). `true` = boss-style (drops at full chance, since `EquipmentData.dropChance` is itself a boolean). My PD-3 spec wrongly said "0.0F" — the corrected pattern is what's actually in PD-3's commit.
+- **Known edge case from PF-2** (filed, not fixed): mid-run server restarts may leave mobs spawned by previous-session rooms unregistered in the `DungeonManager.runByMob` map. The bootstrap in `tickRunning` only fires once (when no participant is registered yet) and registers all currently-known mobs at that instant. If the DBS chunk isn't loaded at that moment, mob registration is missed, and `LivingEntityMixin` (PF-4) won't apply tier damage scaling to those mobs. The mob still functions correctly; players just experience them as "underpowered" until the next room spawns fresh mobs. Acceptable for v4.0; revisit if it becomes a real complaint.

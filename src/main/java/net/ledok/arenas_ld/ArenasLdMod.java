@@ -7,7 +7,6 @@ import net.ledok.arenas_ld.config.ArenasLdConfig;
 import net.ledok.arenas_ld.dungeon.manager.DungeonManager;
 import net.ledok.arenas_ld.dungeon.run.DungeonConnectionListener;
 import net.ledok.arenas_ld.event.PlayerTickHandler;
-import net.ledok.arenas_ld.manager.DungeonBossManager;
 import net.ledok.arenas_ld.manager.MobArenaManager;
 import net.ledok.arenas_ld.manager.RaidBossManager;
 import net.ledok.arenas_ld.networking.ModPackets;
@@ -21,7 +20,6 @@ public class ArenasLdMod implements ModInitializer {
     public static final String MOD_ID = "arenas_ld";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-    public static final DungeonBossManager DUNGEON_BOSS_MANAGER = new DungeonBossManager();
     public static final RaidBossManager RAID_BOSS_MANAGER = new RaidBossManager();
     public static final MobArenaManager MOB_ARENA_MANAGER = new MobArenaManager();
     public static final DungeonManager DUNGEON_MANAGER = new DungeonManager();
@@ -40,7 +38,6 @@ public class ArenasLdMod implements ModInitializer {
         ModPackets.registerS2CPackets();
         BossDataComponent.initialize();
         CommandRegistry.initialize();
-        DUNGEON_BOSS_MANAGER.initialize();
         RAID_BOSS_MANAGER.initialize();
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> DUNGEON_MANAGER.clearForServerStop());
         DungeonConnectionListener.register();
@@ -49,7 +46,6 @@ public class ArenasLdMod implements ModInitializer {
             for (var player : server.getPlayerList().getPlayers()) {
                 PlayerTickHandler.onPlayerTick(player);
             }
-            DUNGEON_BOSS_MANAGER.tick(server);
         });
     }
 }

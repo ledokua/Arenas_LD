@@ -16,12 +16,6 @@ public class BlockRegistry {
     public static final Block BOSS_SPAWNER_BLOCK = registerBlock("boss_spawner",
             new BossSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));
 
-    public static final Block DUNGEON_BOSS_SPAWNER_BLOCK = registerBlock("dungeon_boss_spawner",
-            new DungeonBossSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));
-
-    public static final Block MOB_SPAWNER_BLOCK = registerBlock("mob_spawner",
-            new MobSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));
-
     public static final Block MOB_ARENA_SPAWNER_BLOCK = registerBlock("mob_arena_spawner",
             new MobArenaSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));
 
@@ -30,9 +24,6 @@ public class BlockRegistry {
 
     public static final Block MOB_ARENA_CONTROLLER_BLOCK = registerBlock("mob_arena_controller",
             new MobArenaControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));
-
-    public static final Block DUNGEON_CONTROLLER_BLOCK = registerBlock("dungeon_controller",
-            new DungeonControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));
 
     public static final Block RAID_CONTROLLER_BLOCK = registerBlock("raid_controller",
             new RaidControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));

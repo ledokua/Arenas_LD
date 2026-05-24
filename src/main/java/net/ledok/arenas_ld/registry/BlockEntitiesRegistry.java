@@ -16,16 +16,6 @@ public class BlockEntitiesRegistry {
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":boss_spawner_be"),
                     BlockEntityType.Builder.of(BossSpawnerBlockEntity::new, BlockRegistry.BOSS_SPAWNER_BLOCK).build(null));
 
-    public static final BlockEntityType<DungeonBossSpawnerBlockEntity> DUNGEON_BOSS_SPAWNER_BLOCK_ENTITY =
-            Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
-                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_boss_spawner_be"),
-                    BlockEntityType.Builder.of(DungeonBossSpawnerBlockEntity::new, BlockRegistry.DUNGEON_BOSS_SPAWNER_BLOCK).build(null));
-
-    public static final BlockEntityType<MobSpawnerBlockEntity> MOB_SPAWNER_BLOCK_ENTITY =
-            Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
-                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_spawner_be"),
-                    BlockEntityType.Builder.of(MobSpawnerBlockEntity::new, BlockRegistry.MOB_SPAWNER_BLOCK).build(null));
-
     public static final BlockEntityType<MobArenaSpawnerBlockEntity> MOB_ARENA_SPAWNER_BLOCK_ENTITY =
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_arena_spawner_be"),
@@ -40,11 +30,6 @@ public class BlockEntitiesRegistry {
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_arena_controller_be"),
                     BlockEntityType.Builder.of(MobArenaControllerBlockEntity::new, BlockRegistry.MOB_ARENA_CONTROLLER_BLOCK).build(null));
-
-    public static final BlockEntityType<DungeonControllerBlockEntity> DUNGEON_CONTROLLER_BLOCK_ENTITY =
-            Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
-                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller_be"),
-                    BlockEntityType.Builder.of(DungeonControllerBlockEntity::new, BlockRegistry.DUNGEON_CONTROLLER_BLOCK).build(null));
 
     public static final BlockEntityType<RaidControllerBlockEntity> RAID_CONTROLLER_BLOCK_ENTITY =
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
