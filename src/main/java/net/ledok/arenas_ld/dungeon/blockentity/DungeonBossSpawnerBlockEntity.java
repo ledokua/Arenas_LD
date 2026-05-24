@@ -18,6 +18,9 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -44,7 +47,7 @@ import java.util.Optional;
 public class DungeonBossSpawnerBlockEntity extends BlockEntity implements AttributeProvider, EquipmentProvider, ExtendedScreenHandlerFactory<DungeonBossSpawnerData> {
 
     private EntityDefinition entityDefinition = EntityDefinition.DEFAULT.withMobId("minecraft:zombie");
-    private BlockPos entrancePos = BlockPos.ZERO;
+    private BlockPos entranceOffset = BlockPos.ZERO;
     private ResourceKey<Level> entranceDimension = Level.OVERWORLD;
     private final List<BlockPos> rooms = new ArrayList<>();
 
@@ -79,12 +82,16 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         setEntityDefinition(entityDefinition.withEquipment(eq));
     }
 
-    public BlockPos getEntrancePos() { return entrancePos; }
+    public BlockPos getEntranceOffset() { return entranceOffset; }
 
     public ResourceKey<Level> getEntranceDimension() { return entranceDimension; }
 
-    public void setEntrance(BlockPos pos, ResourceKey<Level> dim) {
-        this.entrancePos = pos;
+    public BlockPos getAbsoluteEntrancePos() {
+        return worldPosition.offset(entranceOffset);
+    }
+
+    public void setEntrancePosition(BlockPos relativeOffset, ResourceKey<Level> dim) {
+        this.entranceOffset = relativeOffset;
         this.entranceDimension = dim;
         setChanged();
     }
@@ -176,13 +183,13 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
 
     private record State(
         EntityDefinition entity,
-        BlockPos entrancePos,
+        BlockPos entranceOffset,
         ResourceKey<Level> entranceDim,
         List<BlockPos> rooms
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             EntityDefinition.CODEC.fieldOf("entity").forGetter(State::entity),
-            BlockPos.CODEC.fieldOf("entrancePos").forGetter(State::entrancePos),
+            BlockPos.CODEC.fieldOf("entranceOffset").forGetter(State::entranceOffset),
             ResourceKey.codec(Registries.DIMENSION).fieldOf("entranceDim").forGetter(State::entranceDim),
             BlockPos.CODEC.listOf().fieldOf("rooms").forGetter(State::rooms)
         ).apply(i, State::new));
@@ -191,7 +198,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
-        State.CODEC.encodeStart(NbtOps.INSTANCE, new State(entityDefinition, entrancePos, entranceDimension, rooms))
+        State.CODEC.encodeStart(NbtOps.INSTANCE, new State(entityDefinition, entranceOffset, entranceDimension, rooms))
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save DungeonBossSpawner at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
@@ -206,12 +213,22 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
                     "Failed to load DungeonBossSpawner at {}: {}", worldPosition, err))
                 .ifPresent(state -> {
                     this.entityDefinition = state.entity();
-                    this.entrancePos = state.entrancePos();
+                    this.entranceOffset = state.entranceOffset();
                     this.entranceDimension = state.entranceDim();
                     this.rooms.clear();
                     this.rooms.addAll(state.rooms());
                 });
         }
+    }
+
+    @Override
+    public Packet<ClientGamePacketListener> getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registryLookup) {
+        return saveWithoutMetadata(registryLookup);
     }
 
     @Override
@@ -227,6 +244,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
 
     @Override
     public DungeonBossSpawnerData getScreenOpeningData(ServerPlayer player) {
-        return new DungeonBossSpawnerData(worldPosition, entityDefinition.mobId(), entrancePos, entranceDimension.location().toString(), List.copyOf(rooms));
+        return new DungeonBossSpawnerData(worldPosition, entityDefinition.mobId(), List.copyOf(rooms));
     }
 }

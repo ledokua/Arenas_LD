@@ -28,7 +28,6 @@ import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
 import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
-import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntrancePayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
 
@@ -81,7 +80,6 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(RoomResetPayload.TYPE, RoomResetPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerEntityDefPayload.TYPE, UpdateMobSpawnerEntityDefPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateDbsEntityDefPayload.TYPE, UpdateDbsEntityDefPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateDbsEntrancePayload.TYPE, UpdateDbsEntrancePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(DbsRemoveRoomPayload.TYPE, DbsRemoveRoomPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(DbsMoveRoomPayload.TYPE, DbsMoveRoomPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(DbsClearRoomsPayload.TYPE, DbsClearRoomsPayload.STREAM_CODEC);

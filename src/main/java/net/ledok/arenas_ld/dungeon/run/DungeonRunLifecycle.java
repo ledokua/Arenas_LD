@@ -80,7 +80,7 @@ public final class DungeonRunLifecycle {
             run.setReturnPoint(uuid, PlayerReturnPoint.capture(player));
             ArenasLdMod.DUNGEON_MANAGER.registerParticipant(uuid, run);
 
-            BlockPos entrance = dbs.getEntrancePos();
+            BlockPos entrance = dbs.getAbsoluteEntrancePos();
             player.teleportTo(targetLevel, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0f, 0.0f);
         }
 
@@ -398,7 +398,7 @@ public final class DungeonRunLifecycle {
             if (target == null) {
                 target = world;
             }
-            BlockPos entrance = dbs.getEntrancePos();
+            BlockPos entrance = dbs.getAbsoluteEntrancePos();
             player.setGameMode(GameType.SURVIVAL);
             player.setHealth(player.getMaxHealth() * 0.5F);
             player.teleportTo(target, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0F, 0.0F);

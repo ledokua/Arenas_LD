@@ -36,7 +36,6 @@ import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
 import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
-import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntrancePayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
@@ -372,35 +371,6 @@ final class SpawnerPacketHandlers {
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
                     spawner.setEntityDefinition(spawner.getEntityDefinition().withMobId(payload.mobId()));
-                    markDirtyAndSync(world, spawner);
-                }
-            });
-        });
-
-        ServerPlayNetworking.registerGlobalReceiver(UpdateDbsEntrancePayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!player.hasPermissions(2)) {
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
-                    return;
-                }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
-                    if (payload.setToPlayer()) {
-                        spawner.setEntrance(player.blockPosition(), player.level().dimension());
-                    } else {
-                        ResourceLocation parsedDim = ResourceLocation.tryParse(payload.dimension());
-                        ResourceKey<Level> dim;
-                        if (parsedDim != null) {
-                            dim = ResourceKey.create(Registries.DIMENSION, parsedDim);
-                        } else {
-                            dim = spawner.getEntranceDimension();
-                            player.sendSystemMessage(Component.translatable("gui.arenas_ld.spawner_v2.invalid_dimension")
-                                .withStyle(ChatFormatting.YELLOW));
-                        }
-                        spawner.setEntrance(new net.minecraft.core.BlockPos(payload.x(), payload.y(), payload.z()), dim);
-                    }
                     markDirtyAndSync(world, spawner);
                 }
             });

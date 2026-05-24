@@ -4,7 +4,6 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.DbsClearRoomsPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsMoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsRemoveRoomPayload;
-import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntrancePayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
 import net.ledok.arenas_ld.screen.EquipmentScreen;
 import net.ledok.arenas_ld.screen.EquipmentScreenData;
@@ -29,10 +28,6 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
     private static final int MAX_ROOMS_VISIBLE = 6;
 
     private EditBox mobIdField;
-    private EditBox entranceX;
-    private EditBox entranceY;
-    private EditBox entranceZ;
-    private EditBox entranceDim;
     private final List<net.minecraft.core.BlockPos> rooms;
     private int roomOffset;
 
@@ -83,38 +78,6 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
                 ));
             }
         }).bounds(x + 116, y + 50, 100, 18).build());
-
-        entranceX = new EditBox(font, x + 68, y + 82, 48, 16, Component.empty());
-        entranceY = new EditBox(font, x + 120, y + 82, 48, 16, Component.empty());
-        entranceZ = new EditBox(font, x + 172, y + 82, 48, 16, Component.empty());
-        entranceDim = new EditBox(font, x + 224, y + 82, 104, 16, Component.empty());
-        var ep = menu.getEntrancePos();
-        entranceX.setValue(Integer.toString(ep.getX()));
-        entranceY.setValue(Integer.toString(ep.getY()));
-        entranceZ.setValue(Integer.toString(ep.getZ()));
-        entranceDim.setValue(menu.getEntranceDimension());
-        addRenderableWidget(entranceX);
-        addRenderableWidget(entranceY);
-        addRenderableWidget(entranceZ);
-        addRenderableWidget(entranceDim);
-
-        addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.apply"), b -> {
-            try {
-                ClientPlayNetworking.send(new UpdateDbsEntrancePayload(
-                    menu.getBlockPos(),
-                    Integer.parseInt(entranceX.getValue()),
-                    Integer.parseInt(entranceY.getValue()),
-                    Integer.parseInt(entranceZ.getValue()),
-                    entranceDim.getValue(),
-                    false
-                ));
-            } catch (NumberFormatException ignored) {
-            }
-        }).bounds(x + 10, y + 102, 70, 16).build());
-
-        addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.dbs_v2.set_to_player"), b ->
-            ClientPlayNetworking.send(new UpdateDbsEntrancePayload(menu.getBlockPos(), 0, 0, 0, "", true))
-        ).bounds(x + 86, y + 102, 140, 16).build());
 
         addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.room_controller.button.clear_all"), b -> {
             if (minecraft == null) return;
@@ -191,7 +154,7 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
         int y = topPos;
         guiGraphics.drawString(font, title, x + 8, y + 8, 0xFFFFFF, false);
         guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.mob_id"), x + 12, y + 29, 0xC0C8E0, false);
-        guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dbs_v2.entrance"), x + 12, y + 84, 0xC0C8E0, false);
+        guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dbs_v2.entrance_hint"), x + 12, y + 84, 0xC0C8E0, false);
         guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dbs_v2.rooms"), x + 12, y + 130, 0xC0C8E0, false);
 
         int visible = Math.min(MAX_ROOMS_VISIBLE, Math.max(0, rooms.size() - roomOffset));

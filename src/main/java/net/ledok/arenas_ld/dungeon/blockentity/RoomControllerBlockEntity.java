@@ -17,6 +17,9 @@ import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -235,6 +238,9 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
         if (state.getValue(PhaseBlock.SOLID) != solid) {
             world.setBlock(doorPos, state.setValue(PhaseBlock.SOLID, solid), 3);
+            if (world.getBlockEntity(doorPos) instanceof net.ledok.arenas_ld.block.entity.PhaseBlockEntity phaseBlock) {
+                phaseBlock.propagateState(solid, new java.util.ArrayList<>());
+            }
         }
     }
 
@@ -313,6 +319,16 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     cleared = state.cleared();
                 });
         }
+    }
+
+    @Override
+    public Packet<ClientGamePacketListener> getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registryLookup) {
+        return saveWithoutMetadata(registryLookup);
     }
 
     @Override
