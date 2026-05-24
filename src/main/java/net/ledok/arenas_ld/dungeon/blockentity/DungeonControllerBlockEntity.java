@@ -51,6 +51,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private static final int DEFAULT_CLOSE_TIMER_SECONDS = 30;
     private static final int DEFAULT_MAX_PARTY_SIZE = 4;
     private static final int DEFAULT_INVITE_EXPIRY_TICKS = 30 * 20;
+    private static final int DEFAULT_DISCONNECT_GRACE_TICKS = 5 * 60 * 20;
 
     private final List<BlockPos> instances = new ArrayList<>();
     private final Map<DifficultyTier, TierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
@@ -58,6 +59,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private int closeTimerSeconds = DEFAULT_CLOSE_TIMER_SECONDS;
     private int maxPartySize = DEFAULT_MAX_PARTY_SIZE;
     private int inviteExpiryTicks = DEFAULT_INVITE_EXPIRY_TICKS;
+    private int disconnectGraceTicks = DEFAULT_DISCONNECT_GRACE_TICKS;
     private final Map<BlockPos, Integer> instanceCooldownTimers = new HashMap<>();
     private final Set<BlockPos> pendingInstanceRemovals = new HashSet<>();
     private final Map<DifficultyTier, List<LeaderboardEntry>> leaderboards = new EnumMap<>(DifficultyTier.class);
@@ -101,6 +103,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     public int getInviteExpiryTicks() {
         return inviteExpiryTicks;
+    }
+
+    public int getDisconnectGraceTicks() {
+        return disconnectGraceTicks;
     }
 
     public Map<BlockPos, Integer> getInstanceCooldownTimers() {
@@ -160,6 +166,13 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     public boolean setInviteExpiryTicks(int ticks) {
         if (ticks <= 0) return false;
         this.inviteExpiryTicks = ticks;
+        setChanged();
+        return true;
+    }
+
+    public boolean setDisconnectGraceTicks(int ticks) {
+        if (ticks < 0) return false;
+        this.disconnectGraceTicks = ticks;
         setChanged();
         return true;
     }
@@ -620,6 +633,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         int closeTimerSeconds,
         int maxPartySize,
         int inviteExpiryTicks,
+        int disconnectGraceTicks,
         List<InstanceCooldown> instanceCooldowns,
         List<InstanceRunEntry> activeRuns,
         List<BlockPos> pendingInstanceRemovals,
@@ -634,6 +648,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             Codec.INT.fieldOf("closeTimerSeconds").forGetter(State::closeTimerSeconds),
             Codec.INT.fieldOf("maxPartySize").forGetter(State::maxPartySize),
             Codec.INT.fieldOf("inviteExpiryTicks").forGetter(State::inviteExpiryTicks),
+            Codec.INT.optionalFieldOf("disconnectGraceTicks", DEFAULT_DISCONNECT_GRACE_TICKS).forGetter(State::disconnectGraceTicks),
             InstanceCooldown.CODEC.listOf().fieldOf("instanceCooldowns").forGetter(State::instanceCooldowns),
             InstanceRunEntry.CODEC.listOf().fieldOf("activeRuns").forGetter(State::activeRuns),
             BlockPos.CODEC.listOf().fieldOf("pendingInstanceRemovals").forGetter(State::pendingInstanceRemovals),
@@ -659,6 +674,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             closeTimerSeconds,
             maxPartySize,
             inviteExpiryTicks,
+            disconnectGraceTicks,
             cooldowns,
             runs,
             new ArrayList<>(pendingInstanceRemovals),
@@ -686,6 +702,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                     closeTimerSeconds = state.closeTimerSeconds();
                     maxPartySize = state.maxPartySize();
                     inviteExpiryTicks = state.inviteExpiryTicks();
+                    disconnectGraceTicks = state.disconnectGraceTicks();
                     instanceCooldownTimers.clear();
                     for (InstanceCooldown c : state.instanceCooldowns()) {
                         instanceCooldownTimers.put(c.pos(), c.ticks());

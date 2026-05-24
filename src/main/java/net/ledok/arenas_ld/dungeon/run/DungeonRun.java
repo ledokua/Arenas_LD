@@ -54,6 +54,7 @@ public final class DungeonRun {
     private final Map<UUID, RunParticipant> participants;
     private final Map<UUID, PlayerReturnPoint> returnPoints;
     private final Map<UUID, DownedPlayer> downedPlayers;
+    private final Map<UUID, Long> disconnectedAt;
     @Nullable private transient ServerBossEvent dungeonTimeBossBar;
     @Nullable private transient ServerBossEvent closeTimerBossBar;
 
@@ -94,6 +95,7 @@ public final class DungeonRun {
         this.participants = new LinkedHashMap<>();
         this.returnPoints = new HashMap<>();
         this.downedPlayers = new HashMap<>();
+        this.disconnectedAt = new HashMap<>();
         this.dungeonTimeBossBar = null;
         this.closeTimerBossBar = null;
     }
@@ -117,7 +119,8 @@ public final class DungeonRun {
         long startTick,
         Map<UUID, RunParticipant> participants,
         Map<UUID, PlayerReturnPoint> returnPoints,
-        Map<UUID, DownedPlayer> downedPlayers
+        Map<UUID, DownedPlayer> downedPlayers,
+        Map<UUID, Long> disconnectedAt
     ) {
         this.phase = phase;
         this.outcome = outcome;
@@ -134,6 +137,7 @@ public final class DungeonRun {
         this.participants = new LinkedHashMap<>(participants);
         this.returnPoints = new HashMap<>(returnPoints);
         this.downedPlayers = new HashMap<>(downedPlayers);
+        this.disconnectedAt = new HashMap<>(disconnectedAt);
         this.dungeonTimeBossBar = null;
         this.closeTimerBossBar = null;
     }
@@ -164,6 +168,9 @@ public final class DungeonRun {
     public Map<UUID, DownedPlayer> downedPlayers() {
         return Collections.unmodifiableMap(downedPlayers);
     }
+    public Map<UUID, Long> disconnectedAt() {
+        return Collections.unmodifiableMap(disconnectedAt);
+    }
 
     // ---- Package-private mutators (called by lifecycle code in Phase E) ----
 
@@ -185,6 +192,8 @@ public final class DungeonRun {
 
     void setDowned(DownedPlayer dp) { downedPlayers.put(dp.playerUuid(), dp); }
     void clearDowned(UUID uuid) { downedPlayers.remove(uuid); }
+    void markDisconnected(UUID uuid, long tick) { disconnectedAt.put(uuid, tick); }
+    void clearDisconnected(UUID uuid) { disconnectedAt.remove(uuid); }
 
     // ---- Convenience predicates ----
 
@@ -230,7 +239,9 @@ public final class DungeonRun {
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, PlayerReturnPoint.CODEC)
                 .fieldOf("returnPoints").forGetter(DungeonRun::returnPoints),
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, DownedPlayer.CODEC)
-                .fieldOf("downedPlayers").forGetter(DungeonRun::downedPlayers)
+                .fieldOf("downedPlayers").forGetter(DungeonRun::downedPlayers),
+            Codec.unboundedMap(UUIDUtil.STRING_CODEC, Codec.LONG)
+                .optionalFieldOf("disconnectedAt", Map.of()).forGetter(DungeonRun::disconnectedAt)
         ).apply(instance, DungeonRun::new)
     );
 }

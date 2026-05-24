@@ -31,7 +31,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public final class DungeonRunLifecycle {
-    private static final String BUSY_REASON = "arenas_ld:dungeon_v2";
+    public static final String BUSY_REASON = "arenas_ld:dungeon_v2";
 
     private DungeonRunLifecycle() {
     }
@@ -177,6 +177,7 @@ public final class DungeonRunLifecycle {
         }
 
         tickDownedPlayers(world, controller, run);
+        tickDisconnectedPlayers(world, controller, run);
         updateDungeonTimeBossBar(world, run);
     }
 
@@ -320,6 +321,23 @@ public final class DungeonRunLifecycle {
                 run.clearDowned(entry.getKey());
             } else {
                 run.setDowned(ticked);
+            }
+        }
+    }
+
+    private static void tickDisconnectedPlayers(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+        long now = world.getGameTime();
+        int grace = controller.getDisconnectGraceTicks();
+        for (Map.Entry<UUID, Long> entry : new HashMap<>(run.disconnectedAt()).entrySet()) {
+            if (now - entry.getValue() > grace) {
+                UUID uuid = entry.getKey();
+                RunParticipant participant = run.participants().get(uuid);
+                if (participant != null) {
+                    run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, now));
+                }
+                run.clearDisconnected(uuid);
+                ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
+                BusyStateCompat.clearBusy(uuid, BUSY_REASON);
             }
         }
     }

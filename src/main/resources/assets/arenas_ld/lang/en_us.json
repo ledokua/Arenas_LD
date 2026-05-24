@@ -24,6 +24,7 @@
   "message.arenas_ld.dungeon.loss_forced": "Dungeon ended by admin.",
   "message.arenas_ld.dungeon.hardcore_death": "Hardcore mode: you fell. You've been removed from the run.",
   "message.arenas_ld.dungeon.you_are_downed": "You're downed. Respawning shortly...",
+  "message.arenas_ld.dungeon.reconnected": "Reconnected — welcome back to the run!",
   "boss_bar.arenas_ld.dungeon_time": "Dungeon Time",
   "boss_bar.arenas_ld.close_timer": "Closing",
   "message.arenas_ld.dungeon_controller_admin.pending_removal": "Instance is running. Removal queued until run finalizes.",
