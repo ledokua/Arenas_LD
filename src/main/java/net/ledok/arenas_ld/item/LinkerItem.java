@@ -38,7 +38,11 @@ public class LinkerItem extends Item {
         ARENA_CONTROLLER_LINKING("item.arenas_ld.linker.mode.arena_controller_linking"),
         DUNGEON_CONTROLLER_LINKING("item.arenas_ld.linker.mode.dungeon_controller_linking"),
         RAID_CONTROLLER_LINKING("item.arenas_ld.linker.mode.raid_controller_linking"),
-        RESPAWN_POINT_LINKING("item.arenas_ld.linker.mode.respawn_point_linking");
+        RESPAWN_POINT_LINKING("item.arenas_ld.linker.mode.respawn_point_linking"),
+        CONTROLLER_INSTANCE("item.arenas_ld.linker.mode.controller_instance"),
+        DBS_ROOM("item.arenas_ld.linker.mode.dbs_room"),
+        ROOM_SPAWNER("item.arenas_ld.linker.mode.room_spawner"),
+        ROOM_DOOR("item.arenas_ld.linker.mode.room_door");
 
         private final String translationKey;
 
@@ -86,6 +90,14 @@ public class LinkerItem extends Item {
             return handleRaidControllerLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
         } else if (currentMode == Mode.RESPAWN_POINT_LINKING) {
             return handleRespawnPointLinking(world, pos, player, stack, blockEntity, isShiftDown, modeData);
+        } else if (currentMode == Mode.CONTROLLER_INSTANCE) {
+            return handleControllerInstanceLinking(world, pos, player, stack, blockEntity, modeData);
+        } else if (currentMode == Mode.DBS_ROOM) {
+            return handleDbsRoomLinking(world, pos, player, stack, blockEntity, modeData);
+        } else if (currentMode == Mode.ROOM_SPAWNER) {
+            return handleRoomSpawnerLinking(world, pos, player, stack, blockEntity, modeData);
+        } else if (currentMode == Mode.ROOM_DOOR) {
+            return handleRoomDoorLinking(world, pos, player, stack, blockEntity, modeData);
         }
 
         return super.useOn(context);
@@ -571,6 +583,172 @@ public class LinkerItem extends Item {
         return InteractionResult.PASS;
     }
 
+    private InteractionResult handleControllerInstanceLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, LinkerModeDataComponent modeData) {
+        Optional<BlockPos> sourcePosOpt = modeData.mainSpawnerPos();
+        Optional<net.minecraft.resources.ResourceKey<Level>> sourceDimOpt = modeData.mainSpawnerDimension();
+
+        if (sourcePosOpt.isEmpty() || sourceDimOpt.isEmpty()) {
+            if (blockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity) {
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_controller_selected", pos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        if (!sourceDimOpt.get().equals(world.dimension())) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        ServerLevel sourceWorld = world.getServer().getLevel(sourceDimOpt.get());
+        if (sourceWorld == null) {
+            stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty(), -1));
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        BlockEntity sourceBe = sourceWorld.getBlockEntity(sourcePosOpt.get());
+        if (!(sourceBe instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller)
+            || !(blockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity)) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        boolean added = controller.addInstance(pos);
+        player.sendSystemMessage(Component.translatable(
+            added ? "message.arenas_ld.linker.controller_instance.added"
+                : "message.arenas_ld.linker.controller_instance.duplicate"
+        ));
+        return InteractionResult.SUCCESS;
+    }
+
+    private InteractionResult handleDbsRoomLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, LinkerModeDataComponent modeData) {
+        Optional<BlockPos> sourcePosOpt = modeData.mainSpawnerPos();
+        Optional<net.minecraft.resources.ResourceKey<Level>> sourceDimOpt = modeData.mainSpawnerDimension();
+
+        if (sourcePosOpt.isEmpty() || sourceDimOpt.isEmpty()) {
+            if (blockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity) {
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.set_main_spawner", pos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dbs_room.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        if (!sourceDimOpt.get().equals(world.dimension())) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dbs_room.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        ServerLevel sourceWorld = world.getServer().getLevel(sourceDimOpt.get());
+        if (sourceWorld == null) {
+            stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty(), -1));
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dbs_room.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        BlockEntity sourceBe = sourceWorld.getBlockEntity(sourcePosOpt.get());
+        if (!(sourceBe instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity dbs)
+            || !(blockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity)) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dbs_room.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        boolean added = dbs.addRoom(pos);
+        player.sendSystemMessage(Component.translatable(
+            added ? "message.arenas_ld.linker.dbs_room.added"
+                : "message.arenas_ld.linker.dbs_room.duplicate"
+        ));
+        return InteractionResult.SUCCESS;
+    }
+
+    private InteractionResult handleRoomSpawnerLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, LinkerModeDataComponent modeData) {
+        Optional<BlockPos> sourcePosOpt = modeData.mainSpawnerPos();
+        Optional<net.minecraft.resources.ResourceKey<Level>> sourceDimOpt = modeData.mainSpawnerDimension();
+
+        if (sourcePosOpt.isEmpty() || sourceDimOpt.isEmpty()) {
+            if (blockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity) {
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.set_main_spawner", pos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_spawner.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        if (!sourceDimOpt.get().equals(world.dimension())) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_spawner.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        ServerLevel sourceWorld = world.getServer().getLevel(sourceDimOpt.get());
+        if (sourceWorld == null) {
+            stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty(), -1));
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_spawner.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        BlockEntity sourceBe = sourceWorld.getBlockEntity(sourcePosOpt.get());
+        boolean validTarget = blockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity
+            || blockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity;
+        if (!(sourceBe instanceof net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity room) || !validTarget) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_spawner.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        boolean added = room.addSpawner(pos);
+        player.sendSystemMessage(Component.translatable(
+            added ? "message.arenas_ld.linker.room_spawner.added"
+                : "message.arenas_ld.linker.room_spawner.duplicate"
+        ));
+        return InteractionResult.SUCCESS;
+    }
+
+    private InteractionResult handleRoomDoorLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, LinkerModeDataComponent modeData) {
+        Optional<BlockPos> sourcePosOpt = modeData.mainSpawnerPos();
+        Optional<net.minecraft.resources.ResourceKey<Level>> sourceDimOpt = modeData.mainSpawnerDimension();
+
+        if (sourcePosOpt.isEmpty() || sourceDimOpt.isEmpty()) {
+            if (blockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity) {
+                stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.of(pos), Optional.of(world.dimension())));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.set_main_spawner", pos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_door.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        if (!sourceDimOpt.get().equals(world.dimension())) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_door.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        ServerLevel sourceWorld = world.getServer().getLevel(sourceDimOpt.get());
+        if (sourceWorld == null) {
+            stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty(), -1));
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_door.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        BlockEntity sourceBe = sourceWorld.getBlockEntity(sourcePosOpt.get());
+        if (!(sourceBe instanceof net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity room)
+            || !(world.getBlockState(pos).getBlock() instanceof net.ledok.arenas_ld.block.PhaseBlock)) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_door.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        boolean replaced = room.getDoorPos() != null && !room.getDoorPos().equals(pos);
+        room.setDoorPos(pos);
+        if (replaced) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_door.cleared_first"));
+        }
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_door.set"));
+        return InteractionResult.SUCCESS;
+    }
+
     @Override
     public InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand usedHand) {
         ItemStack stack = player.getItemInHand(usedHand);
@@ -584,7 +762,11 @@ public class LinkerItem extends Item {
                         || Mode.values()[modeData.mode()] == Mode.ARENA_CONTROLLER_LINKING
                         || Mode.values()[modeData.mode()] == Mode.DUNGEON_CONTROLLER_LINKING
                         || Mode.values()[modeData.mode()] == Mode.RAID_CONTROLLER_LINKING
-                        || Mode.values()[modeData.mode()] == Mode.RESPAWN_POINT_LINKING) {
+                        || Mode.values()[modeData.mode()] == Mode.RESPAWN_POINT_LINKING
+                        || Mode.values()[modeData.mode()] == Mode.CONTROLLER_INSTANCE
+                        || Mode.values()[modeData.mode()] == Mode.DBS_ROOM
+                        || Mode.values()[modeData.mode()] == Mode.ROOM_SPAWNER
+                        || Mode.values()[modeData.mode()] == Mode.ROOM_DOOR) {
                     // Clear Main Spawner/Phase Block selection
                     stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(modeData.mode(), Optional.empty(), Optional.empty(), -1));
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.cleared_selection"));
@@ -610,7 +792,11 @@ public class LinkerItem extends Item {
         } else if ((currentMode == Mode.ARENA_CONTROLLER_LINKING
                 || currentMode == Mode.DUNGEON_CONTROLLER_LINKING
                 || currentMode == Mode.RAID_CONTROLLER_LINKING
-                || currentMode == Mode.RESPAWN_POINT_LINKING) && modeData.mainSpawnerPos().isPresent()) {
+                || currentMode == Mode.RESPAWN_POINT_LINKING
+                || currentMode == Mode.CONTROLLER_INSTANCE
+                || currentMode == Mode.DBS_ROOM
+                || currentMode == Mode.ROOM_SPAWNER
+                || currentMode == Mode.ROOM_DOOR) && modeData.mainSpawnerPos().isPresent()) {
             tooltipComponents.add(Component.translatable("tooltip.arenas_ld.linker.main_spawner", modeData.mainSpawnerPos().get().toShortString()).withStyle(net.minecraft.ChatFormatting.GOLD));
         }
 
