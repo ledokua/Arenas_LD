@@ -10,7 +10,7 @@ import net.minecraft.world.item.ItemStack;
 import java.util.List;
 
 public class DungeonBossSpawnerScreenHandler extends AbstractContainerMenu {
-    private final DungeonBossSpawnerData data;
+    private DungeonBossSpawnerData data;
 
     public DungeonBossSpawnerScreenHandler(int syncId, Inventory playerInventory, DungeonBossSpawnerData data) {
         super(ModScreenHandlers.DUNGEON_BOSS_SPAWNER_SCREEN_HANDLER, syncId);
@@ -28,6 +28,10 @@ public class DungeonBossSpawnerScreenHandler extends AbstractContainerMenu {
     public BlockPos getBlockPos() { return data.blockPos(); }
     public String getMobId() { return data.mobId(); }
     public List<BlockPos> getRooms() { return data.rooms(); }
+
+    public void applyData(DungeonBossSpawnerData data) {
+        this.data = data;
+    }
 
     @Override
     public ItemStack quickMoveStack(Player player, int index) {

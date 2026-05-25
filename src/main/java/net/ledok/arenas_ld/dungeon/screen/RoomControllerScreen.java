@@ -9,6 +9,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 
@@ -37,6 +38,7 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
     @Override
     protected void init() {
         super.init();
+        syncFromMenu();
         rebuildWidgets();
     }
 
@@ -59,9 +61,6 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
                     minecraft.setScreen(this);
                     if (ok) {
                         ClientPlayNetworking.send(new RoomClearSpawnersPayload(menu.getBlockPos()));
-                        spawnerPositions.clear();
-                        scrollOffset = 0;
-                        rebuildWidgets();
                     }
                 },
                 Component.translatable("gui.arenas_ld.room_controller.confirm.clear_title"),
@@ -71,8 +70,6 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
 
         addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.room_controller.button.clear_door"), b -> {
             ClientPlayNetworking.send(new RoomClearDoorPayload(menu.getBlockPos()));
-            doorPos = Optional.empty();
-            rebuildWidgets();
         }).bounds(x + WIDTH - 80, y + 142, 72, 16).build());
 
         addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.room_controller.button.reset"), b -> {
@@ -95,8 +92,6 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
             int rowY = y + 32 + i * 16;
             addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.room_controller.button.remove"), b -> {
                 ClientPlayNetworking.send(new RoomRemoveSpawnerPayload(menu.getBlockPos(), pos));
-                spawnerPositions.remove(pos);
-                rebuildWidgets();
             }).bounds(x + WIDTH - 62, rowY, 54, 14).build());
         }
 
@@ -156,5 +151,30 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
         }
 
         renderTooltip(guiGraphics, mouseX, mouseY);
+    }
+
+    public boolean matchesController(BlockPos blockPos) {
+        return menu.getBlockPos().equals(blockPos);
+    }
+
+    public void applyData(RoomControllerData data) {
+        menu.applyData(data);
+        syncFromMenu();
+        rebuildWidgets();
+    }
+
+    private void syncFromMenu() {
+        spawnerPositions.clear();
+        spawnerPositions.addAll(menu.getSpawnerPositions());
+        doorPos = menu.getDoorPos();
+        scrollOffset = Math.min(scrollOffset, Math.max(0, spawnerPositions.size() - MAX_ROWS));
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 }

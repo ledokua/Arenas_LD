@@ -19,6 +19,7 @@ import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
@@ -52,6 +53,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private static final int DEFAULT_MAX_PARTY_SIZE = 4;
     private static final int DEFAULT_INVITE_EXPIRY_TICKS = 30 * 20;
     private static final int DEFAULT_DISCONNECT_GRACE_TICKS = 5 * 60 * 20;
+    private static final int DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS = 5 * 60 * 20;
 
     private final List<BlockPos> instances = new ArrayList<>();
     private final Map<DifficultyTier, TierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
@@ -60,11 +62,13 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private int maxPartySize = DEFAULT_MAX_PARTY_SIZE;
     private int inviteExpiryTicks = DEFAULT_INVITE_EXPIRY_TICKS;
     private int disconnectGraceTicks = DEFAULT_DISCONNECT_GRACE_TICKS;
+    private int lobbyOfflineTimeoutTicks = DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS;
     private final Map<BlockPos, Integer> instanceCooldownTimers = new HashMap<>();
     private final Set<BlockPos> pendingInstanceRemovals = new HashSet<>();
     private final Map<DifficultyTier, List<LeaderboardEntry>> leaderboards = new EnumMap<>(DifficultyTier.class);
     private final List<Lobby> lobbies = new ArrayList<>();
     private final List<PendingInvite> pendingInvites = new ArrayList<>();
+    private final Map<UUID, Long> lobbyOfflineSinceTicks = new HashMap<>();
     private final Map<BlockPos, DungeonRun> activeRuns = new HashMap<>();
 
     public DungeonControllerBlockEntity(BlockPos pos, BlockState state) {
@@ -107,6 +111,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     public int getDisconnectGraceTicks() {
         return disconnectGraceTicks;
+    }
+
+    public int getLobbyOfflineTimeoutTicks() {
+        return lobbyOfflineTimeoutTicks;
     }
 
     public Map<BlockPos, Integer> getInstanceCooldownTimers() {
@@ -173,6 +181,13 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     public boolean setDisconnectGraceTicks(int ticks) {
         if (ticks < 0) return false;
         this.disconnectGraceTicks = ticks;
+        setChanged();
+        return true;
+    }
+
+    public boolean setLobbyOfflineTimeoutTicks(int ticks) {
+        if (ticks < 0) return false;
+        this.lobbyOfflineTimeoutTicks = ticks;
         setChanged();
         return true;
     }
@@ -247,6 +262,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     }
 
     void addLobby(Lobby lobby) {
+        lobbyOfflineSinceTicks.remove(lobby.lobbyId());
         lobbies.add(lobby);
         setChanged();
     }
@@ -254,6 +270,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     void replaceLobby(Lobby lobby) {
         for (int i = 0; i < lobbies.size(); i++) {
             if (lobbies.get(i).lobbyId().equals(lobby.lobbyId())) {
+                lobbyOfflineSinceTicks.remove(lobby.lobbyId());
                 lobbies.set(i, lobby);
                 setChanged();
                 return;
@@ -262,6 +279,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     }
 
     void removeLobby(UUID lobbyId) {
+        lobbyOfflineSinceTicks.remove(lobbyId);
         boolean removed = lobbies.removeIf(lobby -> lobby.lobbyId().equals(lobbyId));
         if (removed) {
             setChanged();
@@ -607,8 +625,51 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             be.setChanged();
         }
 
+        be.tickLobbyTimeouts(serverLevel, currentTick);
+
         for (DungeonRun run : new ArrayList<>(be.activeRuns.values())) {
             DungeonRunLifecycle.tick(serverLevel, be, run);
+        }
+    }
+
+    private void tickLobbyTimeouts(ServerLevel serverLevel, long currentTick) {
+        boolean changed = false;
+        Iterator<Lobby> iterator = lobbies.iterator();
+        while (iterator.hasNext()) {
+            Lobby lobby = iterator.next();
+            if (lobby.status() == LobbyStatus.IN_RUN || lobby.status() == LobbyStatus.DISBANDED) {
+                if (lobbyOfflineSinceTicks.remove(lobby.lobbyId()) != null) {
+                    changed = true;
+                }
+                continue;
+            }
+
+            boolean anyOnline = false;
+            for (UUID memberUuid : lobby.members()) {
+                if (serverLevel.getServer().getPlayerList().getPlayer(memberUuid) != null) {
+                    anyOnline = true;
+                    break;
+                }
+            }
+
+            if (anyOnline) {
+                if (lobbyOfflineSinceTicks.remove(lobby.lobbyId()) != null) {
+                    changed = true;
+                }
+                continue;
+            }
+
+            long offlineSince = lobbyOfflineSinceTicks.computeIfAbsent(lobby.lobbyId(), ignored -> currentTick);
+            if (lobbyOfflineTimeoutTicks == 0 || currentTick - offlineSince >= lobbyOfflineTimeoutTicks) {
+                iterator.remove();
+                lobbyOfflineSinceTicks.remove(lobby.lobbyId());
+                pendingInvites.removeIf(invite -> invite.lobbyId().equals(lobby.lobbyId()));
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            setChanged();
         }
     }
 
@@ -634,12 +695,14 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         int maxPartySize,
         int inviteExpiryTicks,
         int disconnectGraceTicks,
+        int lobbyOfflineTimeoutTicks,
         List<InstanceCooldown> instanceCooldowns,
         List<InstanceRunEntry> activeRuns,
         List<BlockPos> pendingInstanceRemovals,
         Map<DifficultyTier, List<LeaderboardEntry>> leaderboards,
         List<Lobby> lobbies,
-        List<PendingInvite> pendingInvites
+        List<PendingInvite> pendingInvites,
+        Map<UUID, Long> lobbyOfflineSinceTicks
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("instances").forGetter(State::instances),
@@ -649,12 +712,15 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             Codec.INT.fieldOf("maxPartySize").forGetter(State::maxPartySize),
             Codec.INT.fieldOf("inviteExpiryTicks").forGetter(State::inviteExpiryTicks),
             Codec.INT.optionalFieldOf("disconnectGraceTicks", DEFAULT_DISCONNECT_GRACE_TICKS).forGetter(State::disconnectGraceTicks),
+            Codec.INT.optionalFieldOf("lobbyOfflineTimeoutTicks", DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS).forGetter(State::lobbyOfflineTimeoutTicks),
             InstanceCooldown.CODEC.listOf().fieldOf("instanceCooldowns").forGetter(State::instanceCooldowns),
             InstanceRunEntry.CODEC.listOf().fieldOf("activeRuns").forGetter(State::activeRuns),
             BlockPos.CODEC.listOf().fieldOf("pendingInstanceRemovals").forGetter(State::pendingInstanceRemovals),
             Codec.unboundedMap(DifficultyTier.CODEC, LeaderboardEntry.CODEC.listOf()).fieldOf("leaderboards").forGetter(State::leaderboards),
             Lobby.CODEC.listOf().fieldOf("lobbies").forGetter(State::lobbies),
-            PendingInvite.CODEC.listOf().fieldOf("pendingInvites").forGetter(State::pendingInvites)
+            PendingInvite.CODEC.listOf().fieldOf("pendingInvites").forGetter(State::pendingInvites),
+            Codec.unboundedMap(UUIDUtil.STRING_CODEC, Codec.LONG)
+                .optionalFieldOf("lobbyOfflineSinceTicks", Map.of()).forGetter(State::lobbyOfflineSinceTicks)
         ).apply(i, State::new));
     }
 
@@ -675,12 +741,14 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             maxPartySize,
             inviteExpiryTicks,
             disconnectGraceTicks,
+            lobbyOfflineTimeoutTicks,
             cooldowns,
             runs,
             new ArrayList<>(pendingInstanceRemovals),
             leaderboards,
             lobbies,
-            pendingInvites
+            pendingInvites,
+            lobbyOfflineSinceTicks
         );
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save DungeonController at {}: {}", worldPosition, err))
@@ -703,6 +771,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                     maxPartySize = state.maxPartySize();
                     inviteExpiryTicks = state.inviteExpiryTicks();
                     disconnectGraceTicks = state.disconnectGraceTicks();
+                    lobbyOfflineTimeoutTicks = state.lobbyOfflineTimeoutTicks();
                     instanceCooldownTimers.clear();
                     for (InstanceCooldown c : state.instanceCooldowns()) {
                         instanceCooldownTimers.put(c.pos(), c.ticks());
@@ -721,6 +790,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                     lobbies.addAll(state.lobbies());
                     pendingInvites.clear();
                     pendingInvites.addAll(state.pendingInvites());
+                    lobbyOfflineSinceTicks.clear();
+                    lobbyOfflineSinceTicks.putAll(state.lobbyOfflineSinceTicks());
                     initializeDefaults();
                 });
         } else {

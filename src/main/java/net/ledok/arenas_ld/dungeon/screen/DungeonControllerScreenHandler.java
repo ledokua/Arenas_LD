@@ -18,11 +18,11 @@ import java.util.Optional;
 
 public class DungeonControllerScreenHandler extends AbstractContainerMenu {
     private final BlockPos blockPos;
-    private final List<Lobby> visibleLobbies;
-    private final Optional<Lobby> ownLobby;
-    private final List<PendingInvite> myInvites;
-    private final int maxPartySize;
-    private final Map<DifficultyTier, TierConfig> tiers;
+    private List<Lobby> visibleLobbies;
+    private Optional<Lobby> ownLobby;
+    private List<PendingInvite> myInvites;
+    private int maxPartySize;
+    private Map<DifficultyTier, TierConfig> tiers;
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerData data) {
         this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.maxPartySize(), data.tiers());
@@ -56,7 +56,7 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
     }
 
     public List<Lobby> getVisibleLobbies() {
-        return visibleLobbies;
+        return List.copyOf(visibleLobbies);
     }
 
     public Optional<Lobby> getOwnLobby() {
@@ -64,7 +64,7 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
     }
 
     public List<PendingInvite> getMyInvites() {
-        return myInvites;
+        return List.copyOf(myInvites);
     }
 
     public int getMaxPartySize() {
@@ -72,7 +72,15 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
     }
 
     public Map<DifficultyTier, TierConfig> getTiers() {
-        return tiers;
+        return Map.copyOf(tiers);
+    }
+
+    public void applyData(DungeonControllerData data) {
+        this.visibleLobbies = List.copyOf(data.visibleLobbies());
+        this.ownLobby = data.ownLobby();
+        this.myInvites = List.copyOf(data.myInvites());
+        this.maxPartySize = data.maxPartySize();
+        this.tiers = Map.copyOf(data.tiers());
     }
 
     @Override

@@ -16,6 +16,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 
@@ -55,17 +56,18 @@ public class DungeonControllerAdminScreen extends AbstractContainerScreen<Dungeo
         this.imageWidth = WIDTH;
         this.imageHeight = HEIGHT;
         this.inventoryLabelY = this.imageHeight + 1000;
-        this.instances = new ArrayList<>(handler.getInstances());
-        this.activeRuns = handler.getActiveRunInstances();
-        this.cooldowns = handler.getInstanceCooldownTimers();
-        this.pendingRemovals = handler.getPendingRemovals();
-        this.tierConfigs = new EnumMap<>(handler.getTierConfigs());
-        this.leaderboards = new EnumMap<>(handler.getTopLeaderboards());
+        this.instances = new ArrayList<>();
+        this.activeRuns = new java.util.HashSet<>();
+        this.cooldowns = new java.util.HashMap<>();
+        this.pendingRemovals = new java.util.HashSet<>();
+        this.tierConfigs = new EnumMap<>(DifficultyTier.class);
+        this.leaderboards = new EnumMap<>(DifficultyTier.class);
     }
 
     @Override
     protected void init() {
         super.init();
+        syncFromMenu();
         rebuildWidgets();
     }
 
@@ -110,24 +112,16 @@ public class DungeonControllerAdminScreen extends AbstractContainerScreen<Dungeo
                 int target = Math.max(0, index - 1);
                 if (target != index) {
                     ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), index, target));
-                    net.minecraft.core.BlockPos moved = instances.remove(index);
-                    instances.add(target, moved);
-                    rebuildWidgets();
                 }
             }).bounds(x + WIDTH - 56, rowY - 2, 14, 14).build()).active = index > 0;
             addRenderableWidget(Button.builder(Component.literal("v"), b -> {
                 int target = Math.min(instances.size() - 1, index + 1);
                 if (target != index) {
                     ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), index, target));
-                    net.minecraft.core.BlockPos moved = instances.remove(index);
-                    instances.add(target, moved);
-                    rebuildWidgets();
                 }
             }).bounds(x + WIDTH - 40, rowY - 2, 14, 14).build()).active = index < instances.size() - 1;
             addRenderableWidget(Button.builder(Component.literal("X"), b -> {
                 ClientPlayNetworking.send(new RemoveDungeonInstancePayload(menu.getBlockPos(), pos));
-                instances.remove(index);
-                rebuildWidgets();
             }).bounds(x + WIDTH - 24, rowY - 2, 14, 14).build());
             rowY += 18;
         }
@@ -361,5 +355,38 @@ public class DungeonControllerAdminScreen extends AbstractContainerScreen<Dungeo
         int minutes = seconds / 60;
         int rem = seconds % 60;
         return String.format("%d:%02d", minutes, rem);
+    }
+
+    public boolean matchesController(BlockPos blockPos) {
+        return menu.getBlockPos().equals(blockPos);
+    }
+
+    public void applyData(DungeonControllerAdminData data) {
+        menu.applyData(data);
+        syncFromMenu();
+        rebuildWidgets();
+    }
+
+    private void syncFromMenu() {
+        instances.clear();
+        instances.addAll(menu.getInstances());
+        activeRuns.clear();
+        activeRuns.addAll(menu.getActiveRunInstances());
+        cooldowns.clear();
+        cooldowns.putAll(menu.getInstanceCooldownTimers());
+        pendingRemovals.clear();
+        pendingRemovals.addAll(menu.getPendingRemovals());
+        tierConfigs.clear();
+        tierConfigs.putAll(menu.getTierConfigs());
+        leaderboards.clear();
+        leaderboards.putAll(menu.getTopLeaderboards());
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 }

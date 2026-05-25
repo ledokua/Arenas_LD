@@ -12,6 +12,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 
@@ -85,5 +86,24 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerScreenHa
         guiGraphics.drawString(font, title, x + 8, y + 8, 0xFFFFFF, false);
         guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.mob_id"), x + 12, y + 37, 0xC0C8E0, false);
         renderTooltip(guiGraphics, mouseX, mouseY);
+    }
+
+    public boolean matchesSpawner(BlockPos blockPos) {
+        return menu.getBlockPos().equals(blockPos);
+    }
+
+    public void applyData(MobSpawnerData data) {
+        menu.applyData(data);
+        if (mobIdField != null) {
+            mobIdField.setValue(menu.getMobId());
+        }
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 }

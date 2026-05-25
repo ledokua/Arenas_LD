@@ -13,8 +13,8 @@ import java.util.Optional;
 
 public class RoomControllerScreenHandler extends AbstractContainerMenu {
     private final BlockPos blockPos;
-    private final List<BlockPos> spawnerPositions;
-    private final Optional<BlockPos> doorPos;
+    private List<BlockPos> spawnerPositions;
+    private Optional<BlockPos> doorPos;
 
     public RoomControllerScreenHandler(int syncId, Inventory playerInventory, RoomControllerData data) {
         this(syncId, playerInventory, data.blockPos(), data.spawnerPositions(), data.doorPos());
@@ -42,11 +42,16 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
     }
 
     public List<BlockPos> getSpawnerPositions() {
-        return spawnerPositions;
+        return List.copyOf(spawnerPositions);
     }
 
     public Optional<BlockPos> getDoorPos() {
         return doorPos;
+    }
+
+    public void applyData(RoomControllerData data) {
+        this.spawnerPositions = List.copyOf(data.spawnerPositions());
+        this.doorPos = data.doorPos();
     }
 
     @Override

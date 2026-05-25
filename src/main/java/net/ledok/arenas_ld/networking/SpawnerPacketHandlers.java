@@ -10,19 +10,24 @@ import net.minecraft.ChatFormatting;
 import net.ledok.arenas_ld.dungeon.packet.DbsClearRoomsPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsMoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsRemoveRoomPayload;
+import net.ledok.arenas_ld.dungeon.packet.DungeonBossSpawnerSnapshotPayload;
+import net.ledok.arenas_ld.dungeon.packet.DungeonControllerAdminSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.AddDungeonInstancePayload;
 import net.ledok.arenas_ld.dungeon.packet.AcceptInvitePayload;
 import net.ledok.arenas_ld.dungeon.packet.CreateLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.DeclineInvitePayload;
+import net.ledok.arenas_ld.dungeon.packet.DungeonControllerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.InvitePlayerPayload;
 import net.ledok.arenas_ld.dungeon.packet.JoinLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.KickFromLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.LeaveLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.MoveDungeonInstancePayload;
+import net.ledok.arenas_ld.dungeon.packet.MobSpawnerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.RemoveDungeonInstancePayload;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
+import net.ledok.arenas_ld.dungeon.packet.RoomControllerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomRemoveSpawnerPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomResetPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetLobbyTierPayload;
@@ -215,6 +220,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof RoomControllerBlockEntity room) {
                     room.removeSpawner(payload.spawnerPos());
                     markDirtyAndSync(world, room);
+                    broadcastRoomControllerSnapshot(player, room);
                 }
             });
         });
@@ -231,6 +237,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof RoomControllerBlockEntity room) {
                     room.clearSpawners();
                     markDirtyAndSync(world, room);
+                    broadcastRoomControllerSnapshot(player, room);
                 }
             });
         });
@@ -247,6 +254,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof RoomControllerBlockEntity room) {
                     room.setDoorPos(null);
                     markDirtyAndSync(world, room);
+                    broadcastRoomControllerSnapshot(player, room);
                 }
             });
         });
@@ -263,6 +271,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof RoomControllerBlockEntity room && world instanceof ServerLevel serverLevel) {
                     room.reset(serverLevel);
                     markDirtyAndSync(world, room);
+                    broadcastRoomControllerSnapshot(player, room);
                 }
             });
         });
@@ -279,6 +288,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity spawner) {
                     spawner.setEntityDefinition(spawner.getEntityDefinition().withMobId(payload.mobId()));
                     markDirtyAndSync(world, spawner);
+                    broadcastMobSpawnerSnapshot(player, spawner);
                 }
             });
         });
@@ -295,6 +305,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
                     spawner.setEntityDefinition(spawner.getEntityDefinition().withMobId(payload.mobId()));
                     markDirtyAndSync(world, spawner);
+                    broadcastDungeonBossSpawnerSnapshot(player, spawner);
                 }
             });
         });
@@ -311,6 +322,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
                     spawner.removeRoom(payload.roomPos());
                     markDirtyAndSync(world, spawner);
+                    broadcastDungeonBossSpawnerSnapshot(player, spawner);
                 }
             });
         });
@@ -327,6 +339,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
                     spawner.moveRoom(payload.fromIndex(), payload.toIndex());
                     markDirtyAndSync(world, spawner);
+                    broadcastDungeonBossSpawnerSnapshot(player, spawner);
                 }
             });
         });
@@ -343,6 +356,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
                     spawner.clearRooms();
                     markDirtyAndSync(world, spawner);
+                    broadcastDungeonBossSpawnerSnapshot(player, spawner);
                 }
             });
         });
@@ -355,6 +369,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.createLobby(player);
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
         });
@@ -367,6 +382,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.joinLobby(player, payload.lobbyId());
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
         });
@@ -379,6 +395,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.invitePlayer(player, payload.inviteeUuid());
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
         });
@@ -391,6 +408,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.acceptInvite(player, payload.lobbyId());
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
         });
@@ -403,6 +421,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.declineInvite(player, payload.lobbyId());
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
         });
@@ -415,6 +434,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.leaveLobby(player);
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
         });
@@ -427,6 +447,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.kickFromLobby(player, payload.targetUuid());
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
         });
@@ -439,6 +460,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.setLobbyTier(player, payload.tier());
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
         });
@@ -451,6 +473,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.setLobbyHardcore(player, payload.hardcore());
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
         });
@@ -463,6 +486,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.setLobbyVisibility(player, payload.visibility());
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
         });
@@ -475,6 +499,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.toggleReady(player);
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
         });
@@ -523,6 +548,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.addInstance(payload.instancePos());
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerAdminSnapshot(player, controller);
                 }
             });
         });
@@ -542,6 +568,8 @@ final class SpawnerPacketHandlers {
                             .withStyle(ChatFormatting.YELLOW));
                     }
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
+                    broadcastDungeonControllerAdminSnapshot(player, controller);
                 }
             });
         });
@@ -557,6 +585,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.moveInstance(payload.fromIndex(), payload.toIndex());
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerAdminSnapshot(player, controller);
                 }
             });
         });
@@ -576,6 +605,7 @@ final class SpawnerPacketHandlers {
                             .withStyle(ChatFormatting.YELLOW));
                     }
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerAdminSnapshot(player, controller);
                 }
             });
         });
@@ -595,6 +625,7 @@ final class SpawnerPacketHandlers {
                             .withStyle(ChatFormatting.YELLOW));
                     }
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerAdminSnapshot(player, controller);
                 }
             });
         });
@@ -614,6 +645,7 @@ final class SpawnerPacketHandlers {
                             .withStyle(ChatFormatting.YELLOW));
                     }
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerAdminSnapshot(player, controller);
                 }
             });
         });
@@ -633,6 +665,7 @@ final class SpawnerPacketHandlers {
                             .withStyle(ChatFormatting.YELLOW));
                     }
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerAdminSnapshot(player, controller);
                 }
             });
         });
@@ -648,6 +681,7 @@ final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.setTierConfig(payload.tier(), payload.config());
                     markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerAdminSnapshot(player, controller);
                 }
             });
         });
@@ -656,5 +690,61 @@ final class SpawnerPacketHandlers {
     private static void markDirtyAndSync(Level world, BlockEntity blockEntity) {
         blockEntity.setChanged();
         world.sendBlockUpdated(blockEntity.getBlockPos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
+    }
+
+    private static void broadcastDungeonControllerSnapshot(ServerPlayer actor, net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+        if (actor.server == null) {
+            return;
+        }
+        for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(target, new DungeonControllerSnapshotPayload(controller.getScreenOpeningData(target)));
+        }
+    }
+
+    private static void broadcastRoomControllerSnapshot(ServerPlayer actor, RoomControllerBlockEntity room) {
+        if (actor.server == null) {
+            return;
+        }
+        for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(target, new RoomControllerSnapshotPayload(room.getScreenOpeningData(target)));
+        }
+    }
+
+    private static void broadcastMobSpawnerSnapshot(
+        ServerPlayer actor,
+        net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity spawner
+    ) {
+        if (actor.server == null) {
+            return;
+        }
+        for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(target, new MobSpawnerSnapshotPayload(spawner.getScreenOpeningData(target)));
+        }
+    }
+
+    private static void broadcastDungeonBossSpawnerSnapshot(
+        ServerPlayer actor,
+        net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner
+    ) {
+        if (actor.server == null) {
+            return;
+        }
+        for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(target, new DungeonBossSpawnerSnapshotPayload(spawner.getScreenOpeningData(target)));
+        }
+    }
+
+    private static void broadcastDungeonControllerAdminSnapshot(
+        ServerPlayer actor,
+        net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller
+    ) {
+        if (actor.server == null) {
+            return;
+        }
+        net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminMenuProvider provider =
+            new net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminMenuProvider(controller);
+        for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(target, new DungeonControllerAdminSnapshotPayload(provider.getScreenOpeningData(target)));
+        }
     }
 }

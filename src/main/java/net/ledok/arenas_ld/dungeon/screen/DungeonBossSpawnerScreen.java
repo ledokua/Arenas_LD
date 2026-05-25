@@ -16,6 +16,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 
@@ -42,6 +43,7 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
     @Override
     protected void init() {
         super.init();
+        syncFromMenu();
         rebuildWidgets();
     }
 
@@ -85,9 +87,6 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
                 minecraft.setScreen(this);
                 if (ok) {
                     ClientPlayNetworking.send(new DbsClearRoomsPayload(menu.getBlockPos()));
-                    rooms.clear();
-                    roomOffset = 0;
-                    rebuildWidgets();
                 }
             }, Component.translatable("gui.arenas_ld.room_controller.confirm.clear_title"),
                 Component.translatable("gui.arenas_ld.dbs.clear_rooms_confirm")));
@@ -101,24 +100,14 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
 
             addRenderableWidget(Button.builder(Component.literal("X"), b -> {
                 ClientPlayNetworking.send(new DbsRemoveRoomPayload(menu.getBlockPos(), room));
-                rooms.remove(room);
-                rebuildWidgets();
             }).bounds(x + WIDTH - 24, rowY, 14, 12).build());
 
             addRenderableWidget(Button.builder(Component.literal("v"), b -> {
                 ClientPlayNetworking.send(new DbsMoveRoomPayload(menu.getBlockPos(), idx, idx + 1));
-                if (idx + 1 < rooms.size()) {
-                    java.util.Collections.swap(rooms, idx, idx + 1);
-                }
-                rebuildWidgets();
             }).bounds(x + WIDTH - 42, rowY, 14, 12).build()).active = idx < rooms.size() - 1;
 
             addRenderableWidget(Button.builder(Component.literal("^"), b -> {
                 ClientPlayNetworking.send(new DbsMoveRoomPayload(menu.getBlockPos(), idx, idx - 1));
-                if (idx - 1 >= 0) {
-                    java.util.Collections.swap(rooms, idx, idx - 1);
-                }
-                rebuildWidgets();
             }).bounds(x + WIDTH - 60, rowY, 14, 12).build()).active = idx > 0;
         }
 
@@ -169,5 +158,32 @@ public class DungeonBossSpawnerScreen extends AbstractContainerScreen<DungeonBos
         }
 
         renderTooltip(guiGraphics, mouseX, mouseY);
+    }
+
+    public boolean matchesSpawner(BlockPos blockPos) {
+        return menu.getBlockPos().equals(blockPos);
+    }
+
+    public void applyData(DungeonBossSpawnerData data) {
+        menu.applyData(data);
+        syncFromMenu();
+        rebuildWidgets();
+    }
+
+    private void syncFromMenu() {
+        rooms.clear();
+        rooms.addAll(menu.getRooms());
+        roomOffset = Math.min(roomOffset, Math.max(0, rooms.size() - MAX_ROOMS_VISIBLE));
+        if (mobIdField != null) {
+            mobIdField.setValue(menu.getMobId());
+        }
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 }

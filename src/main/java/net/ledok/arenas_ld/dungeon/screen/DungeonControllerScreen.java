@@ -16,6 +16,7 @@ import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -54,6 +55,7 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
     @Override
     protected void init() {
         super.init();
+        syncFromMenu(false);
         rebuildWidgets();
     }
 
@@ -251,5 +253,40 @@ public class DungeonControllerScreen extends AbstractContainerScreen<DungeonCont
         guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dungeon_controller.tier", lobby.selectedTier().name()), x + 8, y + 118, 0xC0C8E0, false);
         guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dungeon_controller.visibility", lobby.visibility().name()), x + 8, y + 138, 0xC0C8E0, false);
         guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.dungeon_controller.hardcore", lobby.hardcoreEnabled()), x + 8, y + 156, 0xC0C8E0, false);
+    }
+
+    public boolean matchesController(BlockPos blockPos) {
+        return menu.getBlockPos().equals(blockPos);
+    }
+
+    public void applyData(DungeonControllerData data) {
+        Optional<Lobby> previousOwnLobby = this.ownLobby;
+        menu.applyData(data);
+        syncFromMenu(true);
+        if (currentTab == Tab.MY_LOBBY && this.ownLobby.isEmpty()) {
+            currentTab = Tab.LOBBIES;
+        } else if (currentTab == Tab.LOBBIES && previousOwnLobby.isEmpty() && this.ownLobby.isPresent()) {
+            currentTab = Tab.MY_LOBBY;
+        }
+        rebuildWidgets();
+    }
+
+    private void syncFromMenu(boolean preserveTab) {
+        this.visibleLobbies.clear();
+        this.visibleLobbies.addAll(menu.getVisibleLobbies());
+        this.myInvites.clear();
+        this.myInvites.addAll(menu.getMyInvites());
+        this.ownLobby = menu.getOwnLobby();
+        if (!preserveTab && this.ownLobby.isPresent()) {
+            this.currentTab = Tab.MY_LOBBY;
+        }
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 }

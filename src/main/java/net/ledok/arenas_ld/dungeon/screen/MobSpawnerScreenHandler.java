@@ -9,7 +9,7 @@ import net.minecraft.world.item.ItemStack;
 
 public class MobSpawnerScreenHandler extends AbstractContainerMenu {
     private final BlockPos blockPos;
-    private final String mobId;
+    private String mobId;
 
     public MobSpawnerScreenHandler(int syncId, Inventory playerInventory, MobSpawnerData data) {
         super(ModScreenHandlers.MOB_SPAWNER_SCREEN_HANDLER, syncId);
@@ -27,6 +27,10 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
 
     public String getMobId() {
         return mobId;
+    }
+
+    public void applyData(MobSpawnerData data) {
+        this.mobId = data.mobId();
     }
 
     @Override

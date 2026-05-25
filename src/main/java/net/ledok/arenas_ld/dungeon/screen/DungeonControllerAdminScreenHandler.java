@@ -17,16 +17,16 @@ import java.util.Set;
 
 public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     private final BlockPos blockPos;
-    private final List<BlockPos> instances;
-    private final Set<BlockPos> activeRunInstances;
-    private final Map<BlockPos, Integer> instanceCooldownTimers;
-    private final Set<BlockPos> pendingRemovals;
-    private final int cooldownTicks;
-    private final int closeTimerSeconds;
-    private final int maxPartySize;
-    private final int inviteExpiryTicks;
-    private final Map<DifficultyTier, TierConfig> tierConfigs;
-    private final Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
+    private List<BlockPos> instances;
+    private Set<BlockPos> activeRunInstances;
+    private Map<BlockPos, Integer> instanceCooldownTimers;
+    private Set<BlockPos> pendingRemovals;
+    private int cooldownTicks;
+    private int closeTimerSeconds;
+    private int maxPartySize;
+    private int inviteExpiryTicks;
+    private Map<DifficultyTier, TierConfig> tierConfigs;
+    private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerAdminData data) {
         super(ModScreenHandlers.DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER, syncId);
@@ -70,6 +70,19 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     public int getInviteExpiryTicks() { return inviteExpiryTicks; }
     public Map<DifficultyTier, TierConfig> getTierConfigs() { return tierConfigs; }
     public Map<DifficultyTier, List<LeaderboardEntry>> getTopLeaderboards() { return topLeaderboards; }
+
+    public void applyData(DungeonControllerAdminData data) {
+        this.instances = List.copyOf(data.instances());
+        this.activeRunInstances = Set.copyOf(data.activeRunInstances());
+        this.instanceCooldownTimers = Map.copyOf(data.instanceCooldownTimers());
+        this.pendingRemovals = Set.copyOf(data.pendingRemovals());
+        this.cooldownTicks = data.cooldownTicks();
+        this.closeTimerSeconds = data.closeTimerSeconds();
+        this.maxPartySize = data.maxPartySize();
+        this.inviteExpiryTicks = data.inviteExpiryTicks();
+        this.tierConfigs = Map.copyOf(data.tierConfigs());
+        this.topLeaderboards = Map.copyOf(data.topLeaderboards());
+    }
 
     @Override
     public ItemStack quickMoveStack(Player player, int index) {
