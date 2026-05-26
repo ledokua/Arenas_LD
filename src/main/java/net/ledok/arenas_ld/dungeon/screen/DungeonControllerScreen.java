@@ -265,9 +265,13 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         button.renderer((context, rendered, delta) -> {
             boolean active = !rendered.active();
             int fill = active ? PANEL : (rendered.isHoveredOrFocused() ? ROW_BG : PANEL_2);
-            int border = active ? ACCENT : HAIRLINE;
             context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), border);
+            if (active) {
+                context.fill(rendered.getX(), rendered.getY() + rendered.getHeight() - 2,
+                    rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), ACCENT);
+            } else {
+                context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), HAIRLINE);
+            }
         });
         return button;
     }
@@ -350,14 +354,31 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         FlowLayout row = rowPanel(false);
         row.gap(6);
 
+        Optional<Lobby> inviteLobby = resolveLobbyForInvite(invite);
+        String inviterName = inviteLobby
+            .map(l -> l.memberNames().getOrDefault(invite.inviterUuid(), shortUuid(invite.inviterUuid())))
+            .orElse(shortUuid(invite.inviterUuid()));
+        String ownerName = inviteLobby.map(Lobby::ownerName).orElseGet(() -> shortUuid(invite.lobbyId()));
+
         long remainingTicks = Math.max(0L, invite.expiresAtTick() - approximateServerTick());
         long remainingSeconds = remainingTicks / 20L;
         FlowLayout inviteInfo = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        inviteInfo.child(text(Component.literal("From " + shortUuid(invite.inviterUuid())), INK));
-        inviteInfo.child(text(Component.literal("Lobby " + shortUuid(invite.lobbyId())), INK_DIM));
+        inviteInfo.child(text(Component.literal("From " + inviterName), INK));
+        inviteInfo.child(text(Component.literal("Owner: " + ownerName), INK_DIM));
         row.child(inviteInfo);
         row.child(fixedText(Component.literal("-"), 40, INK_DIM, HorizontalAlignment.CENTER));
-        row.child(fixedBadge(Component.literal(shortUuid(invite.lobbyId()).toUpperCase()), 86, INFO));
+
+        Component badgeText;
+        int badgeColor;
+        if (inviteLobby.isPresent()) {
+            DifficultyTier inviteTier = inviteLobby.get().selectedTier();
+            badgeText = Component.literal(inviteTier.name());
+            badgeColor = tierColor(inviteTier);
+        } else {
+            badgeText = Component.literal(shortUuid(invite.lobbyId()).toUpperCase());
+            badgeColor = INFO;
+        }
+        row.child(fixedBadge(badgeText, 86, badgeColor));
         LabelComponent countdown = fixedText(Component.literal(formatRemaining(remainingSeconds)), 62, remainingSeconds <= 15 ? WARN : INK_MID, HorizontalAlignment.CENTER);
         inviteCountdownLabels.put(invite.lobbyId(), countdown);
         row.child(countdown);
@@ -381,7 +402,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
         FlowLayout ownerInfo = Containers.verticalFlow(Sizing.expand(), Sizing.content());
         ownerInfo.child(text(Component.literal(lobby.ownerName()), INK));
-        ownerInfo.child(text(Component.literal("LOB_" + lobby.ownerName().toUpperCase()), INK_DIM));
+        ownerInfo.child(text(Component.literal(shortUuid(lobby.lobbyId()).toUpperCase()), INK_DIM));
         row.child(ownerInfo);
         row.child(fixedBadge(Component.literal(lobby.members().size() + "/" + menu.getMaxPartySize()), 44, INK_MID));
         row.child(fixedBadge(Component.literal(lobby.selectedTier().name()), 70, tierColor(lobby.selectedTier())));
@@ -623,7 +644,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         row.gap(6);
         row.child(headerCell("FROM", Sizing.expand()));
         row.child(headerCell("", Sizing.fixed(40)));
-        row.child(headerCell("TAG", Sizing.fixed(86)));
+        row.child(headerCell("TIER", Sizing.fixed(86)));
         row.child(headerCell("EXPIRES", Sizing.fixed(62)));
         row.child(headerCell("", Sizing.fixed(54)));
         row.child(headerCell("", Sizing.fixed(58)));
@@ -1008,6 +1029,18 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             && previous.members().equals(current.members());
     }
 
+
+    private Optional<Lobby> resolveLobbyForInvite(PendingInvite invite) {
+        for (Lobby lobby : visibleLobbies) {
+            if (lobby.lobbyId().equals(invite.lobbyId())) {
+                return Optional.of(lobby);
+            }
+        }
+        if (ownLobby.isPresent() && ownLobby.get().lobbyId().equals(invite.lobbyId())) {
+            return ownLobby;
+        }
+        return Optional.empty();
+    }
 
     private static String shortUuid(UUID uuid) {
         return uuid.toString().substring(0, 8);
