@@ -23,13 +23,14 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
     private List<PendingInvite> myInvites;
     private int maxPartySize;
     private Map<DifficultyTier, TierConfig> tiers;
+    private long serverGameTick;
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerData data) {
-        this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.maxPartySize(), data.tiers());
+        this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.maxPartySize(), data.tiers(), data.serverGameTick());
     }
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerBlockEntity blockEntity) {
-        this(syncId, inventory, blockEntity.getBlockPos(), blockEntity.getLobbies(), Optional.empty(), blockEntity.getPendingInvites(), blockEntity.getMaxPartySize(), blockEntity.getTierConfigs());
+        this(syncId, inventory, blockEntity.getBlockPos(), blockEntity.getLobbies(), Optional.empty(), blockEntity.getPendingInvites(), blockEntity.getMaxPartySize(), blockEntity.getTierConfigs(), 0L);
     }
 
     private DungeonControllerScreenHandler(
@@ -40,7 +41,8 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         Optional<Lobby> ownLobby,
         List<PendingInvite> myInvites,
         int maxPartySize,
-        Map<DifficultyTier, TierConfig> tiers
+        Map<DifficultyTier, TierConfig> tiers,
+        long serverGameTick
     ) {
         super(ModScreenHandlers.DUNGEON_CONTROLLER_SCREEN_HANDLER, syncId);
         this.blockPos = blockPos;
@@ -49,6 +51,7 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         this.myInvites = List.copyOf(myInvites);
         this.maxPartySize = maxPartySize;
         this.tiers = Map.copyOf(tiers);
+        this.serverGameTick = serverGameTick;
     }
 
     public BlockPos getBlockPos() {
@@ -75,12 +78,17 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         return Map.copyOf(tiers);
     }
 
+    public long getServerGameTick() {
+        return serverGameTick;
+    }
+
     public void applyData(DungeonControllerData data) {
         this.visibleLobbies = List.copyOf(data.visibleLobbies());
         this.ownLobby = data.ownLobby();
         this.myInvites = List.copyOf(data.myInvites());
         this.maxPartySize = data.maxPartySize();
         this.tiers = Map.copyOf(data.tiers());
+        this.serverGameTick = data.serverGameTick();
     }
 
     @Override

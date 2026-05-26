@@ -179,6 +179,13 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
      */
     public int activate(ServerLevel world, TierConfig tier) {
         if (activated) return 0;
+        if (spawnerOffsets.isEmpty()) {
+            ArenasLdMod.LOGGER.warn(
+                "RoomController at {} has no linked spawners; activation deferred",
+                worldPosition
+            );
+            return 0;
+        }
 
         int spawned = 0;
         for (BlockPos absolutePos : getSpawnerPositions()) {
@@ -198,6 +205,14 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 trackSpawnedMob(entity.getUUID());
                 spawned++;
             }
+        }
+        if (spawned <= 0) {
+            ArenasLdMod.LOGGER.warn(
+                "RoomController at {} linked {} spawners but spawned 0 mobs; activation deferred",
+                worldPosition,
+                spawnerOffsets.size()
+            );
+            return 0;
         }
         markActivated();
         return spawned;

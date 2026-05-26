@@ -22,7 +22,8 @@ public record DungeonControllerData(
     Optional<Lobby> ownLobby,
     List<PendingInvite> myInvites,
     int maxPartySize,
-    Map<DifficultyTier, TierConfig> tiers
+    Map<DifficultyTier, TierConfig> tiers,
+    long serverGameTick
 ) {
     public static final StreamCodec<RegistryFriendlyByteBuf, DungeonControllerData> STREAM_CODEC = StreamCodec.of(
         DungeonControllerData::encode,
@@ -52,6 +53,7 @@ public record DungeonControllerData(
             DifficultyTier.STREAM_CODEC.encode(buf, entry.getKey());
             writeTag(buf, (CompoundTag) TierConfig.CODEC.encodeStart(NbtOps.INSTANCE, entry.getValue()).getOrThrow());
         }
+        buf.writeVarLong(data.serverGameTick());
     }
 
     private static DungeonControllerData decode(RegistryFriendlyByteBuf buf) {
@@ -81,8 +83,9 @@ public record DungeonControllerData(
             DifficultyTier tier = DifficultyTier.STREAM_CODEC.decode(buf);
             tiers.put(tier, TierConfig.CODEC.parse(NbtOps.INSTANCE, readTag(buf)).getOrThrow());
         }
+        long serverGameTick = buf.readVarLong();
 
-        return new DungeonControllerData(blockPos, visible, own, invites, maxPartySize, tiers);
+        return new DungeonControllerData(blockPos, visible, own, invites, maxPartySize, tiers, serverGameTick);
     }
 
     private static void writeTag(RegistryFriendlyByteBuf buf, CompoundTag tag) {

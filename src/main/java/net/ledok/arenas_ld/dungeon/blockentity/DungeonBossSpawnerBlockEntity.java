@@ -188,6 +188,11 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         );
 
         if (!world.addFreshEntity(living)) {
+            ArenasLdMod.LOGGER.warn(
+                "DungeonBossSpawner (v4.0): failed to add entity {} to world at {}",
+                entityDefinition.mobId(),
+                worldPosition
+            );
             return null;
         }
         return living;
