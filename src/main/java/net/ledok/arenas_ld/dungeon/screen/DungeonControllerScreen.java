@@ -17,6 +17,7 @@ import io.wispforest.owo.ui.core.Surface;
 import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
+import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.packet.AcceptInvitePayload;
@@ -197,7 +198,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         titleLabel.color(Color.ofArgb(INK));
         FlowLayout meta = Containers.horizontalFlow(Sizing.content(), Sizing.content());
         meta.gap(8);
-        meta.child(smallMeta("POS  " + menu.getBlockPos().getX() + "  " + menu.getBlockPos().getY() + "  " + menu.getBlockPos().getZ()));
+        meta.child(smallMeta("X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
         meta.child(smallMeta("LIVE", GOOD));
         if (ownLobby.isPresent()) {
             meta.child(smallMeta("IN LOBBY", ACCENT));
@@ -297,8 +298,8 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
         lobbiesTabButton.active(currentTab != Tab.LOBBIES);
         myLobbyTabButton.active(currentTab != Tab.MY_LOBBY);
-        lobbiesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.lobbies").append(" [" + visibleLobbies.size() + "]"));
-        myLobbyTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.my_lobby").append(ownLobby.isPresent() ? " [" + ownLobby.get().members().size() + "]" : ""));
+        lobbiesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.lobbies").append(" " + visibleLobbies.size()));
+        myLobbyTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.my_lobby").append(ownLobby.isPresent() ? " " + ownLobby.get().members().size() : ""));
 
         if (currentTab == Tab.LOBBIES) {
             buildLobbiesContent();
@@ -363,8 +364,12 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         long remainingTicks = Math.max(0L, invite.expiresAtTick() - approximateServerTick());
         long remainingSeconds = remainingTicks / 20L;
         FlowLayout inviteInfo = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        inviteInfo.child(text(Component.literal("From " + inviterName), INK));
-        inviteInfo.child(text(Component.literal("Owner: " + ownerName), INK_DIM));
+        FlowLayout fromLine = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        fromLine.gap(3);
+        fromLine.child(text(Component.literal("From"), INK));
+        fromLine.child(text(Component.literal(inviterName), ACCENT));
+        inviteInfo.child(fromLine);
+        inviteInfo.child(text(Component.literal("LOBBY OWNER: " + ownerName.toUpperCase()), INK_DIM));
         row.child(inviteInfo);
         row.child(fixedText(Component.literal("-"), 40, INK_DIM, HorizontalAlignment.CENTER));
 
@@ -406,8 +411,15 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         row.child(ownerInfo);
         row.child(fixedBadge(Component.literal(lobby.members().size() + "/" + menu.getMaxPartySize()), 44, INK_MID));
         row.child(fixedBadge(Component.literal(lobby.selectedTier().name()), 70, tierColor(lobby.selectedTier())));
-        row.child(fixedBadge(Component.literal(lobby.visibility().name()), 78, visibilityColor(lobby.visibility())));
-        row.child(fixedBadge(Component.literal(lobby.status().name()), 82, statusColor(lobby.status().name())));
+
+        FlowLayout visCell = Containers.horizontalFlow(Sizing.fixed(78), Sizing.content());
+        visCell.gap(4);
+        visCell.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        visCell.child(text(Component.literal("●"), visibilityColor(lobby.visibility())));
+        visCell.child(text(Component.literal(lobby.visibility().name()), INK_DIM));
+        row.child(visCell);
+
+        row.child(fixedBadge(Component.literal(statusLabel(lobby.status())), 82, statusColor(lobby.status())));
         if (lobby.hardcoreEnabled()) {
             row.child(fixedBadge(Component.literal("HC"), 34, DANGER));
         }
@@ -415,7 +427,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         UUID lobbyId = lobby.lobbyId();
         boolean isMine = ownLobby.isPresent() && ownLobby.get().lobbyId().equals(lobbyId);
         boolean isFull = lobby.isFull(menu.getMaxPartySize());
-        boolean inRun = lobby.status().name().equals("IN_RUN");
+        boolean inRun = lobby.status() == LobbyStatus.IN_RUN;
 
         if (lobby.visibility() == LobbyVisibility.PUBLIC) {
             ButtonComponent join = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.join"), b -> {
@@ -795,11 +807,19 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         };
     }
 
-    private int statusColor(String status) {
+    private int statusColor(LobbyStatus status) {
         return switch (status) {
-            case "READY" -> GOOD;
-            case "IN_RUN" -> WARN;
+            case READY -> GOOD;
+            case IN_RUN -> WARN;
+            case DISBANDED -> DANGER;
             default -> INFO;
+        };
+    }
+
+    private String statusLabel(LobbyStatus status) {
+        return switch (status) {
+            case IN_RUN -> "IN RUN";
+            default -> status.name();
         };
     }
 
@@ -904,8 +924,8 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private void refreshTabButtons() {
         lobbiesTabButton.active(currentTab != Tab.LOBBIES);
         myLobbyTabButton.active(currentTab != Tab.MY_LOBBY);
-        lobbiesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.lobbies").append(" [" + visibleLobbies.size() + "]"));
-        myLobbyTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.my_lobby").append(ownLobby.isPresent() ? " [" + ownLobby.get().members().size() + "]" : ""));
+        lobbiesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.lobbies").append(" " + visibleLobbies.size()));
+        myLobbyTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.my_lobby").append(ownLobby.isPresent() ? " " + ownLobby.get().members().size() : ""));
     }
 
     private void refreshMyLobbyInPlace(Lobby lobby) {
