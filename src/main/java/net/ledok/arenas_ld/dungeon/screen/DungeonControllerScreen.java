@@ -105,6 +105,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private final List<Lobby> visibleLobbies;
     private final List<PendingInvite> myInvites;
     private Optional<Lobby> ownLobby;
+    private java.util.Set<UUID> busyPlayers;
 
     private Tab currentTab = Tab.LOBBIES;
     private String footerError;
@@ -146,6 +147,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         this.visibleLobbies = new ArrayList<>(handler.getVisibleLobbies());
         this.myInvites = new ArrayList<>(handler.getMyInvites());
         this.ownLobby = handler.getOwnLobby();
+        this.busyPlayers = handler.getBusyPlayers();
         this.snapshotServerTick = handler.getServerGameTick();
         this.snapshotEpochMs = System.currentTimeMillis();
     }
@@ -977,9 +979,8 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         return InviteStatus.ONLINE;
     }
 
-    // Hook for a future busy-status integration; always false until wired up.
     private boolean isBusy(UUID uuid) {
-        return false;
+        return busyPlayers != null && busyPlayers.contains(uuid);
     }
 
     private FlowLayout inviteHeaderRow() {
@@ -1313,6 +1314,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         this.myInvites.clear();
         this.myInvites.addAll(menu.getMyInvites());
         this.ownLobby = menu.getOwnLobby();
+        this.busyPlayers = menu.getBusyPlayers();
         this.snapshotServerTick = menu.getServerGameTick();
         this.snapshotEpochMs = System.currentTimeMillis();
 

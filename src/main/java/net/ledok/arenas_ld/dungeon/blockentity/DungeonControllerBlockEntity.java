@@ -584,7 +584,15 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         List<PendingInvite> myInvites = pendingInvites.stream()
             .filter(invite -> invite.invitedUuid().equals(playerUuid))
             .toList();
-        return new DungeonControllerData(worldPosition, visible, own, myInvites, maxPartySize, tierConfigs, player.serverLevel().getGameTime());
+        Set<UUID> busyPlayers = new HashSet<>();
+        if (player.getServer() != null) {
+            for (ServerPlayer online : player.getServer().getPlayerList().getPlayers()) {
+                if (BusyStateCompat.isBusy(online.getUUID())) {
+                    busyPlayers.add(online.getUUID());
+                }
+            }
+        }
+        return new DungeonControllerData(worldPosition, visible, own, myInvites, maxPartySize, tierConfigs, player.serverLevel().getGameTime(), busyPlayers);
     }
 
     @Override

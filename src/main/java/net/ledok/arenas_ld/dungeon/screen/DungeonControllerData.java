@@ -12,9 +12,12 @@ import net.minecraft.network.codec.StreamCodec;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 public record DungeonControllerData(
     BlockPos blockPos,
@@ -23,7 +26,8 @@ public record DungeonControllerData(
     List<PendingInvite> myInvites,
     int maxPartySize,
     Map<DifficultyTier, TierConfig> tiers,
-    long serverGameTick
+    long serverGameTick,
+    Set<UUID> busyPlayers
 ) {
     public static final StreamCodec<RegistryFriendlyByteBuf, DungeonControllerData> STREAM_CODEC = StreamCodec.of(
         DungeonControllerData::encode,
@@ -54,6 +58,11 @@ public record DungeonControllerData(
             writeTag(buf, (CompoundTag) TierConfig.CODEC.encodeStart(NbtOps.INSTANCE, entry.getValue()).getOrThrow());
         }
         buf.writeVarLong(data.serverGameTick());
+
+        buf.writeVarInt(data.busyPlayers().size());
+        for (UUID busy : data.busyPlayers()) {
+            buf.writeUUID(busy);
+        }
     }
 
     private static DungeonControllerData decode(RegistryFriendlyByteBuf buf) {
@@ -85,7 +94,13 @@ public record DungeonControllerData(
         }
         long serverGameTick = buf.readVarLong();
 
-        return new DungeonControllerData(blockPos, visible, own, invites, maxPartySize, tiers, serverGameTick);
+        int busyCount = buf.readVarInt();
+        Set<UUID> busyPlayers = new HashSet<>(busyCount);
+        for (int i = 0; i < busyCount; i++) {
+            busyPlayers.add(buf.readUUID());
+        }
+
+        return new DungeonControllerData(blockPos, visible, own, invites, maxPartySize, tiers, serverGameTick, busyPlayers);
     }
 
     private static void writeTag(RegistryFriendlyByteBuf buf, CompoundTag tag) {
