@@ -72,12 +72,14 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     private final Map<BlockPos, Integer> cooldowns = new HashMap<>();
     private final Set<BlockPos> pendingRemovals = new HashSet<>();
     private final Map<BlockPos, DungeonControllerAdminData.InstanceRun> runningInstances = new HashMap<>();
+    private final Map<BlockPos, FlowLayout> statusBadges = new HashMap<>();
     private final Map<DifficultyTier, TierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, List<LeaderboardEntry>> leaderboards = new EnumMap<>(DifficultyTier.class);
 
     private Tab currentTab = Tab.INSTANCES;
     private String footerError;
     private long lastCooldownSecond = -1L;
+    private long cooldownSnapshotEpochMs = System.currentTimeMillis();
 
     private FlowLayout contentArea;
     private FlowLayout footerActions;
@@ -150,8 +152,27 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
             long second = System.currentTimeMillis() / 1000L;
             if (second != lastCooldownSecond) {
                 lastCooldownSecond = second;
-                rebuildUi();
+                refreshCooldownsInPlace();
             }
+        }
+    }
+
+    private void refreshCooldownsInPlace() {
+        for (Map.Entry<BlockPos, FlowLayout> entry : statusBadges.entrySet()) {
+            BlockPos pos = entry.getKey();
+            if (pendingRemovals.contains(pos) || activeRuns.contains(pos) || !cooldowns.containsKey(pos)) {
+                continue;
+            }
+            InstanceStatusInfo info = instanceStatusInfo(pos);
+            updateBadge(entry.getValue(), info.label(), info.color());
+        }
+    }
+
+    private void updateBadge(FlowLayout badge, String text, int color) {
+        badge.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
+        if (!badge.children().isEmpty() && badge.children().get(0) instanceof LabelComponent label) {
+            label.text(Component.literal(text));
+            label.color(Color.ofArgb(color));
         }
     }
 
@@ -281,6 +302,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     }
 
     private void buildInstancesTab() {
+        statusBadges.clear();
         int running = 0;
         int idleCooldown = 0;
         for (BlockPos pos : instances) {
@@ -370,7 +392,9 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         row.child(position);
 
         InstanceStatusInfo status = instanceStatusInfo(pos);
-        row.child(fixedBadge(Component.literal(status.label()), 120, status.color()));
+        FlowLayout statusBadge = fixedBadge(Component.literal(status.label()), 120, status.color());
+        statusBadges.put(pos, statusBadge);
+        row.child(statusBadge);
 
         FlowLayout tierParty = Containers.verticalFlow(Sizing.fixed(140), Sizing.content());
         tierParty.gap(1);
@@ -427,10 +451,21 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         if (activeRuns.contains(pos)) {
             return new InstanceStatusInfo("RUNNING", GOOD);
         }
-        if (cooldowns.containsKey(pos)) {
-            return new InstanceStatusInfo("COOLDOWN " + formatTicks(cooldowns.get(pos)), WARN);
+        int cooldown = liveCooldownTicks(pos);
+        if (cooldown > 0) {
+            return new InstanceStatusInfo("COOLDOWN " + formatTicks(cooldown), WARN);
         }
         return new InstanceStatusInfo("IDLE", INK_DIM);
+    }
+
+    // Counts down locally between snapshots so the cooldown ticks live without a server push.
+    private int liveCooldownTicks(BlockPos pos) {
+        Integer ticks = cooldowns.get(pos);
+        if (ticks == null) {
+            return 0;
+        }
+        int elapsedTicks = (int) ((System.currentTimeMillis() - cooldownSnapshotEpochMs) / 50L);
+        return Math.max(0, ticks - elapsedTicks);
     }
 
     private void buildGeneralTab() {
@@ -816,6 +851,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         activeRuns.addAll(menu.getActiveRunInstances());
         cooldowns.clear();
         cooldowns.putAll(menu.getInstanceCooldownTimers());
+        cooldownSnapshotEpochMs = System.currentTimeMillis();
         pendingRemovals.clear();
         pendingRemovals.addAll(menu.getPendingRemovals());
         runningInstances.clear();
