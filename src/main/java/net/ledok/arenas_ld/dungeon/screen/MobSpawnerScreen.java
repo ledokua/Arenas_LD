@@ -7,6 +7,7 @@ import io.wispforest.owo.ui.component.LabelComponent;
 import io.wispforest.owo.ui.component.TextBoxComponent;
 import io.wispforest.owo.ui.container.Containers;
 import io.wispforest.owo.ui.container.FlowLayout;
+import io.wispforest.owo.ui.container.ScrollContainer;
 import io.wispforest.owo.ui.core.Color;
 import io.wispforest.owo.ui.core.HorizontalAlignment;
 import io.wispforest.owo.ui.core.Insets;
@@ -50,9 +51,13 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
     private static final int DANGER     = 0xFFE8624A;
     private static final int GOOD       = 0xFF86D36C;
 
+    private static final int POS_ROW_HEIGHT = 20;
+    private static final int POS_MAX_VISIBLE = 6;
+
     private TextBoxComponent mobIdField;
     private TextBoxComponent spawnCountField;
     private FlowLayout positionsList;
+    private ScrollContainer<FlowLayout> positionsScroll;
     private TextBoxComponent addXField;
     private TextBoxComponent addYField;
     private TextBoxComponent addZField;
@@ -174,9 +179,12 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
         content.child(posHeaderRow);
 
         positionsList = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        positionsList.gap(2);
+        positionsScroll = Containers.verticalScroll(Sizing.fill(100), Sizing.fixed(POS_ROW_HEIGHT), positionsList);
+        positionsScroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
+        positionsScroll.scrollbarThiccness(4);
+        positionsScroll.scrollStep(POS_ROW_HEIGHT);
         rebuildPositionsList();
-        content.child(positionsList);
+        content.child(positionsScroll);
 
         content.child(buildAddRow());
 
@@ -184,19 +192,25 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
 
         // ACTION BUTTONS
         FlowLayout actions = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        actions.gap(6);
         ButtonComponent attrsBtn = Components.button(
             Component.literal(tr("gui.arenas_ld.mob_spawner.ui.attributes")),
             b -> openAttributesScreen()
         );
-        attrsBtn.sizing(Sizing.fill(50), Sizing.fixed(20));
+        attrsBtn.sizing(Sizing.fill(100), Sizing.fixed(20));
         ButtonComponent equipBtn = Components.button(
             Component.literal(tr("gui.arenas_ld.mob_spawner.ui.equipment")),
             b -> openEquipmentScreen()
         );
-        equipBtn.sizing(Sizing.fill(50), Sizing.fixed(20));
-        actions.child(attrsBtn);
-        actions.child(equipBtn);
+        equipBtn.sizing(Sizing.fill(100), Sizing.fixed(20));
+
+        FlowLayout leftCell = Containers.verticalFlow(Sizing.fill(50), Sizing.content());
+        leftCell.padding(Insets.of(0, 0, 0, 3));
+        leftCell.child(attrsBtn);
+        FlowLayout rightCell = Containers.verticalFlow(Sizing.fill(50), Sizing.content());
+        rightCell.padding(Insets.of(0, 0, 3, 0));
+        rightCell.child(equipBtn);
+        actions.child(leftCell);
+        actions.child(rightCell);
         content.child(actions);
 
         return content;
@@ -238,21 +252,29 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
     private void rebuildPositionsList() {
         positionsList.clearChildren();
         if (spawnOffsets.isEmpty()) {
+            FlowLayout emptyRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(POS_ROW_HEIGHT));
+            emptyRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+            emptyRow.padding(Insets.of(0, 0, 6, 6));
             LabelComponent empty = Components.label(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.no_positions")));
             empty.color(Color.ofArgb(INK_DIM));
-            positionsList.child(empty);
-            return;
+            emptyRow.child(empty);
+            positionsList.child(emptyRow);
+        } else {
+            for (int i = 0; i < spawnOffsets.size(); i++) {
+                positionsList.child(buildPositionRow(i));
+            }
         }
-        for (int i = 0; i < spawnOffsets.size(); i++) {
-            positionsList.child(buildPositionRow(i));
+        if (positionsScroll != null) {
+            int visibleRows = Math.min(Math.max(spawnOffsets.size(), 1), POS_MAX_VISIBLE);
+            positionsScroll.verticalSizing(Sizing.fixed(visibleRows * POS_ROW_HEIGHT));
         }
     }
 
     private FlowLayout buildPositionRow(int index) {
         BlockPos offset = spawnOffsets.get(index);
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(18));
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(POS_ROW_HEIGHT));
         row.surface(index % 2 == 0 ? Surface.flat(ROW_BG) : Surface.flat(ROW_BG_ALT));
-        row.padding(Insets.of(2, 6, 2, 6));
+        row.padding(Insets.of(0, 0, 6, 6));
         row.gap(6);
         row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
@@ -269,6 +291,7 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
             spawnOffsets.remove(capturedIndex);
             rebuildPositionsList();
         });
+        removeBtn.sizing(Sizing.content(), Sizing.fixed(16));
         row.child(removeBtn);
         return row;
     }

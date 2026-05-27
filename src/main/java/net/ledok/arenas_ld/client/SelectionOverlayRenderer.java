@@ -22,14 +22,13 @@ import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -73,18 +72,18 @@ public final class SelectionOverlayRenderer {
         PoseStack poseStack = context.matrixStack();
         poseStack.pushPose();
         poseStack.translate(-cam.x, -cam.y, -cam.z);
+        Matrix4f matrix = poseStack.last().pose();
 
         RenderSystem.disableDepthTest();
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.lineWidth(2.5F);
-        RenderSystem.setShader(GameRenderer::getRendertypeLinesShader);
+        RenderSystem.lineWidth(2.0F);
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
 
         BufferBuilder buffer = Tesselator.getInstance()
-            .begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_NORMAL);
+            .begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR);
         for (Box box : boxes) {
-            LevelRenderer.renderLineBox(poseStack, buffer, new AABB(box.pos()),
-                box.color()[0], box.color()[1], box.color()[2], ALPHA);
+            addBoxEdges(buffer, matrix, box.pos(), box.color());
         }
         MeshData mesh = buffer.build();
         if (mesh != null) {
@@ -95,6 +94,41 @@ public final class SelectionOverlayRenderer {
         RenderSystem.enableDepthTest();
         RenderSystem.disableBlend();
         poseStack.popPose();
+    }
+
+    private static void addBoxEdges(BufferBuilder buffer, Matrix4f matrix, BlockPos pos, float[] color) {
+        float x0 = pos.getX();
+        float y0 = pos.getY();
+        float z0 = pos.getZ();
+        float x1 = x0 + 1;
+        float y1 = y0 + 1;
+        float z1 = z0 + 1;
+        float r = color[0];
+        float g = color[1];
+        float b = color[2];
+
+        // bottom face
+        edge(buffer, matrix, x0, y0, z0, x1, y0, z0, r, g, b);
+        edge(buffer, matrix, x1, y0, z0, x1, y0, z1, r, g, b);
+        edge(buffer, matrix, x1, y0, z1, x0, y0, z1, r, g, b);
+        edge(buffer, matrix, x0, y0, z1, x0, y0, z0, r, g, b);
+        // top face
+        edge(buffer, matrix, x0, y1, z0, x1, y1, z0, r, g, b);
+        edge(buffer, matrix, x1, y1, z0, x1, y1, z1, r, g, b);
+        edge(buffer, matrix, x1, y1, z1, x0, y1, z1, r, g, b);
+        edge(buffer, matrix, x0, y1, z1, x0, y1, z0, r, g, b);
+        // verticals
+        edge(buffer, matrix, x0, y0, z0, x0, y1, z0, r, g, b);
+        edge(buffer, matrix, x1, y0, z0, x1, y1, z0, r, g, b);
+        edge(buffer, matrix, x1, y0, z1, x1, y1, z1, r, g, b);
+        edge(buffer, matrix, x0, y0, z1, x0, y1, z1, r, g, b);
+    }
+
+    private static void edge(BufferBuilder buffer, Matrix4f matrix,
+                             float ax, float ay, float az, float bx, float by, float bz,
+                             float r, float g, float b) {
+        buffer.addVertex(matrix, ax, ay, az).setColor(r, g, b, ALPHA);
+        buffer.addVertex(matrix, bx, by, bz).setColor(r, g, b, ALPHA);
     }
 
     private static List<Box> collectBoxes(Minecraft mc, LocalPlayer player) {
