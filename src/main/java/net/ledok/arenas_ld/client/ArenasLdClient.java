@@ -31,7 +31,7 @@ public class ArenasLdClient implements ClientModInitializer {
 
         BlockRenderLayerMap.INSTANCE.putBlock(BlockRegistry.PHASE_BLOCK, RenderType.translucent());
 
-        ConfiguratorOverlayRenderer.register();
+        SelectionOverlayRenderer.register();
 
         ClientPlayNetworking.registerGlobalReceiver(DungeonControllerSnapshotPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> {

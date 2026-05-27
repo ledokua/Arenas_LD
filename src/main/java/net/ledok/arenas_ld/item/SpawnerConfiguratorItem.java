@@ -143,13 +143,16 @@ public class SpawnerConfiguratorItem extends Item {
                 BlockPos spawnOffset = clickedPos.above().subtract(selectedSpawnerPos);
                 EntityDefinition def = mobSpawner.getEntityDefinition();
                 java.util.List<BlockPos> offsets = new java.util.ArrayList<>(def.spawnOffsets());
+                int spawnCount = def.spawnCount();
                 if (offsets.remove(spawnOffset)) {
+                    spawnCount = Math.max(1, spawnCount - 1);
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_removed", clickedPos.toShortString()));
                 } else {
                     offsets.add(spawnOffset);
+                    spawnCount = Math.min(64, spawnCount + 1);
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_added", clickedPos.toShortString(), offsets.size()));
                 }
-                mobSpawner.setEntityDefinition(def.withSpawnOffsets(offsets));
+                mobSpawner.setEntityDefinition(def.withSpawnOffsets(offsets).withSpawnCount(spawnCount));
                 break;
             default:
                 return InteractionResult.PASS;

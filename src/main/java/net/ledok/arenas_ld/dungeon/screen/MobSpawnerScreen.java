@@ -51,7 +51,7 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
     private static final int GOOD       = 0xFF86D36C;
 
     private TextBoxComponent mobIdField;
-    private LabelComponent spawnCountLabel;
+    private TextBoxComponent spawnCountField;
     private FlowLayout positionsList;
     private TextBoxComponent addXField;
     private TextBoxComponent addYField;
@@ -209,29 +209,30 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
         stepper.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
         stepper.padding(Insets.of(2, 4, 2, 4));
 
-        ButtonComponent minus = stepBtn("−", b -> {
-            if (spawnCount > 1) {
-                spawnCount--;
-                spawnCountLabel.text(Component.literal(String.valueOf(spawnCount)));
+        ButtonComponent minus = stepBtn("−", b -> adjustCount(-1));
+
+        spawnCountField = Components.textBox(Sizing.fixed(30), String.valueOf(spawnCount));
+        spawnCountField.verticalSizing(Sizing.fixed(16));
+        spawnCountField.onChanged().subscribe(value -> {
+            try {
+                spawnCount = Math.max(1, Math.min(64, Integer.parseInt(value.trim())));
+            } catch (NumberFormatException ignored) {
             }
         });
 
-        spawnCountLabel = Components.label(Component.literal(String.valueOf(spawnCount)));
-        spawnCountLabel.color(Color.ofArgb(INK));
-        spawnCountLabel.sizing(Sizing.fixed(28), Sizing.content());
-        spawnCountLabel.horizontalTextAlignment(HorizontalAlignment.CENTER);
-
-        ButtonComponent plus = stepBtn("+", b -> {
-            if (spawnCount < 64) {
-                spawnCount++;
-                spawnCountLabel.text(Component.literal(String.valueOf(spawnCount)));
-            }
-        });
+        ButtonComponent plus = stepBtn("+", b -> adjustCount(1));
 
         stepper.child(minus);
-        stepper.child(spawnCountLabel);
+        stepper.child(spawnCountField);
         stepper.child(plus);
         return stepper;
+    }
+
+    private void adjustCount(int delta) {
+        spawnCount = Math.max(1, Math.min(64, spawnCount + delta));
+        if (spawnCountField != null) {
+            spawnCountField.text(String.valueOf(spawnCount));
+        }
     }
 
     private void rebuildPositionsList() {
@@ -356,8 +357,8 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
             mobIdField.text(menu.getMobId());
         }
         spawnCount = menu.getSpawnCount();
-        if (spawnCountLabel != null) {
-            spawnCountLabel.text(Component.literal(String.valueOf(spawnCount)));
+        if (spawnCountField != null) {
+            spawnCountField.text(String.valueOf(spawnCount));
         }
         spawnOffsets.clear();
         spawnOffsets.addAll(menu.getSpawnOffsets());
