@@ -18,16 +18,17 @@ public record TierConfig(
     double damageMultiplier,
     String perPlayerLootTable,
     int dungeonTimeSeconds,
-    boolean hardcoreDefault
+    boolean hardcoreDefault,
+    boolean enabled
 ) {
     public static final TierConfig EASY_DEFAULT =
-        new TierConfig(0.75, 0.75, "", 600, false);
+        new TierConfig(0.75, 0.75, "", 600, false, true);
     public static final TierConfig NORMAL_DEFAULT =
-        new TierConfig(1.0, 1.0, "", 600, false);
+        new TierConfig(1.0, 1.0, "", 600, false, true);
     public static final TierConfig HARD_DEFAULT =
-        new TierConfig(1.5, 1.5, "", 600, false);
+        new TierConfig(1.5, 1.5, "", 600, false, true);
     public static final TierConfig NIGHTMARE_DEFAULT =
-        new TierConfig(2.5, 2.5, "", 600, true);
+        new TierConfig(2.5, 2.5, "", 600, true, true);
 
     public static final Codec<TierConfig> CODEC = RecordCodecBuilder.create(instance ->
         instance.group(
@@ -35,7 +36,8 @@ public record TierConfig(
             Codec.DOUBLE.fieldOf("damageMultiplier").forGetter(TierConfig::damageMultiplier),
             Codec.STRING.fieldOf("perPlayerLootTable").forGetter(TierConfig::perPlayerLootTable),
             Codec.INT.fieldOf("dungeonTimeSeconds").forGetter(TierConfig::dungeonTimeSeconds),
-            Codec.BOOL.fieldOf("hardcoreDefault").forGetter(TierConfig::hardcoreDefault)
+            Codec.BOOL.fieldOf("hardcoreDefault").forGetter(TierConfig::hardcoreDefault),
+            Codec.BOOL.optionalFieldOf("enabled", true).forGetter(TierConfig::enabled)
         ).apply(instance, TierConfig::new)
     );
 

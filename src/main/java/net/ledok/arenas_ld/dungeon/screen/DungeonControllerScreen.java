@@ -827,19 +827,24 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     }
 
     private FlowLayout ownerTierControls(boolean isOwner) {
-        ButtonComponent easy = segmentButton("EASY", tierColor(DifficultyTier.EASY), isOwner,
+        ButtonComponent easy = segmentButton("EASY", tierColor(DifficultyTier.EASY), isOwner && isTierEnabled(DifficultyTier.EASY),
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.EASY,
             b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.EASY)));
-        ButtonComponent normal = segmentButton("NORMAL", tierColor(DifficultyTier.NORMAL), isOwner,
+        ButtonComponent normal = segmentButton("NORMAL", tierColor(DifficultyTier.NORMAL), isOwner && isTierEnabled(DifficultyTier.NORMAL),
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NORMAL,
             b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
-        ButtonComponent hard = segmentButton("HARD", tierColor(DifficultyTier.HARD), isOwner,
+        ButtonComponent hard = segmentButton("HARD", tierColor(DifficultyTier.HARD), isOwner && isTierEnabled(DifficultyTier.HARD),
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.HARD,
             b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
-        ButtonComponent nightmare = segmentButton("NIGHTMARE", tierColor(DifficultyTier.NIGHTMARE), isOwner,
+        ButtonComponent nightmare = segmentButton("NIGHTMARE", tierColor(DifficultyTier.NIGHTMARE), isOwner && isTierEnabled(DifficultyTier.NIGHTMARE),
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NIGHTMARE,
             b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NIGHTMARE)));
         return segmentedControl(easy, normal, hard, nightmare);
+    }
+
+    private boolean isTierEnabled(DifficultyTier tier) {
+        net.ledok.arenas_ld.dungeon.run.TierConfig config = menu.getTiers().get(tier);
+        return config == null || config.enabled();
     }
 
     private FlowLayout ownerVisibilityControls(boolean isOwner) {

@@ -37,7 +37,7 @@ class TierConfigTest {
 
     @Test
     void codecRoundTripsPopulatedInstance() {
-        TierConfig original = new TierConfig(2.7, 3.1, "arenas_ld:dungeon/test_table", 450, true);
+        TierConfig original = new TierConfig(2.7, 3.1, "arenas_ld:dungeon/test_table", 450, true, true);
         Tag encoded = TierConfig.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow();
         DataResult<TierConfig> decoded = TierConfig.CODEC.parse(NbtOps.INSTANCE, encoded);
         assertEquals(original, decoded.getOrThrow());
@@ -45,7 +45,7 @@ class TierConfigTest {
 
     @Test
     void codecRoundTripsEmptyLootTable() {
-        TierConfig original = new TierConfig(1.0, 1.0, "", 600, false);
+        TierConfig original = new TierConfig(1.0, 1.0, "", 600, false, true);
         Tag encoded = TierConfig.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow();
         TierConfig decoded = TierConfig.CODEC.parse(NbtOps.INSTANCE, encoded).getOrThrow();
         assertEquals("", decoded.perPlayerLootTable());

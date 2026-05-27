@@ -432,6 +432,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         Lobby lobby = lobbyOpt.get();
         if (!lobby.isOwner(player.getUUID())) return false;
         if (lobby.status() == LobbyStatus.IN_RUN) return false;
+        if (!tierConfigs.getOrDefault(tier, TierConfig.defaultFor(tier)).enabled()) return false;
         replaceLobby(lobby.withTier(tier));
         return true;
     }

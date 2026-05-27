@@ -24,7 +24,6 @@ import net.ledok.arenas_ld.dungeon.packet.SetInviteExpiryTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
-import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -32,7 +31,6 @@ import net.minecraft.world.entity.player.Inventory;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -74,7 +72,6 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     private final Map<BlockPos, DungeonControllerAdminData.InstanceRun> runningInstances = new HashMap<>();
     private final Map<BlockPos, FlowLayout> statusBadges = new HashMap<>();
     private final Map<DifficultyTier, TierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
-    private final Map<DifficultyTier, List<LeaderboardEntry>> leaderboards = new EnumMap<>(DifficultyTier.class);
 
     private Tab currentTab = Tab.INSTANCES;
     private String footerError;
@@ -101,6 +98,8 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     private final Map<DifficultyTier, String> damageInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> lootInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> timeInputs = new EnumMap<>(DifficultyTier.class);
+    private final Map<DifficultyTier, Boolean> hardcoreInputs = new EnumMap<>(DifficultyTier.class);
+    private final Map<DifficultyTier, Boolean> enabledInputs = new EnumMap<>(DifficultyTier.class);
 
     public DungeonControllerAdminScreen(DungeonControllerAdminScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
@@ -567,119 +566,213 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         onChange.accept(value);
     }
 
-    private FlowLayout numberFieldRow(String labelKey, String initial, java.util.function.Consumer<String> consumer) {
-        FlowLayout row = rowPanel(false);
-        row.gap(6);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-
-        LabelComponent label = Components.label(Component.translatable(labelKey));
-        label.color(Color.ofArgb(INK_MID));
-        label.horizontalSizing(Sizing.fixed(180));
-        row.child(label);
-
-        TextBoxComponent field = Components.textBox(Sizing.fixed(80), initial);
-        field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(consumer::accept);
-        row.child(field);
-        return row;
-    }
-
     private void buildTierTab(DifficultyTier tier) {
         TierConfig config = tierConfigs.getOrDefault(tier, TierConfig.defaultFor(tier));
-        contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller_admin.tier_header", tier.name()), null));
-        FlowLayout summary = rowPanel(true);
-        summary.gap(8);
-        summary.child(fixedBadge(Component.literal("HP x" + trimDouble(config.healthMultiplier())), 96, GOOD));
-        summary.child(fixedBadge(Component.literal("DMG x" + trimDouble(config.damageMultiplier())), 104, DANGER));
-        summary.child(fixedBadge(Component.literal(config.dungeonTimeSeconds() + "s"), 72, INFO));
-        summary.child(fixedBadge(Component.literal(config.hardcoreDefault() ? "HC DEFAULT" : "SAFE DEFAULT"), 118, config.hardcoreDefault() ? WARN : INK_MID));
-        contentArea.child(summary);
+        String tierName = titleCase(tier.name());
+        boolean enabled = enabledInputs.getOrDefault(tier, config.enabled());
 
-        contentArea.child(numberFieldRow(
-            "gui.arenas_ld.dungeon_controller_admin.tier.health",
-            healthInputs.getOrDefault(tier, Double.toString(config.healthMultiplier())),
-            value -> healthInputs.put(tier, value)
-        ));
-        contentArea.child(numberFieldRow(
-            "gui.arenas_ld.dungeon_controller_admin.tier.damage",
-            damageInputs.getOrDefault(tier, Double.toString(config.damageMultiplier())),
-            value -> damageInputs.put(tier, value)
-        ));
-        contentArea.child(textFieldRow(
-            "gui.arenas_ld.dungeon_controller_admin.tier.loot",
-            lootInputs.getOrDefault(tier, config.perPlayerLootTable()),
-            value -> lootInputs.put(tier, value)
-        ));
-        contentArea.child(numberFieldRow(
-            "gui.arenas_ld.dungeon_controller_admin.tier.time",
-            timeInputs.getOrDefault(tier, Integer.toString(config.dungeonTimeSeconds())),
-            value -> timeInputs.put(tier, value)
-        ));
-
-        ButtonComponent hardcore = smallButton(Component.translatable(config.hardcoreDefault()
-            ? "gui.arenas_ld.dungeon_controller_admin.hardcore.on"
-            : "gui.arenas_ld.dungeon_controller_admin.hardcore.off"), b -> {
-            TierConfig current = tierConfigs.getOrDefault(tier, TierConfig.defaultFor(tier));
-            tierConfigs.put(tier, new TierConfig(
-                current.healthMultiplier(),
-                current.damageMultiplier(),
-                current.perPlayerLootTable(),
-                current.dungeonTimeSeconds(),
-                !current.hardcoreDefault()
-            ));
-            syncTierInputs(tier, tierConfigs.get(tier));
-            rebuildUi();
-        });
-        contentArea.child(lineWithLabel("gui.arenas_ld.dungeon_controller_admin.tier.hardcore", hardcore));
-
+        contentArea.child(tierBanner(tier, tierName));
         contentArea.child(spacer(4));
-        contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller_admin.leaderboard"), topEntriesCount(tier)));
 
-        List<LeaderboardEntry> topEntries = leaderboards.getOrDefault(tier, List.of()).stream()
-            .sorted(Comparator.comparingInt(LeaderboardEntry::timeSeconds))
-            .limit(4)
-            .toList();
-
-        if (topEntries.isEmpty()) {
-            contentArea.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller_admin.leaderboard.empty")));
-        } else {
-            for (int i = 0; i < topEntries.size(); i++) {
-                LeaderboardEntry entry = topEntries.get(i);
-                contentArea.child(leaderboardRow(i, entry));
+        contentArea.child(togglePanel(
+            "TIER AVAILABILITY",
+            tierName + " appears in the lobby tier picker and is selectable.",
+            enabled ? "ENABLED" : "DISABLED",
+            enabled ? GOOD : INK_DIM,
+            GOOD,
+            () -> enabledInputs.getOrDefault(tier, config.enabled()),
+            () -> {
+                enabledInputs.put(tier, !enabledInputs.getOrDefault(tier, config.enabled()));
+                rebuildUi();
             }
-        }
+        ));
 
-        footerActions.child(smallButton(Component.translatable("gui.arenas_ld.dungeon_controller_admin.button.apply_all"), b -> applyTier(tier)));
+        contentArea.child(spacer(6));
+        contentArea.child(labelLiteral("TIER PARAMETERS", INK_DIM));
+        contentArea.child(spacer(2));
+
+        contentArea.child(twoColumnRow(
+            stepperFieldDouble("HEALTH MULTIPLIER", "enemy HP × N", "×", 0.25, 0.0, 100.0,
+                healthInputs.getOrDefault(tier, trimDouble(config.healthMultiplier())), v -> healthInputs.put(tier, v)),
+            stepperFieldDouble("DAMAGE MULTIPLIER", "enemy DMG × N", "×", 0.25, 0.0, 100.0,
+                damageInputs.getOrDefault(tier, trimDouble(config.damageMultiplier())), v -> damageInputs.put(tier, v))
+        ));
+
+        contentArea.child(spacer(6));
+        contentArea.child(twoColumnRow(
+            lootField(lootInputs.getOrDefault(tier, config.perPlayerLootTable()), v -> lootInputs.put(tier, v)),
+            stepperField("RUN TIME LIMIT", "seconds", "S", 30, 1, 86400,
+                timeInputs.getOrDefault(tier, Integer.toString(config.dungeonTimeSeconds())), v -> timeInputs.put(tier, v))
+        ));
+
+        contentArea.child(spacer(6));
+        contentArea.child(togglePanel(
+            "HARDCORE DEFAULT",
+            "New " + tierName + " lobbies start with Hardcore enabled.",
+            null,
+            0,
+            DANGER,
+            () -> hardcoreInputs.getOrDefault(tier, config.hardcoreDefault()),
+            () -> {
+                hardcoreInputs.put(tier, !hardcoreInputs.getOrDefault(tier, config.hardcoreDefault()));
+                rebuildUi();
+            }
+        ));
+
+        contentArea.child(spacer(8));
+        FlowLayout applyRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        applyRow.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
+        ButtonComponent apply = smallButton(Component.literal("APPLY " + tier.name() + " TIER"), b -> applyTier(tier));
+        apply.horizontalSizing(Sizing.fixed(150));
+        applyRow.child(apply);
+        contentArea.child(applyRow);
     }
 
-    private FlowLayout textFieldRow(String labelKey, String initial, java.util.function.Consumer<String> consumer) {
-        FlowLayout row = rowPanel(false);
-        row.gap(6);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private FlowLayout tierBanner(DifficultyTier tier, String tierName) {
+        int color = tierColor(tier);
+        FlowLayout banner = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
+        banner.surface(Surface.flat((color & 0x00FFFFFF) | 0x1F000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
+        banner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
+        accent.surface(Surface.flat(color));
+        banner.child(accent);
+        FlowLayout inner = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        inner.padding(Insets.of(0, 0, 10, 10));
+        inner.gap(8);
+        inner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        inner.child(badge(Component.literal(tier.name() + " TIER"), color));
+        inner.child(labelLiteral("Affects all " + tierName + " runs across all instances.", INK));
+        banner.child(inner);
+        return banner;
+    }
 
-        LabelComponent label = Components.label(Component.translatable(labelKey));
-        label.color(Color.ofArgb(INK_MID));
-        label.horizontalSizing(Sizing.fixed(180));
-        row.child(label);
+    private FlowLayout togglePanel(String caption, String description, String stateLabel, int stateColor, int onColor,
+                                   java.util.function.BooleanSupplier on, Runnable onToggle) {
+        FlowLayout panel = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        panel.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
+        panel.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
+        accent.surface(Surface.flat(onColor));
+        panel.child(accent);
 
+        FlowLayout inner = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        inner.padding(Insets.of(8, 8, 10, 10));
+        inner.gap(8);
+        inner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        FlowLayout text = Containers.verticalFlow(Sizing.expand(), Sizing.content());
+        text.gap(2);
+        text.child(labelLiteral(caption, INK_DIM));
+        text.child(labelLiteral(description, INK));
+        inner.child(text);
+
+        if (stateLabel != null) {
+            inner.child(labelLiteral(stateLabel, stateColor));
+        }
+        inner.child(toggleSwitch(onColor, on, onToggle));
+        panel.child(inner);
+        return panel;
+    }
+
+    private ButtonComponent toggleSwitch(int onColor, java.util.function.BooleanSupplier on, Runnable onToggle) {
+        ButtonComponent button = Components.button(Component.empty(), b -> onToggle.run());
+        button.sizing(Sizing.fixed(38), Sizing.fixed(18));
+        button.renderer((context, rendered, delta) -> {
+            boolean isOn = on.getAsBoolean();
+            int x1 = rendered.getX();
+            int y1 = rendered.getY();
+            int w = rendered.getWidth();
+            int h = rendered.getHeight();
+            int track = isOn ? ((onColor & 0x00FFFFFF) | 0x55000000) : PANEL_2;
+            int border = isOn ? onColor : HAIRLINE;
+            context.fill(x1, y1, x1 + w, y1 + h, track);
+            context.drawRectOutline(x1, y1, w, h, border);
+            int knobW = w / 2 - 3;
+            int knobX = isOn ? (x1 + w - knobW - 2) : (x1 + 2);
+            int knobColor = isOn ? onColor : INK;
+            context.fill(knobX, y1 + 2, knobX + knobW, y1 + h - 2, knobColor);
+        });
+        return button;
+    }
+
+    private FlowLayout lootField(String initial, java.util.function.Consumer<String> onChange) {
+        FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        col.gap(4);
+        FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        head.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        head.child(labelLiteral("LOOT TABLE", INK_DIM));
+        col.child(head);
+
+        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
+        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        fieldWrap.gap(4);
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
+        accent.surface(Surface.flat(ACCENT));
+        fieldWrap.child(accent);
+        FlowLayout idCell = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        idCell.padding(Insets.of(0, 0, 4, 0));
+        idCell.child(labelLiteral("id:", INK_DIM));
+        fieldWrap.child(idCell);
         TextBoxComponent field = Components.textBox(Sizing.expand(), initial);
         field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(consumer::accept);
-        row.child(field);
-        return row;
+        field.onChanged().subscribe(onChange::accept);
+        fieldWrap.child(field);
+        col.child(fieldWrap);
+        return col;
     }
 
-    private FlowLayout lineWithLabel(String labelKey, ButtonComponent component) {
-        FlowLayout row = rowPanel(false);
-        row.gap(6);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private FlowLayout stepperFieldDouble(String caption, String hint, String unit, double step, double min, double max,
+                                          String initial, java.util.function.Consumer<String> onChange) {
+        FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        col.gap(4);
 
-        LabelComponent label = Components.label(Component.translatable(labelKey));
-        label.color(Color.ofArgb(INK_MID));
-        label.horizontalSizing(Sizing.fixed(180));
-        row.child(label);
-        row.child(component);
-        return row;
+        FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        head.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        head.child(labelLiteral(caption, INK_DIM));
+        head.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+        LabelComponent hintLabel = Components.label(Component.literal(hint).withStyle(net.minecraft.ChatFormatting.ITALIC));
+        hintLabel.color(Color.ofArgb(INK_DIM));
+        head.child(hintLabel);
+        col.child(head);
+
+        FlowLayout stepper = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        stepper.gap(6);
+        stepper.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(22));
+        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
+        accent.surface(Surface.flat(ACCENT));
+        fieldWrap.child(accent);
+        TextBoxComponent field = Components.textBox(Sizing.expand(), initial);
+        field.verticalSizing(Sizing.fixed(18));
+        field.onChanged().subscribe(onChange::accept);
+        fieldWrap.child(field);
+        FlowLayout unitCell = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        unitCell.padding(Insets.of(0, 0, 6, 6));
+        unitCell.child(labelLiteral(unit, INK_DIM));
+        fieldWrap.child(unitCell);
+
+        stepper.child(stepButton("-", () -> stepValueDouble(field, -step, min, max, onChange)));
+        stepper.child(fieldWrap);
+        stepper.child(stepButton("+", () -> stepValueDouble(field, step, min, max, onChange)));
+        col.child(stepper);
+        return col;
+    }
+
+    private void stepValueDouble(TextBoxComponent field, double delta, double min, double max, java.util.function.Consumer<String> onChange) {
+        double current;
+        try {
+            current = Double.parseDouble(field.getValue().trim());
+        } catch (Exception ignored) {
+            current = min;
+        }
+        double next = Math.max(min, Math.min(max, current + delta));
+        String value = trimDouble(next);
+        field.text(value);
+        onChange.accept(value);
     }
 
     private ButtonComponent smallButton(Component text, java.util.function.Consumer<ButtonComponent> action) {
@@ -764,20 +857,6 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         return row;
     }
 
-    private FlowLayout leaderboardRow(int index, LeaderboardEntry entry) {
-        FlowLayout row = rowPanel(index % 2 == 0);
-        row.gap(8);
-        row.child(fixedText(Component.literal("#" + (index + 1)), 30, ACCENT, HorizontalAlignment.LEFT));
-
-        FlowLayout name = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        name.child(labelLiteral(entry.playerName(), INK));
-        name.child(labelLiteral("RUNNER", INK_DIM));
-        row.child(name);
-
-        row.child(fixedBadge(Component.literal(entry.timeSeconds() + "s"), 70, INFO));
-        return row;
-    }
-
     private FlowLayout badge(Component text, int color) {
         FlowLayout tag = Containers.horizontalFlow(Sizing.content(), Sizing.content());
         tag.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
@@ -789,25 +868,10 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         return tag;
     }
 
-    private FlowLayout rowPanel(boolean alternate) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.surface(Surface.flat(alternate ? ROW_BG_ALT : ROW_BG).and(Surface.outline(HAIRLINE)));
-        row.padding(Insets.of(6));
-        return row;
-    }
-
     private LabelComponent headerCell(String text, Sizing sizing) {
         LabelComponent label = Components.label(Component.literal(text));
         label.color(Color.ofArgb(INK_DIM));
         label.horizontalSizing(sizing);
-        return label;
-    }
-
-    private LabelComponent fixedText(Component text, int width, int color, HorizontalAlignment alignment) {
-        LabelComponent label = Components.label(text);
-        label.color(Color.ofArgb(color));
-        label.horizontalSizing(Sizing.fixed(width));
-        label.horizontalTextAlignment(alignment);
         return label;
     }
 
@@ -847,10 +911,6 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         return smallMeta(text, INK_DIM);
     }
 
-    private int topEntriesCount(DifficultyTier tier) {
-        return (int) leaderboards.getOrDefault(tier, List.of()).stream().limit(4).count();
-    }
-
     private FlowLayout spacer(int px) {
         FlowLayout spacer = Containers.verticalFlow(Sizing.fill(100), Sizing.fixed(px));
         spacer.surface(Surface.BLANK);
@@ -888,7 +948,9 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
             return;
         }
 
-        TierConfig updated = new TierConfig(health, damage, loot, time, current.hardcoreDefault());
+        boolean hardcore = hardcoreInputs.getOrDefault(tier, current.hardcoreDefault());
+        boolean enabled = enabledInputs.getOrDefault(tier, current.enabled());
+        TierConfig updated = new TierConfig(health, damage, loot, time, hardcore, enabled);
         tierConfigs.put(tier, updated);
         footerError = null;
         ClientPlayNetworking.send(new SetTierConfigPayload(menu.getBlockPos(), tier, updated));
@@ -931,8 +993,6 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         runningInstances.putAll(menu.getRunningInstances());
         tierConfigs.clear();
         tierConfigs.putAll(menu.getTierConfigs());
-        leaderboards.clear();
-        leaderboards.putAll(menu.getTopLeaderboards());
 
         cooldownInput = Integer.toString(menu.getCooldownTicks() / 20);
         closeTimerInput = Integer.toString(menu.getCloseTimerSeconds());
@@ -945,10 +1005,12 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     }
 
     private void syncTierInputs(DifficultyTier tier, TierConfig config) {
-        healthInputs.put(tier, Double.toString(config.healthMultiplier()));
-        damageInputs.put(tier, Double.toString(config.damageMultiplier()));
+        healthInputs.put(tier, trimDouble(config.healthMultiplier()));
+        damageInputs.put(tier, trimDouble(config.damageMultiplier()));
         lootInputs.put(tier, config.perPlayerLootTable());
         timeInputs.put(tier, Integer.toString(config.dungeonTimeSeconds()));
+        hardcoreInputs.put(tier, config.hardcoreDefault());
+        enabledInputs.put(tier, config.enabled());
     }
 
     public boolean matchesController(BlockPos blockPos) {
