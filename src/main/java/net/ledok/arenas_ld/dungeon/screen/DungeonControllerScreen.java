@@ -513,16 +513,14 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         FlowLayout summaryAccent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
         summaryAccent.surface(Surface.flat(ACCENT));
         summary.child(summaryAccent);
-        FlowLayout summaryCols = Containers.horizontalFlow(Sizing.expand(), Sizing.fill(100));
-        summaryCols.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        summaryCols.padding(Insets.of(0, 0, 10, 10));
-        summaryCols.gap(8);
-        summaryCols.child(infoColumn("OWNER", summaryOwnerLabel));
-        summaryCols.child(infoColumn("TIER", summaryTierValue));
-        summaryCols.child(infoColumn("MEMBERS", summaryMembersLabel));
-        summaryCols.child(infoColumn("VISIBILITY", summaryVisibilityValue));
-        summaryCols.child(infoColumn("HARDCORE", summaryHardcoreValue));
-        summary.child(summaryCols);
+        FlowLayout summaryPad = Containers.verticalFlow(Sizing.fixed(9), Sizing.fill(100));
+        summaryPad.surface(Surface.BLANK);
+        summary.child(summaryPad);
+        summary.child(infoColumn("OWNER", summaryOwnerLabel, Sizing.fill(24)));
+        summary.child(infoColumn("TIER", summaryTierValue, Sizing.fill(18)));
+        summary.child(infoColumn("MEMBERS", summaryMembersLabel, Sizing.fill(18)));
+        summary.child(infoColumn("VISIBILITY", summaryVisibilityValue, Sizing.fill(18)));
+        summary.child(infoColumn("HARDCORE", summaryHardcoreValue, Sizing.fill(18)));
         contentArea.child(summary);
         contentArea.child(sectionHeader(Component.literal("MEMBERS"), lobby.members().size()));
         contentArea.child(memberHeaderRow(isOwner));
@@ -795,8 +793,8 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         return row;
     }
 
-    private FlowLayout infoColumn(String caption, LabelComponent value) {
-        FlowLayout col = Containers.verticalFlow(Sizing.expand(), Sizing.content());
+    private FlowLayout infoColumn(String caption, LabelComponent value, Sizing width) {
+        FlowLayout col = Containers.verticalFlow(width, Sizing.content());
         col.gap(3);
         LabelComponent captionLabel = Components.label(Component.literal(caption));
         captionLabel.color(Color.ofArgb(INK_DIM));
