@@ -464,22 +464,29 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         boolean isFull = lobby.isFull(menu.getMaxPartySize());
         boolean inRun = lobby.status() == LobbyStatus.IN_RUN;
 
-        FlowLayout actionCell = Containers.horizontalFlow(Sizing.fixed(72), Sizing.content());
+        FlowLayout actionCell = Containers.horizontalFlow(Sizing.fixed(84), Sizing.content());
         actionCell.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
-        if (lobby.visibility() == LobbyVisibility.PUBLIC) {
-            ButtonComponent join = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.join"), b -> {
+        ButtonComponent actionButton;
+        if (inRun) {
+            actionButton = smallButton(Component.literal("RUNNING"), b -> {});
+            actionButton.active(false);
+        } else if (isFull) {
+            actionButton = smallButton(Component.literal("FULL"), b -> {});
+            actionButton.active(false);
+        } else if (lobby.visibility() == LobbyVisibility.PUBLIC) {
+            actionButton = smallButton(Component.literal("JOIN"), b -> {
                 footerError = null;
                 ClientPlayNetworking.send(new JoinLobbyPayload(menu.getBlockPos(), lobbyId));
             });
-            join.active(!isMine && !isFull && !inRun && ownLobby.isEmpty());
-            actionCell.child(join);
+            actionButton.active(!isMine && ownLobby.isEmpty());
         } else {
-            ButtonComponent req = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.request_invite"), b ->
+            actionButton = smallButton(Component.literal("REQUEST"), b ->
                 footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.invite_only").getString()
             );
-            req.active(!isMine && !inRun && !isFull);
-            actionCell.child(req);
+            actionButton.active(!isMine);
         }
+        actionButton.horizontalSizing(Sizing.fill(100));
+        actionCell.child(actionButton);
         row.child(actionCell);
         return row;
     }
@@ -712,7 +719,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         row.child(headerCell("TIER", Sizing.fixed(70)));
         row.child(headerCell("VISIBILITY", Sizing.fixed(78)));
         row.child(headerCell("STATUS", Sizing.fixed(82)));
-        row.child(headerCell("", Sizing.fixed(72)));
+        row.child(headerCell("", Sizing.fixed(84)));
         return row;
     }
 
