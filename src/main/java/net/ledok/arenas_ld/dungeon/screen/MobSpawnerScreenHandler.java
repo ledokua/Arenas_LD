@@ -7,18 +7,29 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.List;
+
 public class MobSpawnerScreenHandler extends AbstractContainerMenu {
     private final BlockPos blockPos;
     private String mobId;
+    private int spawnCount;
+    private List<BlockPos> spawnOffsets;
 
     public MobSpawnerScreenHandler(int syncId, Inventory playerInventory, MobSpawnerData data) {
         super(ModScreenHandlers.MOB_SPAWNER_SCREEN_HANDLER, syncId);
         this.blockPos = data.blockPos();
         this.mobId = data.mobId();
+        this.spawnCount = data.spawnCount();
+        this.spawnOffsets = data.spawnOffsets();
     }
 
     public MobSpawnerScreenHandler(int syncId, Inventory playerInventory, net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity blockEntity) {
-        this(syncId, playerInventory, new MobSpawnerData(blockEntity.getBlockPos(), blockEntity.getEntityDefinition().mobId()));
+        this(syncId, playerInventory, new MobSpawnerData(
+            blockEntity.getBlockPos(),
+            blockEntity.getEntityDefinition().mobId(),
+            blockEntity.getEntityDefinition().spawnCount(),
+            blockEntity.getEntityDefinition().spawnOffsets()
+        ));
     }
 
     public BlockPos getBlockPos() {
@@ -29,8 +40,18 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
         return mobId;
     }
 
+    public int getSpawnCount() {
+        return spawnCount;
+    }
+
+    public List<BlockPos> getSpawnOffsets() {
+        return spawnOffsets;
+    }
+
     public void applyData(MobSpawnerData data) {
         this.mobId = data.mobId();
+        this.spawnCount = data.spawnCount();
+        this.spawnOffsets = data.spawnOffsets();
     }
 
     @Override

@@ -286,7 +286,10 @@ final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity spawner) {
-                    spawner.setEntityDefinition(spawner.getEntityDefinition().withMobId(payload.mobId()));
+                    spawner.setEntityDefinition(spawner.getEntityDefinition()
+                        .withMobId(payload.mobId())
+                        .withSpawnCount(payload.spawnCount())
+                        .withSpawnOffsets(payload.spawnOffsets()));
                     markDirtyAndSync(world, spawner);
                     broadcastMobSpawnerSnapshot(player, spawner);
                 }

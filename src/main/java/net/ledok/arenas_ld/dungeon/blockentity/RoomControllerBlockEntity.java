@@ -190,20 +190,21 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         int spawned = 0;
         for (BlockPos absolutePos : getSpawnerPositions()) {
             BlockEntity be = world.getBlockEntity(absolutePos);
-            LivingEntity entity = null;
             if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity newMobSpawner) {
-                entity = newMobSpawner.spawnSingleScaled(world, tier.healthMultiplier());
+                for (LivingEntity entity : newMobSpawner.spawnScaled(world, tier.healthMultiplier())) {
+                    trackSpawnedMob(entity.getUUID());
+                    spawned++;
+                }
             } else if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity newBossSpawner) {
-                entity = newBossSpawner.spawnSingleScaled(world, tier.healthMultiplier());
+                LivingEntity entity = newBossSpawner.spawnSingleScaled(world, tier.healthMultiplier());
+                if (entity != null) {
+                    trackSpawnedMob(entity.getUUID());
+                    spawned++;
+                }
             } else {
                 ArenasLdMod.LOGGER.warn(
                     "RoomController at {}: linked position {} is not a spawner (got {})",
                     worldPosition, absolutePos, be == null ? "null" : be.getClass().getSimpleName());
-                continue;
-            }
-            if (entity != null) {
-                trackSpawnedMob(entity.getUUID());
-                spawned++;
             }
         }
         if (spawned <= 0) {
