@@ -74,13 +74,17 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     }
 
     private static final class MemberRowRefs {
+        private final FlowLayout statusSquare;
+        private final LabelComponent statusGlyph;
+        private final LabelComponent connectionLabel;
         private final FlowLayout readyBadge;
-        private final FlowLayout onlineBadge;
         private final ButtonComponent kickButton;
 
-        private MemberRowRefs(FlowLayout readyBadge, FlowLayout onlineBadge, ButtonComponent kickButton) {
+        private MemberRowRefs(FlowLayout statusSquare, LabelComponent statusGlyph, LabelComponent connectionLabel, FlowLayout readyBadge, ButtonComponent kickButton) {
+            this.statusSquare = statusSquare;
+            this.statusGlyph = statusGlyph;
+            this.connectionLabel = connectionLabel;
             this.readyBadge = readyBadge;
-            this.onlineBadge = onlineBadge;
             this.kickButton = kickButton;
         }
     }
@@ -522,12 +526,25 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         summary.child(infoColumn("VISIBILITY", summaryVisibilityValue, Sizing.fill(18)));
         summary.child(infoColumn("HARDCORE", summaryHardcoreValue, Sizing.fill(18)));
         contentArea.child(summary);
-        contentArea.child(sectionHeader(Component.literal("MEMBERS"), lobby.members().size()));
-        contentArea.child(memberHeaderRow(isOwner));
+        contentArea.child(membersSectionHeader(lobby.readyMembers().size(), lobby.members().size(), menu.getMaxPartySize()));
 
-        for (UUID member : lobby.members().stream().sorted(Comparator.comparing(UUID::toString)).limit(5).toList()) {
-            contentArea.child(memberRow(lobby, member, isOwner));
+        FlowLayout memberList = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        memberList.child(memberHeaderRow(isOwner));
+        memberList.child(rowDivider(HAIRLINE_HI));
+        List<UUID> orderedMembers = lobby.members().stream()
+            .sorted(Comparator.comparing((UUID m) -> m.equals(lobby.ownerUuid()) ? 0 : 1)
+                .thenComparing(m -> lobby.memberNames().getOrDefault(m, shortUuid(m)).toLowerCase(java.util.Locale.ROOT)))
+            .limit(5)
+            .toList();
+        boolean firstMemberRow = true;
+        for (UUID member : orderedMembers) {
+            if (!firstMemberRow) {
+                memberList.child(rowDivider(HAIRLINE));
+            }
+            memberList.child(memberRow(lobby, member, isOwner));
+            firstMemberRow = false;
         }
+        contentArea.child(memberList);
 
         contentArea.child(spacer(4));
         contentArea.child(sectionHeader(Component.literal("OWNER CONTROLS"), null));
@@ -603,35 +620,54 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     }
 
     private FlowLayout memberRow(Lobby lobby, UUID member, boolean isOwner) {
-        FlowLayout row = rowPanel(false);
-        row.gap(6);
+        boolean online = isOnline(member);
+        boolean ready = lobby.readyMembers().contains(member);
+        boolean isLobbyOwner = member.equals(lobby.ownerUuid());
+
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(ROW_BG));
+        row.padding(Insets.of(7, 7, 8, 8));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        FlowLayout statusSquare = Containers.horizontalFlow(Sizing.fixed(18), Sizing.fixed(18));
+        statusSquare.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        LabelComponent statusGlyph = text(Component.literal(online ? "✓" : "!"), online ? GOOD : WARN);
+        applyStatusSquare(statusSquare, online);
+        statusSquare.child(statusGlyph);
+        row.child(statusSquare);
 
         String name = lobby.memberNames().getOrDefault(member, shortUuid(member));
-        FlowLayout memberInfo = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        memberInfo.child(text(Component.literal(name), INK));
-        memberInfo.child(text(Component.literal(member.equals(lobby.ownerUuid()) ? "OWNER" : "MEMBER"), INK_DIM));
-        row.child(memberInfo);
-        FlowLayout readyBadge = fixedBadge(Component.translatable(lobby.readyMembers().contains(member)
-            ? "gui.arenas_ld.dungeon_controller.status.ready"
-            : "gui.arenas_ld.dungeon_controller.status.pending"), 84, lobby.readyMembers().contains(member) ? GOOD : INK_DIM);
+        FlowLayout nameCell = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        nameCell.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        nameCell.gap(6);
+        nameCell.child(text(Component.literal(name), INK));
+        if (isLobbyOwner) {
+            nameCell.child(badge(Component.literal("★ OWNER"), ACCENT));
+        }
+        row.child(nameCell);
+
+        LabelComponent connectionLabel = text(Component.literal(online ? "● ONLINE" : "○ OFFLINE"), online ? GOOD : DANGER);
+        connectionLabel.horizontalSizing(Sizing.fixed(84));
+        row.child(connectionLabel);
+
+        FlowLayout readyBadge = fixedBadge(Component.literal(ready ? "READY" : "NOT READY"), 84, ready ? GOOD : INK_DIM);
         row.child(readyBadge);
-        FlowLayout onlineBadge = fixedBadge(Component.translatable(isOnline(member)
-            ? "gui.arenas_ld.dungeon_controller.status.online"
-            : "gui.arenas_ld.dungeon_controller.status.offline"), 84, isOnline(member) ? GOOD : DANGER);
-        row.child(onlineBadge);
 
         ButtonComponent kickButton = null;
-        if (isOwner && !member.equals(lobby.ownerUuid())) {
-            kickButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.kick"), b -> {
+        if (isOwner && !isLobbyOwner) {
+            kickButton = dangerButton(Component.literal("KICK"), b -> {
                 footerError = null;
                 ClientPlayNetworking.send(new KickFromLobbyPayload(menu.getBlockPos(), member));
             });
             kickButton.horizontalSizing(Sizing.fixed(54));
             row.child(kickButton);
         } else {
-            row.child(fixedText(Component.literal(""), 54, INK_DIM, HorizontalAlignment.RIGHT));
+            FlowLayout kickSpace = Containers.horizontalFlow(Sizing.fixed(54), Sizing.content());
+            kickSpace.surface(Surface.BLANK);
+            row.child(kickSpace);
         }
-        memberRowRefs.put(member, new MemberRowRefs(readyBadge, onlineBadge, kickButton));
+        memberRowRefs.put(member, new MemberRowRefs(statusSquare, statusGlyph, connectionLabel, readyBadge, kickButton));
         return row;
     }
 
@@ -731,11 +767,16 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
     private FlowLayout memberHeaderRow(boolean isOwner) {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.padding(Insets.of(2, 2, 6, 6));
-        row.gap(6);
-        row.child(headerCell("MEMBER", Sizing.expand()));
+        row.surface(Surface.flat(PANEL_2));
+        row.padding(Insets.of(5, 5, 8, 8));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout statusSpacer = Containers.horizontalFlow(Sizing.fixed(18), Sizing.content());
+        statusSpacer.surface(Surface.BLANK);
+        row.child(statusSpacer);
+        row.child(headerCell("NAME", Sizing.expand()));
+        row.child(headerCell("CONNECTION", Sizing.fixed(84)));
         row.child(headerCell("READY", Sizing.fixed(84)));
-        row.child(headerCell("ONLINE", Sizing.fixed(84)));
         row.child(headerCell(isOwner ? "ACTION" : "", Sizing.fixed(54)));
         return row;
     }
@@ -782,6 +823,37 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             row.child(action);
         }
         return row;
+    }
+
+    private FlowLayout membersSectionHeader(int readyCount, int count, int max) {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        row.gap(6);
+        row.child(text(Component.literal("MEMBERS"), INK_DIM));
+        row.child(text(Component.literal("· " + readyCount + " READY · " + count + " / " + max), ACCENT));
+        return row;
+    }
+
+    private FlowLayout rowDivider(int color) {
+        FlowLayout divider = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(1));
+        divider.surface(Surface.flat(color));
+        return divider;
+    }
+
+    private void applyStatusSquare(FlowLayout square, boolean online) {
+        int color = online ? GOOD : WARN;
+        square.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x66000000)));
+    }
+
+    private ButtonComponent dangerButton(Component text, java.util.function.Consumer<ButtonComponent> action) {
+        ButtonComponent button = Components.button(text.copy().withStyle(ChatFormatting.RED), action);
+        button.sizing(Sizing.content(), Sizing.fixed(18));
+        button.renderer((context, rendered, delta) -> {
+            int fill = rendered.isHoveredOrFocused() ? ((DANGER & 0x00FFFFFF) | 0x44000000) : ((DANGER & 0x00FFFFFF) | 0x1F000000);
+            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
+            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), DANGER);
+        });
+        return button;
     }
 
     private FlowLayout labeledControlRow(LabelComponent labelComponent, io.wispforest.owo.ui.core.Component controls) {
@@ -1061,20 +1133,14 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         for (UUID member : lobby.members()) {
             MemberRowRefs refs = memberRowRefs.get(member);
             if (refs == null) continue;
-            updateBadge(
-                refs.readyBadge,
-                Component.translatable(lobby.readyMembers().contains(member)
-                    ? "gui.arenas_ld.dungeon_controller.status.ready"
-                    : "gui.arenas_ld.dungeon_controller.status.pending"),
-                lobby.readyMembers().contains(member) ? GOOD : INK_DIM
-            );
-            updateBadge(
-                refs.onlineBadge,
-                Component.translatable(isOnline(member)
-                    ? "gui.arenas_ld.dungeon_controller.status.online"
-                    : "gui.arenas_ld.dungeon_controller.status.offline"),
-                isOnline(member) ? GOOD : DANGER
-            );
+            boolean online = isOnline(member);
+            boolean ready = lobby.readyMembers().contains(member);
+            applyStatusSquare(refs.statusSquare, online);
+            refs.statusGlyph.text(Component.literal(online ? "✓" : "!"));
+            refs.statusGlyph.color(Color.ofArgb(online ? GOOD : WARN));
+            refs.connectionLabel.text(Component.literal(online ? "● ONLINE" : "○ OFFLINE"));
+            refs.connectionLabel.color(Color.ofArgb(online ? GOOD : DANGER));
+            updateBadge(refs.readyBadge, Component.literal(ready ? "READY" : "NOT READY"), ready ? GOOD : INK_DIM);
             if (refs.kickButton != null) {
                 refs.kickButton.active(isOwner && !member.equals(lobby.ownerUuid()));
             }
