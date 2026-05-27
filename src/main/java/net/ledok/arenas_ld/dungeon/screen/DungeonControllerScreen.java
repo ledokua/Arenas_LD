@@ -73,6 +73,19 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         INVITES
     }
 
+    private enum InviteStatus {
+        ONLINE,
+        IN_LOBBY,
+        IN_RUN,
+        BUSY
+    }
+
+    private record InviteCandidate(UUID uuid, String name, InviteStatus status) {
+        boolean selectable() {
+            return status == InviteStatus.ONLINE;
+        }
+    }
+
     private static final class MemberRowRefs {
         private final FlowLayout statusSquare;
         private final LabelComponent statusGlyph;
@@ -108,6 +121,10 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private ButtonComponent invitesTabButton;
     private TextBoxComponent inviteField;
     private String inviteInput = "";
+    private boolean inviteDropdownOpen = false;
+    private FlowLayout inviteFieldRow;
+    private FlowLayout inviteDropdownPanel;
+    private ButtonComponent inviteChevron;
     private double savedScrollProgress = 0.0D;
     private boolean restoreScrollNextTick = false;
     private final Map<UUID, LabelComponent> inviteCountdownLabels = new HashMap<>();
@@ -184,6 +201,25 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
                 refreshInviteCountdowns();
             }
         }
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        boolean handled = super.mouseClicked(mouseX, mouseY, button);
+        if (inviteDropdownOpen
+            && !pointInside(inviteFieldRow, mouseX, mouseY)
+            && !pointInside(inviteDropdownPanel, mouseX, mouseY)) {
+            closeInviteDropdown();
+        }
+        return handled;
+    }
+
+    private boolean pointInside(io.wispforest.owo.ui.core.Component component, double mouseX, double mouseY) {
+        if (component == null) {
+            return false;
+        }
+        return mouseX >= component.x() && mouseX < component.x() + component.width()
+            && mouseY >= component.y() && mouseY < component.y() + component.height();
     }
 
     private FlowLayout buildHeader() {
@@ -321,6 +357,10 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         readyToggleButton = null;
         leaveLobbyButton = null;
         startRunButton = null;
+        inviteFieldRow = null;
+        inviteDropdownPanel = null;
+        inviteChevron = null;
+        inviteDropdownOpen = false;
 
         lobbiesTabButton.active(currentTab != Tab.LOBBIES);
         myLobbyTabButton.active(currentTab != Tab.MY_LOBBY);
@@ -709,34 +749,243 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     }
 
     private FlowLayout ownerInviteControls(boolean isOwner) {
+        FlowLayout section = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        section.gap(0);
+
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
         row.gap(6);
         row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        inviteFieldRow = row;
+
+        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout fieldAccent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fixed(20));
+        fieldAccent.surface(Surface.flat(ACCENT));
+        fieldWrap.child(fieldAccent);
 
         inviteField = Components.textBox(Sizing.expand(), inviteInput);
-        inviteField.verticalSizing(Sizing.fixed(20));
-        inviteField.onChanged().subscribe(value -> inviteInput = value);
+        inviteField.verticalSizing(Sizing.fixed(18));
         inviteField.active = isOwner;
-        row.child(inviteField);
-
-        ButtonComponent invite = smallButton(Component.literal("INVITE"), b -> {
-            footerError = null;
-            UUID invitee = resolveInviteeUuid(inviteInput);
-            if (invitee == null) {
-                footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.invitee_not_found").getString();
-                return;
-            }
-            ClientPlayNetworking.send(new InvitePlayerPayload(menu.getBlockPos(), invitee));
-            inviteInput = "";
-            if (inviteField != null) {
-                inviteField.text("");
+        inviteField.onChanged().subscribe(value -> {
+            inviteInput = value;
+            if (inviteDropdownOpen) {
+                refreshInviteDropdown();
             }
         });
+        inviteField.mouseDown().subscribe((mouseX, mouseY, button) -> {
+            if (isOwner) {
+                openInviteDropdown();
+            }
+            return false;
+        });
+        fieldWrap.child(inviteField);
+
+        inviteChevron = Components.button(Component.empty(), b -> {
+            if (isOwner) {
+                toggleInviteDropdown();
+            }
+        });
+        inviteChevron.sizing(Sizing.fixed(18), Sizing.fixed(20));
+        inviteChevron.active(isOwner);
+        inviteChevron.renderer((context, rendered, delta) -> {
+            String glyph = inviteDropdownOpen ? "▲" : "▼";
+            int tx = rendered.getX() + (rendered.getWidth() - this.font.width(glyph)) / 2;
+            int ty = rendered.getY() + (rendered.getHeight() - this.font.lineHeight) / 2 + 1;
+            context.drawString(this.font, glyph, tx, ty, INK_MID, false);
+        });
+        fieldWrap.child(inviteChevron);
+        row.child(fieldWrap);
+
+        ButtonComponent invite = smallButton(Component.literal("INVITE"), b -> sendInvite());
         invite.active(isOwner);
         invite.horizontalSizing(Sizing.fixed(58));
         row.child(invite);
 
+        section.child(row);
+
+        inviteDropdownPanel = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        inviteDropdownPanel.surface(Surface.BLANK);
+        section.child(inviteDropdownPanel);
+        refreshInviteDropdown();
+
+        return section;
+    }
+
+    private void sendInvite() {
+        footerError = null;
+        UUID invitee = resolveInviteeUuid(inviteInput);
+        if (invitee == null) {
+            footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.invitee_not_found").getString();
+            return;
+        }
+        ClientPlayNetworking.send(new InvitePlayerPayload(menu.getBlockPos(), invitee));
+        inviteInput = "";
+        if (inviteField != null) {
+            inviteField.text("");
+        }
+        closeInviteDropdown();
+    }
+
+    private void openInviteDropdown() {
+        if (!inviteDropdownOpen) {
+            inviteDropdownOpen = true;
+            refreshInviteDropdown();
+            if (contentScroll != null) {
+                contentScroll.scrollTo(1.0D);
+            }
+        }
+    }
+
+    private void closeInviteDropdown() {
+        if (inviteDropdownOpen) {
+            inviteDropdownOpen = false;
+            refreshInviteDropdown();
+        }
+    }
+
+    private void toggleInviteDropdown() {
+        if (inviteDropdownOpen) {
+            closeInviteDropdown();
+        } else {
+            openInviteDropdown();
+        }
+    }
+
+    private void refreshInviteDropdown() {
+        if (inviteDropdownPanel == null) {
+            return;
+        }
+        inviteDropdownPanel.clearChildren();
+        if (!inviteDropdownOpen) {
+            inviteDropdownPanel.surface(Surface.BLANK);
+            return;
+        }
+        inviteDropdownPanel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+
+        List<InviteCandidate> candidates = inviteCandidates(inviteInput);
+        long available = candidates.stream().filter(InviteCandidate::selectable).count();
+
+        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        header.surface(Surface.flat(ROW_BG));
+        header.padding(Insets.of(4, 4, 8, 8));
+        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        header.child(text(Component.literal("NEARBY · FRIENDS"), INK_DIM));
+        header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+        header.child(text(Component.literal(available + " AVAILABLE"), ACCENT));
+        inviteDropdownPanel.child(header);
+        inviteDropdownPanel.child(rowDivider(HAIRLINE_HI));
+
+        if (candidates.isEmpty()) {
+            FlowLayout empty = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+            empty.padding(Insets.of(8));
+            empty.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+            empty.child(text(Component.literal("No players found"), INK_DIM));
+            inviteDropdownPanel.child(empty);
+            return;
+        }
+
+        boolean first = true;
+        for (InviteCandidate candidate : candidates) {
+            if (!first) {
+                inviteDropdownPanel.child(rowDivider(HAIRLINE));
+            }
+            inviteDropdownPanel.child(inviteCandidateRow(candidate));
+            first = false;
+        }
+    }
+
+    private ButtonComponent inviteCandidateRow(InviteCandidate candidate) {
+        boolean selectable = candidate.selectable();
+        ButtonComponent row = Components.button(Component.empty(), b -> {
+            if (!selectable) {
+                return;
+            }
+            footerError = null;
+            ClientPlayNetworking.send(new InvitePlayerPayload(menu.getBlockPos(), candidate.uuid()));
+            inviteInput = "";
+            if (inviteField != null) {
+                inviteField.text("");
+            }
+            closeInviteDropdown();
+        });
+        row.sizing(Sizing.fill(100), Sizing.fixed(22));
+        row.active(selectable);
+        int statusColor = selectable ? GOOD : WARN;
+        int alpha = selectable ? 0xFF000000 : 0x73000000;
+        String statusText = switch (candidate.status()) {
+            case ONLINE -> "ONLINE";
+            case IN_LOBBY -> "IN LOBBY";
+            case IN_RUN -> "IN RUN";
+            case BUSY -> "BUSY";
+        };
+        String nameText = "@" + candidate.name();
+        row.renderer((context, rendered, delta) -> {
+            int x1 = rendered.getX();
+            int y1 = rendered.getY();
+            int w = rendered.getWidth();
+            int h = rendered.getHeight();
+            boolean hover = selectable && rendered.isHoveredOrFocused();
+            context.fill(x1, y1, x1 + w, y1 + h, hover ? ROW_BG : PANEL_2);
+            if (hover) {
+                context.fill(x1, y1, x1 + 2, y1 + h, ACCENT);
+            }
+            int squareColor = (statusColor & 0x00FFFFFF) | alpha;
+            context.fill(x1 + 8, y1 + h / 2 - 4, x1 + 16, y1 + h / 2 + 4, squareColor);
+            int nameColor = (INK & 0x00FFFFFF) | alpha;
+            context.drawString(this.font, nameText, x1 + 24, y1 + (h - this.font.lineHeight) / 2 + 1, nameColor, false);
+            int statusTextColor = (statusColor & 0x00FFFFFF) | alpha;
+            int statusWidth = this.font.width(statusText);
+            context.drawString(this.font, statusText, x1 + w - statusWidth - 10, y1 + (h - this.font.lineHeight) / 2 + 1, statusTextColor, false);
+        });
         return row;
+    }
+
+    private List<InviteCandidate> inviteCandidates(String filter) {
+        List<InviteCandidate> result = new ArrayList<>();
+        if (minecraft == null || minecraft.getConnection() == null) {
+            return result;
+        }
+        UUID self = minecraft.player != null ? minecraft.player.getUUID() : null;
+        java.util.Set<UUID> myMembers = ownLobby.map(lobby -> new java.util.HashSet<>(lobby.members())).orElseGet(java.util.HashSet::new);
+        String needle = filter == null ? "" : filter.trim().toLowerCase(java.util.Locale.ROOT);
+        if (needle.startsWith("@")) {
+            needle = needle.substring(1);
+        }
+        for (PlayerInfo info : minecraft.getConnection().getOnlinePlayers()) {
+            UUID id = info.getProfile().getId();
+            String name = info.getProfile().getName();
+            if (id == null || name == null) {
+                continue;
+            }
+            if (id.equals(self) || myMembers.contains(id)) {
+                continue;
+            }
+            if (!needle.isEmpty() && !name.toLowerCase(java.util.Locale.ROOT).contains(needle)) {
+                continue;
+            }
+            result.add(new InviteCandidate(id, name, inviteStatusFor(id)));
+        }
+        result.sort(Comparator.comparing((InviteCandidate c) -> c.selectable() ? 0 : 1)
+            .thenComparing(c -> c.name().toLowerCase(java.util.Locale.ROOT)));
+        return result;
+    }
+
+    private InviteStatus inviteStatusFor(UUID uuid) {
+        if (isBusy(uuid)) {
+            return InviteStatus.BUSY;
+        }
+        for (Lobby lobby : visibleLobbies) {
+            if (lobby.members().contains(uuid)) {
+                return lobby.status() == LobbyStatus.IN_RUN ? InviteStatus.IN_RUN : InviteStatus.IN_LOBBY;
+            }
+        }
+        return InviteStatus.ONLINE;
+    }
+
+    // Hook for a future busy-status integration; always false until wired up.
+    private boolean isBusy(UUID uuid) {
+        return false;
     }
 
     private FlowLayout inviteHeaderRow() {
@@ -1187,6 +1436,10 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             if (refs.kickButton != null) {
                 refs.kickButton.active(isOwner && !member.equals(lobby.ownerUuid()));
             }
+        }
+
+        if (inviteDropdownOpen) {
+            refreshInviteDropdown();
         }
 
         footerLabel.text(footerError == null ? Component.empty() : Component.literal(footerError).withStyle(ChatFormatting.RED));
