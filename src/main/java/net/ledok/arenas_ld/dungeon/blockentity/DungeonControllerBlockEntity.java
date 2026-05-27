@@ -593,7 +593,15 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                 }
             }
         }
-        return new DungeonControllerData(worldPosition, visible, own, myInvites, maxPartySize, tierConfigs, player.serverLevel().getGameTime(), busyPlayers);
+        Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards = new EnumMap<>(DifficultyTier.class);
+        for (DifficultyTier tier : DifficultyTier.values()) {
+            List<LeaderboardEntry> top = leaderboards.getOrDefault(tier, List.of()).stream()
+                .sorted(java.util.Comparator.comparingInt(LeaderboardEntry::timeSeconds))
+                .limit(10)
+                .toList();
+            topLeaderboards.put(tier, top);
+        }
+        return new DungeonControllerData(worldPosition, visible, own, myInvites, maxPartySize, tierConfigs, player.serverLevel().getGameTime(), busyPlayers, topLeaderboards);
     }
 
     @Override

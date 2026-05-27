@@ -169,6 +169,7 @@
   "gui.arenas_ld.dbs.clear_rooms_confirm": "Це видалить усі прив'язані кімнати з цього спавнера.",
   "gui.arenas_ld.dungeon_controller.tab.lobbies": "ЛОБІ",
   "gui.arenas_ld.dungeon_controller.tab.my_lobby": "МОЄ ЛОБІ",
+  "gui.arenas_ld.dungeon_controller.tab.leaderboard": "ТАБЛИЦЯ ЛІДЕРІВ",
   "gui.arenas_ld.dungeon_controller.tab.invites": "ЗАПРОШЕННЯ",
   "gui.arenas_ld.dungeon_controller.button.create": "Створити лобі",
   "gui.arenas_ld.dungeon_controller.button.join": "Увійти",

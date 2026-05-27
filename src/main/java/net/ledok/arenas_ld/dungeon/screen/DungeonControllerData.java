@@ -3,6 +3,7 @@ package net.ledok.arenas_ld.dungeon.screen;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
+import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -27,7 +28,8 @@ public record DungeonControllerData(
     int maxPartySize,
     Map<DifficultyTier, TierConfig> tiers,
     long serverGameTick,
-    Set<UUID> busyPlayers
+    Set<UUID> busyPlayers,
+    Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards
 ) {
     public static final StreamCodec<RegistryFriendlyByteBuf, DungeonControllerData> STREAM_CODEC = StreamCodec.of(
         DungeonControllerData::encode,
@@ -62,6 +64,15 @@ public record DungeonControllerData(
         buf.writeVarInt(data.busyPlayers().size());
         for (UUID busy : data.busyPlayers()) {
             buf.writeUUID(busy);
+        }
+
+        buf.writeVarInt(data.topLeaderboards().size());
+        for (Map.Entry<DifficultyTier, List<LeaderboardEntry>> entry : data.topLeaderboards().entrySet()) {
+            DifficultyTier.STREAM_CODEC.encode(buf, entry.getKey());
+            buf.writeVarInt(entry.getValue().size());
+            for (LeaderboardEntry leaderboardEntry : entry.getValue()) {
+                writeTag(buf, (CompoundTag) LeaderboardEntry.CODEC.encodeStart(NbtOps.INSTANCE, leaderboardEntry).getOrThrow());
+            }
         }
     }
 
@@ -100,7 +111,19 @@ public record DungeonControllerData(
             busyPlayers.add(buf.readUUID());
         }
 
-        return new DungeonControllerData(blockPos, visible, own, invites, maxPartySize, tiers, serverGameTick, busyPlayers);
+        int leaderboardMapSize = buf.readVarInt();
+        Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards = new EnumMap<>(DifficultyTier.class);
+        for (int i = 0; i < leaderboardMapSize; i++) {
+            DifficultyTier tier = DifficultyTier.STREAM_CODEC.decode(buf);
+            int entrySize = buf.readVarInt();
+            List<LeaderboardEntry> entries = new ArrayList<>(entrySize);
+            for (int j = 0; j < entrySize; j++) {
+                entries.add(LeaderboardEntry.CODEC.parse(NbtOps.INSTANCE, readTag(buf)).getOrThrow());
+            }
+            topLeaderboards.put(tier, entries);
+        }
+
+        return new DungeonControllerData(blockPos, visible, own, invites, maxPartySize, tiers, serverGameTick, busyPlayers, topLeaderboards);
     }
 
     private static void writeTag(RegistryFriendlyByteBuf buf, CompoundTag tag) {

@@ -4,6 +4,7 @@ import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
+import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.screen.ModScreenHandlers;
 import net.minecraft.core.BlockPos;
@@ -27,13 +28,14 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
     private Map<DifficultyTier, TierConfig> tiers;
     private long serverGameTick;
     private Set<UUID> busyPlayers;
+    private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerData data) {
-        this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.maxPartySize(), data.tiers(), data.serverGameTick(), data.busyPlayers());
+        this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.maxPartySize(), data.tiers(), data.serverGameTick(), data.busyPlayers(), data.topLeaderboards());
     }
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerBlockEntity blockEntity) {
-        this(syncId, inventory, blockEntity.getBlockPos(), blockEntity.getLobbies(), Optional.empty(), blockEntity.getPendingInvites(), blockEntity.getMaxPartySize(), blockEntity.getTierConfigs(), 0L, Set.of());
+        this(syncId, inventory, blockEntity.getBlockPos(), blockEntity.getLobbies(), Optional.empty(), blockEntity.getPendingInvites(), blockEntity.getMaxPartySize(), blockEntity.getTierConfigs(), 0L, Set.of(), Map.of());
     }
 
     private DungeonControllerScreenHandler(
@@ -46,7 +48,8 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         int maxPartySize,
         Map<DifficultyTier, TierConfig> tiers,
         long serverGameTick,
-        Set<UUID> busyPlayers
+        Set<UUID> busyPlayers,
+        Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards
     ) {
         super(ModScreenHandlers.DUNGEON_CONTROLLER_SCREEN_HANDLER, syncId);
         this.blockPos = blockPos;
@@ -57,6 +60,7 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         this.tiers = Map.copyOf(tiers);
         this.serverGameTick = serverGameTick;
         this.busyPlayers = Set.copyOf(busyPlayers);
+        this.topLeaderboards = Map.copyOf(topLeaderboards);
     }
 
     public BlockPos getBlockPos() {
@@ -91,6 +95,10 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         return Set.copyOf(busyPlayers);
     }
 
+    public Map<DifficultyTier, List<LeaderboardEntry>> getTopLeaderboards() {
+        return Map.copyOf(topLeaderboards);
+    }
+
     public void applyData(DungeonControllerData data) {
         this.visibleLobbies = List.copyOf(data.visibleLobbies());
         this.ownLobby = data.ownLobby();
@@ -99,6 +107,7 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         this.tiers = Map.copyOf(data.tiers());
         this.serverGameTick = data.serverGameTick();
         this.busyPlayers = Set.copyOf(data.busyPlayers());
+        this.topLeaderboards = Map.copyOf(data.topLeaderboards());
     }
 
     @Override

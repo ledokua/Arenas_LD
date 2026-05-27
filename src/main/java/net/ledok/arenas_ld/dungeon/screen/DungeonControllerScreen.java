@@ -33,6 +33,7 @@ import net.ledok.arenas_ld.dungeon.packet.SetLobbyVisibilityPayload;
 import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
+import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.core.BlockPos;
@@ -70,6 +71,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private enum Tab {
         LOBBIES,
         MY_LOBBY,
+        LEADERBOARD,
         INVITES
     }
 
@@ -106,6 +108,8 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private final List<PendingInvite> myInvites;
     private Optional<Lobby> ownLobby;
     private java.util.Set<UUID> busyPlayers;
+    private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards = Map.of();
+    private DifficultyTier leaderboardTier = DifficultyTier.NORMAL;
 
     private Tab currentTab = Tab.LOBBIES;
     private String footerError;
@@ -119,6 +123,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private LabelComponent footerLabel;
     private ButtonComponent lobbiesTabButton;
     private ButtonComponent myLobbyTabButton;
+    private ButtonComponent leaderboardTabButton;
     private ButtonComponent invitesTabButton;
     private TextBoxComponent inviteField;
     private String inviteInput = "";
@@ -148,6 +153,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         this.myInvites = new ArrayList<>(handler.getMyInvites());
         this.ownLobby = handler.getOwnLobby();
         this.busyPlayers = handler.getBusyPlayers();
+        this.topLeaderboards = handler.getTopLeaderboards();
         this.snapshotServerTick = handler.getServerGameTick();
         this.snapshotEpochMs = System.currentTimeMillis();
     }
@@ -293,16 +299,28 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         FlowLayout tabs = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(30));
         tabs.surface(Surface.flat(PANEL_2));
         tabs.padding(Insets.of(4));
-        tabs.gap(4);
+        tabs.gap(0);
+        tabs.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
         lobbiesTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.lobbies", Tab.LOBBIES);
         myLobbyTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.my_lobby", Tab.MY_LOBBY);
+        leaderboardTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.leaderboard", Tab.LEADERBOARD);
         invitesTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.invites", Tab.INVITES);
 
-        tabs.child(lobbiesTabButton);
-        tabs.child(myLobbyTabButton);
-        tabs.child(invitesTabButton);
+        tabs.child(tabCell(lobbiesTabButton));
+        tabs.child(tabCell(myLobbyTabButton));
+        tabs.child(tabCell(leaderboardTabButton));
+        tabs.child(tabCell(invitesTabButton));
         return tabs;
+    }
+
+    private FlowLayout tabCell(ButtonComponent button) {
+        FlowLayout cell = Containers.verticalFlow(Sizing.fill(25), Sizing.content());
+        cell.surface(Surface.BLANK);
+        cell.padding(Insets.of(0, 0, 2, 2));
+        button.horizontalSizing(Sizing.fill(100));
+        cell.child(button);
+        return cell;
     }
 
     private FlowLayout buildFooter() {
@@ -366,17 +384,18 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
         lobbiesTabButton.active(currentTab != Tab.LOBBIES);
         myLobbyTabButton.active(currentTab != Tab.MY_LOBBY);
+        leaderboardTabButton.active(currentTab != Tab.LEADERBOARD);
         invitesTabButton.active(currentTab != Tab.INVITES);
         lobbiesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.lobbies").append(" " + visibleLobbies.size()));
         myLobbyTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.my_lobby").append(ownLobby.isPresent() ? " " + ownLobby.get().members().size() : ""));
+        leaderboardTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.leaderboard"));
         invitesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.invites").append(" " + myInvites.size()));
 
-        if (currentTab == Tab.LOBBIES) {
-            buildLobbiesContent();
-        } else if (currentTab == Tab.INVITES) {
-            buildInvitesContent();
-        } else {
-            buildMyLobbyContent();
+        switch (currentTab) {
+            case LOBBIES -> buildLobbiesContent();
+            case MY_LOBBY -> buildMyLobbyContent();
+            case LEADERBOARD -> buildLeaderboardContent();
+            case INVITES -> buildInvitesContent();
         }
 
         footerLabel.text(footerError == null ? Component.empty() : Component.literal(footerError).withStyle(ChatFormatting.RED));
@@ -398,6 +417,119 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
                 contentArea.child(inviteRow(invite));
             }
         }
+    }
+
+    private void buildLeaderboardContent() {
+        contentArea.child(controlCaption("TIER"));
+        contentArea.child(leaderboardTierControls());
+
+        contentArea.child(spacer(4));
+        contentArea.child(leaderboardBanner(leaderboardTier));
+
+        List<LeaderboardEntry> entries = new ArrayList<>(topLeaderboards.getOrDefault(leaderboardTier, List.of()));
+        entries.sort(Comparator.comparingInt(LeaderboardEntry::timeSeconds));
+
+        contentArea.child(spacer(4));
+        contentArea.child(sectionHeader(Component.literal("TOP RUNS"), entries.size()));
+
+        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        list.child(leaderboardHeaderRow());
+        list.child(rowDivider(HAIRLINE_HI));
+        if (entries.isEmpty()) {
+            FlowLayout empty = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+            empty.surface(Surface.flat(ROW_BG));
+            empty.padding(Insets.of(10));
+            empty.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+            empty.child(dimLabel(Component.literal("No runs recorded yet.")));
+            list.child(empty);
+        } else {
+            for (int i = 0; i < entries.size(); i++) {
+                if (i > 0) {
+                    list.child(rowDivider(HAIRLINE));
+                }
+                list.child(leaderboardRow(i + 1, entries.get(i), leaderboardTier));
+            }
+        }
+        contentArea.child(list);
+    }
+
+    private FlowLayout leaderboardTierControls() {
+        ButtonComponent easy = leaderboardTierButton(DifficultyTier.EASY, "EASY");
+        ButtonComponent normal = leaderboardTierButton(DifficultyTier.NORMAL, "NORMAL");
+        ButtonComponent hard = leaderboardTierButton(DifficultyTier.HARD, "HARD");
+        ButtonComponent nightmare = leaderboardTierButton(DifficultyTier.NIGHTMARE, "NIGHTMARE");
+        return segmentedControl(easy, normal, hard, nightmare);
+    }
+
+    private ButtonComponent leaderboardTierButton(DifficultyTier tier, String label) {
+        return segmentButton(label, tierColor(tier), true,
+            () -> leaderboardTier == tier,
+            b -> {
+                leaderboardTier = tier;
+                rebuildUi();
+            });
+    }
+
+    private FlowLayout leaderboardBanner(DifficultyTier tier) {
+        int color = tierColor(tier);
+        FlowLayout banner = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
+        banner.surface(Surface.flat((color & 0x00FFFFFF) | 0x1F000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
+        banner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
+        accent.surface(Surface.flat(color));
+        banner.child(accent);
+        FlowLayout inner = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        inner.padding(Insets.of(0, 0, 10, 10));
+        inner.gap(8);
+        inner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        inner.child(badge(Component.literal(tier.name() + " TIER"), color));
+        inner.child(text(Component.literal("Fastest " + titleCase(tier.name()) + " runs across the server."), INK));
+        banner.child(inner);
+        return banner;
+    }
+
+    private FlowLayout leaderboardHeaderRow() {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(PANEL_2));
+        row.padding(Insets.of(5, 5, 8, 8));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        row.child(headerCell("RANK", Sizing.fixed(50)));
+        row.child(headerCell("PLAYER", Sizing.expand()));
+        LabelComponent timeHeader = headerCell("TIME", Sizing.fixed(64));
+        timeHeader.horizontalTextAlignment(HorizontalAlignment.RIGHT);
+        row.child(timeHeader);
+        return row;
+    }
+
+    private FlowLayout leaderboardRow(int rank, LeaderboardEntry entry, DifficultyTier tier) {
+        boolean top = rank == 1;
+        int color = tierColor(tier);
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(top ? ((color & 0x00FFFFFF) | 0x1A000000) : ROW_BG));
+        row.padding(Insets.of(7, 7, 8, 8));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        LabelComponent rankLabel = text(Component.literal(top ? "★1" : ("#" + rank)), top ? color : INK_MID);
+        rankLabel.horizontalSizing(Sizing.fixed(50));
+        row.child(rankLabel);
+
+        LabelComponent nameLabel = text(Component.literal(entry.playerName()), INK);
+        nameLabel.horizontalSizing(Sizing.expand());
+        row.child(nameLabel);
+
+        LabelComponent timeLabel = text(Component.literal(formatClock(entry.timeSeconds())), top ? color : INK_MID);
+        timeLabel.horizontalSizing(Sizing.fixed(64));
+        timeLabel.horizontalTextAlignment(HorizontalAlignment.RIGHT);
+        row.child(timeLabel);
+        return row;
+    }
+
+    private static String formatClock(int totalSeconds) {
+        int mins = Math.max(0, totalSeconds) / 60;
+        int secs = Math.max(0, totalSeconds) % 60;
+        return String.format("%02d:%02d", mins, secs);
     }
 
     private void buildLobbiesContent() {
@@ -1319,6 +1451,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         this.myInvites.addAll(menu.getMyInvites());
         this.ownLobby = menu.getOwnLobby();
         this.busyPlayers = menu.getBusyPlayers();
+        this.topLeaderboards = menu.getTopLeaderboards();
         this.snapshotServerTick = menu.getServerGameTick();
         this.snapshotEpochMs = System.currentTimeMillis();
 
