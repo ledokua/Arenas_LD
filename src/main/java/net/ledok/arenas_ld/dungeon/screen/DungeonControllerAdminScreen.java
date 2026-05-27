@@ -845,7 +845,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     private FlowLayout badge(Component text, int color) {
         FlowLayout tag = Containers.horizontalFlow(Sizing.content(), Sizing.content());
         tag.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
-        tag.padding(Insets.of(2, 4, 2, 4));
+        tag.padding(Insets.of(4, 2, 4, 4));
         tag.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
         LabelComponent label = Components.label(text);
         label.color(Color.ofArgb(color));
@@ -863,7 +863,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     private FlowLayout fixedBadge(Component text, int width, int color) {
         FlowLayout tag = Containers.horizontalFlow(Sizing.fixed(width), Sizing.content());
         tag.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
-        tag.padding(Insets.of(2, 4, 2, 4));
+        tag.padding(Insets.of(4, 2, 4, 4));
         tag.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
         LabelComponent label = Components.label(text);
         label.color(Color.ofArgb(color));

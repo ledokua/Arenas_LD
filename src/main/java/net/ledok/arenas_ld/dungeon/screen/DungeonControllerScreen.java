@@ -622,7 +622,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         FlowLayout visCell = Containers.horizontalFlow(Sizing.fixed(78), Sizing.content());
         int visColor = visibilityColor(lobby.visibility());
         visCell.surface(Surface.flat((visColor & 0x00FFFFFF) | 0x22000000).and(Surface.outline((visColor & 0x00FFFFFF) | 0x55000000)));
-        visCell.padding(Insets.of(2, 4, 2, 4));
+        visCell.padding(Insets.of(4, 2, 4, 4));
         visCell.gap(4);
         visCell.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
         visCell.child(text(Component.literal("●"), visColor));
@@ -1350,7 +1350,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private FlowLayout badge(Component text, int color) {
         FlowLayout tag = Containers.horizontalFlow(Sizing.content(), Sizing.content());
         tag.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
-        tag.padding(Insets.of(2, 4, 2, 4));
+        tag.padding(Insets.of(4, 2, 4, 4));
         tag.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
         tag.child(this.text(text, color));
         return tag;
@@ -1359,7 +1359,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private FlowLayout fixedBadge(Component text, int width, int color) {
         FlowLayout tag = Containers.horizontalFlow(Sizing.fixed(width), Sizing.content());
         tag.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
-        tag.padding(Insets.of(2, 4, 2, 4));
+        tag.padding(Insets.of(4, 2, 4, 4));
         tag.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
         LabelComponent label = this.text(text, color);
         label.horizontalSizing(Sizing.expand());
