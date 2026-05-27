@@ -163,13 +163,29 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         header.child(mark);
 
         FlowLayout info = Containers.verticalFlow(Sizing.content(), Sizing.content());
+        info.gap(3);
+
+        FlowLayout titleLine = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        titleLine.gap(8);
+        titleLine.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
         LabelComponent titleLabel = Components.label(Component.translatable("gui.arenas_ld.dungeon_controller_admin.title"));
         titleLabel.color(Color.ofArgb(INK));
+        titleLine.child(titleLabel);
+        titleLine.child(badge(Component.literal("OP"), WARN));
+        info.child(titleLine);
+
         FlowLayout meta = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        meta.gap(8);
-        meta.child(smallMeta("POS  " + menu.getBlockPos().getX() + "  " + menu.getBlockPos().getY() + "  " + menu.getBlockPos().getZ()));
-        meta.child(smallMeta("OP", WARN));
-        info.child(titleLabel);
+        meta.gap(10);
+        meta.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        meta.child(smallMeta("POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
+        FlowLayout live = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        live.gap(4);
+        live.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        LabelComponent liveDot = Components.label(Component.literal("●"));
+        liveDot.color(Color.ofArgb(GOOD));
+        live.child(liveDot);
+        live.child(smallMeta("LIVE", GOOD));
+        meta.child(live);
         info.child(meta);
         header.child(info);
 

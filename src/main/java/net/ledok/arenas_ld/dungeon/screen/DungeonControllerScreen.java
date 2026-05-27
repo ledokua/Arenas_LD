@@ -245,7 +245,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             color = ACCENT;
         } else {
             label = Component.literal("AVAILABLE");
-            color = INK_DIM;
+            color = GOOD;
         }
         return badge(label, color);
     }
