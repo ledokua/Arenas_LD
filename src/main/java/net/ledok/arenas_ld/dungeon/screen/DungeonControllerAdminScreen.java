@@ -98,7 +98,6 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     private final Map<DifficultyTier, String> damageInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> lootInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> timeInputs = new EnumMap<>(DifficultyTier.class);
-    private final Map<DifficultyTier, Boolean> hardcoreInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, Boolean> enabledInputs = new EnumMap<>(DifficultyTier.class);
 
     public DungeonControllerAdminScreen(DungeonControllerAdminScreenHandler handler, Inventory inventory, Component title) {
@@ -605,20 +604,6 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
                 timeInputs.getOrDefault(tier, Integer.toString(config.dungeonTimeSeconds())), v -> timeInputs.put(tier, v))
         ));
 
-        contentArea.child(spacer(6));
-        contentArea.child(togglePanel(
-            "HARDCORE DEFAULT",
-            "New " + tierName + " lobbies start with Hardcore enabled.",
-            null,
-            0,
-            DANGER,
-            () -> hardcoreInputs.getOrDefault(tier, config.hardcoreDefault()),
-            () -> {
-                hardcoreInputs.put(tier, !hardcoreInputs.getOrDefault(tier, config.hardcoreDefault()));
-                rebuildUi();
-            }
-        ));
-
         contentArea.child(spacer(8));
         FlowLayout applyRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
         applyRow.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
@@ -948,9 +933,8 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
             return;
         }
 
-        boolean hardcore = hardcoreInputs.getOrDefault(tier, current.hardcoreDefault());
         boolean enabled = enabledInputs.getOrDefault(tier, current.enabled());
-        TierConfig updated = new TierConfig(health, damage, loot, time, hardcore, enabled);
+        TierConfig updated = new TierConfig(health, damage, loot, time, enabled);
         tierConfigs.put(tier, updated);
         footerError = null;
         ClientPlayNetworking.send(new SetTierConfigPayload(menu.getBlockPos(), tier, updated));
@@ -1009,7 +993,6 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         damageInputs.put(tier, trimDouble(config.damageMultiplier()));
         lootInputs.put(tier, config.perPlayerLootTable());
         timeInputs.put(tier, Integer.toString(config.dungeonTimeSeconds()));
-        hardcoreInputs.put(tier, config.hardcoreDefault());
         enabledInputs.put(tier, config.enabled());
     }
 

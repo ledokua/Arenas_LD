@@ -11,24 +11,23 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  * @param damageMultiplier scales incoming damage to players in this run, applied via LivingEntityMixin. Should be > 0.
  * @param perPlayerLootTable loot table ID rolled per player on win. Empty string = no loot.
  * @param dungeonTimeSeconds total time for the run at this tier. Should be > 0.
- * @param hardcoreDefault whether hardcore is enabled by default at this tier (lobby owner can override unless the controller forbids it — future feature).
+ * @param enabled whether this tier appears in the lobby tier picker and can be selected.
  */
 public record TierConfig(
     double healthMultiplier,
     double damageMultiplier,
     String perPlayerLootTable,
     int dungeonTimeSeconds,
-    boolean hardcoreDefault,
     boolean enabled
 ) {
     public static final TierConfig EASY_DEFAULT =
-        new TierConfig(0.75, 0.75, "", 600, false, true);
+        new TierConfig(0.75, 0.75, "", 600, true);
     public static final TierConfig NORMAL_DEFAULT =
-        new TierConfig(1.0, 1.0, "", 600, false, true);
+        new TierConfig(1.0, 1.0, "", 600, true);
     public static final TierConfig HARD_DEFAULT =
-        new TierConfig(1.5, 1.5, "", 600, false, true);
+        new TierConfig(1.5, 1.5, "", 600, true);
     public static final TierConfig NIGHTMARE_DEFAULT =
-        new TierConfig(2.5, 2.5, "", 600, true, true);
+        new TierConfig(2.5, 2.5, "", 600, true);
 
     public static final Codec<TierConfig> CODEC = RecordCodecBuilder.create(instance ->
         instance.group(
@@ -36,7 +35,6 @@ public record TierConfig(
             Codec.DOUBLE.fieldOf("damageMultiplier").forGetter(TierConfig::damageMultiplier),
             Codec.STRING.fieldOf("perPlayerLootTable").forGetter(TierConfig::perPlayerLootTable),
             Codec.INT.fieldOf("dungeonTimeSeconds").forGetter(TierConfig::dungeonTimeSeconds),
-            Codec.BOOL.fieldOf("hardcoreDefault").forGetter(TierConfig::hardcoreDefault),
             Codec.BOOL.optionalFieldOf("enabled", true).forGetter(TierConfig::enabled)
         ).apply(instance, TierConfig::new)
     );

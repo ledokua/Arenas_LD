@@ -606,9 +606,15 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         row.gap(8);
 
         FlowLayout ownerInfo = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        ownerInfo.child(text(Component.literal(lobby.ownerName()), INK));
-        String idLine = shortUuid(lobby.lobbyId()).toUpperCase() + (lobby.hardcoreEnabled() ? " · HC" : "");
-        ownerInfo.child(text(Component.literal(idLine), INK_DIM));
+        FlowLayout nameLine = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        nameLine.gap(5);
+        nameLine.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        nameLine.child(text(Component.literal(lobby.ownerName()), INK));
+        if (lobby.hardcoreEnabled()) {
+            nameLine.child(badge(Component.literal("H"), DANGER));
+        }
+        ownerInfo.child(nameLine);
+        ownerInfo.child(text(Component.literal(shortUuid(lobby.lobbyId()).toUpperCase()), INK_DIM));
         row.child(ownerInfo);
         row.child(fixedBadge(Component.literal(lobby.members().size() + "/" + menu.getMaxPartySize()), 44, INK_MID));
         row.child(fixedBadge(Component.literal(lobby.selectedTier().name()), 70, tierColor(lobby.selectedTier())));
