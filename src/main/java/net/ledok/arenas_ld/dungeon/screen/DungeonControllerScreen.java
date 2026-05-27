@@ -388,15 +388,19 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         inviteCountdownLabels.put(invite.lobbyId(), countdown);
         row.child(countdown);
 
-        row.child(smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), b -> {
+        ButtonComponent accept = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), b -> {
             footerError = null;
             ClientPlayNetworking.send(new AcceptInvitePayload(menu.getBlockPos(), invite.lobbyId()));
-        }));
+        });
+        accept.horizontalSizing(Sizing.fixed(54));
+        row.child(accept);
 
-        row.child(smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), b -> {
+        ButtonComponent decline = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), b -> {
             footerError = null;
             ClientPlayNetworking.send(new DeclineInvitePayload(menu.getBlockPos(), invite.lobbyId()));
-        }));
+        });
+        decline.horizontalSizing(Sizing.fixed(58));
+        row.child(decline);
 
         return row;
     }
@@ -407,7 +411,8 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
         FlowLayout ownerInfo = Containers.verticalFlow(Sizing.expand(), Sizing.content());
         ownerInfo.child(text(Component.literal(lobby.ownerName()), INK));
-        ownerInfo.child(text(Component.literal(shortUuid(lobby.lobbyId()).toUpperCase()), INK_DIM));
+        String idLine = shortUuid(lobby.lobbyId()).toUpperCase() + (lobby.hardcoreEnabled() ? " · HC" : "");
+        ownerInfo.child(text(Component.literal(idLine), INK_DIM));
         row.child(ownerInfo);
         row.child(fixedBadge(Component.literal(lobby.members().size() + "/" + menu.getMaxPartySize()), 44, INK_MID));
         row.child(fixedBadge(Component.literal(lobby.selectedTier().name()), 70, tierColor(lobby.selectedTier())));
@@ -420,29 +425,29 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         row.child(visCell);
 
         row.child(fixedBadge(Component.literal(statusLabel(lobby.status())), 82, statusColor(lobby.status())));
-        if (lobby.hardcoreEnabled()) {
-            row.child(fixedBadge(Component.literal("HC"), 34, DANGER));
-        }
 
         UUID lobbyId = lobby.lobbyId();
         boolean isMine = ownLobby.isPresent() && ownLobby.get().lobbyId().equals(lobbyId);
         boolean isFull = lobby.isFull(menu.getMaxPartySize());
         boolean inRun = lobby.status() == LobbyStatus.IN_RUN;
 
+        FlowLayout actionCell = Containers.horizontalFlow(Sizing.fixed(72), Sizing.content());
+        actionCell.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
         if (lobby.visibility() == LobbyVisibility.PUBLIC) {
             ButtonComponent join = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.join"), b -> {
                 footerError = null;
                 ClientPlayNetworking.send(new JoinLobbyPayload(menu.getBlockPos(), lobbyId));
             });
             join.active(!isMine && !isFull && !inRun && ownLobby.isEmpty());
-            row.child(join);
+            actionCell.child(join);
         } else {
             ButtonComponent req = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.request_invite"), b ->
                 footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.invite_only").getString()
             );
             req.active(!isMine && !inRun && !isFull);
-            row.child(req);
+            actionCell.child(req);
         }
+        row.child(actionCell);
         return row;
     }
 
@@ -575,6 +580,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
                 footerError = null;
                 ClientPlayNetworking.send(new KickFromLobbyPayload(menu.getBlockPos(), member));
             });
+            kickButton.horizontalSizing(Sizing.fixed(54));
             row.child(kickButton);
         } else {
             row.child(fixedText(Component.literal(""), 54, INK_DIM, HorizontalAlignment.RIGHT));
