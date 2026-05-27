@@ -31,6 +31,8 @@ public class ArenasLdClient implements ClientModInitializer {
 
         BlockRenderLayerMap.INSTANCE.putBlock(BlockRegistry.PHASE_BLOCK, RenderType.translucent());
 
+        ConfiguratorOverlayRenderer.register();
+
         ClientPlayNetworking.registerGlobalReceiver(DungeonControllerSnapshotPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> {
                     if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen screen

@@ -156,13 +156,6 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
         return result;
     }
 
-    /** @deprecated use {@link #spawnScaled(ServerLevel, double)} which supports multi-spawn */
-    @Nullable
-    public LivingEntity spawnSingleScaled(ServerLevel world, double healthMultiplier) {
-        List<LivingEntity> list = spawnScaled(world, healthMultiplier);
-        return list.isEmpty() ? null : list.get(0);
-    }
-
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);

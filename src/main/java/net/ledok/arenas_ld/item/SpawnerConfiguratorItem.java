@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.item;
 
 import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
+import net.ledok.arenas_ld.dungeon.blockentity.EntityDefinition;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
 import net.minecraft.core.BlockPos;
@@ -32,7 +33,8 @@ public class SpawnerConfiguratorItem extends Item {
     public enum Mode {
         SPAWNER_SELECTION("item.arenas_ld.configurator.mode.spawner_selection"),
         EXIT_POSITION("item.arenas_ld.configurator.mode.exit_position"),
-        ENTRANCE_POSITION("item.arenas_ld.configurator.mode.entrance_position");
+        ENTRANCE_POSITION("item.arenas_ld.configurator.mode.entrance_position"),
+        MOB_SPAWN_POSITION("item.arenas_ld.configurator.mode.mob_spawn_position");
 
         private final String translationKey;
 
@@ -67,6 +69,7 @@ public class SpawnerConfiguratorItem extends Item {
         if (player.isShiftKeyDown()) {
             if (clickedBlockEntity instanceof BossSpawnerBlockEntity
                 || clickedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity
+                || clickedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity
                 || clickedBlockEntity instanceof MobArenaSpawnerBlockEntity) {
                 stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(data.mode(), Optional.of(clickedPos), Optional.of(world.dimension())));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawner_selected", clickedPos.toShortString()));
@@ -95,6 +98,7 @@ public class SpawnerConfiguratorItem extends Item {
 
         if (!(selectedBlockEntity instanceof BossSpawnerBlockEntity)
             && !(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity)
+            && !(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity)
             && !(selectedBlockEntity instanceof MobArenaSpawnerBlockEntity)) {
             player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.invalid_spawner"));
             stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, SpawnerSelectionDataComponent.DEFAULT);
@@ -125,6 +129,27 @@ public class SpawnerConfiguratorItem extends Item {
                     bossSpawner.entranceDimension = clickedDimension;
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.entrance_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
+                break;
+            case MOB_SPAWN_POSITION:
+                if (!(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity mobSpawner)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_needs_mob_spawner"));
+                    return InteractionResult.FAIL;
+                }
+                if (!selectedSpawnerDim.equals(clickedDimension)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_wrong_dimension"));
+                    return InteractionResult.FAIL;
+                }
+                // Mob spawns ON the clicked block (one block above it), stored relative to the spawner.
+                BlockPos spawnOffset = clickedPos.above().subtract(selectedSpawnerPos);
+                EntityDefinition def = mobSpawner.getEntityDefinition();
+                java.util.List<BlockPos> offsets = new java.util.ArrayList<>(def.spawnOffsets());
+                if (offsets.remove(spawnOffset)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_removed", clickedPos.toShortString()));
+                } else {
+                    offsets.add(spawnOffset);
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_added", clickedPos.toShortString(), offsets.size()));
+                }
+                mobSpawner.setEntityDefinition(def.withSpawnOffsets(offsets));
                 break;
             default:
                 return InteractionResult.PASS;
