@@ -653,7 +653,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
     private FlowLayout inviteHeaderRow() {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.padding(Insets.of(2, 6));
+        row.padding(Insets.of(2, 2, 6, 6));
         row.gap(6);
         row.child(headerCell("FROM", Sizing.expand()));
         row.child(headerCell("", Sizing.fixed(40)));
@@ -666,7 +666,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
     private FlowLayout lobbyHeaderRow() {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.padding(Insets.of(2, 6));
+        row.padding(Insets.of(2, 2, 6, 6));
         row.gap(8);
         row.child(headerCell("OWNER", Sizing.expand()));
         row.child(headerCell("SIZE", Sizing.fixed(44)));
@@ -679,7 +679,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
     private FlowLayout memberHeaderRow(boolean isOwner) {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.padding(Insets.of(2, 6));
+        row.padding(Insets.of(2, 2, 6, 6));
         row.gap(6);
         row.child(headerCell("MEMBER", Sizing.expand()));
         row.child(headerCell("READY", Sizing.fixed(84)));
