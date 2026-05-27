@@ -1134,13 +1134,13 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             MemberRowRefs refs = memberRowRefs.get(member);
             if (refs == null) continue;
             boolean online = isOnline(member);
-            boolean ready = lobby.readyMembers().contains(member);
+            boolean memberReady = lobby.readyMembers().contains(member);
             applyStatusSquare(refs.statusSquare, online);
             refs.statusGlyph.text(Component.literal(online ? "✓" : "!"));
             refs.statusGlyph.color(Color.ofArgb(online ? GOOD : WARN));
             refs.connectionLabel.text(Component.literal(online ? "● ONLINE" : "○ OFFLINE"));
             refs.connectionLabel.color(Color.ofArgb(online ? GOOD : DANGER));
-            updateBadge(refs.readyBadge, Component.literal(ready ? "READY" : "NOT READY"), ready ? GOOD : INK_DIM);
+            updateBadge(refs.readyBadge, Component.literal(memberReady ? "READY" : "NOT READY"), memberReady ? GOOD : INK_DIM);
             if (refs.kickButton != null) {
                 refs.kickButton.active(isOwner && !member.equals(lobby.ownerUuid()));
             }
