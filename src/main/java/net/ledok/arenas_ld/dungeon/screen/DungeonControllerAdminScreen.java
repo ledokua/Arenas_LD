@@ -470,28 +470,101 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
 
     private void buildGeneralTab() {
         contentArea.child(sectionHeader(Component.literal("GENERAL CONFIGURATION"), null));
-        contentArea.child(numberFieldRow(
-            "gui.arenas_ld.dungeon_controller_admin.label.cooldown",
-            cooldownInput,
-            value -> cooldownInput = value
+        contentArea.child(spacer(2));
+        contentArea.child(twoColumnRow(
+            stepperField("COOLDOWN", "seconds after a run", "S", 5, 0, 86400, cooldownInput, v -> cooldownInput = v),
+            stepperField("CLOSE TIMER", "before finished dungeon closes", "S", 5, 0, 86400, closeTimerInput, v -> closeTimerInput = v)
         ));
-        contentArea.child(numberFieldRow(
-            "gui.arenas_ld.dungeon_controller_admin.label.close_timer",
-            closeTimerInput,
-            value -> closeTimerInput = value
+        contentArea.child(spacer(8));
+        contentArea.child(twoColumnRow(
+            stepperField("MAX PARTY SIZE", "players per lobby", "P", 1, 1, 64, maxPartyInput, v -> maxPartyInput = v),
+            stepperField("INVITE EXPIRY", "how long invites last", "S", 5, 1, 86400, inviteExpiryInput, v -> inviteExpiryInput = v)
         ));
-        contentArea.child(numberFieldRow(
-            "gui.arenas_ld.dungeon_controller_admin.label.max_party",
-            maxPartyInput,
-            value -> maxPartyInput = value
-        ));
-        contentArea.child(numberFieldRow(
-            "gui.arenas_ld.dungeon_controller_admin.label.invite_expiry",
-            inviteExpiryInput,
-            value -> inviteExpiryInput = value
-        ));
+        contentArea.child(spacer(10));
 
-        footerActions.child(smallButton(Component.translatable("gui.arenas_ld.apply"), b -> applyGeneral()));
+        FlowLayout applyRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        applyRow.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
+        ButtonComponent apply = smallButton(Component.literal("APPLY CHANGES"), b -> applyGeneral());
+        apply.horizontalSizing(Sizing.fixed(120));
+        applyRow.child(apply);
+        contentArea.child(applyRow);
+    }
+
+    private FlowLayout twoColumnRow(FlowLayout left, FlowLayout right) {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        FlowLayout c0 = Containers.verticalFlow(Sizing.fill(50), Sizing.content());
+        c0.padding(Insets.of(0, 0, 0, 5));
+        c0.child(left);
+        FlowLayout c1 = Containers.verticalFlow(Sizing.fill(50), Sizing.content());
+        c1.padding(Insets.of(0, 0, 5, 0));
+        c1.child(right);
+        row.child(c0);
+        row.child(c1);
+        return row;
+    }
+
+    private FlowLayout stepperField(String caption, String hint, String unit, int step, int min, int max,
+                                    String initial, java.util.function.Consumer<String> onChange) {
+        FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        col.gap(4);
+
+        FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        head.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        head.child(labelLiteral(caption, INK_DIM));
+        head.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+        LabelComponent hintLabel = Components.label(Component.literal(hint).withStyle(net.minecraft.ChatFormatting.ITALIC));
+        hintLabel.color(Color.ofArgb(INK_DIM));
+        head.child(hintLabel);
+        col.child(head);
+
+        FlowLayout stepper = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        stepper.gap(6);
+        stepper.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(22));
+        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
+        accent.surface(Surface.flat(ACCENT));
+        fieldWrap.child(accent);
+        TextBoxComponent field = Components.textBox(Sizing.expand(), initial);
+        field.verticalSizing(Sizing.fixed(18));
+        field.onChanged().subscribe(onChange::accept);
+        fieldWrap.child(field);
+        FlowLayout unitCell = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        unitCell.padding(Insets.of(0, 0, 6, 6));
+        unitCell.child(labelLiteral(unit, INK_DIM));
+        fieldWrap.child(unitCell);
+
+        stepper.child(stepButton("-", () -> stepValue(field, -step, min, max, onChange)));
+        stepper.child(fieldWrap);
+        stepper.child(stepButton("+", () -> stepValue(field, step, min, max, onChange)));
+        col.child(stepper);
+        return col;
+    }
+
+    private ButtonComponent stepButton(String glyph, Runnable action) {
+        ButtonComponent button = Components.button(Component.literal(glyph), b -> action.run());
+        button.sizing(Sizing.fixed(34), Sizing.fixed(22));
+        button.renderer((context, rendered, delta) -> {
+            int fill = rendered.isHoveredOrFocused() ? ROW_BG : PANEL_2;
+            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
+            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), HAIRLINE);
+        });
+        return button;
+    }
+
+    private void stepValue(TextBoxComponent field, int delta, int min, int max, java.util.function.Consumer<String> onChange) {
+        int current;
+        try {
+            current = Integer.parseInt(field.getValue().trim());
+        } catch (Exception ignored) {
+            current = min;
+        }
+        int next = Math.max(min, Math.min(max, current + delta));
+        String value = Integer.toString(next);
+        field.text(value);
+        onChange.accept(value);
     }
 
     private FlowLayout numberFieldRow(String labelKey, String initial, java.util.function.Consumer<String> consumer) {
