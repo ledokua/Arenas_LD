@@ -648,15 +648,15 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
 
     private FlowLayout togglePanel(String caption, String description, String stateLabel, int stateColor, int onColor,
                                    java.util.function.BooleanSupplier on, Runnable onToggle) {
-        FlowLayout panel = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        FlowLayout panel = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(40));
         panel.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
         panel.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
         FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
         accent.surface(Surface.flat(onColor));
         panel.child(accent);
 
-        FlowLayout inner = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
-        inner.padding(Insets.of(8, 8, 10, 10));
+        FlowLayout inner = Containers.horizontalFlow(Sizing.expand(), Sizing.fill(100));
+        inner.padding(Insets.of(6, 6, 10, 10));
         inner.gap(8);
         inner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
