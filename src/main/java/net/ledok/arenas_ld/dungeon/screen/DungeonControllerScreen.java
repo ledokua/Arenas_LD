@@ -184,37 +184,45 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     }
 
     private FlowLayout buildHeader() {
-        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(42));
+        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(46));
         header.surface(Surface.flat(PANEL_2));
-        header.padding(Insets.of(6));
-        header.gap(8);
+        header.padding(Insets.of(8, 8, 10, 10));
+        header.gap(10);
+        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
-        FlowLayout mark = Containers.verticalFlow(Sizing.fixed(18), Sizing.fixed(18));
-        mark.surface(Surface.flat(ACCENT));
+        FlowLayout mark = Containers.verticalFlow(Sizing.fixed(20), Sizing.fixed(20));
+        mark.surface(Surface.flat(ACCENT).and(Surface.outline(ACCENT_DARK)));
         header.child(mark);
 
         FlowLayout info = Containers.verticalFlow(Sizing.content(), Sizing.content());
+        info.gap(3);
+
+        FlowLayout titleLine = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        titleLine.gap(8);
+        titleLine.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
         LabelComponent titleLabel = Components.label(Component.translatable("container.arenas_ld.dungeon_controller"));
         titleLabel.color(Color.ofArgb(INK));
+        titleLine.child(titleLabel);
+        titleLine.child(statusBadge());
+        info.child(titleLine);
+
         FlowLayout meta = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        meta.gap(8);
-        meta.child(smallMeta("X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
-        meta.child(smallMeta("LIVE", GOOD));
-        if (ownLobby.isPresent()) {
-            meta.child(smallMeta("IN LOBBY", ACCENT));
-        } else if (!myInvites.isEmpty()) {
-            meta.child(smallMeta("INVITES " + myInvites.size(), INFO));
-        } else {
-            meta.child(smallMeta("AVAILABLE", INK_DIM));
-        }
-        info.child(titleLabel);
+        meta.gap(10);
+        meta.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        meta.child(smallMeta("POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
+        FlowLayout live = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        live.gap(4);
+        live.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        live.child(text(Component.literal("●"), GOOD));
+        live.child(smallMeta("LIVE", GOOD));
+        meta.child(live);
         info.child(meta);
         header.child(info);
 
         header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
 
-        ButtonComponent close = Components.button(Component.literal("X"), b -> onClose());
-        close.sizing(Sizing.fixed(20), Sizing.fixed(16));
+        ButtonComponent close = Components.button(Component.literal("×"), b -> onClose());
+        close.sizing(Sizing.fixed(22), Sizing.fixed(18));
         close.renderer((context, button, delta) -> {
             int fill = button.isHoveredOrFocused() ? ROW_BG : PANEL;
             context.fill(button.getX(), button.getY(), button.getX() + button.getWidth(), button.getY() + button.getHeight(), fill);
@@ -222,6 +230,22 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         });
         header.child(close);
         return header;
+    }
+
+    private FlowLayout statusBadge() {
+        Component label;
+        int color;
+        if (ownLobby.isPresent()) {
+            label = Component.literal("IN LOBBY");
+            color = INFO;
+        } else if (!myInvites.isEmpty()) {
+            label = Component.literal("INVITES " + myInvites.size());
+            color = ACCENT;
+        } else {
+            label = Component.literal("AVAILABLE");
+            color = INK_DIM;
+        }
+        return badge(label, color);
     }
 
     private FlowLayout buildTabs() {
