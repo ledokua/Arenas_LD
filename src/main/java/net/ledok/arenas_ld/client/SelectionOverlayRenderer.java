@@ -81,7 +81,7 @@ public final class SelectionOverlayRenderer {
         RenderSystem.setShader(GameRenderer::getPositionColorShader);
 
         BufferBuilder buffer = Tesselator.getInstance()
-            .begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR);
+            .begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
         for (Box box : boxes) {
             addBoxEdges(buffer, matrix, box.pos(), box.color());
         }
