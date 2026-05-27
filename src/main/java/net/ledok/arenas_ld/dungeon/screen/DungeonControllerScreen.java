@@ -141,7 +141,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         rootComponent.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
 
         int shellWidth = Math.max(420, Math.min(560, this.width - 24));
-        int shellHeight = Math.max(250, Math.min(320, this.height - 24));
+        int shellHeight = Math.max(300, this.height - 24);
         FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
         shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
 
