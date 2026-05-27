@@ -507,15 +507,15 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         summaryVisibilityValue = text(Component.literal(titleCase(lobby.visibility().name())), visibilityColor(lobby.visibility()));
         summaryHardcoreValue = text(Component.literal(lobby.hardcoreEnabled() ? "On" : "Off"), lobby.hardcoreEnabled() ? DANGER : INK_MID);
 
-        FlowLayout summary = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        FlowLayout summary = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(40));
         summary.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
         summary.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        FlowLayout summaryAccent = Containers.verticalFlow(Sizing.fixed(3), Sizing.expand());
+        FlowLayout summaryAccent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
         summaryAccent.surface(Surface.flat(ACCENT));
         summary.child(summaryAccent);
-        FlowLayout summaryCols = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        FlowLayout summaryCols = Containers.horizontalFlow(Sizing.expand(), Sizing.fill(100));
         summaryCols.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        summaryCols.padding(Insets.of(9, 9, 12, 10));
+        summaryCols.padding(Insets.of(0, 0, 10, 10));
         summaryCols.gap(8);
         summaryCols.child(infoColumn("OWNER", summaryOwnerLabel));
         summaryCols.child(infoColumn("TIER", summaryTierValue));
