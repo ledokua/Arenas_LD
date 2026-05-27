@@ -131,28 +131,40 @@ public class SpawnerConfiguratorItem extends Item {
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.entrance_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
             case MOB_SPAWN_POSITION:
-                if (!(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity mobSpawner)) {
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_needs_mob_spawner"));
-                    return InteractionResult.FAIL;
-                }
                 if (!selectedSpawnerDim.equals(clickedDimension)) {
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_wrong_dimension"));
                     return InteractionResult.FAIL;
                 }
                 // Mob spawns ON the clicked block (one block above it), stored relative to the spawner.
                 BlockPos spawnOffset = clickedPos.above().subtract(selectedSpawnerPos);
-                EntityDefinition def = mobSpawner.getEntityDefinition();
-                java.util.List<BlockPos> offsets = new java.util.ArrayList<>(def.spawnOffsets());
-                int spawnCount = def.spawnCount();
-                if (offsets.remove(spawnOffset)) {
-                    spawnCount = Math.max(1, spawnCount - 1);
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_removed", clickedPos.toShortString()));
+                if (selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity mobSpawner) {
+                    EntityDefinition def = mobSpawner.getEntityDefinition();
+                    java.util.List<BlockPos> offsets = new java.util.ArrayList<>(def.spawnOffsets());
+                    int spawnCount = def.spawnCount();
+                    if (offsets.remove(spawnOffset)) {
+                        spawnCount = Math.max(1, spawnCount - 1);
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_removed", clickedPos.toShortString()));
+                    } else {
+                        offsets.add(spawnOffset);
+                        spawnCount = Math.min(64, spawnCount + 1);
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_added", clickedPos.toShortString(), offsets.size()));
+                    }
+                    mobSpawner.setEntityDefinition(def.withSpawnOffsets(offsets).withSpawnCount(spawnCount));
+                } else if (selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity bossSpawner) {
+                    // Boss spawner holds a single spawn position: placing replaces it, clicking the same one clears it.
+                    EntityDefinition def = bossSpawner.getEntityDefinition();
+                    java.util.List<BlockPos> current = def.spawnOffsets();
+                    if (current.size() == 1 && current.get(0).equals(spawnOffset)) {
+                        bossSpawner.setEntityDefinition(def.withSpawnOffsets(java.util.List.of()));
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_removed", clickedPos.toShortString()));
+                    } else {
+                        bossSpawner.setEntityDefinition(def.withSpawnOffsets(java.util.List.of(spawnOffset)));
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_added", clickedPos.toShortString(), 1));
+                    }
                 } else {
-                    offsets.add(spawnOffset);
-                    spawnCount = Math.min(64, spawnCount + 1);
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_added", clickedPos.toShortString(), offsets.size()));
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_needs_mob_spawner"));
+                    return InteractionResult.FAIL;
                 }
-                mobSpawner.setEntityDefinition(def.withSpawnOffsets(offsets).withSpawnCount(spawnCount));
                 break;
             default:
                 return InteractionResult.PASS;

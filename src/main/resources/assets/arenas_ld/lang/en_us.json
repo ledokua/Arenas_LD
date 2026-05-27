@@ -430,7 +430,7 @@
   "message.arenas_ld.configurator.entrance_pos_set": "Set entrance position to %s in %s",
   "message.arenas_ld.configurator.spawn_pos_added": "Added spawn position at %s (total: %s)",
   "message.arenas_ld.configurator.spawn_pos_removed": "Removed spawn position at %s",
-  "message.arenas_ld.configurator.spawn_pos_needs_mob_spawner": "Mob Spawn Position mode requires a selected Mob Spawner.",
+  "message.arenas_ld.configurator.spawn_pos_needs_mob_spawner": "Mob Spawn Position mode requires a selected Mob Spawner or Dungeon Boss Spawner.",
   "message.arenas_ld.configurator.spawn_pos_wrong_dimension": "Spawn position must be in the same dimension as the spawner.",
   "message.arenas_ld.configurator.cleared_selection": "Spawner selection cleared.",
   "message.arenas_ld.configurator.mode_changed": "Mode changed to: %s",

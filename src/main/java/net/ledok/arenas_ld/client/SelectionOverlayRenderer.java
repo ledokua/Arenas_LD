@@ -1,7 +1,13 @@
 package net.ledok.arenas_ld.client;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity;
@@ -15,8 +21,8 @@ import net.ledok.arenas_ld.util.LinkerModeDataComponent;
 import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.ItemStack;
@@ -33,7 +39,8 @@ import java.util.Optional;
  * Draws through-wall outline boxes for the selection held in a Spawner Configurator or Linker:
  * a gold box on the selected/main block and green boxes on its linked targets. Client-side only;
  * reads the selection from the held item's data component and the linked positions from the synced
- * block entity at the selected position.
+ * block entity at the selected position. Renders with the depth test disabled so the boxes stay
+ * visible through terrain.
  */
 public final class SelectionOverlayRenderer {
     private static final float[] MAIN_COLOR = {0.96f, 0.69f, 0.26f};   // gold
@@ -62,25 +69,32 @@ public final class SelectionOverlayRenderer {
             return;
         }
 
-        MultiBufferSource consumers = context.consumers();
-        if (consumers == null) {
-            return;
-        }
-        VertexConsumer lines = consumers.getBuffer(OverlayRenderType.LINES_THROUGH_WALLS);
         Vec3 cam = context.camera().getPosition();
-
         PoseStack poseStack = context.matrixStack();
         poseStack.pushPose();
         poseStack.translate(-cam.x, -cam.y, -cam.z);
+
+        RenderSystem.disableDepthTest();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.lineWidth(2.5F);
+        RenderSystem.setShader(GameRenderer::getRendertypeLinesShader);
+
+        BufferBuilder buffer = Tesselator.getInstance()
+            .begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_NORMAL);
         for (Box box : boxes) {
-            LevelRenderer.renderLineBox(poseStack, lines, new AABB(box.pos()),
+            LevelRenderer.renderLineBox(poseStack, buffer, new AABB(box.pos()),
                 box.color()[0], box.color()[1], box.color()[2], ALPHA);
         }
-        poseStack.popPose();
-
-        if (consumers instanceof MultiBufferSource.BufferSource bufferSource) {
-            bufferSource.endBatch(OverlayRenderType.LINES_THROUGH_WALLS);
+        MeshData mesh = buffer.build();
+        if (mesh != null) {
+            BufferUploader.drawWithShader(mesh);
         }
+
+        RenderSystem.lineWidth(1.0F);
+        RenderSystem.enableDepthTest();
+        RenderSystem.disableBlend();
+        poseStack.popPose();
     }
 
     private static List<Box> collectBoxes(Minecraft mc, LocalPlayer player) {
@@ -111,11 +125,19 @@ public final class SelectionOverlayRenderer {
             return;
         }
         BlockPos spawnerPos = posOpt.get();
-        if (!(mc.level.getBlockEntity(spawnerPos) instanceof MobSpawnerBlockEntity spawner)) {
+        BlockEntity be = mc.level.getBlockEntity(spawnerPos);
+
+        List<BlockPos> offsets;
+        if (be instanceof MobSpawnerBlockEntity mobSpawner) {
+            offsets = mobSpawner.getEntityDefinition().spawnOffsets();
+        } else if (be instanceof DungeonBossSpawnerBlockEntity bossSpawner) {
+            offsets = bossSpawner.getEntityDefinition().spawnOffsets();
+        } else {
             return;
         }
+
         boxes.add(new Box(spawnerPos, MAIN_COLOR));
-        for (BlockPos offset : spawner.getEntityDefinition().spawnOffsets()) {
+        for (BlockPos offset : offsets) {
             boxes.add(new Box(spawnerPos.offset(offset), TARGET_COLOR));
         }
     }

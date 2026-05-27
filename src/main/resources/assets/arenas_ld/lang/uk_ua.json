@@ -423,7 +423,7 @@
   "item.arenas_ld.configurator.mode.mob_spawn_position": "Позиція спавну моба",
   "message.arenas_ld.configurator.spawn_pos_added": "Додано позицію спавну у %s (всього: %s)",
   "message.arenas_ld.configurator.spawn_pos_removed": "Видалено позицію спавну у %s",
-  "message.arenas_ld.configurator.spawn_pos_needs_mob_spawner": "Режим позиції спавну моба потребує вибраного Спавнера мобів.",
+  "message.arenas_ld.configurator.spawn_pos_needs_mob_spawner": "Режим позиції спавну моба потребує вибраного Спавнера мобів або Спавнера боса підземелля.",
   "message.arenas_ld.configurator.spawn_pos_wrong_dimension": "Позиція спавну має бути в тому ж вимірі, що й спавнер.",
   "message.arenas_ld.configurator.spawner_selected": "Вибрано спавнер у %s",
   "message.arenas_ld.configurator.no_spawner_selected": "Спавнер не вибрано. Shift + Права кнопка миші на спавнері, щоб вибрати його.",

@@ -179,13 +179,19 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
 
         living.heal(living.getMaxHealth());
 
-        living.moveTo(
-            worldPosition.getX() + 0.5,
-            worldPosition.getY() + 1,
-            worldPosition.getZ() + 0.5,
-            world.random.nextFloat() * 360.0F,
-            0.0F
-        );
+        List<BlockPos> offsets = entityDefinition.spawnOffsets();
+        double spawnX, spawnY, spawnZ;
+        if (offsets.isEmpty()) {
+            spawnX = worldPosition.getX() + 0.5;
+            spawnY = worldPosition.getY() + 1;
+            spawnZ = worldPosition.getZ() + 0.5;
+        } else {
+            BlockPos offset = offsets.get(0);
+            spawnX = worldPosition.getX() + offset.getX() + 0.5;
+            spawnY = worldPosition.getY() + offset.getY();
+            spawnZ = worldPosition.getZ() + offset.getZ() + 0.5;
+        }
+        living.moveTo(spawnX, spawnY, spawnZ, world.random.nextFloat() * 360.0F, 0.0F);
 
         if (!world.addFreshEntity(living)) {
             ArenasLdMod.LOGGER.warn(
