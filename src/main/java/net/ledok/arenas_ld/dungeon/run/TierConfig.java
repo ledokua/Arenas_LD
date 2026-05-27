@@ -20,11 +20,13 @@ public record TierConfig(
     int dungeonTimeSeconds,
     boolean hardcoreDefault
 ) {
+    public static final TierConfig EASY_DEFAULT =
+        new TierConfig(0.75, 0.75, "", 600, false);
     public static final TierConfig NORMAL_DEFAULT =
         new TierConfig(1.0, 1.0, "", 600, false);
     public static final TierConfig HARD_DEFAULT =
         new TierConfig(1.5, 1.5, "", 600, false);
-    public static final TierConfig HELL_DEFAULT =
+    public static final TierConfig NIGHTMARE_DEFAULT =
         new TierConfig(2.5, 2.5, "", 600, true);
 
     public static final Codec<TierConfig> CODEC = RecordCodecBuilder.create(instance ->
@@ -43,9 +45,10 @@ public record TierConfig(
      */
     public static TierConfig defaultFor(DifficultyTier tier) {
         return switch (tier) {
+            case EASY -> EASY_DEFAULT;
             case NORMAL -> NORMAL_DEFAULT;
             case HARD -> HARD_DEFAULT;
-            case HELL -> HELL_DEFAULT;
+            case NIGHTMARE -> NIGHTMARE_DEFAULT;
         };
     }
 }

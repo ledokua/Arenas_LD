@@ -61,9 +61,10 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     private enum Tab {
         INSTANCES,
         GENERAL,
+        EASY,
         NORMAL,
         HARD,
-        HELL
+        NIGHTMARE
     }
 
     private final List<BlockPos> instances = new ArrayList<>();
@@ -83,9 +84,10 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
 
     private ButtonComponent instancesTabButton;
     private ButtonComponent generalTabButton;
+    private ButtonComponent easyTabButton;
     private ButtonComponent normalTabButton;
     private ButtonComponent hardTabButton;
-    private ButtonComponent hellTabButton;
+    private ButtonComponent nightmareTabButton;
 
     private String cooldownInput;
     private String closeTimerInput;
@@ -205,15 +207,17 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
 
         instancesTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.instances", Tab.INSTANCES, 76);
         generalTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.general", Tab.GENERAL, 72);
+        easyTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.easy", Tab.EASY, 56);
         normalTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.normal", Tab.NORMAL, 64);
         hardTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.hard", Tab.HARD, 56);
-        hellTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.hell", Tab.HELL, 56);
+        nightmareTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.nightmare", Tab.NIGHTMARE, 80);
 
         tabs.child(instancesTabButton);
         tabs.child(generalTabButton);
+        tabs.child(easyTabButton);
         tabs.child(normalTabButton);
         tabs.child(hardTabButton);
-        tabs.child(hellTabButton);
+        tabs.child(nightmareTabButton);
         return tabs;
     }
 
@@ -257,17 +261,19 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
 
         instancesTabButton.active(currentTab != Tab.INSTANCES);
         generalTabButton.active(currentTab != Tab.GENERAL);
+        easyTabButton.active(currentTab != Tab.EASY);
         normalTabButton.active(currentTab != Tab.NORMAL);
         hardTabButton.active(currentTab != Tab.HARD);
-        hellTabButton.active(currentTab != Tab.HELL);
+        nightmareTabButton.active(currentTab != Tab.NIGHTMARE);
         instancesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller_admin.tab.instances").append(" [" + instances.size() + "]"));
 
         switch (currentTab) {
             case INSTANCES -> buildInstancesTab();
             case GENERAL -> buildGeneralTab();
+            case EASY -> buildTierTab(DifficultyTier.EASY);
             case NORMAL -> buildTierTab(DifficultyTier.NORMAL);
             case HARD -> buildTierTab(DifficultyTier.HARD);
-            case HELL -> buildTierTab(DifficultyTier.HELL);
+            case NIGHTMARE -> buildTierTab(DifficultyTier.NIGHTMARE);
         }
 
         footerLabel.text(footerError == null ? Component.empty() : Component.literal(footerError));

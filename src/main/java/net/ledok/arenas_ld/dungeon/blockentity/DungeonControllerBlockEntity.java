@@ -77,9 +77,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     }
 
     private void initializeDefaults() {
+        tierConfigs.putIfAbsent(DifficultyTier.EASY, TierConfig.EASY_DEFAULT);
         tierConfigs.putIfAbsent(DifficultyTier.NORMAL, TierConfig.NORMAL_DEFAULT);
         tierConfigs.putIfAbsent(DifficultyTier.HARD, TierConfig.HARD_DEFAULT);
-        tierConfigs.putIfAbsent(DifficultyTier.HELL, TierConfig.HELL_DEFAULT);
+        tierConfigs.putIfAbsent(DifficultyTier.NIGHTMARE, TierConfig.NIGHTMARE_DEFAULT);
         for (DifficultyTier tier : DifficultyTier.values()) {
             leaderboards.putIfAbsent(tier, new ArrayList<>());
         }

@@ -13,9 +13,10 @@ import net.minecraft.network.codec.StreamCodec;
  * rather than throwing — this protects against renaming/removing tiers in the future.
  */
 public enum DifficultyTier {
+    EASY,
     NORMAL,
     HARD,
-    HELL;
+    NIGHTMARE;
 
     public static final Codec<DifficultyTier> CODEC = Codec.STRING.xmap(
         DifficultyTier::fromStringOrDefault,

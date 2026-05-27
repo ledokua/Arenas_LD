@@ -695,16 +695,19 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     }
 
     private FlowLayout ownerTierControls(boolean isOwner) {
+        ButtonComponent easy = segmentButton("EASY", tierColor(DifficultyTier.EASY), isOwner,
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.EASY,
+            b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.EASY)));
         ButtonComponent normal = segmentButton("NORMAL", tierColor(DifficultyTier.NORMAL), isOwner,
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NORMAL,
             b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
         ButtonComponent hard = segmentButton("HARD", tierColor(DifficultyTier.HARD), isOwner,
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.HARD,
             b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
-        ButtonComponent hell = segmentButton("HELL", tierColor(DifficultyTier.HELL), isOwner,
-            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.HELL,
-            b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HELL)));
-        return segmentedControl(normal, hard, hell);
+        ButtonComponent nightmare = segmentButton("NIGHTMARE", tierColor(DifficultyTier.NIGHTMARE), isOwner,
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NIGHTMARE,
+            b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NIGHTMARE)));
+        return segmentedControl(easy, normal, hard, nightmare);
     }
 
     private FlowLayout ownerVisibilityControls(boolean isOwner) {
@@ -1241,9 +1244,10 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
     private int tierColor(DifficultyTier tier) {
         return switch (tier) {
+            case EASY -> GOOD;
             case NORMAL -> INFO;
             case HARD -> WARN;
-            case HELL -> DANGER;
+            case NIGHTMARE -> DANGER;
         };
     }
 
