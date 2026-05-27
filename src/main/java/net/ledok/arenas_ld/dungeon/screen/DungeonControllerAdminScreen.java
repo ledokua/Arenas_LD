@@ -193,7 +193,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         LabelComponent titleLabel = Components.label(Component.translatable("gui.arenas_ld.dungeon_controller_admin.title"));
         titleLabel.color(Color.ofArgb(INK));
         titleLine.child(titleLabel);
-        titleLine.child(badge(Component.literal("OP"), WARN));
+        titleLine.child(badge(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.op"), WARN));
         info.child(titleLine);
 
         FlowLayout meta = Containers.horizontalFlow(Sizing.content(), Sizing.content());
@@ -352,15 +352,15 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
 
         LabelComponent activeValue = Components.label(Component.literal(running + " / " + total));
         activeValue.color(Color.ofArgb(running > 0 ? GOOD : INK));
-        inner.child(summaryColumn("ACTIVE RUNS", activeValue, Sizing.fixed(120)));
-        inner.child(summaryColumn("IDLE / COOLDOWN", labelLiteral(Integer.toString(idleCooldown), INK), Sizing.fixed(140)));
+        inner.child(summaryColumn(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.active_runs"), activeValue, Sizing.fixed(120)));
+        inner.child(summaryColumn(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.idle_cooldown"), labelLiteral(Integer.toString(idleCooldown), INK), Sizing.fixed(140)));
 
         FlowLayout hint = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
         hint.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
         hint.gap(3);
-        hint.child(labelLiteral("Add new instances with", INK_DIM));
-        hint.child(labelLiteral("Linker", ACCENT));
-        hint.child(labelLiteral("mode in the world.", INK_DIM));
+        hint.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.hint_pre"), INK_DIM));
+        hint.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.hint_link"), ACCENT));
+        hint.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.hint_post"), INK_DIM));
         inner.child(hint);
         bar.child(inner);
         return bar;
@@ -399,7 +399,9 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         DungeonControllerAdminData.InstanceRun run = runningInstances.get(pos);
         if (run != null) {
             tierParty.child(labelLiteral(titleCase(run.tier().name()), tierColor(run.tier())));
-            String party = run.party() == null || run.party().isEmpty() ? "Party" : run.party() + " party";
+            String party = run.party() == null || run.party().isEmpty()
+                ? tr("gui.arenas_ld.dungeon_controller_admin.ui.party_fallback")
+                : Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.party_suffix", run.party()).getString();
             tierParty.child(labelLiteral(party, INK_MID));
         } else {
             tierParty.child(labelLiteral("—", INK_DIM));
@@ -425,12 +427,12 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         boolean pending = pendingRemovals.contains(pos);
         ButtonComponent action;
         if (pending) {
-            action = smallButton(Component.literal("CANCEL"), b -> {
+            action = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.action.cancel"), b -> {
                 footerError = null;
                 ClientPlayNetworking.send(new RemoveDungeonInstancePayload(menu.getBlockPos(), pos));
             });
         } else {
-            action = dangerButton(Component.literal("REMOVE"), b -> {
+            action = dangerButton(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.action.remove"), b -> {
                 footerError = null;
                 ClientPlayNetworking.send(new RemoveDungeonInstancePayload(menu.getBlockPos(), pos));
             });
@@ -444,16 +446,16 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
 
     private InstanceStatusInfo instanceStatusInfo(BlockPos pos) {
         if (pendingRemovals.contains(pos)) {
-            return new InstanceStatusInfo("PENDING REMOVAL", WARN);
+            return new InstanceStatusInfo(tr("gui.arenas_ld.dungeon_controller_admin.ui.status.pending_removal"), WARN);
         }
         if (activeRuns.contains(pos)) {
-            return new InstanceStatusInfo("RUNNING", GOOD);
+            return new InstanceStatusInfo(tr("gui.arenas_ld.dungeon_controller_admin.ui.status.running"), GOOD);
         }
         int cooldown = liveCooldownTicks(pos);
         if (cooldown > 0) {
-            return new InstanceStatusInfo("COOLDOWN " + formatTicks(cooldown), WARN);
+            return new InstanceStatusInfo(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.status.cooldown", formatTicks(cooldown)).getString(), WARN);
         }
-        return new InstanceStatusInfo("IDLE", INK_DIM);
+        return new InstanceStatusInfo(tr("gui.arenas_ld.dungeon_controller_admin.ui.status.idle"), INK_DIM);
     }
 
     // Counts down locally between snapshots so the cooldown ticks live without a server push.
@@ -467,22 +469,22 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     }
 
     private void buildGeneralTab() {
-        contentArea.child(sectionHeader(Component.literal("GENERAL CONFIGURATION"), null));
+        contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.general.section"), null));
         contentArea.child(spacer(2));
         contentArea.child(twoColumnRow(
-            stepperField("COOLDOWN", "seconds after a run", "S", 5, 0, 86400, cooldownInput, v -> cooldownInput = v),
-            stepperField("CLOSE TIMER", "before finished dungeon closes", "S", 5, 0, 86400, closeTimerInput, v -> closeTimerInput = v)
+            stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.cooldown"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.cooldown_hint"), "S", 5, 0, 86400, cooldownInput, v -> cooldownInput = v),
+            stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.close_timer"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.close_timer_hint"), "S", 5, 0, 86400, closeTimerInput, v -> closeTimerInput = v)
         ));
         contentArea.child(spacer(8));
         contentArea.child(twoColumnRow(
-            stepperField("MAX PARTY SIZE", "players per lobby", "P", 1, 1, 64, maxPartyInput, v -> maxPartyInput = v),
-            stepperField("INVITE EXPIRY", "how long invites last", "S", 5, 1, 86400, inviteExpiryInput, v -> inviteExpiryInput = v)
+            stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.max_party"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.max_party_hint"), "P", 1, 1, 64, maxPartyInput, v -> maxPartyInput = v),
+            stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.invite_expiry"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.invite_expiry_hint"), "S", 5, 1, 86400, inviteExpiryInput, v -> inviteExpiryInput = v)
         ));
         contentArea.child(spacer(10));
 
         FlowLayout applyRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
         applyRow.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
-        ButtonComponent apply = smallButton(Component.literal("APPLY CHANGES"), b -> applyGeneral());
+        ButtonComponent apply = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.general.apply"), b -> applyGeneral());
         apply.horizontalSizing(Sizing.fixed(120));
         applyRow.child(apply);
         contentArea.child(applyRow);
@@ -574,9 +576,9 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         contentArea.child(spacer(4));
 
         contentArea.child(togglePanel(
-            "TIER AVAILABILITY",
-            tierName + " appears in the lobby tier picker and is selectable.",
-            enabled ? "ENABLED" : "DISABLED",
+            tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.availability"),
+            Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.availability_desc", tierName).getString(),
+            enabled ? tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.enabled") : tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.disabled"),
             enabled ? GOOD : INK_DIM,
             GOOD,
             () -> enabledInputs.getOrDefault(tier, config.enabled()),
@@ -587,27 +589,27 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         ));
 
         contentArea.child(spacer(6));
-        contentArea.child(labelLiteral("TIER PARAMETERS", INK_DIM));
+        contentArea.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.parameters"), INK_DIM));
         contentArea.child(spacer(2));
 
         contentArea.child(twoColumnRow(
-            stepperFieldDouble("HEALTH MULTIPLIER", "enemy HP × N", "×", 0.25, 0.0, 100.0,
+            stepperFieldDouble(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.health"), tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.health_hint"), "×", 0.25, 0.0, 100.0,
                 healthInputs.getOrDefault(tier, trimDouble(config.healthMultiplier())), v -> healthInputs.put(tier, v)),
-            stepperFieldDouble("DAMAGE MULTIPLIER", "enemy DMG × N", "×", 0.25, 0.0, 100.0,
+            stepperFieldDouble(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.damage"), tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.damage_hint"), "×", 0.25, 0.0, 100.0,
                 damageInputs.getOrDefault(tier, trimDouble(config.damageMultiplier())), v -> damageInputs.put(tier, v))
         ));
 
         contentArea.child(spacer(6));
         contentArea.child(twoColumnRow(
             lootField(lootInputs.getOrDefault(tier, config.perPlayerLootTable()), v -> lootInputs.put(tier, v)),
-            stepperField("RUN TIME LIMIT", "seconds", "S", 30, 1, 86400,
+            stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.time"), tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.time_hint"), "S", 30, 1, 86400,
                 timeInputs.getOrDefault(tier, Integer.toString(config.dungeonTimeSeconds())), v -> timeInputs.put(tier, v))
         ));
 
         contentArea.child(spacer(8));
         FlowLayout applyRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
         applyRow.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
-        ButtonComponent apply = smallButton(Component.literal("APPLY " + tier.name() + " TIER"), b -> applyTier(tier));
+        ButtonComponent apply = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.apply", tier.name()), b -> applyTier(tier));
         apply.horizontalSizing(Sizing.fixed(150));
         applyRow.child(apply);
         contentArea.child(applyRow);
@@ -625,8 +627,8 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         inner.padding(Insets.of(0, 0, 10, 10));
         inner.gap(8);
         inner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        inner.child(badge(Component.literal(tier.name() + " TIER"), color));
-        inner.child(labelLiteral("Affects all " + tierName + " runs across all instances.", INK));
+        inner.child(badge(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.banner_badge", tier.name()), color));
+        inner.child(labelLiteral(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.banner_desc", tierName).getString(), INK));
         banner.child(inner);
         return banner;
     }
@@ -685,7 +687,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         col.gap(4);
         FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
         head.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        head.child(labelLiteral("LOOT TABLE", INK_DIM));
+        head.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.loot"), INK_DIM));
         col.child(head);
 
         FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
@@ -833,9 +835,9 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         row.gap(6);
         row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
         row.child(headerCell("#", Sizing.fixed(28)));
-        row.child(headerCell("POSITION", Sizing.expand()));
-        row.child(headerCell("STATUS", Sizing.fixed(120)));
-        row.child(headerCell("TIER · PARTY", Sizing.fixed(140)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller_admin.ui.col.position"), Sizing.expand()));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller_admin.ui.col.status"), Sizing.fixed(120)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller_admin.ui.col.tier_party"), Sizing.fixed(140)));
         row.child(headerCell("", Sizing.fixed(22)));
         row.child(headerCell("", Sizing.fixed(22)));
         row.child(headerCell("", Sizing.fixed(64)));
@@ -877,6 +879,10 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         LabelComponent label = Components.label(Component.literal(value));
         label.color(Color.ofArgb(color));
         return label;
+    }
+
+    private String tr(String key) {
+        return Component.translatable(key).getString();
     }
 
     private String trimDouble(double value) {
