@@ -118,10 +118,6 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private LabelComponent summaryTierValue;
     private LabelComponent summaryVisibilityValue;
     private LabelComponent summaryHardcoreValue;
-    private LabelComponent tierSummaryLabel;
-    private LabelComponent visibilitySummaryLabel;
-    private LabelComponent hardcoreSummaryLabel;
-    private ButtonComponent hardcoreToggleButton;
     private ButtonComponent readyToggleButton;
     private ButtonComponent leaveLobbyButton;
     private ButtonComponent startRunButton;
@@ -322,10 +318,6 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         summaryTierValue = null;
         summaryVisibilityValue = null;
         summaryHardcoreValue = null;
-        tierSummaryLabel = null;
-        visibilitySummaryLabel = null;
-        hardcoreSummaryLabel = null;
-        hardcoreToggleButton = null;
         readyToggleButton = null;
         leaveLobbyButton = null;
         startRunButton = null;
@@ -548,29 +540,22 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         }
         contentArea.child(memberList);
 
-        contentArea.child(spacer(4));
+        contentArea.child(spacer(6));
         contentArea.child(sectionHeader(Component.literal("OWNER CONTROLS"), null));
-        contentArea.child(labeledControlRow(tierSummaryLabel = text(Component.translatable("gui.arenas_ld.dungeon_controller.tier", lobby.selectedTier().name()), INK_MID), ownerTierControls(isOwner)));
-        contentArea.child(labeledControlRow(visibilitySummaryLabel = text(Component.translatable("gui.arenas_ld.dungeon_controller.visibility", lobby.visibility().name()), INK_MID), ownerVisibilityControls(isOwner)));
 
-        ButtonComponent hc = smallButton(Component.translatable(lobby.hardcoreEnabled()
-            ? "gui.arenas_ld.dungeon_controller.hardcore.off"
-            : "gui.arenas_ld.dungeon_controller.hardcore.on"), b -> {
-            footerError = null;
-            boolean currentHardcore = ownLobby.map(Lobby::hardcoreEnabled).orElse(false);
-            ClientPlayNetworking.send(new SetLobbyHardcorePayload(menu.getBlockPos(), !currentHardcore));
-        });
-        hc.active(isOwner);
-        hardcoreToggleButton = hc;
-        hardcoreSummaryLabel = text(Component.translatable(
-            "gui.arenas_ld.dungeon_controller.hardcore",
-            Component.translatable(lobby.hardcoreEnabled()
-                ? "gui.arenas_ld.dungeon_controller.hardcore.on"
-                : "gui.arenas_ld.dungeon_controller.hardcore.off")
-        ), INK_MID);
-        contentArea.child(labeledControlRow(hardcoreSummaryLabel, hc));
+        contentArea.child(controlCaption("TIER"));
+        contentArea.child(ownerTierControls(isOwner));
 
-        contentArea.child(labeledControlRow(text(Component.translatable("gui.arenas_ld.dungeon_controller.button.invite"), INK_MID), ownerInviteControls(isOwner)));
+        contentArea.child(spacer(4));
+        contentArea.child(controlCaption("VISIBILITY"));
+        contentArea.child(ownerVisibilityControls(isOwner));
+
+        contentArea.child(spacer(4));
+        contentArea.child(hardcoreControl(isOwner));
+
+        contentArea.child(spacer(4));
+        contentArea.child(controlCaption("INVITE PLAYER"));
+        contentArea.child(ownerInviteControls(isOwner));
 
         boolean ready = lobby.readyMembers().contains(self);
         boolean allReady = lobby.allReady();
@@ -674,55 +659,67 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     }
 
     private FlowLayout ownerTierControls(boolean isOwner) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(4);
-
-        ButtonComponent normal = smallButton(Component.literal("Normal"), b ->
-            ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
-        ButtonComponent hard = smallButton(Component.literal("Hard"), b ->
-            ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
-        ButtonComponent hell = smallButton(Component.literal("Hell"), b ->
-            ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HELL)));
-
-        normal.active(isOwner);
-        hard.active(isOwner);
-        hell.active(isOwner);
-        row.child(normal);
-        row.child(hard);
-        row.child(hell);
-        return row;
+        ButtonComponent normal = segmentButton("NORMAL", tierColor(DifficultyTier.NORMAL), isOwner,
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NORMAL,
+            b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
+        ButtonComponent hard = segmentButton("HARD", tierColor(DifficultyTier.HARD), isOwner,
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.HARD,
+            b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
+        ButtonComponent hell = segmentButton("HELL", tierColor(DifficultyTier.HELL), isOwner,
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.HELL,
+            b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HELL)));
+        return segmentedControl(normal, hard, hell);
     }
 
     private FlowLayout ownerVisibilityControls(boolean isOwner) {
+        ButtonComponent pub = segmentButton("PUBLIC", visibilityColor(LobbyVisibility.PUBLIC), isOwner,
+            () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.PUBLIC,
+            b -> ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PUBLIC)));
+        ButtonComponent fr = segmentButton("FRIENDS", visibilityColor(LobbyVisibility.FRIENDS), isOwner,
+            () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.FRIENDS,
+            b -> ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.FRIENDS)));
+        ButtonComponent pr = segmentButton("PRIVATE", visibilityColor(LobbyVisibility.PRIVATE), isOwner,
+            () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.PRIVATE,
+            b -> ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PRIVATE)));
+        return segmentedControl(pub, fr, pr);
+    }
+
+    private FlowLayout hardcoreControl(boolean isOwner) {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(4);
+        row.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
+        row.padding(Insets.of(8, 8, 10, 10));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
-        ButtonComponent pub = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.visibility.public"), b ->
-            ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PUBLIC)));
-        ButtonComponent fr = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.visibility.friends"), b ->
-            ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.FRIENDS)));
-        ButtonComponent pr = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.visibility.private"), b ->
-            ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PRIVATE)));
+        FlowLayout textCol = Containers.verticalFlow(Sizing.expand(), Sizing.content());
+        textCol.gap(2);
+        textCol.child(text(Component.literal("HARDCORE"), INK_DIM));
+        textCol.child(text(Component.literal("Permadeath. No second attempts."), INK));
+        row.child(textCol);
 
-        pub.active(isOwner);
-        fr.active(isOwner);
-        pr.active(isOwner);
-        row.child(pub);
-        row.child(fr);
-        row.child(pr);
+        ButtonComponent toggle = toggleSwitch(isOwner,
+            () -> ownLobby.map(Lobby::hardcoreEnabled).orElse(false),
+            b -> {
+                footerError = null;
+                boolean currentHardcore = ownLobby.map(Lobby::hardcoreEnabled).orElse(false);
+                ClientPlayNetworking.send(new SetLobbyHardcorePayload(menu.getBlockPos(), !currentHardcore));
+            });
+        row.child(toggle);
         return row;
     }
 
     private FlowLayout ownerInviteControls(boolean isOwner) {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(4);
+        row.gap(6);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
-        inviteField = Components.textBox(Sizing.fixed(170), inviteInput);
-        inviteField.verticalSizing(Sizing.fixed(18));
+        inviteField = Components.textBox(Sizing.expand(), inviteInput);
+        inviteField.verticalSizing(Sizing.fixed(20));
         inviteField.onChanged().subscribe(value -> inviteInput = value);
+        inviteField.active = isOwner;
         row.child(inviteField);
 
-        ButtonComponent invite = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.invite"), b -> {
+        ButtonComponent invite = smallButton(Component.literal("INVITE"), b -> {
             footerError = null;
             UUID invitee = resolveInviteeUuid(inviteInput);
             if (invitee == null) {
@@ -736,6 +733,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             }
         });
         invite.active(isOwner);
+        invite.horizontalSizing(Sizing.fixed(58));
         row.child(invite);
 
         return row;
@@ -859,13 +857,72 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         return button;
     }
 
-    private FlowLayout labeledControlRow(LabelComponent labelComponent, io.wispforest.owo.ui.core.Component controls) {
-        FlowLayout row = rowPanel(true);
-        row.gap(8);
-        labelComponent.horizontalSizing(Sizing.fixed(170));
-        row.child(labelComponent);
-        row.child(controls);
+    private LabelComponent controlCaption(String caption) {
+        LabelComponent label = Components.label(Component.literal(caption));
+        label.color(Color.ofArgb(INK_DIM));
+        return label;
+    }
+
+    private ButtonComponent segmentButton(String label, int accentColor, boolean active, java.util.function.BooleanSupplier selected, java.util.function.Consumer<ButtonComponent> action) {
+        ButtonComponent button = Components.button(Component.empty(), action);
+        button.sizing(Sizing.fill(100), Sizing.fixed(26));
+        button.active(active);
+        button.renderer((context, rendered, delta) -> {
+            boolean sel = selected.getAsBoolean();
+            boolean isActive = rendered.active();
+            boolean hover = rendered.isHoveredOrFocused();
+            int x1 = rendered.getX();
+            int y1 = rendered.getY();
+            int w = rendered.getWidth();
+            int h = rendered.getHeight();
+            int fill = sel ? ((accentColor & 0x00FFFFFF) | 0x26000000) : (isActive && hover ? ROW_BG : PANEL_2);
+            int border = sel ? accentColor : HAIRLINE;
+            context.fill(x1, y1, x1 + w, y1 + h, fill);
+            context.drawRectOutline(x1, y1, w, h, border);
+            int textColor = sel ? accentColor : (isActive ? INK : INK_DIM);
+            int tx = x1 + (w - this.font.width(label)) / 2;
+            int ty = y1 + (h - this.font.lineHeight) / 2 + 1;
+            context.drawString(this.font, label, tx, ty, textColor, false);
+        });
+        return button;
+    }
+
+    private FlowLayout segmentedControl(ButtonComponent... buttons) {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        int n = buttons.length;
+        int base = 100 / n;
+        for (int i = 0; i < n; i++) {
+            int pct = (i == n - 1) ? (100 - base * (n - 1)) : base;
+            FlowLayout cell = Containers.verticalFlow(Sizing.fill(pct), Sizing.content());
+            cell.surface(Surface.BLANK);
+            cell.padding(Insets.of(0, 0, i == 0 ? 0 : 3, i == n - 1 ? 0 : 3));
+            cell.child(buttons[i]);
+            row.child(cell);
+        }
         return row;
+    }
+
+    private ButtonComponent toggleSwitch(boolean active, java.util.function.BooleanSupplier on, java.util.function.Consumer<ButtonComponent> action) {
+        ButtonComponent button = Components.button(Component.empty(), action);
+        button.sizing(Sizing.fixed(38), Sizing.fixed(18));
+        button.active(active);
+        button.renderer((context, rendered, delta) -> {
+            boolean isOn = on.getAsBoolean();
+            int x1 = rendered.getX();
+            int y1 = rendered.getY();
+            int w = rendered.getWidth();
+            int h = rendered.getHeight();
+            int track = isOn ? ((DANGER & 0x00FFFFFF) | 0x55000000) : PANEL_2;
+            int border = isOn ? DANGER : HAIRLINE;
+            context.fill(x1, y1, x1 + w, y1 + h, track);
+            context.drawRectOutline(x1, y1, w, h, border);
+            int knobW = w / 2 - 3;
+            int knobX = isOn ? (x1 + w - knobW - 2) : (x1 + 2);
+            int knobColor = isOn ? DANGER : INK;
+            context.fill(knobX, y1 + 2, knobX + knobW, y1 + h - 2, knobColor);
+        });
+        return button;
     }
 
     private FlowLayout infoColumn(String caption, LabelComponent value, Sizing width) {
@@ -1103,26 +1160,6 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         if (summaryHardcoreValue != null) {
             summaryHardcoreValue.text(Component.literal(lobby.hardcoreEnabled() ? "On" : "Off"));
             summaryHardcoreValue.color(Color.ofArgb(lobby.hardcoreEnabled() ? DANGER : INK_MID));
-        }
-        if (tierSummaryLabel != null) {
-            tierSummaryLabel.text(Component.translatable("gui.arenas_ld.dungeon_controller.tier", lobby.selectedTier().name()));
-        }
-        if (visibilitySummaryLabel != null) {
-            visibilitySummaryLabel.text(Component.translatable("gui.arenas_ld.dungeon_controller.visibility", lobby.visibility().name()));
-        }
-        if (hardcoreSummaryLabel != null) {
-            hardcoreSummaryLabel.text(Component.translatable(
-                "gui.arenas_ld.dungeon_controller.hardcore",
-                Component.translatable(lobby.hardcoreEnabled()
-                    ? "gui.arenas_ld.dungeon_controller.hardcore.on"
-                    : "gui.arenas_ld.dungeon_controller.hardcore.off")
-            ));
-        }
-        if (hardcoreToggleButton != null) {
-            hardcoreToggleButton.setMessage(Component.translatable(lobby.hardcoreEnabled()
-                ? "gui.arenas_ld.dungeon_controller.hardcore.off"
-                : "gui.arenas_ld.dungeon_controller.hardcore.on"));
-            hardcoreToggleButton.active(isOwner);
         }
         if (readyToggleButton != null) {
             readyToggleButton.setMessage(Component.translatable(ready
