@@ -110,9 +110,9 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private final Map<UUID, MemberRowRefs> memberRowRefs = new HashMap<>();
     private LabelComponent summaryOwnerLabel;
     private LabelComponent summaryMembersLabel;
-    private FlowLayout summaryTierBadge;
-    private FlowLayout summaryVisibilityBadge;
-    private FlowLayout summaryHardcoreBadge;
+    private LabelComponent summaryTierValue;
+    private LabelComponent summaryVisibilityValue;
+    private LabelComponent summaryHardcoreValue;
     private LabelComponent tierSummaryLabel;
     private LabelComponent visibilitySummaryLabel;
     private LabelComponent hardcoreSummaryLabel;
@@ -313,9 +313,9 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         memberRowRefs.clear();
         summaryOwnerLabel = null;
         summaryMembersLabel = null;
-        summaryTierBadge = null;
-        summaryVisibilityBadge = null;
-        summaryHardcoreBadge = null;
+        summaryTierValue = null;
+        summaryVisibilityValue = null;
+        summaryHardcoreValue = null;
         tierSummaryLabel = null;
         visibilitySummaryLabel = null;
         hardcoreSummaryLabel = null;
@@ -501,20 +501,28 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         UUID self = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : UUID.randomUUID();
         boolean isOwner = lobby.ownerUuid().equals(self);
 
-        FlowLayout summary = rowPanel(true);
-        summary.gap(12);
-        FlowLayout summaryLeft = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        summaryOwnerLabel = text(Component.translatable("gui.arenas_ld.dungeon_controller.owner", lobby.ownerName()), INK);
-        summaryMembersLabel = text(Component.translatable("gui.arenas_ld.dungeon_controller.members", lobby.members().size(), menu.getMaxPartySize()), INK_MID);
-        summaryLeft.child(summaryOwnerLabel);
-        summaryLeft.child(summaryMembersLabel);
-        summary.child(summaryLeft);
-        summaryTierBadge = badge(Component.literal(lobby.selectedTier().name()), tierColor(lobby.selectedTier()));
-        summaryVisibilityBadge = badge(Component.literal(lobby.visibility().name()), visibilityColor(lobby.visibility()));
-        summaryHardcoreBadge = badge(Component.literal(lobby.hardcoreEnabled() ? "HC ON" : "HC OFF"), lobby.hardcoreEnabled() ? DANGER : INK_MID);
-        summary.child(summaryTierBadge);
-        summary.child(summaryVisibilityBadge);
-        summary.child(summaryHardcoreBadge);
+        summaryOwnerLabel = text(Component.literal(lobby.ownerName()), ACCENT);
+        summaryMembersLabel = text(Component.literal(lobby.members().size() + " / " + menu.getMaxPartySize()), INK);
+        summaryTierValue = text(Component.literal(titleCase(lobby.selectedTier().name())), tierColor(lobby.selectedTier()));
+        summaryVisibilityValue = text(Component.literal(titleCase(lobby.visibility().name())), visibilityColor(lobby.visibility()));
+        summaryHardcoreValue = text(Component.literal(lobby.hardcoreEnabled() ? "On" : "Off"), lobby.hardcoreEnabled() ? DANGER : INK_MID);
+
+        FlowLayout summary = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        summary.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
+        summary.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout summaryAccent = Containers.verticalFlow(Sizing.fixed(3), Sizing.expand());
+        summaryAccent.surface(Surface.flat(ACCENT));
+        summary.child(summaryAccent);
+        FlowLayout summaryCols = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        summaryCols.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        summaryCols.padding(Insets.of(9, 9, 12, 10));
+        summaryCols.gap(8);
+        summaryCols.child(infoColumn("OWNER", summaryOwnerLabel));
+        summaryCols.child(infoColumn("TIER", summaryTierValue));
+        summaryCols.child(infoColumn("MEMBERS", summaryMembersLabel));
+        summaryCols.child(infoColumn("VISIBILITY", summaryVisibilityValue));
+        summaryCols.child(infoColumn("HARDCORE", summaryHardcoreValue));
+        summary.child(summaryCols);
         contentArea.child(summary);
         contentArea.child(sectionHeader(Component.literal("MEMBERS"), lobby.members().size()));
         contentArea.child(memberHeaderRow(isOwner));
@@ -787,6 +795,23 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         return row;
     }
 
+    private FlowLayout infoColumn(String caption, LabelComponent value) {
+        FlowLayout col = Containers.verticalFlow(Sizing.expand(), Sizing.content());
+        col.gap(3);
+        LabelComponent captionLabel = Components.label(Component.literal(caption));
+        captionLabel.color(Color.ofArgb(INK_DIM));
+        col.child(captionLabel);
+        col.child(value);
+        return col;
+    }
+
+    private static String titleCase(String value) {
+        if (value.isEmpty()) {
+            return value;
+        }
+        return value.charAt(0) + value.substring(1).toLowerCase(java.util.Locale.ROOT);
+    }
+
     private LabelComponent headerCell(String text, Sizing sizing) {
         LabelComponent label = Components.label(Component.literal(text));
         label.color(Color.ofArgb(INK_DIM));
@@ -986,19 +1011,22 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         boolean canStart = isOwner && allReady && allOnline;
 
         if (summaryOwnerLabel != null) {
-            summaryOwnerLabel.text(Component.translatable("gui.arenas_ld.dungeon_controller.owner", lobby.ownerName()));
+            summaryOwnerLabel.text(Component.literal(lobby.ownerName()));
         }
         if (summaryMembersLabel != null) {
-            summaryMembersLabel.text(Component.translatable("gui.arenas_ld.dungeon_controller.members", lobby.members().size(), menu.getMaxPartySize()));
+            summaryMembersLabel.text(Component.literal(lobby.members().size() + " / " + menu.getMaxPartySize()));
         }
-        if (summaryTierBadge != null) {
-            updateBadge(summaryTierBadge, Component.literal(lobby.selectedTier().name()), tierColor(lobby.selectedTier()));
+        if (summaryTierValue != null) {
+            summaryTierValue.text(Component.literal(titleCase(lobby.selectedTier().name())));
+            summaryTierValue.color(Color.ofArgb(tierColor(lobby.selectedTier())));
         }
-        if (summaryVisibilityBadge != null) {
-            updateBadge(summaryVisibilityBadge, Component.literal(lobby.visibility().name()), visibilityColor(lobby.visibility()));
+        if (summaryVisibilityValue != null) {
+            summaryVisibilityValue.text(Component.literal(titleCase(lobby.visibility().name())));
+            summaryVisibilityValue.color(Color.ofArgb(visibilityColor(lobby.visibility())));
         }
-        if (summaryHardcoreBadge != null) {
-            updateBadge(summaryHardcoreBadge, Component.literal(lobby.hardcoreEnabled() ? "HC ON" : "HC OFF"), lobby.hardcoreEnabled() ? DANGER : INK_MID);
+        if (summaryHardcoreValue != null) {
+            summaryHardcoreValue.text(Component.literal(lobby.hardcoreEnabled() ? "On" : "Off"));
+            summaryHardcoreValue.color(Color.ofArgb(lobby.hardcoreEnabled() ? DANGER : INK_MID));
         }
         if (tierSummaryLabel != null) {
             tierSummaryLabel.text(Component.translatable("gui.arenas_ld.dungeon_controller.tier", lobby.selectedTier().name()));
