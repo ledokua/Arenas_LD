@@ -1,7 +1,6 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
-import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -29,7 +28,6 @@ public record DungeonControllerAdminData(
     int maxPartySize,
     int inviteExpiryTicks,
     Map<DifficultyTier, TierConfig> tierConfigs,
-    Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards,
     Map<BlockPos, InstanceRun> runningInstances
 ) {
     /** Tier and party label of the run currently occupying an instance. */
@@ -73,15 +71,6 @@ public record DungeonControllerAdminData(
         for (Map.Entry<DifficultyTier, TierConfig> entry : data.tierConfigs().entrySet()) {
             DifficultyTier.STREAM_CODEC.encode(buf, entry.getKey());
             buf.writeNbt((CompoundTag) TierConfig.CODEC.encodeStart(NbtOps.INSTANCE, entry.getValue()).getOrThrow());
-        }
-
-        buf.writeVarInt(data.topLeaderboards().size());
-        for (Map.Entry<DifficultyTier, List<LeaderboardEntry>> entry : data.topLeaderboards().entrySet()) {
-            DifficultyTier.STREAM_CODEC.encode(buf, entry.getKey());
-            buf.writeVarInt(entry.getValue().size());
-            for (LeaderboardEntry leaderboardEntry : entry.getValue()) {
-                buf.writeNbt((CompoundTag) LeaderboardEntry.CODEC.encodeStart(NbtOps.INSTANCE, leaderboardEntry).getOrThrow());
-            }
         }
 
         buf.writeVarInt(data.runningInstances().size());
@@ -136,21 +125,6 @@ public record DungeonControllerAdminData(
             }
         }
 
-        int leaderboardMapSize = buf.readVarInt();
-        Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards = new EnumMap<>(DifficultyTier.class);
-        for (int i = 0; i < leaderboardMapSize; i++) {
-            DifficultyTier tier = DifficultyTier.STREAM_CODEC.decode(buf);
-            int entrySize = buf.readVarInt();
-            List<LeaderboardEntry> entries = new ArrayList<>(entrySize);
-            for (int j = 0; j < entrySize; j++) {
-                CompoundTag tag = buf.readNbt();
-                if (tag != null) {
-                    entries.add(LeaderboardEntry.CODEC.parse(NbtOps.INSTANCE, tag).getOrThrow());
-                }
-            }
-            topLeaderboards.put(tier, entries);
-        }
-
         int runningSize = buf.readVarInt();
         Map<BlockPos, InstanceRun> runningInstances = new HashMap<>();
         for (int i = 0; i < runningSize; i++) {
@@ -171,7 +145,6 @@ public record DungeonControllerAdminData(
             maxPartySize,
             inviteExpiryTicks,
             tierConfigs,
-            topLeaderboards,
             runningInstances
         );
     }

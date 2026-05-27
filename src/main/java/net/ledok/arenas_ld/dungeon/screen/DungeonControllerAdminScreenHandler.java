@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.dungeon.screen;
 
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
-import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.screen.ModScreenHandlers;
 import net.minecraft.core.BlockPos;
@@ -26,7 +25,6 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     private int maxPartySize;
     private int inviteExpiryTicks;
     private Map<DifficultyTier, TierConfig> tierConfigs;
-    private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
     private Map<BlockPos, DungeonControllerAdminData.InstanceRun> runningInstances;
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerAdminData data) {
@@ -41,7 +39,6 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.maxPartySize = data.maxPartySize();
         this.inviteExpiryTicks = data.inviteExpiryTicks();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
-        this.topLeaderboards = Map.copyOf(data.topLeaderboards());
         this.runningInstances = Map.copyOf(data.runningInstances());
     }
 
@@ -57,7 +54,6 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
             controller.getMaxPartySize(),
             controller.getInviteExpiryTicks(),
             controller.getTierConfigs(),
-            Map.of(),
             Map.of()
         ));
     }
@@ -72,7 +68,6 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     public int getMaxPartySize() { return maxPartySize; }
     public int getInviteExpiryTicks() { return inviteExpiryTicks; }
     public Map<DifficultyTier, TierConfig> getTierConfigs() { return tierConfigs; }
-    public Map<DifficultyTier, List<LeaderboardEntry>> getTopLeaderboards() { return topLeaderboards; }
     public Map<BlockPos, DungeonControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
 
     public void applyData(DungeonControllerAdminData data) {
@@ -85,7 +80,6 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.maxPartySize = data.maxPartySize();
         this.inviteExpiryTicks = data.inviteExpiryTicks();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
-        this.topLeaderboards = Map.copyOf(data.topLeaderboards());
         this.runningInstances = Map.copyOf(data.runningInstances());
     }
 
