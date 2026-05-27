@@ -424,10 +424,14 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         row.gap(6);
 
         Optional<Lobby> inviteLobby = resolveLobbyForInvite(invite);
+        String ownerName = inviteLobby.map(Lobby::ownerName)
+            .filter(n -> !n.isEmpty())
+            .orElseGet(() -> !invite.ownerName().isEmpty() ? invite.ownerName() : shortUuid(invite.lobbyId()));
         String inviterName = inviteLobby
-            .map(l -> l.memberNames().getOrDefault(invite.inviterUuid(), shortUuid(invite.inviterUuid())))
-            .orElse(shortUuid(invite.inviterUuid()));
-        String ownerName = inviteLobby.map(Lobby::ownerName).orElseGet(() -> shortUuid(invite.lobbyId()));
+            .map(l -> l.memberNames().get(invite.inviterUuid()))
+            .filter(n -> !n.isEmpty())
+            .orElse(ownerName);
+        DifficultyTier inviteTier = inviteLobby.map(Lobby::selectedTier).orElse(invite.tier());
 
         long remainingTicks = Math.max(0L, invite.expiresAtTick() - approximateServerTick());
         long remainingSeconds = remainingTicks / 20L;
@@ -441,17 +445,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         row.child(inviteInfo);
         row.child(fixedText(Component.literal("-"), 40, INK_DIM, HorizontalAlignment.CENTER));
 
-        Component badgeText;
-        int badgeColor;
-        if (inviteLobby.isPresent()) {
-            DifficultyTier inviteTier = inviteLobby.get().selectedTier();
-            badgeText = Component.literal(inviteTier.name());
-            badgeColor = tierColor(inviteTier);
-        } else {
-            badgeText = Component.literal(shortUuid(invite.lobbyId()).toUpperCase());
-            badgeColor = INFO;
-        }
-        row.child(fixedBadge(badgeText, 86, badgeColor));
+        row.child(fixedBadge(Component.literal(inviteTier.name()), 86, tierColor(inviteTier)));
         LabelComponent countdown = fixedText(Component.literal(formatRemaining(remainingSeconds)), 62, remainingSeconds <= 15 ? WARN : INK_MID, HorizontalAlignment.CENTER);
         inviteCountdownLabels.put(invite.lobbyId(), countdown);
         row.child(countdown);

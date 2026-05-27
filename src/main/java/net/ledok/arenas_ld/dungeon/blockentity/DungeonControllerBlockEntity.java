@@ -343,7 +343,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
         long now = inviter.serverLevel().getGameTime();
         pendingInvites.removeIf(invite -> invite.expiresAtTick() <= now);
-        PendingInvite invite = new PendingInvite(lobby.lobbyId(), inviteeUuid, inviter.getUUID(), now + inviteExpiryTicks);
+        PendingInvite invite = new PendingInvite(lobby.lobbyId(), inviteeUuid, inviter.getUUID(), now + inviteExpiryTicks, lobby.selectedTier(), lobby.ownerName());
         pendingInvites.removeIf(existing ->
             existing.lobbyId().equals(invite.lobbyId()) && existing.invitedUuid().equals(invite.invitedUuid()));
         addInvite(invite);
