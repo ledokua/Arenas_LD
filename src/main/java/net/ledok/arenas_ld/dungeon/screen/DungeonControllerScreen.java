@@ -69,7 +69,8 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
     private enum Tab {
         LOBBIES,
-        MY_LOBBY
+        MY_LOBBY,
+        INVITES
     }
 
     private static final class MemberRowRefs {
@@ -100,6 +101,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private LabelComponent footerLabel;
     private ButtonComponent lobbiesTabButton;
     private ButtonComponent myLobbyTabButton;
+    private ButtonComponent invitesTabButton;
     private TextBoxComponent inviteField;
     private String inviteInput = "";
     private double savedScrollProgress = 0.0D;
@@ -174,7 +176,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             contentScroll.scrollTo(savedScrollProgress);
             restoreScrollNextTick = false;
         }
-        if (currentTab == Tab.LOBBIES && !myInvites.isEmpty()) {
+        if ((currentTab == Tab.LOBBIES || currentTab == Tab.INVITES) && !myInvites.isEmpty()) {
             long now = approximateServerTick() / 20L;
             if (now != lastCountdownSecond) {
                 lastCountdownSecond = now;
@@ -256,9 +258,11 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
         lobbiesTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.lobbies", Tab.LOBBIES);
         myLobbyTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.my_lobby", Tab.MY_LOBBY);
+        invitesTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.invites", Tab.INVITES);
 
         tabs.child(lobbiesTabButton);
         tabs.child(myLobbyTabButton);
+        tabs.child(invitesTabButton);
         return tabs;
     }
 
@@ -322,11 +326,15 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
         lobbiesTabButton.active(currentTab != Tab.LOBBIES);
         myLobbyTabButton.active(currentTab != Tab.MY_LOBBY);
+        invitesTabButton.active(currentTab != Tab.INVITES);
         lobbiesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.lobbies").append(" " + visibleLobbies.size()));
         myLobbyTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.my_lobby").append(ownLobby.isPresent() ? " " + ownLobby.get().members().size() : ""));
+        invitesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.invites").append(" " + myInvites.size()));
 
         if (currentTab == Tab.LOBBIES) {
             buildLobbiesContent();
+        } else if (currentTab == Tab.INVITES) {
+            buildInvitesContent();
         } else {
             buildMyLobbyContent();
         }
@@ -340,21 +348,19 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         }
     }
 
-    private void buildLobbiesContent() {
+    private void buildInvitesContent() {
         contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.invites"), myInvites.size()));
-        if (!myInvites.isEmpty()) {
-            contentArea.child(inviteHeaderRow());
-        }
-
         if (myInvites.isEmpty()) {
             contentArea.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller.no_invites")));
         } else {
-            for (PendingInvite invite : myInvites.stream().limit(3).toList()) {
+            contentArea.child(inviteHeaderRow());
+            for (PendingInvite invite : myInvites) {
                 contentArea.child(inviteRow(invite));
             }
         }
+    }
 
-        contentArea.child(spacer(6));
+    private void buildLobbiesContent() {
         ButtonComponent create = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.create"), b -> {
             footerError = null;
             ClientPlayNetworking.send(new CreateLobbyPayload(menu.getBlockPos()));
