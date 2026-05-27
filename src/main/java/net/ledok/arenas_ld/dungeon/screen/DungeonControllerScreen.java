@@ -114,6 +114,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private final Map<UUID, MemberRowRefs> memberRowRefs = new HashMap<>();
     private LabelComponent summaryOwnerLabel;
     private LabelComponent summaryMembersLabel;
+    private LabelComponent membersSummaryLabel;
     private LabelComponent summaryTierValue;
     private LabelComponent summaryVisibilityValue;
     private LabelComponent summaryHardcoreValue;
@@ -317,6 +318,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         memberRowRefs.clear();
         summaryOwnerLabel = null;
         summaryMembersLabel = null;
+        membersSummaryLabel = null;
         summaryTierValue = null;
         summaryVisibilityValue = null;
         summaryHardcoreValue = null;
@@ -830,7 +832,8 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
         row.gap(6);
         row.child(text(Component.literal("MEMBERS"), INK_DIM));
-        row.child(text(Component.literal("· " + readyCount + " READY · " + count + " / " + max), ACCENT));
+        membersSummaryLabel = text(Component.literal("· " + readyCount + " READY · " + count + " / " + max), ACCENT);
+        row.child(membersSummaryLabel);
         return row;
     }
 
@@ -1085,6 +1088,9 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         }
         if (summaryMembersLabel != null) {
             summaryMembersLabel.text(Component.literal(lobby.members().size() + " / " + menu.getMaxPartySize()));
+        }
+        if (membersSummaryLabel != null) {
+            membersSummaryLabel.text(Component.literal("· " + lobby.readyMembers().size() + " READY · " + lobby.members().size() + " / " + menu.getMaxPartySize()));
         }
         if (summaryTierValue != null) {
             summaryTierValue.text(Component.literal(titleCase(lobby.selectedTier().name())));
