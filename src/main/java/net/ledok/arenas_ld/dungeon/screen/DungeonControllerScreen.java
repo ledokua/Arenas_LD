@@ -448,10 +448,13 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         row.child(fixedBadge(Component.literal(lobby.selectedTier().name()), 70, tierColor(lobby.selectedTier())));
 
         FlowLayout visCell = Containers.horizontalFlow(Sizing.fixed(78), Sizing.content());
+        int visColor = visibilityColor(lobby.visibility());
+        visCell.surface(Surface.flat((visColor & 0x00FFFFFF) | 0x22000000).and(Surface.outline((visColor & 0x00FFFFFF) | 0x55000000)));
+        visCell.padding(Insets.of(2, 4, 2, 4));
         visCell.gap(4);
-        visCell.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        visCell.child(text(Component.literal("●"), visibilityColor(lobby.visibility())));
-        visCell.child(text(Component.literal(lobby.visibility().name()), INK_DIM));
+        visCell.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        visCell.child(text(Component.literal("●"), visColor));
+        visCell.child(text(Component.literal(lobby.visibility().name()), visColor));
         row.child(visCell);
 
         row.child(fixedBadge(Component.literal(statusLabel(lobby.status())), 82, statusColor(lobby.status())));
@@ -707,7 +710,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         row.child(headerCell("OWNER", Sizing.expand()));
         row.child(headerCell("SIZE", Sizing.fixed(44)));
         row.child(headerCell("TIER", Sizing.fixed(70)));
-        row.child(headerCell("VIS", Sizing.fixed(78)));
+        row.child(headerCell("VISIBILITY", Sizing.fixed(78)));
         row.child(headerCell("STATUS", Sizing.fixed(82)));
         row.child(headerCell("", Sizing.fixed(72)));
         return row;
