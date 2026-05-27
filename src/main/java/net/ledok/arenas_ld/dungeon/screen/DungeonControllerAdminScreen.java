@@ -71,6 +71,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     private final Set<BlockPos> activeRuns = new HashSet<>();
     private final Map<BlockPos, Integer> cooldowns = new HashMap<>();
     private final Set<BlockPos> pendingRemovals = new HashSet<>();
+    private final Map<BlockPos, DungeonControllerAdminData.InstanceRun> runningInstances = new HashMap<>();
     private final Map<DifficultyTier, TierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, List<LeaderboardEntry>> leaderboards = new EnumMap<>(DifficultyTier.class);
 
@@ -280,64 +281,156 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     }
 
     private void buildInstancesTab() {
-        FlowLayout summary = rowPanel(true);
-        summary.gap(8);
-        summary.child(fixedBadge(Component.literal(activeRuns.size() + " RUNNING"), 108, GOOD));
-        summary.child(fixedBadge(Component.literal(cooldowns.size() + " COOLDOWN"), 116, WARN));
-        summary.child(fixedBadge(Component.literal(pendingRemovals.size() + " PENDING"), 108, DANGER));
-        summary.child(fixedBadge(Component.literal(Math.max(0, instances.size() - activeRuns.size() - cooldowns.size()) + " IDLE"), 82, INK_MID));
-        summary.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-        summary.child(label("gui.arenas_ld.dungeon_controller_admin.active_runs_count", INK_MID,
-            activeRuns.size(), instances.size()));
-        contentArea.child(summary);
-        if (!instances.isEmpty()) {
-            contentArea.child(instanceHeaderRow());
+        int running = 0;
+        int idleCooldown = 0;
+        for (BlockPos pos : instances) {
+            if (pendingRemovals.contains(pos)) {
+                continue;
+            }
+            if (activeRuns.contains(pos)) {
+                running++;
+            } else {
+                idleCooldown++;
+            }
         }
-
-        for (int i = 0; i < instances.size() && i < 7; i++) {
-            contentArea.child(instanceRow(i, instances.get(i)));
-        }
+        contentArea.child(instancesSummaryBar(running, instances.size(), idleCooldown));
 
         if (instances.isEmpty()) {
-            contentArea.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller_admin.use_linker_hint")));
+            FlowLayout empty = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+            empty.surface(Surface.flat(ROW_BG));
+            empty.padding(Insets.of(10));
+            empty.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+            empty.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller_admin.use_linker_hint")));
+            contentArea.child(empty);
+            return;
         }
+
+        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        list.child(instanceHeaderRow());
+        list.child(rowDivider(HAIRLINE_HI));
+        for (int i = 0; i < instances.size(); i++) {
+            if (i > 0) {
+                list.child(rowDivider(HAIRLINE));
+            }
+            list.child(instanceRow(i, instances.get(i)));
+        }
+        contentArea.child(list);
+    }
+
+    private FlowLayout instancesSummaryBar(int running, int total, int idleCooldown) {
+        FlowLayout bar = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(40));
+        bar.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
+        bar.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
+        accent.surface(Surface.flat(ACCENT));
+        bar.child(accent);
+
+        FlowLayout inner = Containers.horizontalFlow(Sizing.expand(), Sizing.fill(100));
+        inner.padding(Insets.of(0, 0, 12, 10));
+        inner.gap(0);
+        inner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        LabelComponent activeValue = Components.label(Component.literal(running + " / " + total));
+        activeValue.color(Color.ofArgb(running > 0 ? GOOD : INK));
+        inner.child(summaryColumn("ACTIVE RUNS", activeValue, Sizing.fixed(120)));
+        inner.child(summaryColumn("IDLE / COOLDOWN", labelLiteral(Integer.toString(idleCooldown), INK), Sizing.fixed(140)));
+
+        FlowLayout hint = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        hint.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
+        hint.gap(3);
+        hint.child(labelLiteral("Add new instances with", INK_DIM));
+        hint.child(labelLiteral("Linker", ACCENT));
+        hint.child(labelLiteral("mode in the world.", INK_DIM));
+        inner.child(hint);
+        bar.child(inner);
+        return bar;
+    }
+
+    private FlowLayout summaryColumn(String caption, LabelComponent value, Sizing width) {
+        FlowLayout col = Containers.verticalFlow(width, Sizing.content());
+        col.gap(3);
+        col.child(labelLiteral(caption, INK_DIM));
+        col.child(value);
+        return col;
     }
 
     private FlowLayout instanceRow(int index, BlockPos pos) {
-        FlowLayout row = rowPanel(index % 2 == 0);
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(ROW_BG));
+        row.padding(Insets.of(7, 7, 8, 8));
         row.gap(6);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
-        FlowLayout info = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        LabelComponent name = Components.label(Component.literal((index + 1) + ". " + pos.toShortString()));
-        name.color(Color.ofArgb(INK));
-        LabelComponent hint = Components.label(Component.literal("INSTANCE"));
-        hint.color(Color.ofArgb(INK_DIM));
-        info.child(name);
-        info.child(hint);
-        row.child(info);
+        LabelComponent rank = labelLiteral(Integer.toString(index + 1), INK_MID);
+        rank.horizontalSizing(Sizing.fixed(28));
+        row.child(rank);
 
-        row.child(fixedBadge(instanceStatus(pos), 138, statusColor(pos)));
+        LabelComponent position = labelLiteral("X " + pos.getX() + " · Z " + pos.getZ(), INK);
+        position.horizontalSizing(Sizing.expand());
+        row.child(position);
 
-        ButtonComponent up = smallButton(Component.literal("^"), b -> {
+        InstanceStatusInfo status = instanceStatusInfo(pos);
+        row.child(fixedBadge(Component.literal(status.label()), 120, status.color()));
+
+        FlowLayout tierParty = Containers.verticalFlow(Sizing.fixed(140), Sizing.content());
+        tierParty.gap(1);
+        DungeonControllerAdminData.InstanceRun run = runningInstances.get(pos);
+        if (run != null) {
+            tierParty.child(labelLiteral(titleCase(run.tier().name()), tierColor(run.tier())));
+            String party = run.party() == null || run.party().isEmpty() ? "Party" : run.party() + " party";
+            tierParty.child(labelLiteral(party, INK_MID));
+        } else {
+            tierParty.child(labelLiteral("—", INK_DIM));
+        }
+        row.child(tierParty);
+
+        ButtonComponent up = smallButton(Component.literal("↑"), b -> {
             footerError = null;
             ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), index, Math.max(0, index - 1)));
         });
+        up.sizing(Sizing.fixed(22), Sizing.fixed(18));
         up.active(index > 0);
         row.child(up);
 
-        ButtonComponent down = smallButton(Component.literal("v"), b -> {
+        ButtonComponent down = smallButton(Component.literal("↓"), b -> {
             footerError = null;
             ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), index, Math.min(instances.size() - 1, index + 1)));
         });
+        down.sizing(Sizing.fixed(22), Sizing.fixed(18));
         down.active(index < instances.size() - 1);
         row.child(down);
 
-        row.child(smallButton(Component.literal("X"), b -> {
-            footerError = null;
-            ClientPlayNetworking.send(new RemoveDungeonInstancePayload(menu.getBlockPos(), pos));
-        }));
-
+        boolean pending = pendingRemovals.contains(pos);
+        ButtonComponent action;
+        if (pending) {
+            action = smallButton(Component.literal("CANCEL"), b -> {
+                footerError = null;
+                ClientPlayNetworking.send(new RemoveDungeonInstancePayload(menu.getBlockPos(), pos));
+            });
+        } else {
+            action = dangerButton(Component.literal("REMOVE"), b -> {
+                footerError = null;
+                ClientPlayNetworking.send(new RemoveDungeonInstancePayload(menu.getBlockPos(), pos));
+            });
+        }
+        action.horizontalSizing(Sizing.fixed(64));
+        row.child(action);
         return row;
+    }
+
+    private record InstanceStatusInfo(String label, int color) {}
+
+    private InstanceStatusInfo instanceStatusInfo(BlockPos pos) {
+        if (pendingRemovals.contains(pos)) {
+            return new InstanceStatusInfo("PENDING REMOVAL", WARN);
+        }
+        if (activeRuns.contains(pos)) {
+            return new InstanceStatusInfo("RUNNING", GOOD);
+        }
+        if (cooldowns.containsKey(pos)) {
+            return new InstanceStatusInfo("COOLDOWN " + formatTicks(cooldowns.get(pos)), WARN);
+        }
+        return new InstanceStatusInfo("IDLE", INK_DIM);
     }
 
     private void buildGeneralTab() {
@@ -493,14 +586,37 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         return button;
     }
 
-    private LabelComponent label(String key, int color, Object... args) {
-        LabelComponent label = Components.label(Component.translatable(key, args));
-        label.color(Color.ofArgb(color));
-        return label;
+    private ButtonComponent dangerButton(Component text, java.util.function.Consumer<ButtonComponent> action) {
+        ButtonComponent button = Components.button(text.copy().withStyle(net.minecraft.ChatFormatting.RED), action);
+        button.sizing(Sizing.content(), Sizing.fixed(18));
+        button.renderer((context, rendered, delta) -> {
+            int fill = rendered.isHoveredOrFocused() ? ((DANGER & 0x00FFFFFF) | 0x44000000) : ((DANGER & 0x00FFFFFF) | 0x1F000000);
+            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
+            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), DANGER);
+        });
+        return button;
     }
 
-    private LabelComponent label(String key, int color) {
-        return label(key, color, new Object[0]);
+    private FlowLayout rowDivider(int color) {
+        FlowLayout divider = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(1));
+        divider.surface(Surface.flat(color));
+        return divider;
+    }
+
+    private int tierColor(DifficultyTier tier) {
+        return switch (tier) {
+            case EASY -> GOOD;
+            case NORMAL -> INFO;
+            case HARD -> WARN;
+            case NIGHTMARE -> DANGER;
+        };
+    }
+
+    private static String titleCase(String value) {
+        if (value.isEmpty()) {
+            return value;
+        }
+        return value.charAt(0) + value.substring(1).toLowerCase(java.util.Locale.ROOT);
     }
 
     private LabelComponent dimLabel(Component text) {
@@ -526,12 +642,17 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
 
     private FlowLayout instanceHeaderRow() {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(PANEL_2));
+        row.padding(Insets.of(5, 5, 8, 8));
         row.gap(6);
-        row.child(headerCell("INSTANCE", Sizing.expand()));
-        row.child(headerCell("STATUS", Sizing.fixed(138)));
-        row.child(headerCell("", Sizing.fixed(20)));
-        row.child(headerCell("", Sizing.fixed(20)));
-        row.child(headerCell("", Sizing.fixed(20)));
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        row.child(headerCell("#", Sizing.fixed(28)));
+        row.child(headerCell("POSITION", Sizing.expand()));
+        row.child(headerCell("STATUS", Sizing.fixed(120)));
+        row.child(headerCell("TIER · PARTY", Sizing.fixed(140)));
+        row.child(headerCell("", Sizing.fixed(22)));
+        row.child(headerCell("", Sizing.fixed(22)));
+        row.child(headerCell("", Sizing.fixed(64)));
         return row;
     }
 
@@ -681,32 +802,6 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         }
     }
 
-    private Component instanceStatus(BlockPos pos) {
-        if (pendingRemovals.contains(pos)) {
-            return Component.translatable("gui.arenas_ld.dungeon_controller_admin.instance_status.pending_removal");
-        }
-        if (activeRuns.contains(pos)) {
-            return Component.translatable("gui.arenas_ld.dungeon_controller_admin.instance_status.running");
-        }
-        if (cooldowns.containsKey(pos)) {
-            return Component.translatable("gui.arenas_ld.dungeon_controller_admin.instance_status.cooldown", formatTicks(cooldowns.get(pos)));
-        }
-        return Component.translatable("gui.arenas_ld.dungeon_controller_admin.instance_status.idle");
-    }
-
-    private int statusColor(BlockPos pos) {
-        if (pendingRemovals.contains(pos)) {
-            return 0xFFE17070;
-        }
-        if (activeRuns.contains(pos)) {
-            return 0xFF66DD66;
-        }
-        if (cooldowns.containsKey(pos)) {
-            return 0xFFE8CC66;
-        }
-        return 0xFFA0A0A0;
-    }
-
     private String formatTicks(int ticks) {
         int seconds = Math.max(0, ticks / 20);
         int minutes = seconds / 60;
@@ -723,6 +818,8 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         cooldowns.putAll(menu.getInstanceCooldownTimers());
         pendingRemovals.clear();
         pendingRemovals.addAll(menu.getPendingRemovals());
+        runningInstances.clear();
+        runningInstances.putAll(menu.getRunningInstances());
         tierConfigs.clear();
         tierConfigs.putAll(menu.getTierConfigs());
         leaderboards.clear();

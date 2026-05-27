@@ -54,7 +54,8 @@ public final class DungeonRunLifecycle {
         BlockPos dbsPos,
         List<UUID> partyUuids,
         DifficultyTier tier,
-        boolean hardcore
+        boolean hardcore,
+        String ownerName
     ) {
         if (controller.getActiveRuns().containsKey(dbsPos)) return null;
         if (controller.getInstanceCooldownTimers().containsKey(dbsPos)) return null;
@@ -65,7 +66,7 @@ public final class DungeonRunLifecycle {
         forceLoadChunksForRun(world, dbsPos);
 
         TierConfig tierConfig = controller.getTierConfigs().getOrDefault(tier, TierConfig.defaultFor(tier));
-        DungeonRun run = new DungeonRun(tier, tierConfig, hardcore, dbsPos, world.dimension(), world.getGameTime());
+        DungeonRun run = new DungeonRun(tier, tierConfig, hardcore, dbsPos, world.dimension(), world.getGameTime(), ownerName);
 
         ServerLevel targetLevel = world.getServer().getLevel(dbs.getEntranceDimension());
         if (targetLevel == null) {

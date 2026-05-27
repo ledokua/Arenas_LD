@@ -37,6 +37,9 @@ public class DungeonControllerAdminMenuProvider implements ExtendedScreenHandler
                 .toList();
             topLeaderboards.put(tier, top10);
         }
+        Map<net.minecraft.core.BlockPos, DungeonControllerAdminData.InstanceRun> runningInstances = new java.util.HashMap<>();
+        controller.getActiveRuns().forEach((pos, run) ->
+            runningInstances.put(pos, new DungeonControllerAdminData.InstanceRun(run.tier(), run.ownerName())));
         return new DungeonControllerAdminData(
             controller.getBlockPos(),
             controller.getInstances(),
@@ -48,7 +51,8 @@ public class DungeonControllerAdminMenuProvider implements ExtendedScreenHandler
             controller.getMaxPartySize(),
             controller.getInviteExpiryTicks(),
             controller.getTierConfigs(),
-            topLeaderboards
+            topLeaderboards,
+            runningInstances
         );
     }
 

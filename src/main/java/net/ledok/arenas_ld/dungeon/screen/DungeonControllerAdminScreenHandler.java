@@ -27,6 +27,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     private int inviteExpiryTicks;
     private Map<DifficultyTier, TierConfig> tierConfigs;
     private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
+    private Map<BlockPos, DungeonControllerAdminData.InstanceRun> runningInstances;
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerAdminData data) {
         super(ModScreenHandlers.DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER, syncId);
@@ -41,6 +42,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.inviteExpiryTicks = data.inviteExpiryTicks();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.topLeaderboards = Map.copyOf(data.topLeaderboards());
+        this.runningInstances = Map.copyOf(data.runningInstances());
     }
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerBlockEntity controller) {
@@ -55,6 +57,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
             controller.getMaxPartySize(),
             controller.getInviteExpiryTicks(),
             controller.getTierConfigs(),
+            Map.of(),
             Map.of()
         ));
     }
@@ -70,6 +73,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     public int getInviteExpiryTicks() { return inviteExpiryTicks; }
     public Map<DifficultyTier, TierConfig> getTierConfigs() { return tierConfigs; }
     public Map<DifficultyTier, List<LeaderboardEntry>> getTopLeaderboards() { return topLeaderboards; }
+    public Map<BlockPos, DungeonControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
 
     public void applyData(DungeonControllerAdminData data) {
         this.instances = List.copyOf(data.instances());
@@ -82,6 +86,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.inviteExpiryTicks = data.inviteExpiryTicks();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.topLeaderboards = Map.copyOf(data.topLeaderboards());
+        this.runningInstances = Map.copyOf(data.runningInstances());
     }
 
     @Override

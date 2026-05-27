@@ -526,7 +526,8 @@ final class SpawnerPacketHandlers {
                             instancePos,
                             party,
                             lobby.selectedTier(),
-                            lobby.hardcoreEnabled()
+                            lobby.hardcoreEnabled(),
+                            lobby.ownerName()
                         );
                         if (run == null) {
                             ArenasLdMod.LOGGER.warn("startRun failed for lobby {}", lobby.lobbyId());

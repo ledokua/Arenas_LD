@@ -29,8 +29,12 @@ public record DungeonControllerAdminData(
     int maxPartySize,
     int inviteExpiryTicks,
     Map<DifficultyTier, TierConfig> tierConfigs,
-    Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards
+    Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards,
+    Map<BlockPos, InstanceRun> runningInstances
 ) {
+    /** Tier and party label of the run currently occupying an instance. */
+    public record InstanceRun(DifficultyTier tier, String party) {}
+
     public static final StreamCodec<RegistryFriendlyByteBuf, DungeonControllerAdminData> STREAM_CODEC = StreamCodec.of(
         DungeonControllerAdminData::encode,
         DungeonControllerAdminData::decode
@@ -78,6 +82,13 @@ public record DungeonControllerAdminData(
             for (LeaderboardEntry leaderboardEntry : entry.getValue()) {
                 buf.writeNbt((CompoundTag) LeaderboardEntry.CODEC.encodeStart(NbtOps.INSTANCE, leaderboardEntry).getOrThrow());
             }
+        }
+
+        buf.writeVarInt(data.runningInstances().size());
+        for (Map.Entry<BlockPos, InstanceRun> entry : data.runningInstances().entrySet()) {
+            buf.writeBlockPos(entry.getKey());
+            DifficultyTier.STREAM_CODEC.encode(buf, entry.getValue().tier());
+            buf.writeUtf(entry.getValue().party());
         }
     }
 
@@ -140,6 +151,15 @@ public record DungeonControllerAdminData(
             topLeaderboards.put(tier, entries);
         }
 
+        int runningSize = buf.readVarInt();
+        Map<BlockPos, InstanceRun> runningInstances = new HashMap<>();
+        for (int i = 0; i < runningSize; i++) {
+            BlockPos pos = buf.readBlockPos();
+            DifficultyTier tier = DifficultyTier.STREAM_CODEC.decode(buf);
+            String party = buf.readUtf();
+            runningInstances.put(pos, new InstanceRun(tier, party));
+        }
+
         return new DungeonControllerAdminData(
             blockPos,
             instances,
@@ -151,7 +171,8 @@ public record DungeonControllerAdminData(
             maxPartySize,
             inviteExpiryTicks,
             tierConfigs,
-            topLeaderboards
+            topLeaderboards,
+            runningInstances
         );
     }
 }

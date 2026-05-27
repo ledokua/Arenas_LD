@@ -28,7 +28,8 @@ class DungeonRunTest {
             false,
             new BlockPos(100, 64, 200),
             Level.OVERWORLD,
-            12345L
+            12345L,
+            "Owner"
         );
     }
 

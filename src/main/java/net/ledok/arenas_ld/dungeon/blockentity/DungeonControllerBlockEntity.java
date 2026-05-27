@@ -202,6 +202,11 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     public boolean removeInstance(BlockPos pos) {
         if (!instances.contains(pos)) return false;
+        if (pendingInstanceRemovals.contains(pos)) {
+            pendingInstanceRemovals.remove(pos);
+            setChanged();
+            return true;
+        }
         if (isInstanceInActiveRun(pos)) {
             pendingInstanceRemovals.add(pos);
             setChanged();
