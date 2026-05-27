@@ -15,12 +15,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DifficultyTierTest {
 
     @Test
-    void hasExactlyThreeValuesInExpectedOrder() {
+    void hasExactlyFourValuesInExpectedOrder() {
         DifficultyTier[] values = DifficultyTier.values();
-        assertEquals(3, values.length);
-        assertEquals(DifficultyTier.NORMAL, values[0]);
-        assertEquals(DifficultyTier.HARD, values[1]);
-        assertEquals(DifficultyTier.HELL, values[2]);
+        assertEquals(4, values.length);
+        assertEquals(DifficultyTier.EASY, values[0]);
+        assertEquals(DifficultyTier.NORMAL, values[1]);
+        assertEquals(DifficultyTier.HARD, values[2]);
+        assertEquals(DifficultyTier.NIGHTMARE, values[3]);
     }
 
     @Test

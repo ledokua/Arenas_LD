@@ -12,13 +12,18 @@ class TierConfigTest {
 
     @Test
     void defaultForReturnsExpectedConstants() {
+        assertSame(TierConfig.EASY_DEFAULT, TierConfig.defaultFor(DifficultyTier.EASY));
         assertSame(TierConfig.NORMAL_DEFAULT, TierConfig.defaultFor(DifficultyTier.NORMAL));
         assertSame(TierConfig.HARD_DEFAULT, TierConfig.defaultFor(DifficultyTier.HARD));
-        assertSame(TierConfig.HELL_DEFAULT, TierConfig.defaultFor(DifficultyTier.HELL));
+        assertSame(TierConfig.NIGHTMARE_DEFAULT, TierConfig.defaultFor(DifficultyTier.NIGHTMARE));
     }
 
     @Test
     void defaultConstantsHaveExpectedValues() {
+        assertEquals(0.75, TierConfig.EASY_DEFAULT.healthMultiplier());
+        assertEquals(0.75, TierConfig.EASY_DEFAULT.damageMultiplier());
+        assertEquals(false, TierConfig.EASY_DEFAULT.hardcoreDefault());
+
         assertEquals(1.0, TierConfig.NORMAL_DEFAULT.healthMultiplier());
         assertEquals(1.0, TierConfig.NORMAL_DEFAULT.damageMultiplier());
         assertEquals("", TierConfig.NORMAL_DEFAULT.perPlayerLootTable());
@@ -26,8 +31,8 @@ class TierConfigTest {
         assertEquals(false, TierConfig.NORMAL_DEFAULT.hardcoreDefault());
 
         assertEquals(1.5, TierConfig.HARD_DEFAULT.healthMultiplier());
-        assertEquals(2.5, TierConfig.HELL_DEFAULT.healthMultiplier());
-        assertEquals(true, TierConfig.HELL_DEFAULT.hardcoreDefault());
+        assertEquals(2.5, TierConfig.NIGHTMARE_DEFAULT.healthMultiplier());
+        assertEquals(true, TierConfig.NIGHTMARE_DEFAULT.hardcoreDefault());
     }
 
     @Test
