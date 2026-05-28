@@ -100,7 +100,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     );
 
     // --- Runtime: spawner-local fields not yet migrated to RaidRun ---
-    private long battleStartTime = -1;
     private final ServerBossEvent raidTimerBossBar = (ServerBossEvent) new ServerBossEvent(
             Component.translatable("gui.arenas_ld.raid_timer"),
             BossEvent.BossBarColor.YELLOW,
@@ -302,10 +301,11 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             return;
         }
 
-        if (battleTimeLimitTicks > 0 && battleStartTime >= 0) {
-            long elapsedTicks = world.getGameTime() - battleStartTime;
-            updateRaidTimerBossBar(world, elapsedTicks);
-            if (elapsedTicks >= battleTimeLimitTicks) {
+        if (battleTimeLimitTicks > 0) {
+            int remaining = run.timerTicks() - 1;
+            RaidRunLifecycle.setTimerTicks(run, Math.max(0, remaining));
+            updateRaidTimerBossBar(world, run);
+            if (remaining <= 0) {
                 bossEntity.discard();
                 handleBattleLoss(world, "Time ran out.");
                 return;
@@ -394,11 +394,15 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
 
         RaidDifficulty diff = difficulty != null ? difficulty : RaidDifficulty.NORMAL;
-        this.battleStartTime = world.getGameTime();
         this.battleTimeLimitTicks = Math.max(0, battleTimeLimitTicks);
 
         RaidRun run = findRun();
         long now = world.getGameTime();
+        // Spawner's battleTimeLimitTicks (UI-configurable) overrides the tier-config
+        // value the run was constructed with. 0 means "no time limit".
+        if (run != null && this.battleTimeLimitTicks > 0) {
+            RaidRunLifecycle.setTimerTicks(run, this.battleTimeLimitTicks);
+        }
         for (ServerPlayer p : players) {
             if (run != null) {
                 RaidRunLifecycle.addParticipant(run, new RunParticipant(
@@ -605,7 +609,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         // 1-tick safety buffer so controller state can transition instance status first.
         this.respawnCooldown = 1;
-        this.battleStartTime = -1;
         this.raidTimerBossBar.removeAllPlayers();
         this.raidTimerBossBar.setVisible(false);
         ArenasLdMod.RAID_BOSS_MANAGER.unregisterSpawner(this);
@@ -654,7 +657,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         player.setHealth(1.0F);
         player.setGameMode(GameType.SPECTATOR);
-        battleStartTime -= resolveDeathTimePenaltyTicks();
+        RaidRunLifecycle.setTimerTicks(run, Math.max(0, run.timerTicks() - resolveDeathTimePenaltyTicks()));
         RaidRunLifecycle.setDowned(run, new DownedPlayer(player.getUUID(), DOWNED_RESPAWN_TICKS));
         markDirtyAndSync();
     }
@@ -674,7 +677,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             level instanceof ServerLevel sl ? sl.getGameTime() : 0L);
         if (!run.downedPlayers().containsKey(player.getUUID())) {
             if (battleTimeLimitTicks > 0) {
-                battleStartTime -= resolveDeathTimePenaltyTicks();
+                RaidRunLifecycle.setTimerTicks(run, Math.max(0, run.timerTicks() - resolveDeathTimePenaltyTicks()));
             }
             RaidRunLifecycle.setDowned(run, new DownedPlayer(player.getUUID(), DOWNED_RESPAWN_TICKS));
         }
@@ -769,7 +772,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
     }
 
-    private void updateRaidTimerBossBar(ServerLevel world, long elapsedTicks) {
+    private void updateRaidTimerBossBar(ServerLevel world, RaidRun run) {
         if (battleTimeLimitTicks <= 0) {
             raidTimerBossBar.setVisible(false);
             return;
@@ -777,13 +780,11 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (!raidTimerBossBar.isVisible()) {
             raidTimerBossBar.setVisible(true);
         }
-        long remainingTicks = Math.max(0L, (long) battleTimeLimitTicks - elapsedTicks);
-        float progress = 1.0f - ((float) elapsedTicks / (float) battleTimeLimitTicks);
+        int remainingTicks = Math.max(0, run.timerTicks());
+        float progress = (float) remainingTicks / (float) battleTimeLimitTicks;
         raidTimerBossBar.setProgress(Mth.clamp(progress, 0.0f, 1.0f));
-        raidTimerBossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime((int) (remainingTicks / 20L))));
+        raidTimerBossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(remainingTicks / 20)));
 
-        RaidRun run = findRun();
-        if (run == null) return;
         for (UUID uuid : run.participants().keySet()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
             if (player != null && !raidTimerBossBar.getPlayers().contains(player)) {
@@ -831,7 +832,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         List<String> names = run != null
             ? run.participants().values().stream().map(RunParticipant::playerName).toList()
             : List.of();
-        int elapsed = battleStartTime > 0 ? Math.max(0, (int) ((world.getGameTime() - battleStartTime) / 20L)) : 0;
+        int elapsed = run != null ? Math.max(0, (int) ((world.getGameTime() - run.startTick()) / 20L)) : 0;
         RaidDifficulty diff = run != null ? RaidDifficulty.from(run.tier()) : RaidDifficulty.NORMAL;
         controller.onRaidEnded(this.worldPosition, wasWin, diff, new ArrayList<>(names), elapsed);
     }
@@ -858,7 +859,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         nbt.putLongArray("RespawnPointOffsets", respawnPointOffsets.stream().mapToLong(BlockPos::asLong).toArray());
 
         nbt.putInt("RespawnCooldown", respawnCooldown);
-        nbt.putLong("BattleStartTime", battleStartTime);
 
         CompoundTag tierConfigsTag = new CompoundTag();
         for (RaidDifficulty tier : RaidDifficulty.values()) {
@@ -900,7 +900,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
 
         respawnCooldown = nbt.getInt("RespawnCooldown");
-        battleStartTime = nbt.getLong("BattleStartTime");
 
         tierConfigs.clear();
         initializeTierConfigs();

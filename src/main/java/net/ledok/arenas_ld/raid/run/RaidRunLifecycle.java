@@ -115,6 +115,10 @@ public final class RaidRunLifecycle {
         run.setBossRef(bossUuid, bossDimension);
     }
 
+    public static void setTimerTicks(RaidRun run, int ticks) {
+        run.setTimerTicks(ticks);
+    }
+
     public static void setRegenerationTickTimer(RaidRun run, int ticks) {
         run.setRegenerationTickTimer(ticks);
     }
