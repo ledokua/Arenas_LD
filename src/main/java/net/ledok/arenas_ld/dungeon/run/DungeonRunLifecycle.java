@@ -195,6 +195,7 @@ public final class DungeonRunLifecycle {
         int runDurationSeconds = (int) (runDurationTicks / 20);
         String lootTableId = run.resolvedTierConfig().perPlayerLootTable();
         long rewardPerPlayer = run.resolvedTierConfig().rewardCurrency();
+        boolean lootViaInbox = controller.isLootViaInbox();
 
         for (UUID uuid : run.lootEligibleUuids()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
@@ -209,7 +210,9 @@ public final class DungeonRunLifecycle {
 
             if (!lootTableId.isEmpty()) {
                 ItemStack bundle = createLootBundle(lootTableId);
-                if (!player.getInventory().add(bundle)) {
+                if (lootViaInbox) {
+                    net.ledok.arenas_ld.util.EconomyCompat.deliverItem(uuid, bundle, bundle.getCount(), "DUNGEON_LOOT");
+                } else if (!player.getInventory().add(bundle)) {
                     player.drop(bundle, false);
                 }
             }

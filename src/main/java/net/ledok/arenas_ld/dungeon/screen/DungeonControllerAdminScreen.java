@@ -21,6 +21,7 @@ import net.ledok.arenas_ld.dungeon.packet.RemoveDungeonInstancePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetCloseTimerSecondsPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetCooldownTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetInviteExpiryTicksPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetLootViaInboxPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
@@ -93,6 +94,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     private String closeTimerInput;
     private String maxPartyInput;
     private String inviteExpiryInput;
+    private boolean lootViaInboxInput;
 
     private final Map<DifficultyTier, String> healthInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> damageInputs = new EnumMap<>(DifficultyTier.class);
@@ -480,6 +482,21 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         contentArea.child(twoColumnRow(
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.max_party"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.max_party_hint"), "P", 1, 1, 64, maxPartyInput, v -> maxPartyInput = v),
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.invite_expiry"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.invite_expiry_hint"), "S", 5, 1, 86400, inviteExpiryInput, v -> inviteExpiryInput = v)
+        ));
+        contentArea.child(spacer(10));
+
+        contentArea.child(togglePanel(
+            tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox"),
+            tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_desc"),
+            lootViaInboxInput ? tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_on") : tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_off"),
+            lootViaInboxInput ? INFO : INK_DIM,
+            INFO,
+            () -> lootViaInboxInput,
+            () -> {
+                lootViaInboxInput = !lootViaInboxInput;
+                ClientPlayNetworking.send(new SetLootViaInboxPayload(menu.getBlockPos(), lootViaInboxInput));
+                rebuildUi();
+            }
         ));
         contentArea.child(spacer(10));
 
@@ -1057,6 +1074,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         closeTimerInput = Integer.toString(menu.getCloseTimerSeconds());
         maxPartyInput = Integer.toString(menu.getMaxPartySize());
         inviteExpiryInput = Integer.toString(menu.getInviteExpiryTicks() / 20);
+        lootViaInboxInput = menu.isLootViaInbox();
 
         for (Map.Entry<DifficultyTier, TierConfig> entry : tierConfigs.entrySet()) {
             syncTierInputs(entry.getKey(), entry.getValue());

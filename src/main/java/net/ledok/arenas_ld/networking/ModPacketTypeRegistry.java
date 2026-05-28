@@ -32,6 +32,7 @@ import net.ledok.arenas_ld.dungeon.packet.SetLobbyVisibilityPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetCloseTimerSecondsPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetCooldownTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetInviteExpiryTicksPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetLootViaInboxPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
 import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
@@ -99,6 +100,7 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(SetCloseTimerSecondsPayload.TYPE, SetCloseTimerSecondsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetMaxPartySizePayload.TYPE, SetMaxPartySizePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetInviteExpiryTicksPayload.TYPE, SetInviteExpiryTicksPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(SetLootViaInboxPayload.TYPE, SetLootViaInboxPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetTierConfigPayload.TYPE, SetTierConfigPayload.STREAM_CODEC);
     }
 

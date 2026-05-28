@@ -64,6 +64,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private int inviteExpiryTicks = DEFAULT_INVITE_EXPIRY_TICKS;
     private int disconnectGraceTicks = DEFAULT_DISCONNECT_GRACE_TICKS;
     private int lobbyOfflineTimeoutTicks = DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS;
+    private boolean lootViaInbox = false;
     private final Map<BlockPos, Integer> instanceCooldownTimers = new HashMap<>();
     private final Set<BlockPos> pendingInstanceRemovals = new HashSet<>();
     private final Map<DifficultyTier, List<LeaderboardEntry>> leaderboards = new EnumMap<>(DifficultyTier.class);
@@ -118,6 +119,18 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     public int getLobbyOfflineTimeoutTicks() {
         return lobbyOfflineTimeoutTicks;
+    }
+
+    public boolean isLootViaInbox() {
+        return lootViaInbox;
+    }
+
+    public void setLootViaInbox(boolean lootViaInbox) {
+        if (this.lootViaInbox == lootViaInbox) {
+            return;
+        }
+        this.lootViaInbox = lootViaInbox;
+        setChanged();
     }
 
     public Map<BlockPos, Integer> getInstanceCooldownTimers() {
@@ -903,6 +916,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save DungeonController at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
+        nbt.putBoolean("LootViaInbox", lootViaInbox);
     }
 
     @Override
@@ -949,6 +963,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         } else {
             initializeDefaults();
         }
+        lootViaInbox = nbt.getBoolean("LootViaInbox");
     }
 
     @Override

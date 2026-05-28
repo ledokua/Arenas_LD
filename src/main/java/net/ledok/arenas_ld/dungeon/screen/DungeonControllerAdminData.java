@@ -27,6 +27,7 @@ public record DungeonControllerAdminData(
     int closeTimerSeconds,
     int maxPartySize,
     int inviteExpiryTicks,
+    boolean lootViaInbox,
     Map<DifficultyTier, TierConfig> tierConfigs,
     Map<BlockPos, InstanceRun> runningInstances
 ) {
@@ -66,6 +67,7 @@ public record DungeonControllerAdminData(
         buf.writeVarInt(data.closeTimerSeconds());
         buf.writeVarInt(data.maxPartySize());
         buf.writeVarInt(data.inviteExpiryTicks());
+        buf.writeBoolean(data.lootViaInbox());
 
         buf.writeVarInt(data.tierConfigs().size());
         for (Map.Entry<DifficultyTier, TierConfig> entry : data.tierConfigs().entrySet()) {
@@ -114,6 +116,7 @@ public record DungeonControllerAdminData(
         int closeTimerSeconds = buf.readVarInt();
         int maxPartySize = buf.readVarInt();
         int inviteExpiryTicks = buf.readVarInt();
+        boolean lootViaInbox = buf.readBoolean();
 
         int tierConfigSize = buf.readVarInt();
         Map<DifficultyTier, TierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
@@ -144,6 +147,7 @@ public record DungeonControllerAdminData(
             closeTimerSeconds,
             maxPartySize,
             inviteExpiryTicks,
+            lootViaInbox,
             tierConfigs,
             runningInstances
         );

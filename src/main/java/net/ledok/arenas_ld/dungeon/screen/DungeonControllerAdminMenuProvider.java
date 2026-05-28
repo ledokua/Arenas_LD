@@ -37,6 +37,7 @@ public class DungeonControllerAdminMenuProvider implements ExtendedScreenHandler
             controller.getCloseTimerSeconds(),
             controller.getMaxPartySize(),
             controller.getInviteExpiryTicks(),
+            controller.isLootViaInbox(),
             controller.getTierConfigs(),
             runningInstances
         );
