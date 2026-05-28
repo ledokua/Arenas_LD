@@ -1086,8 +1086,6 @@ public class RaidControllerBlockEntity extends BlockEntity
             spawnerLevel,
             players,
             difficulty,
-            this.worldPosition,
-            serverLevel.dimension(),
             lobby.hardcoreEnabled(),
             spawner.battleTimeLimitTicks
         );

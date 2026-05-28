@@ -99,8 +99,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     );
 
     // --- Runtime from controller ---
-    private BlockPos controllerPos = null;
-    private ResourceKey<Level> controllerDimension = null;
     private RaidDifficulty activeDifficulty = RaidDifficulty.NORMAL;
     private long battleStartTime = -1;
     private boolean hardcoreEnabled = false;
@@ -364,8 +362,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             ServerLevel world,
             List<ServerPlayer> players,
             RaidDifficulty difficulty,
-            BlockPos controllerPos,
-            ResourceKey<Level> controllerDimension,
             boolean hardcoreEnabled,
             int battleTimeLimitTicks
     ) {
@@ -393,8 +389,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             return;
         }
 
-        this.controllerPos = controllerPos;
-        this.controllerDimension = controllerDimension;
         this.activeDifficulty = difficulty != null ? difficulty : RaidDifficulty.NORMAL;
         this.battleStartTime = world.getGameTime();
         this.hardcoreEnabled = hardcoreEnabled;
@@ -610,8 +604,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         this.boundsTickCounter = 0;
         // 1-tick safety buffer so controller state can transition instance status first.
         this.respawnCooldown = 1;
-        this.controllerPos = null;
-        this.controllerDimension = null;
         this.activeDifficulty = RaidDifficulty.NORMAL;
         this.battleStartTime = -1;
         this.hardcoreEnabled = false;
@@ -652,14 +644,9 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
      * legacy constant if none is loaded. Controller is the source of truth.
      */
     private int resolveDeathTimePenaltyTicks() {
-        if (controllerPos == null || controllerDimension == null) return DEATH_TIME_PENALTY_TICKS;
         if (!(level instanceof ServerLevel sl) || sl.getServer() == null) return DEATH_TIME_PENALTY_TICKS;
-        ServerLevel controllerLevel = sl.getServer().getLevel(controllerDimension);
-        if (controllerLevel == null) return DEATH_TIME_PENALTY_TICKS;
-        if (controllerLevel.getBlockEntity(controllerPos) instanceof RaidControllerBlockEntity ctrl) {
-            return ctrl.getDeathTimePenaltyTicks();
-        }
-        return DEATH_TIME_PENALTY_TICKS;
+        RaidControllerBlockEntity ctrl = RaidRunLifecycle.findOwningController(sl.getServer(), worldPosition);
+        return ctrl != null ? ctrl.getDeathTimePenaltyTicks() : DEATH_TIME_PENALTY_TICKS;
     }
 
     public void handlePlayerDown(ServerPlayer player) {
@@ -843,13 +830,8 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     }
 
     private void notifyController(ServerLevel world, boolean wasWin, @Nullable RaidRun run) {
-        if (controllerPos == null || controllerDimension == null) return;
-        ServerLevel controllerWorld = world.getServer().getLevel(controllerDimension);
-        if (controllerWorld == null) return;
-        BlockEntity be = controllerWorld.getBlockEntity(controllerPos);
-        if (!(be instanceof RaidControllerBlockEntity controller)) {
-            return;
-        }
+        RaidControllerBlockEntity controller = RaidRunLifecycle.findOwningController(world.getServer(), worldPosition);
+        if (controller == null) return;
 
         List<String> names = run != null
             ? run.participants().values().stream().map(RunParticipant::playerName).toList()
@@ -883,8 +865,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         nbt.putInt("RespawnCooldown", respawnCooldown);
         if (activeBossUuid != null) nbt.putUUID("ActiveBossUuid", activeBossUuid);
         if (bossDimension != null) nbt.putString("BossDimension", bossDimension.location().toString());
-        if (controllerPos != null) nbt.putLong("ControllerPos", controllerPos.asLong());
-        if (controllerDimension != null) nbt.putString("ControllerDimension", controllerDimension.location().toString());
         nbt.putString("ActiveDifficulty", activeDifficulty.name());
         nbt.putLong("BattleStartTime", battleStartTime);
         nbt.putBoolean("HardcoreEnabled", hardcoreEnabled);
@@ -933,10 +913,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (nbt.hasUUID("ActiveBossUuid")) activeBossUuid = nbt.getUUID("ActiveBossUuid");
         if (nbt.contains("BossDimension")) {
             bossDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("BossDimension")));
-        }
-        controllerPos = nbt.contains("ControllerPos") ? BlockPos.of(nbt.getLong("ControllerPos")) : null;
-        if (nbt.contains("ControllerDimension")) {
-            controllerDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ControllerDimension")));
         }
         activeDifficulty = RaidDifficulty.fromNameOrDefault(nbt.getString("ActiveDifficulty"), RaidDifficulty.NORMAL);
         battleStartTime = nbt.getLong("BattleStartTime");
