@@ -42,6 +42,7 @@ public final class DungeonRun {
     private DungeonPhase phase;
     private DungeonOutcome outcome;
     private final DifficultyTier tier;
+    private final String ownerName;
     private final TierConfig resolvedTierConfig;
     private final boolean hardcoreEnabled;
     private final BlockPos dbsPos;
@@ -78,11 +79,13 @@ public final class DungeonRun {
         boolean hardcoreEnabled,
         BlockPos dbsPos,
         ResourceKey<Level> dbsDimension,
-        long startTick
+        long startTick,
+        String ownerName
     ) {
         this.phase = DungeonPhase.STARTING;
         this.outcome = DungeonOutcome.IN_PROGRESS;
         this.tier = tier;
+        this.ownerName = ownerName == null ? "" : ownerName;
         this.resolvedTierConfig = resolvedTierConfig;
         this.hardcoreEnabled = hardcoreEnabled;
         this.dbsPos = dbsPos;
@@ -125,6 +128,7 @@ public final class DungeonRun {
         this.phase = phase;
         this.outcome = outcome;
         this.tier = tier;
+        this.ownerName = "";
         this.resolvedTierConfig = resolvedTierConfig;
         this.hardcoreEnabled = hardcoreEnabled;
         this.dbsPos = dbsPos;
@@ -147,6 +151,7 @@ public final class DungeonRun {
     public DungeonPhase phase() { return phase; }
     public DungeonOutcome outcome() { return outcome; }
     public DifficultyTier tier() { return tier; }
+    public String ownerName() { return ownerName; }
     public TierConfig resolvedTierConfig() { return resolvedTierConfig; }
     public boolean hardcoreEnabled() { return hardcoreEnabled; }
     public BlockPos dbsPos() { return dbsPos; }

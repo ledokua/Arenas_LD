@@ -8,6 +8,7 @@ import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
+import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.DungeonRun;
 import net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle;
@@ -68,6 +69,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private final Map<DifficultyTier, List<LeaderboardEntry>> leaderboards = new EnumMap<>(DifficultyTier.class);
     private final List<Lobby> lobbies = new ArrayList<>();
     private final List<PendingInvite> pendingInvites = new ArrayList<>();
+    private final List<PendingJoinRequest> pendingJoinRequests = new ArrayList<>();
     private final Map<UUID, Long> lobbyOfflineSinceTicks = new HashMap<>();
     private final Map<BlockPos, DungeonRun> activeRuns = new HashMap<>();
 
@@ -77,9 +79,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     }
 
     private void initializeDefaults() {
+        tierConfigs.putIfAbsent(DifficultyTier.EASY, TierConfig.EASY_DEFAULT);
         tierConfigs.putIfAbsent(DifficultyTier.NORMAL, TierConfig.NORMAL_DEFAULT);
         tierConfigs.putIfAbsent(DifficultyTier.HARD, TierConfig.HARD_DEFAULT);
-        tierConfigs.putIfAbsent(DifficultyTier.HELL, TierConfig.HELL_DEFAULT);
+        tierConfigs.putIfAbsent(DifficultyTier.NIGHTMARE, TierConfig.NIGHTMARE_DEFAULT);
         for (DifficultyTier tier : DifficultyTier.values()) {
             leaderboards.putIfAbsent(tier, new ArrayList<>());
         }
@@ -139,6 +142,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     public List<PendingInvite> getPendingInvites() {
         return Collections.unmodifiableList(pendingInvites);
+    }
+
+    public List<PendingJoinRequest> getPendingJoinRequests() {
+        return Collections.unmodifiableList(pendingJoinRequests);
     }
 
     public Map<BlockPos, DungeonRun> getActiveRuns() {
@@ -201,6 +208,11 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     public boolean removeInstance(BlockPos pos) {
         if (!instances.contains(pos)) return false;
+        if (pendingInstanceRemovals.contains(pos)) {
+            pendingInstanceRemovals.remove(pos);
+            setChanged();
+            return true;
+        }
         if (isInstanceInActiveRun(pos)) {
             pendingInstanceRemovals.add(pos);
             setChanged();
@@ -281,6 +293,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     void removeLobby(UUID lobbyId) {
         lobbyOfflineSinceTicks.remove(lobbyId);
         boolean removed = lobbies.removeIf(lobby -> lobby.lobbyId().equals(lobbyId));
+        removeJoinRequestsForLobby(lobbyId);
         if (removed) {
             setChanged();
         }
@@ -295,6 +308,31 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         boolean removed = pendingInvites.removeIf(invite ->
             invite.lobbyId().equals(lobbyId) && invite.invitedUuid().equals(invitedUuid));
         if (removed) {
+            setChanged();
+        }
+    }
+
+    void addJoinRequest(PendingJoinRequest request) {
+        pendingJoinRequests.add(request);
+        setChanged();
+    }
+
+    void removeJoinRequest(UUID lobbyId, UUID requesterUuid) {
+        boolean removed = pendingJoinRequests.removeIf(req ->
+            req.lobbyId().equals(lobbyId) && req.requesterUuid().equals(requesterUuid));
+        if (removed) {
+            setChanged();
+        }
+    }
+
+    private void removeJoinRequestsForPlayer(UUID requesterUuid) {
+        if (pendingJoinRequests.removeIf(req -> req.requesterUuid().equals(requesterUuid))) {
+            setChanged();
+        }
+    }
+
+    private void removeJoinRequestsForLobby(UUID lobbyId) {
+        if (pendingJoinRequests.removeIf(req -> req.lobbyId().equals(lobbyId))) {
             setChanged();
         }
     }
@@ -343,7 +381,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
         long now = inviter.serverLevel().getGameTime();
         pendingInvites.removeIf(invite -> invite.expiresAtTick() <= now);
-        PendingInvite invite = new PendingInvite(lobby.lobbyId(), inviteeUuid, inviter.getUUID(), now + inviteExpiryTicks);
+        PendingInvite invite = new PendingInvite(lobby.lobbyId(), inviteeUuid, inviter.getUUID(), now + inviteExpiryTicks, lobby.selectedTier(), lobby.ownerName());
         pendingInvites.removeIf(existing ->
             existing.lobbyId().equals(invite.lobbyId()) && existing.invitedUuid().equals(invite.invitedUuid()));
         addInvite(invite);
@@ -375,6 +413,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         updated = recomputeLobbyReadiness(updated);
         replaceLobby(updated);
         removeInvite(lobbyId, invitee.getUUID());
+        removeJoinRequestsForPlayer(invitee.getUUID());
         return true;
     }
 
@@ -382,6 +421,36 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         Optional<PendingInvite> invite = findInvite(lobbyId, invitee.getUUID());
         if (invite.isEmpty()) return false;
         removeInvite(lobbyId, invitee.getUUID());
+        return true;
+    }
+
+    public boolean requestJoin(ServerPlayer requester, UUID lobbyId) {
+        UUID requesterUuid = requester.getUUID();
+        if (BusyStateCompat.isBusy(requesterUuid)) return false;
+        if (findLobbyByMember(requesterUuid).isPresent()) return false;
+
+        Optional<Lobby> lobbyOpt = findLobbyById(lobbyId);
+        if (lobbyOpt.isEmpty()) return false;
+        Lobby lobby = lobbyOpt.get();
+        if (lobby.visibility() != LobbyVisibility.FRIENDS) return false;
+        if (lobby.status() == LobbyStatus.IN_RUN || lobby.status() == LobbyStatus.DISBANDED) return false;
+        if (lobby.isFull(maxPartySize)) return false;
+
+        long now = requester.serverLevel().getGameTime();
+        pendingJoinRequests.removeIf(req -> req.expiresAtTick() <= now);
+        if (pendingJoinRequests.stream().anyMatch(req ->
+            req.lobbyId().equals(lobbyId) && req.requesterUuid().equals(requesterUuid))) {
+            return false;
+        }
+
+        PendingJoinRequest request = new PendingJoinRequest(
+            lobbyId,
+            requesterUuid,
+            requester.getGameProfile().getName(),
+            now + inviteExpiryTicks,
+            lobby.selectedTier()
+        );
+        addJoinRequest(request);
         return true;
     }
 
@@ -403,6 +472,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             replaceLobby(recomputeLobbyReadiness(lobby.withMemberRemoved(playerUuid)));
         }
         removeInvitesForPlayer(playerUuid);
+        removeJoinRequestsForPlayer(playerUuid);
         return true;
     }
 
@@ -417,6 +487,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
         replaceLobby(recomputeLobbyReadiness(lobby.withMemberRemoved(targetUuid)));
         removeInvitesForPlayer(targetUuid);
+        removeJoinRequestsForPlayer(targetUuid);
         return true;
     }
 
@@ -426,6 +497,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         Lobby lobby = lobbyOpt.get();
         if (!lobby.isOwner(player.getUUID())) return false;
         if (lobby.status() == LobbyStatus.IN_RUN) return false;
+        if (!tierConfigs.getOrDefault(tier, TierConfig.defaultFor(tier)).enabled()) return false;
         replaceLobby(lobby.withTier(tier));
         return true;
     }
@@ -493,6 +565,54 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
         Lobby updated = recomputeLobbyReadiness(lobby.withMemberAdded(player.getUUID(), player.getGameProfile().getName()));
         replaceLobby(updated);
+        removeJoinRequestsForPlayer(player.getUUID());
+        return true;
+    }
+
+    public boolean acceptJoinRequest(ServerPlayer owner, UUID requesterUuid) {
+        Optional<Lobby> lobbyOpt = findLobbyByMember(owner.getUUID());
+        if (lobbyOpt.isEmpty()) return false;
+        Lobby lobby = lobbyOpt.get();
+        if (!lobby.isOwner(owner.getUUID())) return false;
+        if (lobby.status() == LobbyStatus.IN_RUN || lobby.status() == LobbyStatus.DISBANDED) return false;
+        if (lobby.isFull(maxPartySize)) return false;
+
+        Optional<PendingJoinRequest> requestOpt = pendingJoinRequests.stream()
+            .filter(req -> req.lobbyId().equals(lobby.lobbyId()) && req.requesterUuid().equals(requesterUuid))
+            .findFirst();
+        if (requestOpt.isEmpty()) return false;
+        PendingJoinRequest request = requestOpt.get();
+        long now = owner.serverLevel().getGameTime();
+        if (request.expiresAtTick() < now) {
+            removeJoinRequest(lobby.lobbyId(), requesterUuid);
+            return false;
+        }
+        if (findLobbyByMember(requesterUuid).isPresent()) {
+            removeJoinRequest(lobby.lobbyId(), requesterUuid);
+            return false;
+        }
+        if (BusyStateCompat.isBusy(requesterUuid)) {
+            removeJoinRequest(lobby.lobbyId(), requesterUuid);
+            return false;
+        }
+
+        Lobby updated = lobby.withMemberAdded(requesterUuid, request.requesterName());
+        updated = recomputeLobbyReadiness(updated);
+        replaceLobby(updated);
+        removeJoinRequestsForPlayer(requesterUuid);
+        return true;
+    }
+
+    public boolean declineJoinRequest(ServerPlayer owner, UUID requesterUuid) {
+        Optional<Lobby> lobbyOpt = findLobbyByMember(owner.getUUID());
+        if (lobbyOpt.isEmpty()) return false;
+        Lobby lobby = lobbyOpt.get();
+        if (!lobby.isOwner(owner.getUUID())) return false;
+        Optional<PendingJoinRequest> req = pendingJoinRequests.stream()
+            .filter(r -> r.lobbyId().equals(lobby.lobbyId()) && r.requesterUuid().equals(requesterUuid))
+            .findFirst();
+        if (req.isEmpty()) return false;
+        removeJoinRequest(lobby.lobbyId(), requesterUuid);
         return true;
     }
 
@@ -584,7 +704,30 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         List<PendingInvite> myInvites = pendingInvites.stream()
             .filter(invite -> invite.invitedUuid().equals(playerUuid))
             .toList();
-        return new DungeonControllerData(worldPosition, visible, own, myInvites, maxPartySize, tierConfigs, player.serverLevel().getGameTime());
+        Optional<Lobby> ownedLobby = lobbies.stream()
+            .filter(lobby -> lobby.isOwner(playerUuid))
+            .findFirst();
+        List<PendingJoinRequest> myJoinRequests = pendingJoinRequests.stream()
+            .filter(req -> req.requesterUuid().equals(playerUuid)
+                || (ownedLobby.isPresent() && req.lobbyId().equals(ownedLobby.get().lobbyId())))
+            .toList();
+        Set<UUID> busyPlayers = new HashSet<>();
+        if (player.getServer() != null) {
+            for (ServerPlayer online : player.getServer().getPlayerList().getPlayers()) {
+                if (BusyStateCompat.isBusy(online.getUUID())) {
+                    busyPlayers.add(online.getUUID());
+                }
+            }
+        }
+        Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards = new EnumMap<>(DifficultyTier.class);
+        for (DifficultyTier tier : DifficultyTier.values()) {
+            List<LeaderboardEntry> top = leaderboards.getOrDefault(tier, List.of()).stream()
+                .sorted(java.util.Comparator.comparingInt(LeaderboardEntry::timeSeconds))
+                .limit(10)
+                .toList();
+            topLeaderboards.put(tier, top);
+        }
+        return new DungeonControllerData(worldPosition, visible, own, myInvites, myJoinRequests, maxPartySize, tierConfigs, player.serverLevel().getGameTime(), busyPlayers, topLeaderboards);
     }
 
     @Override
@@ -622,6 +765,9 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
         long currentTick = serverLevel.getGameTime();
         if (be.pendingInvites.removeIf(invite -> invite.expiresAtTick() <= currentTick)) {
+            be.setChanged();
+        }
+        if (be.pendingJoinRequests.removeIf(req -> req.expiresAtTick() <= currentTick)) {
             be.setChanged();
         }
 
@@ -664,6 +810,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                 iterator.remove();
                 lobbyOfflineSinceTicks.remove(lobby.lobbyId());
                 pendingInvites.removeIf(invite -> invite.lobbyId().equals(lobby.lobbyId()));
+                pendingJoinRequests.removeIf(req -> req.lobbyId().equals(lobby.lobbyId()));
                 changed = true;
             }
         }
@@ -702,7 +849,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         Map<DifficultyTier, List<LeaderboardEntry>> leaderboards,
         List<Lobby> lobbies,
         List<PendingInvite> pendingInvites,
-        Map<UUID, Long> lobbyOfflineSinceTicks
+        Map<UUID, Long> lobbyOfflineSinceTicks,
+        List<PendingJoinRequest> pendingJoinRequests
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("instances").forGetter(State::instances),
@@ -720,7 +868,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             Lobby.CODEC.listOf().fieldOf("lobbies").forGetter(State::lobbies),
             PendingInvite.CODEC.listOf().fieldOf("pendingInvites").forGetter(State::pendingInvites),
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, Codec.LONG)
-                .optionalFieldOf("lobbyOfflineSinceTicks", Map.of()).forGetter(State::lobbyOfflineSinceTicks)
+                .optionalFieldOf("lobbyOfflineSinceTicks", Map.of()).forGetter(State::lobbyOfflineSinceTicks),
+            PendingJoinRequest.CODEC.listOf().optionalFieldOf("pendingJoinRequests", List.of()).forGetter(State::pendingJoinRequests)
         ).apply(i, State::new));
     }
 
@@ -748,7 +897,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             leaderboards,
             lobbies,
             pendingInvites,
-            lobbyOfflineSinceTicks
+            lobbyOfflineSinceTicks,
+            pendingJoinRequests
         );
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save DungeonController at {}: {}", worldPosition, err))
@@ -790,6 +940,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                     lobbies.addAll(state.lobbies());
                     pendingInvites.clear();
                     pendingInvites.addAll(state.pendingInvites());
+                    pendingJoinRequests.clear();
+                    pendingJoinRequests.addAll(state.pendingJoinRequests());
                     lobbyOfflineSinceTicks.clear();
                     lobbyOfflineSinceTicks.putAll(state.lobbyOfflineSinceTicks());
                     initializeDefaults();

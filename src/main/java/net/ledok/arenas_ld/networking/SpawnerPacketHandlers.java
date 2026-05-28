@@ -14,11 +14,14 @@ import net.ledok.arenas_ld.dungeon.packet.DungeonBossSpawnerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.DungeonControllerAdminSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.AddDungeonInstancePayload;
 import net.ledok.arenas_ld.dungeon.packet.AcceptInvitePayload;
+import net.ledok.arenas_ld.dungeon.packet.AcceptJoinRequestPayload;
 import net.ledok.arenas_ld.dungeon.packet.CreateLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.DeclineInvitePayload;
+import net.ledok.arenas_ld.dungeon.packet.DeclineJoinRequestPayload;
 import net.ledok.arenas_ld.dungeon.packet.DungeonControllerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.InvitePlayerPayload;
 import net.ledok.arenas_ld.dungeon.packet.JoinLobbyPayload;
+import net.ledok.arenas_ld.dungeon.packet.RequestJoinPayload;
 import net.ledok.arenas_ld.dungeon.packet.KickFromLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.LeaveLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.MoveDungeonInstancePayload;
@@ -286,7 +289,10 @@ final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity spawner) {
-                    spawner.setEntityDefinition(spawner.getEntityDefinition().withMobId(payload.mobId()));
+                    spawner.setEntityDefinition(spawner.getEntityDefinition()
+                        .withMobId(payload.mobId())
+                        .withSpawnCount(payload.spawnCount())
+                        .withSpawnOffsets(payload.spawnOffsets()));
                     markDirtyAndSync(world, spawner);
                     broadcastMobSpawnerSnapshot(player, spawner);
                 }
@@ -426,6 +432,45 @@ final class SpawnerPacketHandlers {
             });
         });
 
+        ServerPlayNetworking.registerGlobalReceiver(RequestJoinPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.requestJoin(player, payload.lobbyId());
+                    markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(AcceptJoinRequestPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.acceptJoinRequest(player, payload.requesterUuid());
+                    markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(DeclineJoinRequestPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.declineJoinRequest(player, payload.requesterUuid());
+                    markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
+                }
+            });
+        });
+
         ServerPlayNetworking.registerGlobalReceiver(LeaveLobbyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
@@ -526,7 +571,8 @@ final class SpawnerPacketHandlers {
                             instancePos,
                             party,
                             lobby.selectedTier(),
-                            lobby.hardcoreEnabled()
+                            lobby.hardcoreEnabled(),
+                            lobby.ownerName()
                         );
                         if (run == null) {
                             ArenasLdMod.LOGGER.warn("startRun failed for lobby {}", lobby.lobbyId());

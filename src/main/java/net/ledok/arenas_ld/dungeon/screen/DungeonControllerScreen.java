@@ -17,13 +17,18 @@ import io.wispforest.owo.ui.core.Surface;
 import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
+import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
+import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.packet.AcceptInvitePayload;
+import net.ledok.arenas_ld.dungeon.packet.AcceptJoinRequestPayload;
 import net.ledok.arenas_ld.dungeon.packet.CreateLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.DeclineInvitePayload;
+import net.ledok.arenas_ld.dungeon.packet.DeclineJoinRequestPayload;
 import net.ledok.arenas_ld.dungeon.packet.InvitePlayerPayload;
 import net.ledok.arenas_ld.dungeon.packet.JoinLobbyPayload;
+import net.ledok.arenas_ld.dungeon.packet.RequestJoinPayload;
 import net.ledok.arenas_ld.dungeon.packet.KickFromLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.LeaveLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetLobbyHardcorePayload;
@@ -32,6 +37,7 @@ import net.ledok.arenas_ld.dungeon.packet.SetLobbyVisibilityPayload;
 import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
+import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.core.BlockPos;
@@ -68,24 +74,47 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
     private enum Tab {
         LOBBIES,
-        MY_LOBBY
+        MY_LOBBY,
+        LEADERBOARD,
+        INVITES
+    }
+
+    private enum InviteStatus {
+        ONLINE,
+        IN_LOBBY,
+        IN_RUN,
+        BUSY
+    }
+
+    private record InviteCandidate(UUID uuid, String name, InviteStatus status) {
+        boolean selectable() {
+            return status == InviteStatus.ONLINE;
+        }
     }
 
     private static final class MemberRowRefs {
+        private final FlowLayout statusSquare;
+        private final LabelComponent statusGlyph;
+        private final LabelComponent connectionLabel;
         private final FlowLayout readyBadge;
-        private final FlowLayout onlineBadge;
         private final ButtonComponent kickButton;
 
-        private MemberRowRefs(FlowLayout readyBadge, FlowLayout onlineBadge, ButtonComponent kickButton) {
+        private MemberRowRefs(FlowLayout statusSquare, LabelComponent statusGlyph, LabelComponent connectionLabel, FlowLayout readyBadge, ButtonComponent kickButton) {
+            this.statusSquare = statusSquare;
+            this.statusGlyph = statusGlyph;
+            this.connectionLabel = connectionLabel;
             this.readyBadge = readyBadge;
-            this.onlineBadge = onlineBadge;
             this.kickButton = kickButton;
         }
     }
 
     private final List<Lobby> visibleLobbies;
     private final List<PendingInvite> myInvites;
+    private final List<PendingJoinRequest> myJoinRequests;
     private Optional<Lobby> ownLobby;
+    private java.util.Set<UUID> busyPlayers;
+    private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards = Map.of();
+    private DifficultyTier leaderboardTier = DifficultyTier.NORMAL;
 
     private Tab currentTab = Tab.LOBBIES;
     private String footerError;
@@ -99,21 +128,25 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private LabelComponent footerLabel;
     private ButtonComponent lobbiesTabButton;
     private ButtonComponent myLobbyTabButton;
+    private ButtonComponent leaderboardTabButton;
+    private ButtonComponent invitesTabButton;
     private TextBoxComponent inviteField;
     private String inviteInput = "";
+    private boolean inviteDropdownOpen = false;
+    private FlowLayout inviteFieldRow;
+    private FlowLayout inviteDropdownPanel;
+    private ButtonComponent inviteChevron;
     private double savedScrollProgress = 0.0D;
     private boolean restoreScrollNextTick = false;
     private final Map<UUID, LabelComponent> inviteCountdownLabels = new HashMap<>();
+    private final Map<UUID, LabelComponent> joinRequestCountdownLabels = new HashMap<>();
     private final Map<UUID, MemberRowRefs> memberRowRefs = new HashMap<>();
     private LabelComponent summaryOwnerLabel;
     private LabelComponent summaryMembersLabel;
-    private FlowLayout summaryTierBadge;
-    private FlowLayout summaryVisibilityBadge;
-    private FlowLayout summaryHardcoreBadge;
-    private LabelComponent tierSummaryLabel;
-    private LabelComponent visibilitySummaryLabel;
-    private LabelComponent hardcoreSummaryLabel;
-    private ButtonComponent hardcoreToggleButton;
+    private LabelComponent membersSummaryLabel;
+    private LabelComponent summaryTierValue;
+    private LabelComponent summaryVisibilityValue;
+    private LabelComponent summaryHardcoreValue;
     private ButtonComponent readyToggleButton;
     private ButtonComponent leaveLobbyButton;
     private ButtonComponent startRunButton;
@@ -124,7 +157,10 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         this.titleLabelY = 9999;
         this.visibleLobbies = new ArrayList<>(handler.getVisibleLobbies());
         this.myInvites = new ArrayList<>(handler.getMyInvites());
+        this.myJoinRequests = new ArrayList<>(handler.getMyJoinRequests());
         this.ownLobby = handler.getOwnLobby();
+        this.busyPlayers = handler.getBusyPlayers();
+        this.topLeaderboards = handler.getTopLeaderboards();
         this.snapshotServerTick = handler.getServerGameTick();
         this.snapshotEpochMs = System.currentTimeMillis();
     }
@@ -140,7 +176,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         rootComponent.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
 
         int shellWidth = Math.max(420, Math.min(560, this.width - 24));
-        int shellHeight = Math.max(250, Math.min(320, this.height - 24));
+        int shellHeight = Math.max(300, this.height - 24);
         FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
         shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
 
@@ -173,47 +209,75 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             contentScroll.scrollTo(savedScrollProgress);
             restoreScrollNextTick = false;
         }
-        if (currentTab == Tab.LOBBIES && !myInvites.isEmpty()) {
+        if ((currentTab == Tab.LOBBIES || currentTab == Tab.INVITES) && (!myInvites.isEmpty() || !myJoinRequests.isEmpty())) {
             long now = approximateServerTick() / 20L;
             if (now != lastCountdownSecond) {
                 lastCountdownSecond = now;
                 refreshInviteCountdowns();
+                refreshJoinRequestCountdowns();
             }
         }
     }
 
-    private FlowLayout buildHeader() {
-        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(42));
-        header.surface(Surface.flat(PANEL_2));
-        header.padding(Insets.of(6));
-        header.gap(8);
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        boolean handled = super.mouseClicked(mouseX, mouseY, button);
+        if (inviteDropdownOpen
+            && !pointInside(inviteFieldRow, mouseX, mouseY)
+            && !pointInside(inviteDropdownPanel, mouseX, mouseY)) {
+            closeInviteDropdown();
+        }
+        return handled;
+    }
 
-        FlowLayout mark = Containers.verticalFlow(Sizing.fixed(18), Sizing.fixed(18));
-        mark.surface(Surface.flat(ACCENT));
+    private boolean pointInside(io.wispforest.owo.ui.core.Component component, double mouseX, double mouseY) {
+        if (component == null) {
+            return false;
+        }
+        return mouseX >= component.x() && mouseX < component.x() + component.width()
+            && mouseY >= component.y() && mouseY < component.y() + component.height();
+    }
+
+    private FlowLayout buildHeader() {
+        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(46));
+        header.surface(Surface.flat(PANEL_2));
+        header.padding(Insets.of(8, 8, 10, 10));
+        header.gap(10);
+        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        FlowLayout mark = Containers.verticalFlow(Sizing.fixed(20), Sizing.fixed(20));
+        mark.surface(Surface.flat(ACCENT).and(Surface.outline(ACCENT_DARK)));
         header.child(mark);
 
         FlowLayout info = Containers.verticalFlow(Sizing.content(), Sizing.content());
+        info.gap(3);
+
+        FlowLayout titleLine = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        titleLine.gap(8);
+        titleLine.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
         LabelComponent titleLabel = Components.label(Component.translatable("container.arenas_ld.dungeon_controller"));
         titleLabel.color(Color.ofArgb(INK));
+        titleLine.child(titleLabel);
+        titleLine.child(statusBadge());
+        info.child(titleLine);
+
         FlowLayout meta = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        meta.gap(8);
-        meta.child(smallMeta("POS  " + menu.getBlockPos().getX() + "  " + menu.getBlockPos().getY() + "  " + menu.getBlockPos().getZ()));
-        meta.child(smallMeta("LIVE", GOOD));
-        if (ownLobby.isPresent()) {
-            meta.child(smallMeta("IN LOBBY", ACCENT));
-        } else if (!myInvites.isEmpty()) {
-            meta.child(smallMeta("INVITES " + myInvites.size(), INFO));
-        } else {
-            meta.child(smallMeta("AVAILABLE", INK_DIM));
-        }
-        info.child(titleLabel);
+        meta.gap(10);
+        meta.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        meta.child(smallMeta("POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
+        FlowLayout live = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        live.gap(4);
+        live.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        live.child(text(Component.literal("●"), GOOD));
+        live.child(smallMeta("LIVE", GOOD));
+        meta.child(live);
         info.child(meta);
         header.child(info);
 
         header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
 
-        ButtonComponent close = Components.button(Component.literal("X"), b -> onClose());
-        close.sizing(Sizing.fixed(20), Sizing.fixed(16));
+        ButtonComponent close = Components.button(Component.literal("×"), b -> onClose());
+        close.sizing(Sizing.fixed(22), Sizing.fixed(18));
         close.renderer((context, button, delta) -> {
             int fill = button.isHoveredOrFocused() ? ROW_BG : PANEL;
             context.fill(button.getX(), button.getY(), button.getX() + button.getWidth(), button.getY() + button.getHeight(), fill);
@@ -223,18 +287,48 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         return header;
     }
 
+    private FlowLayout statusBadge() {
+        Component label;
+        int color;
+        if (ownLobby.isPresent()) {
+            label = Component.translatable("gui.arenas_ld.dungeon_controller.ui.status.in_lobby");
+            color = INFO;
+        } else if (!myInvites.isEmpty()) {
+            label = Component.translatable("gui.arenas_ld.dungeon_controller.ui.status.invites", myInvites.size());
+            color = ACCENT;
+        } else {
+            label = Component.translatable("gui.arenas_ld.dungeon_controller.ui.status.available");
+            color = GOOD;
+        }
+        return badge(label, color);
+    }
+
     private FlowLayout buildTabs() {
         FlowLayout tabs = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(30));
         tabs.surface(Surface.flat(PANEL_2));
         tabs.padding(Insets.of(4));
-        tabs.gap(4);
+        tabs.gap(0);
+        tabs.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
         lobbiesTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.lobbies", Tab.LOBBIES);
         myLobbyTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.my_lobby", Tab.MY_LOBBY);
+        leaderboardTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.leaderboard", Tab.LEADERBOARD);
+        invitesTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.invites", Tab.INVITES);
 
-        tabs.child(lobbiesTabButton);
-        tabs.child(myLobbyTabButton);
+        tabs.child(tabCell(lobbiesTabButton));
+        tabs.child(tabCell(myLobbyTabButton));
+        tabs.child(tabCell(leaderboardTabButton));
+        tabs.child(tabCell(invitesTabButton));
         return tabs;
+    }
+
+    private FlowLayout tabCell(ButtonComponent button) {
+        FlowLayout cell = Containers.verticalFlow(Sizing.fill(25), Sizing.content());
+        cell.surface(Surface.BLANK);
+        cell.padding(Insets.of(0, 0, 2, 2));
+        button.horizontalSizing(Sizing.fill(100));
+        cell.child(button);
+        return cell;
     }
 
     private FlowLayout buildFooter() {
@@ -281,29 +375,36 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         contentArea.clearChildren();
         footerActions.clearChildren();
         inviteCountdownLabels.clear();
+        joinRequestCountdownLabels.clear();
         memberRowRefs.clear();
         summaryOwnerLabel = null;
         summaryMembersLabel = null;
-        summaryTierBadge = null;
-        summaryVisibilityBadge = null;
-        summaryHardcoreBadge = null;
-        tierSummaryLabel = null;
-        visibilitySummaryLabel = null;
-        hardcoreSummaryLabel = null;
-        hardcoreToggleButton = null;
+        membersSummaryLabel = null;
+        summaryTierValue = null;
+        summaryVisibilityValue = null;
+        summaryHardcoreValue = null;
         readyToggleButton = null;
         leaveLobbyButton = null;
         startRunButton = null;
+        inviteFieldRow = null;
+        inviteDropdownPanel = null;
+        inviteChevron = null;
+        inviteDropdownOpen = false;
 
         lobbiesTabButton.active(currentTab != Tab.LOBBIES);
         myLobbyTabButton.active(currentTab != Tab.MY_LOBBY);
-        lobbiesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.lobbies").append(" [" + visibleLobbies.size() + "]"));
-        myLobbyTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.my_lobby").append(ownLobby.isPresent() ? " [" + ownLobby.get().members().size() + "]" : ""));
+        leaderboardTabButton.active(currentTab != Tab.LEADERBOARD);
+        invitesTabButton.active(currentTab != Tab.INVITES);
+        lobbiesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.lobbies").append(" " + visibleLobbies.size()));
+        myLobbyTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.my_lobby").append(ownLobby.isPresent() ? " " + ownLobby.get().members().size() : ""));
+        leaderboardTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.leaderboard"));
+        invitesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.invites").append(" " + myInvites.size()));
 
-        if (currentTab == Tab.LOBBIES) {
-            buildLobbiesContent();
-        } else {
-            buildMyLobbyContent();
+        switch (currentTab) {
+            case LOBBIES -> buildLobbiesContent();
+            case MY_LOBBY -> buildMyLobbyContent();
+            case LEADERBOARD -> buildLeaderboardContent();
+            case INVITES -> buildInvitesContent();
         }
 
         footerLabel.text(footerError == null ? Component.empty() : Component.literal(footerError).withStyle(ChatFormatting.RED));
@@ -315,21 +416,203 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         }
     }
 
-    private void buildLobbiesContent() {
+    private void buildInvitesContent() {
         contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.invites"), myInvites.size()));
-        if (!myInvites.isEmpty()) {
-            contentArea.child(inviteHeaderRow());
-        }
-
         if (myInvites.isEmpty()) {
             contentArea.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller.no_invites")));
         } else {
-            for (PendingInvite invite : myInvites.stream().limit(3).toList()) {
+            contentArea.child(inviteHeaderRow());
+            for (PendingInvite invite : myInvites) {
                 contentArea.child(inviteRow(invite));
             }
         }
 
-        contentArea.child(spacer(6));
+        UUID self = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : null;
+        boolean isOwner = self != null && ownLobby.isPresent() && ownLobby.get().ownerUuid().equals(self);
+        if (isOwner) {
+            UUID ownedLobbyId = ownLobby.get().lobbyId();
+            List<PendingJoinRequest> incoming = myJoinRequests.stream()
+                .filter(r -> r.lobbyId().equals(ownedLobbyId))
+                .toList();
+            contentArea.child(spacer(8));
+            contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.join_requests"), incoming.size()));
+            if (incoming.isEmpty()) {
+                contentArea.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller.no_join_requests")));
+            } else {
+                contentArea.child(joinRequestHeaderRow());
+                for (PendingJoinRequest req : incoming) {
+                    contentArea.child(joinRequestRow(req));
+                }
+            }
+        }
+    }
+
+    private FlowLayout joinRequestHeaderRow() {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.padding(Insets.of(2, 2, 6, 6));
+        row.gap(6);
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.requester"), Sizing.expand()));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.tier"), Sizing.fixed(86)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.expires"), Sizing.fixed(62)));
+        row.child(headerCell("", Sizing.fixed(54)));
+        row.child(headerCell("", Sizing.fixed(58)));
+        return row;
+    }
+
+    private FlowLayout joinRequestRow(PendingJoinRequest req) {
+        FlowLayout row = rowPanel(false);
+        row.gap(6);
+
+        String requesterName = !req.requesterName().isEmpty() ? req.requesterName() : shortUuid(req.requesterUuid());
+
+        FlowLayout info = Containers.verticalFlow(Sizing.expand(), Sizing.content());
+        FlowLayout fromLine = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        fromLine.gap(3);
+        fromLine.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite_row.from"), INK));
+        fromLine.child(text(Component.literal(requesterName), ACCENT));
+        info.child(fromLine);
+        info.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.join_request_row.wants_to_join"), INK_DIM));
+        row.child(info);
+
+        row.child(fixedBadge(Component.literal(req.tier().name()), 86, tierColor(req.tier())));
+
+        long remainingSeconds = Math.max(0L, req.expiresAtTick() - approximateServerTick()) / 20L;
+        LabelComponent countdown = fixedText(Component.literal(formatRemaining(remainingSeconds)), 62, remainingSeconds <= 15 ? WARN : INK_MID, HorizontalAlignment.CENTER);
+        joinRequestCountdownLabels.put(req.requesterUuid(), countdown);
+        row.child(countdown);
+
+        UUID requesterUuid = req.requesterUuid();
+        ButtonComponent accept = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), b -> {
+            footerError = null;
+            ClientPlayNetworking.send(new AcceptJoinRequestPayload(menu.getBlockPos(), requesterUuid));
+        });
+        accept.horizontalSizing(Sizing.fixed(54));
+        row.child(accept);
+
+        ButtonComponent decline = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), b -> {
+            footerError = null;
+            ClientPlayNetworking.send(new DeclineJoinRequestPayload(menu.getBlockPos(), requesterUuid));
+        });
+        decline.horizontalSizing(Sizing.fixed(58));
+        row.child(decline);
+
+        return row;
+    }
+
+    private void buildLeaderboardContent() {
+        contentArea.child(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.col.tier")));
+        contentArea.child(leaderboardTierControls());
+
+        contentArea.child(spacer(4));
+        contentArea.child(leaderboardBanner(leaderboardTier));
+
+        List<LeaderboardEntry> entries = new ArrayList<>(topLeaderboards.getOrDefault(leaderboardTier, List.of()));
+        entries.sort(Comparator.comparingInt(LeaderboardEntry::timeSeconds));
+
+        contentArea.child(spacer(4));
+        contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.ui.section.top_runs"), entries.size()));
+
+        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        list.child(leaderboardHeaderRow());
+        list.child(rowDivider(HAIRLINE_HI));
+        if (entries.isEmpty()) {
+            FlowLayout empty = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+            empty.surface(Surface.flat(ROW_BG));
+            empty.padding(Insets.of(10));
+            empty.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+            empty.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller.ui.leaderboard.no_runs")));
+            list.child(empty);
+        } else {
+            for (int i = 0; i < entries.size(); i++) {
+                if (i > 0) {
+                    list.child(rowDivider(HAIRLINE));
+                }
+                list.child(leaderboardRow(i + 1, entries.get(i), leaderboardTier));
+            }
+        }
+        contentArea.child(list);
+    }
+
+    private FlowLayout leaderboardTierControls() {
+        ButtonComponent easy = leaderboardTierButton(DifficultyTier.EASY, "EASY");
+        ButtonComponent normal = leaderboardTierButton(DifficultyTier.NORMAL, "NORMAL");
+        ButtonComponent hard = leaderboardTierButton(DifficultyTier.HARD, "HARD");
+        ButtonComponent nightmare = leaderboardTierButton(DifficultyTier.NIGHTMARE, "NIGHTMARE");
+        return segmentedControl(easy, normal, hard, nightmare);
+    }
+
+    private ButtonComponent leaderboardTierButton(DifficultyTier tier, String label) {
+        return segmentButton(label, tierColor(tier), true,
+            () -> leaderboardTier == tier,
+            b -> {
+                leaderboardTier = tier;
+                rebuildUi();
+            });
+    }
+
+    private FlowLayout leaderboardBanner(DifficultyTier tier) {
+        int color = tierColor(tier);
+        FlowLayout banner = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
+        banner.surface(Surface.flat((color & 0x00FFFFFF) | 0x1F000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
+        banner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
+        accent.surface(Surface.flat(color));
+        banner.child(accent);
+        FlowLayout inner = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        inner.padding(Insets.of(0, 0, 10, 10));
+        inner.gap(8);
+        inner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        inner.child(badge(Component.translatable("gui.arenas_ld.dungeon_controller.ui.leaderboard.banner_badge", tier.name()), color));
+        inner.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.leaderboard.banner_desc", titleCase(tier.name())), INK));
+        banner.child(inner);
+        return banner;
+    }
+
+    private FlowLayout leaderboardHeaderRow() {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(PANEL_2));
+        row.padding(Insets.of(5, 5, 8, 8));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.rank"), Sizing.fixed(50)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.player"), Sizing.expand()));
+        LabelComponent timeHeader = headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.time"), Sizing.fixed(64));
+        timeHeader.horizontalTextAlignment(HorizontalAlignment.RIGHT);
+        row.child(timeHeader);
+        return row;
+    }
+
+    private FlowLayout leaderboardRow(int rank, LeaderboardEntry entry, DifficultyTier tier) {
+        boolean top = rank == 1;
+        int color = tierColor(tier);
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(top ? ((color & 0x00FFFFFF) | 0x1A000000) : ROW_BG));
+        row.padding(Insets.of(7, 7, 8, 8));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        LabelComponent rankLabel = text(Component.literal(top ? "★1" : ("#" + rank)), top ? color : INK_MID);
+        rankLabel.horizontalSizing(Sizing.fixed(50));
+        row.child(rankLabel);
+
+        LabelComponent nameLabel = text(Component.literal(entry.playerName()), INK);
+        nameLabel.horizontalSizing(Sizing.expand());
+        row.child(nameLabel);
+
+        LabelComponent timeLabel = text(Component.literal(formatClock(entry.timeSeconds())), top ? color : INK_MID);
+        timeLabel.horizontalSizing(Sizing.fixed(64));
+        timeLabel.horizontalTextAlignment(HorizontalAlignment.RIGHT);
+        row.child(timeLabel);
+        return row;
+    }
+
+    private static String formatClock(int totalSeconds) {
+        int mins = Math.max(0, totalSeconds) / 60;
+        int secs = Math.max(0, totalSeconds) % 60;
+        return String.format("%02d:%02d", mins, secs);
+    }
+
+    private void buildLobbiesContent() {
         ButtonComponent create = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.create"), b -> {
             footerError = null;
             ClientPlayNetworking.send(new CreateLobbyPayload(menu.getBlockPos()));
@@ -355,43 +638,45 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         row.gap(6);
 
         Optional<Lobby> inviteLobby = resolveLobbyForInvite(invite);
+        String ownerName = inviteLobby.map(Lobby::ownerName)
+            .filter(n -> !n.isEmpty())
+            .orElseGet(() -> !invite.ownerName().isEmpty() ? invite.ownerName() : shortUuid(invite.lobbyId()));
         String inviterName = inviteLobby
-            .map(l -> l.memberNames().getOrDefault(invite.inviterUuid(), shortUuid(invite.inviterUuid())))
-            .orElse(shortUuid(invite.inviterUuid()));
-        String ownerName = inviteLobby.map(Lobby::ownerName).orElseGet(() -> shortUuid(invite.lobbyId()));
+            .map(l -> l.memberNames().get(invite.inviterUuid()))
+            .filter(n -> !n.isEmpty())
+            .orElse(ownerName);
+        DifficultyTier inviteTier = inviteLobby.map(Lobby::selectedTier).orElse(invite.tier());
 
         long remainingTicks = Math.max(0L, invite.expiresAtTick() - approximateServerTick());
         long remainingSeconds = remainingTicks / 20L;
         FlowLayout inviteInfo = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        inviteInfo.child(text(Component.literal("From " + inviterName), INK));
-        inviteInfo.child(text(Component.literal("Owner: " + ownerName), INK_DIM));
+        FlowLayout fromLine = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        fromLine.gap(3);
+        fromLine.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite_row.from"), INK));
+        fromLine.child(text(Component.literal(inviterName), ACCENT));
+        inviteInfo.child(fromLine);
+        inviteInfo.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite_row.owner", ownerName.toUpperCase()), INK_DIM));
         row.child(inviteInfo);
         row.child(fixedText(Component.literal("-"), 40, INK_DIM, HorizontalAlignment.CENTER));
 
-        Component badgeText;
-        int badgeColor;
-        if (inviteLobby.isPresent()) {
-            DifficultyTier inviteTier = inviteLobby.get().selectedTier();
-            badgeText = Component.literal(inviteTier.name());
-            badgeColor = tierColor(inviteTier);
-        } else {
-            badgeText = Component.literal(shortUuid(invite.lobbyId()).toUpperCase());
-            badgeColor = INFO;
-        }
-        row.child(fixedBadge(badgeText, 86, badgeColor));
+        row.child(fixedBadge(Component.literal(inviteTier.name()), 86, tierColor(inviteTier)));
         LabelComponent countdown = fixedText(Component.literal(formatRemaining(remainingSeconds)), 62, remainingSeconds <= 15 ? WARN : INK_MID, HorizontalAlignment.CENTER);
         inviteCountdownLabels.put(invite.lobbyId(), countdown);
         row.child(countdown);
 
-        row.child(smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), b -> {
+        ButtonComponent accept = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), b -> {
             footerError = null;
             ClientPlayNetworking.send(new AcceptInvitePayload(menu.getBlockPos(), invite.lobbyId()));
-        }));
+        });
+        accept.horizontalSizing(Sizing.fixed(54));
+        row.child(accept);
 
-        row.child(smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), b -> {
+        ButtonComponent decline = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), b -> {
             footerError = null;
             ClientPlayNetworking.send(new DeclineInvitePayload(menu.getBlockPos(), invite.lobbyId()));
-        }));
+        });
+        decline.horizontalSizing(Sizing.fixed(58));
+        row.child(decline);
 
         return row;
     }
@@ -401,36 +686,69 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         row.gap(8);
 
         FlowLayout ownerInfo = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        ownerInfo.child(text(Component.literal(lobby.ownerName()), INK));
+        FlowLayout nameLine = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        nameLine.gap(5);
+        nameLine.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        nameLine.child(text(Component.literal(lobby.ownerName()), INK));
+        if (lobby.hardcoreEnabled()) {
+            nameLine.child(badge(Component.literal("H"), DANGER));
+        }
+        ownerInfo.child(nameLine);
         ownerInfo.child(text(Component.literal(shortUuid(lobby.lobbyId()).toUpperCase()), INK_DIM));
         row.child(ownerInfo);
         row.child(fixedBadge(Component.literal(lobby.members().size() + "/" + menu.getMaxPartySize()), 44, INK_MID));
         row.child(fixedBadge(Component.literal(lobby.selectedTier().name()), 70, tierColor(lobby.selectedTier())));
-        row.child(fixedBadge(Component.literal(lobby.visibility().name()), 78, visibilityColor(lobby.visibility())));
-        row.child(fixedBadge(Component.literal(lobby.status().name()), 82, statusColor(lobby.status().name())));
-        if (lobby.hardcoreEnabled()) {
-            row.child(fixedBadge(Component.literal("HC"), 34, DANGER));
-        }
+
+        FlowLayout visCell = Containers.horizontalFlow(Sizing.fixed(78), Sizing.content());
+        int visColor = visibilityColor(lobby.visibility());
+        visCell.surface(Surface.flat((visColor & 0x00FFFFFF) | 0x22000000).and(Surface.outline((visColor & 0x00FFFFFF) | 0x55000000)));
+        visCell.padding(Insets.of(4, 2, 4, 4));
+        visCell.gap(4);
+        visCell.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        visCell.child(text(Component.literal("●"), visColor));
+        visCell.child(text(Component.literal(lobby.visibility().name()), visColor));
+        row.child(visCell);
+
+        row.child(fixedBadge(Component.literal(statusLabel(lobby.status())), 82, statusColor(lobby.status())));
 
         UUID lobbyId = lobby.lobbyId();
         boolean isMine = ownLobby.isPresent() && ownLobby.get().lobbyId().equals(lobbyId);
         boolean isFull = lobby.isFull(menu.getMaxPartySize());
-        boolean inRun = lobby.status().name().equals("IN_RUN");
+        boolean inRun = lobby.status() == LobbyStatus.IN_RUN;
 
-        if (lobby.visibility() == LobbyVisibility.PUBLIC) {
-            ButtonComponent join = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.join"), b -> {
+        FlowLayout actionCell = Containers.horizontalFlow(Sizing.fixed(84), Sizing.content());
+        actionCell.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
+        ButtonComponent actionButton;
+        if (inRun) {
+            actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.running"), b -> {});
+            actionButton.active(false);
+        } else if (isFull) {
+            actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.full"), b -> {});
+            actionButton.active(false);
+        } else if (lobby.visibility() == LobbyVisibility.PUBLIC) {
+            actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.join"), b -> {
                 footerError = null;
                 ClientPlayNetworking.send(new JoinLobbyPayload(menu.getBlockPos(), lobbyId));
             });
-            join.active(!isMine && !isFull && !inRun && ownLobby.isEmpty());
-            row.child(join);
+            actionButton.active(!isMine && ownLobby.isEmpty());
         } else {
-            ButtonComponent req = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.request_invite"), b ->
-                footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.invite_only").getString()
-            );
-            req.active(!isMine && !inRun && !isFull);
-            row.child(req);
+            UUID self = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : null;
+            boolean alreadyRequested = self != null && myJoinRequests.stream()
+                .anyMatch(r -> r.lobbyId().equals(lobbyId) && r.requesterUuid().equals(self));
+            if (alreadyRequested) {
+                actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.pending"), b -> {});
+                actionButton.active(false);
+            } else {
+                actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.request"), b -> {
+                    footerError = null;
+                    ClientPlayNetworking.send(new RequestJoinPayload(menu.getBlockPos(), lobbyId));
+                });
+                actionButton.active(!isMine && ownLobby.isEmpty());
+            }
         }
+        actionButton.horizontalSizing(Sizing.fill(100));
+        actionCell.child(actionButton);
+        row.child(actionCell);
         return row;
     }
 
@@ -444,51 +762,63 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         UUID self = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : UUID.randomUUID();
         boolean isOwner = lobby.ownerUuid().equals(self);
 
-        FlowLayout summary = rowPanel(true);
-        summary.gap(12);
-        FlowLayout summaryLeft = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        summaryOwnerLabel = text(Component.translatable("gui.arenas_ld.dungeon_controller.owner", lobby.ownerName()), INK);
-        summaryMembersLabel = text(Component.translatable("gui.arenas_ld.dungeon_controller.members", lobby.members().size(), menu.getMaxPartySize()), INK_MID);
-        summaryLeft.child(summaryOwnerLabel);
-        summaryLeft.child(summaryMembersLabel);
-        summary.child(summaryLeft);
-        summaryTierBadge = badge(Component.literal(lobby.selectedTier().name()), tierColor(lobby.selectedTier()));
-        summaryVisibilityBadge = badge(Component.literal(lobby.visibility().name()), visibilityColor(lobby.visibility()));
-        summaryHardcoreBadge = badge(Component.literal(lobby.hardcoreEnabled() ? "HC ON" : "HC OFF"), lobby.hardcoreEnabled() ? DANGER : INK_MID);
-        summary.child(summaryTierBadge);
-        summary.child(summaryVisibilityBadge);
-        summary.child(summaryHardcoreBadge);
-        contentArea.child(summary);
-        contentArea.child(sectionHeader(Component.literal("MEMBERS"), lobby.members().size()));
-        contentArea.child(memberHeaderRow(isOwner));
+        summaryOwnerLabel = text(Component.literal(lobby.ownerName()), ACCENT);
+        summaryMembersLabel = text(Component.literal(lobby.members().size() + " / " + menu.getMaxPartySize()), INK);
+        summaryTierValue = text(Component.literal(titleCase(lobby.selectedTier().name())), tierColor(lobby.selectedTier()));
+        summaryVisibilityValue = text(Component.literal(titleCase(lobby.visibility().name())), visibilityColor(lobby.visibility()));
+        summaryHardcoreValue = text(Component.translatable(lobby.hardcoreEnabled() ? "gui.arenas_ld.dungeon_controller.ui.hardcore.on" : "gui.arenas_ld.dungeon_controller.ui.hardcore.off"), lobby.hardcoreEnabled() ? DANGER : INK_MID);
 
-        for (UUID member : lobby.members().stream().sorted(Comparator.comparing(UUID::toString)).limit(5).toList()) {
-            contentArea.child(memberRow(lobby, member, isOwner));
+        FlowLayout summary = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(40));
+        summary.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
+        summary.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout summaryAccent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
+        summaryAccent.surface(Surface.flat(ACCENT));
+        summary.child(summaryAccent);
+        FlowLayout summaryPad = Containers.verticalFlow(Sizing.fixed(9), Sizing.fill(100));
+        summaryPad.surface(Surface.BLANK);
+        summary.child(summaryPad);
+        summary.child(infoColumn(tr("gui.arenas_ld.dungeon_controller.ui.col.owner"), summaryOwnerLabel, Sizing.fill(24)));
+        summary.child(infoColumn(tr("gui.arenas_ld.dungeon_controller.ui.col.tier"), summaryTierValue, Sizing.fill(18)));
+        summary.child(infoColumn(tr("gui.arenas_ld.dungeon_controller.ui.col.members"), summaryMembersLabel, Sizing.fill(18)));
+        summary.child(infoColumn(tr("gui.arenas_ld.dungeon_controller.ui.col.visibility"), summaryVisibilityValue, Sizing.fill(18)));
+        summary.child(infoColumn(tr("gui.arenas_ld.dungeon_controller.ui.col.hardcore"), summaryHardcoreValue, Sizing.fill(18)));
+        contentArea.child(summary);
+        contentArea.child(membersSectionHeader(lobby.readyMembers().size(), lobby.members().size(), menu.getMaxPartySize()));
+
+        FlowLayout memberList = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        memberList.child(memberHeaderRow(isOwner));
+        memberList.child(rowDivider(HAIRLINE_HI));
+        List<UUID> orderedMembers = lobby.members().stream()
+            .sorted(Comparator.comparing((UUID m) -> m.equals(lobby.ownerUuid()) ? 0 : 1)
+                .thenComparing(m -> lobby.memberNames().getOrDefault(m, shortUuid(m)).toLowerCase(java.util.Locale.ROOT)))
+            .limit(5)
+            .toList();
+        boolean firstMemberRow = true;
+        for (UUID member : orderedMembers) {
+            if (!firstMemberRow) {
+                memberList.child(rowDivider(HAIRLINE));
+            }
+            memberList.child(memberRow(lobby, member, isOwner));
+            firstMemberRow = false;
         }
+        contentArea.child(memberList);
+
+        contentArea.child(spacer(6));
+        contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.ui.section.owner_controls"), null));
+
+        contentArea.child(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.col.tier")));
+        contentArea.child(ownerTierControls(isOwner));
 
         contentArea.child(spacer(4));
-        contentArea.child(sectionHeader(Component.literal("OWNER CONTROLS"), null));
-        contentArea.child(labeledControlRow(tierSummaryLabel = text(Component.translatable("gui.arenas_ld.dungeon_controller.tier", lobby.selectedTier().name()), INK_MID), ownerTierControls(isOwner)));
-        contentArea.child(labeledControlRow(visibilitySummaryLabel = text(Component.translatable("gui.arenas_ld.dungeon_controller.visibility", lobby.visibility().name()), INK_MID), ownerVisibilityControls(isOwner)));
+        contentArea.child(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.col.visibility")));
+        contentArea.child(ownerVisibilityControls(isOwner));
 
-        ButtonComponent hc = smallButton(Component.translatable(lobby.hardcoreEnabled()
-            ? "gui.arenas_ld.dungeon_controller.hardcore.off"
-            : "gui.arenas_ld.dungeon_controller.hardcore.on"), b -> {
-            footerError = null;
-            boolean currentHardcore = ownLobby.map(Lobby::hardcoreEnabled).orElse(false);
-            ClientPlayNetworking.send(new SetLobbyHardcorePayload(menu.getBlockPos(), !currentHardcore));
-        });
-        hc.active(isOwner);
-        hardcoreToggleButton = hc;
-        hardcoreSummaryLabel = text(Component.translatable(
-            "gui.arenas_ld.dungeon_controller.hardcore",
-            Component.translatable(lobby.hardcoreEnabled()
-                ? "gui.arenas_ld.dungeon_controller.hardcore.on"
-                : "gui.arenas_ld.dungeon_controller.hardcore.off")
-        ), INK_MID);
-        contentArea.child(labeledControlRow(hardcoreSummaryLabel, hc));
+        contentArea.child(spacer(4));
+        contentArea.child(hardcoreControl(isOwner));
 
-        contentArea.child(labeledControlRow(text(Component.translatable("gui.arenas_ld.dungeon_controller.button.invite"), INK_MID), ownerInviteControls(isOwner)));
+        contentArea.child(spacer(4));
+        contentArea.child(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.section.invite_player")));
+        contentArea.child(ownerInviteControls(isOwner));
 
         boolean ready = lobby.readyMembers().contains(self);
         boolean allReady = lobby.allReady();
@@ -540,112 +870,362 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     }
 
     private FlowLayout memberRow(Lobby lobby, UUID member, boolean isOwner) {
-        FlowLayout row = rowPanel(false);
-        row.gap(6);
+        boolean online = isOnline(member);
+        boolean ready = lobby.readyMembers().contains(member);
+        boolean isLobbyOwner = member.equals(lobby.ownerUuid());
+
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(ROW_BG));
+        row.padding(Insets.of(7, 7, 8, 8));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        FlowLayout statusSquare = Containers.horizontalFlow(Sizing.fixed(18), Sizing.fixed(18));
+        statusSquare.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        LabelComponent statusGlyph = text(Component.literal(online ? "✓" : "!"), online ? GOOD : WARN);
+        applyStatusSquare(statusSquare, online);
+        statusSquare.child(statusGlyph);
+        row.child(statusSquare);
 
         String name = lobby.memberNames().getOrDefault(member, shortUuid(member));
-        FlowLayout memberInfo = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        memberInfo.child(text(Component.literal(name), INK));
-        memberInfo.child(text(Component.literal(member.equals(lobby.ownerUuid()) ? "OWNER" : "MEMBER"), INK_DIM));
-        row.child(memberInfo);
-        FlowLayout readyBadge = fixedBadge(Component.translatable(lobby.readyMembers().contains(member)
-            ? "gui.arenas_ld.dungeon_controller.status.ready"
-            : "gui.arenas_ld.dungeon_controller.status.pending"), 84, lobby.readyMembers().contains(member) ? GOOD : INK_DIM);
+        FlowLayout nameCell = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        nameCell.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        nameCell.gap(6);
+        nameCell.child(text(Component.literal(name), INK));
+        if (isLobbyOwner) {
+            nameCell.child(badge(Component.literal("★ ").append(Component.translatable("gui.arenas_ld.dungeon_controller.ui.owner_badge")), ACCENT));
+        }
+        row.child(nameCell);
+
+        LabelComponent connectionLabel = text(Component.literal(online ? "● " : "○ ").append(Component.translatable(online ? "gui.arenas_ld.dungeon_controller.ui.member.online" : "gui.arenas_ld.dungeon_controller.ui.member.offline")), online ? GOOD : DANGER);
+        connectionLabel.horizontalSizing(Sizing.fixed(84));
+        row.child(connectionLabel);
+
+        FlowLayout readyBadge = fixedBadge(Component.translatable(ready ? "gui.arenas_ld.dungeon_controller.ui.member.ready" : "gui.arenas_ld.dungeon_controller.ui.member.not_ready"), 84, ready ? GOOD : INK_DIM);
         row.child(readyBadge);
-        FlowLayout onlineBadge = fixedBadge(Component.translatable(isOnline(member)
-            ? "gui.arenas_ld.dungeon_controller.status.online"
-            : "gui.arenas_ld.dungeon_controller.status.offline"), 84, isOnline(member) ? GOOD : DANGER);
-        row.child(onlineBadge);
 
         ButtonComponent kickButton = null;
-        if (isOwner && !member.equals(lobby.ownerUuid())) {
-            kickButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.kick"), b -> {
+        if (isOwner && !isLobbyOwner) {
+            kickButton = dangerButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.kick"), b -> {
                 footerError = null;
                 ClientPlayNetworking.send(new KickFromLobbyPayload(menu.getBlockPos(), member));
             });
+            kickButton.horizontalSizing(Sizing.fixed(54));
             row.child(kickButton);
         } else {
-            row.child(fixedText(Component.literal(""), 54, INK_DIM, HorizontalAlignment.RIGHT));
+            FlowLayout kickSpace = Containers.horizontalFlow(Sizing.fixed(54), Sizing.content());
+            kickSpace.surface(Surface.BLANK);
+            row.child(kickSpace);
         }
-        memberRowRefs.put(member, new MemberRowRefs(readyBadge, onlineBadge, kickButton));
+        memberRowRefs.put(member, new MemberRowRefs(statusSquare, statusGlyph, connectionLabel, readyBadge, kickButton));
         return row;
     }
 
     private FlowLayout ownerTierControls(boolean isOwner) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(4);
+        ButtonComponent easy = segmentButton("EASY", tierColor(DifficultyTier.EASY), isOwner && isTierEnabled(DifficultyTier.EASY),
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.EASY,
+            b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.EASY)));
+        ButtonComponent normal = segmentButton("NORMAL", tierColor(DifficultyTier.NORMAL), isOwner && isTierEnabled(DifficultyTier.NORMAL),
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NORMAL,
+            b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
+        ButtonComponent hard = segmentButton("HARD", tierColor(DifficultyTier.HARD), isOwner && isTierEnabled(DifficultyTier.HARD),
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.HARD,
+            b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
+        ButtonComponent nightmare = segmentButton("NIGHTMARE", tierColor(DifficultyTier.NIGHTMARE), isOwner && isTierEnabled(DifficultyTier.NIGHTMARE),
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NIGHTMARE,
+            b -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NIGHTMARE)));
+        return segmentedControl(easy, normal, hard, nightmare);
+    }
 
-        ButtonComponent normal = smallButton(Component.literal("Normal"), b ->
-            ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
-        ButtonComponent hard = smallButton(Component.literal("Hard"), b ->
-            ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
-        ButtonComponent hell = smallButton(Component.literal("Hell"), b ->
-            ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HELL)));
-
-        normal.active(isOwner);
-        hard.active(isOwner);
-        hell.active(isOwner);
-        row.child(normal);
-        row.child(hard);
-        row.child(hell);
-        return row;
+    private boolean isTierEnabled(DifficultyTier tier) {
+        net.ledok.arenas_ld.dungeon.run.TierConfig config = menu.getTiers().get(tier);
+        return config == null || config.enabled();
     }
 
     private FlowLayout ownerVisibilityControls(boolean isOwner) {
+        ButtonComponent pub = segmentButton("PUBLIC", visibilityColor(LobbyVisibility.PUBLIC), isOwner,
+            () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.PUBLIC,
+            b -> ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PUBLIC)));
+        ButtonComponent fr = segmentButton("FRIENDS", visibilityColor(LobbyVisibility.FRIENDS), isOwner,
+            () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.FRIENDS,
+            b -> ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.FRIENDS)));
+        ButtonComponent pr = segmentButton("PRIVATE", visibilityColor(LobbyVisibility.PRIVATE), isOwner,
+            () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.PRIVATE,
+            b -> ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PRIVATE)));
+        return segmentedControl(pub, fr, pr);
+    }
+
+    private FlowLayout hardcoreControl(boolean isOwner) {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(4);
+        row.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
+        row.padding(Insets.of(8, 8, 10, 10));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
-        ButtonComponent pub = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.visibility.public"), b ->
-            ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PUBLIC)));
-        ButtonComponent fr = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.visibility.friends"), b ->
-            ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.FRIENDS)));
-        ButtonComponent pr = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.visibility.private"), b ->
-            ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PRIVATE)));
+        FlowLayout textCol = Containers.verticalFlow(Sizing.expand(), Sizing.content());
+        textCol.gap(2);
+        textCol.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.hardcore.title"), INK_DIM));
+        textCol.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.hardcore.desc"), INK));
+        row.child(textCol);
 
-        pub.active(isOwner);
-        fr.active(isOwner);
-        pr.active(isOwner);
-        row.child(pub);
-        row.child(fr);
-        row.child(pr);
+        ButtonComponent toggle = toggleSwitch(isOwner,
+            () -> ownLobby.map(Lobby::hardcoreEnabled).orElse(false),
+            b -> {
+                footerError = null;
+                boolean currentHardcore = ownLobby.map(Lobby::hardcoreEnabled).orElse(false);
+                ClientPlayNetworking.send(new SetLobbyHardcorePayload(menu.getBlockPos(), !currentHardcore));
+            });
+        row.child(toggle);
         return row;
     }
 
     private FlowLayout ownerInviteControls(boolean isOwner) {
+        FlowLayout section = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        section.gap(0);
+
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(4);
+        row.gap(6);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        inviteFieldRow = row;
 
-        inviteField = Components.textBox(Sizing.fixed(170), inviteInput);
+        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout fieldAccent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fixed(20));
+        fieldAccent.surface(Surface.flat(ACCENT));
+        fieldWrap.child(fieldAccent);
+
+        inviteField = Components.textBox(Sizing.expand(), inviteInput);
         inviteField.verticalSizing(Sizing.fixed(18));
-        inviteField.onChanged().subscribe(value -> inviteInput = value);
-        row.child(inviteField);
+        inviteField.active = isOwner;
+        inviteField.onChanged().subscribe(value -> {
+            inviteInput = value;
+            if (inviteDropdownOpen) {
+                refreshInviteDropdown();
+            }
+        });
+        inviteField.mouseDown().subscribe((mouseX, mouseY, button) -> {
+            if (isOwner) {
+                openInviteDropdown();
+            }
+            return false;
+        });
+        fieldWrap.child(inviteField);
 
-        ButtonComponent invite = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.invite"), b -> {
-            footerError = null;
-            UUID invitee = resolveInviteeUuid(inviteInput);
-            if (invitee == null) {
-                footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.invitee_not_found").getString();
+        inviteChevron = Components.button(Component.empty(), b -> {
+            if (isOwner) {
+                toggleInviteDropdown();
+            }
+        });
+        inviteChevron.sizing(Sizing.fixed(18), Sizing.fixed(20));
+        inviteChevron.active(isOwner);
+        inviteChevron.renderer((context, rendered, delta) -> {
+            String glyph = inviteDropdownOpen ? "▲" : "▼";
+            int tx = rendered.getX() + (rendered.getWidth() - this.font.width(glyph)) / 2;
+            int ty = rendered.getY() + (rendered.getHeight() - this.font.lineHeight) / 2 + 1;
+            context.drawString(this.font, glyph, tx, ty, INK_MID, false);
+        });
+        fieldWrap.child(inviteChevron);
+        row.child(fieldWrap);
+
+        ButtonComponent invite = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.invite"), b -> sendInvite());
+        invite.active(isOwner);
+        invite.horizontalSizing(Sizing.fixed(58));
+        row.child(invite);
+
+        section.child(row);
+
+        inviteDropdownPanel = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        inviteDropdownPanel.surface(Surface.BLANK);
+        section.child(inviteDropdownPanel);
+        refreshInviteDropdown();
+
+        return section;
+    }
+
+    private void sendInvite() {
+        footerError = null;
+        UUID invitee = resolveInviteeUuid(inviteInput);
+        if (invitee == null) {
+            footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.invitee_not_found").getString();
+            return;
+        }
+        ClientPlayNetworking.send(new InvitePlayerPayload(menu.getBlockPos(), invitee));
+        inviteInput = "";
+        if (inviteField != null) {
+            inviteField.text("");
+        }
+        closeInviteDropdown();
+    }
+
+    private void openInviteDropdown() {
+        if (!inviteDropdownOpen) {
+            inviteDropdownOpen = true;
+            refreshInviteDropdown();
+            if (contentScroll != null) {
+                contentScroll.scrollTo(1.0D);
+            }
+        }
+    }
+
+    private void closeInviteDropdown() {
+        if (inviteDropdownOpen) {
+            inviteDropdownOpen = false;
+            refreshInviteDropdown();
+        }
+    }
+
+    private void toggleInviteDropdown() {
+        if (inviteDropdownOpen) {
+            closeInviteDropdown();
+        } else {
+            openInviteDropdown();
+        }
+    }
+
+    private void refreshInviteDropdown() {
+        if (inviteDropdownPanel == null) {
+            return;
+        }
+        inviteDropdownPanel.clearChildren();
+        if (!inviteDropdownOpen) {
+            inviteDropdownPanel.surface(Surface.BLANK);
+            return;
+        }
+        inviteDropdownPanel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+
+        List<InviteCandidate> candidates = inviteCandidates(inviteInput);
+        long available = candidates.stream().filter(InviteCandidate::selectable).count();
+
+        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        header.surface(Surface.flat(ROW_BG));
+        header.padding(Insets.of(4, 4, 8, 8));
+        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        header.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.header"), INK_DIM));
+        header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+        header.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.available", available), ACCENT));
+        inviteDropdownPanel.child(header);
+        inviteDropdownPanel.child(rowDivider(HAIRLINE_HI));
+
+        if (candidates.isEmpty()) {
+            FlowLayout empty = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+            empty.padding(Insets.of(8));
+            empty.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+            empty.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.empty"), INK_DIM));
+            inviteDropdownPanel.child(empty);
+            return;
+        }
+
+        boolean first = true;
+        for (InviteCandidate candidate : candidates) {
+            if (!first) {
+                inviteDropdownPanel.child(rowDivider(HAIRLINE));
+            }
+            inviteDropdownPanel.child(inviteCandidateRow(candidate));
+            first = false;
+        }
+    }
+
+    private ButtonComponent inviteCandidateRow(InviteCandidate candidate) {
+        boolean selectable = candidate.selectable();
+        ButtonComponent row = Components.button(Component.empty(), b -> {
+            if (!selectable) {
                 return;
             }
-            ClientPlayNetworking.send(new InvitePlayerPayload(menu.getBlockPos(), invitee));
+            footerError = null;
+            ClientPlayNetworking.send(new InvitePlayerPayload(menu.getBlockPos(), candidate.uuid()));
             inviteInput = "";
             if (inviteField != null) {
                 inviteField.text("");
             }
+            closeInviteDropdown();
         });
-        invite.active(isOwner);
-        row.child(invite);
-
+        row.sizing(Sizing.fill(100), Sizing.fixed(22));
+        row.active(selectable);
+        int statusColor = selectable ? GOOD : WARN;
+        int alpha = selectable ? 0xFF000000 : 0x73000000;
+        String statusText = switch (candidate.status()) {
+            case ONLINE -> tr("gui.arenas_ld.dungeon_controller.ui.member.online");
+            case IN_LOBBY -> tr("gui.arenas_ld.dungeon_controller.ui.candidate.in_lobby");
+            case IN_RUN -> tr("gui.arenas_ld.dungeon_controller.ui.candidate.in_run");
+            case BUSY -> tr("gui.arenas_ld.dungeon_controller.ui.candidate.busy");
+        };
+        String nameText = "@" + candidate.name();
+        row.renderer((context, rendered, delta) -> {
+            int x1 = rendered.getX();
+            int y1 = rendered.getY();
+            int w = rendered.getWidth();
+            int h = rendered.getHeight();
+            boolean hover = selectable && rendered.isHoveredOrFocused();
+            context.fill(x1, y1, x1 + w, y1 + h, hover ? ROW_BG : PANEL_2);
+            if (hover) {
+                context.fill(x1, y1, x1 + 2, y1 + h, ACCENT);
+            }
+            int squareColor = (statusColor & 0x00FFFFFF) | alpha;
+            context.fill(x1 + 8, y1 + h / 2 - 4, x1 + 16, y1 + h / 2 + 4, squareColor);
+            int nameColor = (INK & 0x00FFFFFF) | alpha;
+            context.drawString(this.font, nameText, x1 + 24, y1 + (h - this.font.lineHeight) / 2 + 1, nameColor, false);
+            int statusTextColor = (statusColor & 0x00FFFFFF) | alpha;
+            int statusWidth = this.font.width(statusText);
+            context.drawString(this.font, statusText, x1 + w - statusWidth - 10, y1 + (h - this.font.lineHeight) / 2 + 1, statusTextColor, false);
+        });
         return row;
+    }
+
+    private List<InviteCandidate> inviteCandidates(String filter) {
+        List<InviteCandidate> result = new ArrayList<>();
+        if (minecraft == null || minecraft.getConnection() == null) {
+            return result;
+        }
+        UUID self = minecraft.player != null ? minecraft.player.getUUID() : null;
+        java.util.Set<UUID> myMembers = ownLobby.map(lobby -> new java.util.HashSet<>(lobby.members())).orElseGet(java.util.HashSet::new);
+        String needle = filter == null ? "" : filter.trim().toLowerCase(java.util.Locale.ROOT);
+        if (needle.startsWith("@")) {
+            needle = needle.substring(1);
+        }
+        for (PlayerInfo info : minecraft.getConnection().getOnlinePlayers()) {
+            UUID id = info.getProfile().getId();
+            String name = info.getProfile().getName();
+            if (id == null || name == null) {
+                continue;
+            }
+            if (id.equals(self) || myMembers.contains(id)) {
+                continue;
+            }
+            if (!needle.isEmpty() && !name.toLowerCase(java.util.Locale.ROOT).contains(needle)) {
+                continue;
+            }
+            result.add(new InviteCandidate(id, name, inviteStatusFor(id)));
+        }
+        result.sort(Comparator.comparing((InviteCandidate c) -> c.selectable() ? 0 : 1)
+            .thenComparing(c -> c.name().toLowerCase(java.util.Locale.ROOT)));
+        return result;
+    }
+
+    private InviteStatus inviteStatusFor(UUID uuid) {
+        if (isBusy(uuid)) {
+            return InviteStatus.BUSY;
+        }
+        for (Lobby lobby : visibleLobbies) {
+            if (lobby.members().contains(uuid)) {
+                return lobby.status() == LobbyStatus.IN_RUN ? InviteStatus.IN_RUN : InviteStatus.IN_LOBBY;
+            }
+        }
+        return InviteStatus.ONLINE;
+    }
+
+    private boolean isBusy(UUID uuid) {
+        return busyPlayers != null && busyPlayers.contains(uuid);
     }
 
     private FlowLayout inviteHeaderRow() {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.padding(Insets.of(2, 2, 6, 6));
         row.gap(6);
-        row.child(headerCell("FROM", Sizing.expand()));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.from"), Sizing.expand()));
         row.child(headerCell("", Sizing.fixed(40)));
-        row.child(headerCell("TIER", Sizing.fixed(86)));
-        row.child(headerCell("EXPIRES", Sizing.fixed(62)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.tier"), Sizing.fixed(86)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.expires"), Sizing.fixed(62)));
         row.child(headerCell("", Sizing.fixed(54)));
         row.child(headerCell("", Sizing.fixed(58)));
         return row;
@@ -653,23 +1233,30 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
     private FlowLayout lobbyHeaderRow() {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.padding(Insets.of(2, 2, 6, 6));
         row.gap(8);
-        row.child(headerCell("OWNER", Sizing.expand()));
-        row.child(headerCell("SIZE", Sizing.fixed(44)));
-        row.child(headerCell("TIER", Sizing.fixed(70)));
-        row.child(headerCell("VIS", Sizing.fixed(78)));
-        row.child(headerCell("STATUS", Sizing.fixed(82)));
-        row.child(headerCell("", Sizing.fixed(72)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.owner"), Sizing.expand()));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.size"), Sizing.fixed(44)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.tier"), Sizing.fixed(70)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.visibility"), Sizing.fixed(78)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.status"), Sizing.fixed(82)));
+        row.child(headerCell("", Sizing.fixed(84)));
         return row;
     }
 
     private FlowLayout memberHeaderRow(boolean isOwner) {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(6);
-        row.child(headerCell("MEMBER", Sizing.expand()));
-        row.child(headerCell("READY", Sizing.fixed(84)));
-        row.child(headerCell("ONLINE", Sizing.fixed(84)));
-        row.child(headerCell(isOwner ? "ACTION" : "", Sizing.fixed(54)));
+        row.surface(Surface.flat(PANEL_2));
+        row.padding(Insets.of(5, 5, 8, 8));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout statusSpacer = Containers.horizontalFlow(Sizing.fixed(18), Sizing.content());
+        statusSpacer.surface(Surface.BLANK);
+        row.child(statusSpacer);
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.name"), Sizing.expand()));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.connection"), Sizing.fixed(84)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.ready"), Sizing.fixed(84)));
+        row.child(headerCell(isOwner ? tr("gui.arenas_ld.dungeon_controller.ui.col.action") : "", Sizing.fixed(54)));
         return row;
     }
 
@@ -717,13 +1304,125 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         return row;
     }
 
-    private FlowLayout labeledControlRow(LabelComponent labelComponent, io.wispforest.owo.ui.core.Component controls) {
-        FlowLayout row = rowPanel(true);
-        row.gap(8);
-        labelComponent.horizontalSizing(Sizing.fixed(170));
-        row.child(labelComponent);
-        row.child(controls);
+    private FlowLayout membersSectionHeader(int readyCount, int count, int max) {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        row.gap(6);
+        row.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.section.members"), INK_DIM));
+        membersSummaryLabel = text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.members_summary", readyCount, count, max), ACCENT);
+        row.child(membersSummaryLabel);
         return row;
+    }
+
+    private FlowLayout rowDivider(int color) {
+        FlowLayout divider = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(1));
+        divider.surface(Surface.flat(color));
+        return divider;
+    }
+
+    private void applyStatusSquare(FlowLayout square, boolean online) {
+        int color = online ? GOOD : WARN;
+        square.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x66000000)));
+    }
+
+    private ButtonComponent dangerButton(Component text, java.util.function.Consumer<ButtonComponent> action) {
+        ButtonComponent button = Components.button(text.copy().withStyle(ChatFormatting.RED), action);
+        button.sizing(Sizing.content(), Sizing.fixed(18));
+        button.renderer((context, rendered, delta) -> {
+            int fill = rendered.isHoveredOrFocused() ? ((DANGER & 0x00FFFFFF) | 0x44000000) : ((DANGER & 0x00FFFFFF) | 0x1F000000);
+            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
+            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), DANGER);
+        });
+        return button;
+    }
+
+    private String tr(String key) {
+        return Component.translatable(key).getString();
+    }
+
+    private LabelComponent controlCaption(String caption) {
+        LabelComponent label = Components.label(Component.literal(caption));
+        label.color(Color.ofArgb(INK_DIM));
+        return label;
+    }
+
+    private ButtonComponent segmentButton(String label, int accentColor, boolean active, java.util.function.BooleanSupplier selected, java.util.function.Consumer<ButtonComponent> action) {
+        ButtonComponent button = Components.button(Component.empty(), action);
+        button.sizing(Sizing.fill(100), Sizing.fixed(26));
+        button.active(active);
+        button.renderer((context, rendered, delta) -> {
+            boolean sel = selected.getAsBoolean();
+            boolean isActive = rendered.active();
+            boolean hover = rendered.isHoveredOrFocused();
+            int x1 = rendered.getX();
+            int y1 = rendered.getY();
+            int w = rendered.getWidth();
+            int h = rendered.getHeight();
+            int fill = sel ? ((accentColor & 0x00FFFFFF) | 0x26000000) : (isActive && hover ? ROW_BG : PANEL_2);
+            int border = sel ? accentColor : HAIRLINE;
+            context.fill(x1, y1, x1 + w, y1 + h, fill);
+            context.drawRectOutline(x1, y1, w, h, border);
+            int textColor = sel ? accentColor : (isActive ? INK : INK_DIM);
+            int tx = x1 + (w - this.font.width(label)) / 2;
+            int ty = y1 + (h - this.font.lineHeight) / 2 + 1;
+            context.drawString(this.font, label, tx, ty, textColor, false);
+        });
+        return button;
+    }
+
+    private FlowLayout segmentedControl(ButtonComponent... buttons) {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        int n = buttons.length;
+        int base = 100 / n;
+        for (int i = 0; i < n; i++) {
+            int pct = (i == n - 1) ? (100 - base * (n - 1)) : base;
+            FlowLayout cell = Containers.verticalFlow(Sizing.fill(pct), Sizing.content());
+            cell.surface(Surface.BLANK);
+            cell.padding(Insets.of(0, 0, i == 0 ? 0 : 3, i == n - 1 ? 0 : 3));
+            cell.child(buttons[i]);
+            row.child(cell);
+        }
+        return row;
+    }
+
+    private ButtonComponent toggleSwitch(boolean active, java.util.function.BooleanSupplier on, java.util.function.Consumer<ButtonComponent> action) {
+        ButtonComponent button = Components.button(Component.empty(), action);
+        button.sizing(Sizing.fixed(38), Sizing.fixed(18));
+        button.active(active);
+        button.renderer((context, rendered, delta) -> {
+            boolean isOn = on.getAsBoolean();
+            int x1 = rendered.getX();
+            int y1 = rendered.getY();
+            int w = rendered.getWidth();
+            int h = rendered.getHeight();
+            int track = isOn ? ((DANGER & 0x00FFFFFF) | 0x55000000) : PANEL_2;
+            int border = isOn ? DANGER : HAIRLINE;
+            context.fill(x1, y1, x1 + w, y1 + h, track);
+            context.drawRectOutline(x1, y1, w, h, border);
+            int knobW = w / 2 - 3;
+            int knobX = isOn ? (x1 + w - knobW - 2) : (x1 + 2);
+            int knobColor = isOn ? DANGER : INK;
+            context.fill(knobX, y1 + 2, knobX + knobW, y1 + h - 2, knobColor);
+        });
+        return button;
+    }
+
+    private FlowLayout infoColumn(String caption, LabelComponent value, Sizing width) {
+        FlowLayout col = Containers.verticalFlow(width, Sizing.content());
+        col.gap(3);
+        LabelComponent captionLabel = Components.label(Component.literal(caption));
+        captionLabel.color(Color.ofArgb(INK_DIM));
+        col.child(captionLabel);
+        col.child(value);
+        return col;
+    }
+
+    private static String titleCase(String value) {
+        if (value.isEmpty()) {
+            return value;
+        }
+        return value.charAt(0) + value.substring(1).toLowerCase(java.util.Locale.ROOT);
     }
 
     private LabelComponent headerCell(String text, Sizing sizing) {
@@ -744,7 +1443,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private FlowLayout badge(Component text, int color) {
         FlowLayout tag = Containers.horizontalFlow(Sizing.content(), Sizing.content());
         tag.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
-        tag.padding(Insets.of(2, 4, 2, 4));
+        tag.padding(Insets.of(4, 2, 4, 4));
         tag.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
         tag.child(this.text(text, color));
         return tag;
@@ -753,7 +1452,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private FlowLayout fixedBadge(Component text, int width, int color) {
         FlowLayout tag = Containers.horizontalFlow(Sizing.fixed(width), Sizing.content());
         tag.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
-        tag.padding(Insets.of(2, 4, 2, 4));
+        tag.padding(Insets.of(4, 2, 4, 4));
         tag.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
         LabelComponent label = this.text(text, color);
         label.horizontalSizing(Sizing.expand());
@@ -781,9 +1480,10 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
     private int tierColor(DifficultyTier tier) {
         return switch (tier) {
+            case EASY -> GOOD;
             case NORMAL -> INFO;
             case HARD -> WARN;
-            case HELL -> DANGER;
+            case NIGHTMARE -> DANGER;
         };
     }
 
@@ -795,11 +1495,19 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         };
     }
 
-    private int statusColor(String status) {
+    private int statusColor(LobbyStatus status) {
         return switch (status) {
-            case "READY" -> GOOD;
-            case "IN_RUN" -> WARN;
+            case READY -> GOOD;
+            case IN_RUN -> WARN;
+            case DISBANDED -> DANGER;
             default -> INFO;
+        };
+    }
+
+    private String statusLabel(LobbyStatus status) {
+        return switch (status) {
+            case IN_RUN -> "IN RUN";
+            default -> status.name();
         };
     }
 
@@ -845,7 +1553,11 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         this.visibleLobbies.addAll(menu.getVisibleLobbies());
         this.myInvites.clear();
         this.myInvites.addAll(menu.getMyInvites());
+        this.myJoinRequests.clear();
+        this.myJoinRequests.addAll(menu.getMyJoinRequests());
         this.ownLobby = menu.getOwnLobby();
+        this.busyPlayers = menu.getBusyPlayers();
+        this.topLeaderboards = menu.getTopLeaderboards();
         this.snapshotServerTick = menu.getServerGameTick();
         this.snapshotEpochMs = System.currentTimeMillis();
 
@@ -904,8 +1616,8 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private void refreshTabButtons() {
         lobbiesTabButton.active(currentTab != Tab.LOBBIES);
         myLobbyTabButton.active(currentTab != Tab.MY_LOBBY);
-        lobbiesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.lobbies").append(" [" + visibleLobbies.size() + "]"));
-        myLobbyTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.my_lobby").append(ownLobby.isPresent() ? " [" + ownLobby.get().members().size() + "]" : ""));
+        lobbiesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.lobbies").append(" " + visibleLobbies.size()));
+        myLobbyTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.my_lobby").append(ownLobby.isPresent() ? " " + ownLobby.get().members().size() : ""));
     }
 
     private void refreshMyLobbyInPlace(Lobby lobby) {
@@ -917,39 +1629,25 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         boolean canStart = isOwner && allReady && allOnline;
 
         if (summaryOwnerLabel != null) {
-            summaryOwnerLabel.text(Component.translatable("gui.arenas_ld.dungeon_controller.owner", lobby.ownerName()));
+            summaryOwnerLabel.text(Component.literal(lobby.ownerName()));
         }
         if (summaryMembersLabel != null) {
-            summaryMembersLabel.text(Component.translatable("gui.arenas_ld.dungeon_controller.members", lobby.members().size(), menu.getMaxPartySize()));
+            summaryMembersLabel.text(Component.literal(lobby.members().size() + " / " + menu.getMaxPartySize()));
         }
-        if (summaryTierBadge != null) {
-            updateBadge(summaryTierBadge, Component.literal(lobby.selectedTier().name()), tierColor(lobby.selectedTier()));
+        if (membersSummaryLabel != null) {
+            membersSummaryLabel.text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.members_summary", lobby.readyMembers().size(), lobby.members().size(), menu.getMaxPartySize()));
         }
-        if (summaryVisibilityBadge != null) {
-            updateBadge(summaryVisibilityBadge, Component.literal(lobby.visibility().name()), visibilityColor(lobby.visibility()));
+        if (summaryTierValue != null) {
+            summaryTierValue.text(Component.literal(titleCase(lobby.selectedTier().name())));
+            summaryTierValue.color(Color.ofArgb(tierColor(lobby.selectedTier())));
         }
-        if (summaryHardcoreBadge != null) {
-            updateBadge(summaryHardcoreBadge, Component.literal(lobby.hardcoreEnabled() ? "HC ON" : "HC OFF"), lobby.hardcoreEnabled() ? DANGER : INK_MID);
+        if (summaryVisibilityValue != null) {
+            summaryVisibilityValue.text(Component.literal(titleCase(lobby.visibility().name())));
+            summaryVisibilityValue.color(Color.ofArgb(visibilityColor(lobby.visibility())));
         }
-        if (tierSummaryLabel != null) {
-            tierSummaryLabel.text(Component.translatable("gui.arenas_ld.dungeon_controller.tier", lobby.selectedTier().name()));
-        }
-        if (visibilitySummaryLabel != null) {
-            visibilitySummaryLabel.text(Component.translatable("gui.arenas_ld.dungeon_controller.visibility", lobby.visibility().name()));
-        }
-        if (hardcoreSummaryLabel != null) {
-            hardcoreSummaryLabel.text(Component.translatable(
-                "gui.arenas_ld.dungeon_controller.hardcore",
-                Component.translatable(lobby.hardcoreEnabled()
-                    ? "gui.arenas_ld.dungeon_controller.hardcore.on"
-                    : "gui.arenas_ld.dungeon_controller.hardcore.off")
-            ));
-        }
-        if (hardcoreToggleButton != null) {
-            hardcoreToggleButton.setMessage(Component.translatable(lobby.hardcoreEnabled()
-                ? "gui.arenas_ld.dungeon_controller.hardcore.off"
-                : "gui.arenas_ld.dungeon_controller.hardcore.on"));
-            hardcoreToggleButton.active(isOwner);
+        if (summaryHardcoreValue != null) {
+            summaryHardcoreValue.text(Component.translatable(lobby.hardcoreEnabled() ? "gui.arenas_ld.dungeon_controller.ui.hardcore.on" : "gui.arenas_ld.dungeon_controller.ui.hardcore.off"));
+            summaryHardcoreValue.color(Color.ofArgb(lobby.hardcoreEnabled() ? DANGER : INK_MID));
         }
         if (readyToggleButton != null) {
             readyToggleButton.setMessage(Component.translatable(ready
@@ -966,23 +1664,21 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         for (UUID member : lobby.members()) {
             MemberRowRefs refs = memberRowRefs.get(member);
             if (refs == null) continue;
-            updateBadge(
-                refs.readyBadge,
-                Component.translatable(lobby.readyMembers().contains(member)
-                    ? "gui.arenas_ld.dungeon_controller.status.ready"
-                    : "gui.arenas_ld.dungeon_controller.status.pending"),
-                lobby.readyMembers().contains(member) ? GOOD : INK_DIM
-            );
-            updateBadge(
-                refs.onlineBadge,
-                Component.translatable(isOnline(member)
-                    ? "gui.arenas_ld.dungeon_controller.status.online"
-                    : "gui.arenas_ld.dungeon_controller.status.offline"),
-                isOnline(member) ? GOOD : DANGER
-            );
+            boolean online = isOnline(member);
+            boolean memberReady = lobby.readyMembers().contains(member);
+            applyStatusSquare(refs.statusSquare, online);
+            refs.statusGlyph.text(Component.literal(online ? "✓" : "!"));
+            refs.statusGlyph.color(Color.ofArgb(online ? GOOD : WARN));
+            refs.connectionLabel.text(Component.literal(online ? "● " : "○ ").append(Component.translatable(online ? "gui.arenas_ld.dungeon_controller.ui.member.online" : "gui.arenas_ld.dungeon_controller.ui.member.offline")));
+            refs.connectionLabel.color(Color.ofArgb(online ? GOOD : DANGER));
+            updateBadge(refs.readyBadge, Component.translatable(memberReady ? "gui.arenas_ld.dungeon_controller.ui.member.ready" : "gui.arenas_ld.dungeon_controller.ui.member.not_ready"), memberReady ? GOOD : INK_DIM);
             if (refs.kickButton != null) {
                 refs.kickButton.active(isOwner && !member.equals(lobby.ownerUuid()));
             }
+        }
+
+        if (inviteDropdownOpen) {
+            refreshInviteDropdown();
         }
 
         footerLabel.text(footerError == null ? Component.empty() : Component.literal(footerError).withStyle(ChatFormatting.RED));
@@ -993,6 +1689,17 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             LabelComponent label = inviteCountdownLabels.get(invite.lobbyId());
             if (label == null) continue;
             long remainingTicks = Math.max(0L, invite.expiresAtTick() - approximateServerTick());
+            long remainingSeconds = remainingTicks / 20L;
+            label.text(Component.literal(formatRemaining(remainingSeconds)));
+            label.color(Color.ofArgb(remainingSeconds <= 15 ? WARN : INK_MID));
+        }
+    }
+
+    private void refreshJoinRequestCountdowns() {
+        for (PendingJoinRequest req : myJoinRequests) {
+            LabelComponent label = joinRequestCountdownLabels.get(req.requesterUuid());
+            if (label == null) continue;
+            long remainingTicks = Math.max(0L, req.expiresAtTick() - approximateServerTick());
             long remainingSeconds = remainingTicks / 20L;
             label.text(Component.literal(formatRemaining(remainingSeconds)));
             label.color(Color.ofArgb(remainingSeconds <= 15 ? WARN : INK_MID));

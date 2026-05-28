@@ -12,22 +12,25 @@ class TierConfigTest {
 
     @Test
     void defaultForReturnsExpectedConstants() {
+        assertSame(TierConfig.EASY_DEFAULT, TierConfig.defaultFor(DifficultyTier.EASY));
         assertSame(TierConfig.NORMAL_DEFAULT, TierConfig.defaultFor(DifficultyTier.NORMAL));
         assertSame(TierConfig.HARD_DEFAULT, TierConfig.defaultFor(DifficultyTier.HARD));
-        assertSame(TierConfig.HELL_DEFAULT, TierConfig.defaultFor(DifficultyTier.HELL));
+        assertSame(TierConfig.NIGHTMARE_DEFAULT, TierConfig.defaultFor(DifficultyTier.NIGHTMARE));
     }
 
     @Test
     void defaultConstantsHaveExpectedValues() {
+        assertEquals(0.75, TierConfig.EASY_DEFAULT.healthMultiplier());
+        assertEquals(0.75, TierConfig.EASY_DEFAULT.damageMultiplier());
+        assertEquals(true, TierConfig.EASY_DEFAULT.enabled());
+
         assertEquals(1.0, TierConfig.NORMAL_DEFAULT.healthMultiplier());
         assertEquals(1.0, TierConfig.NORMAL_DEFAULT.damageMultiplier());
         assertEquals("", TierConfig.NORMAL_DEFAULT.perPlayerLootTable());
         assertEquals(600, TierConfig.NORMAL_DEFAULT.dungeonTimeSeconds());
-        assertEquals(false, TierConfig.NORMAL_DEFAULT.hardcoreDefault());
 
         assertEquals(1.5, TierConfig.HARD_DEFAULT.healthMultiplier());
-        assertEquals(2.5, TierConfig.HELL_DEFAULT.healthMultiplier());
-        assertEquals(true, TierConfig.HELL_DEFAULT.hardcoreDefault());
+        assertEquals(2.5, TierConfig.NIGHTMARE_DEFAULT.healthMultiplier());
     }
 
     @Test
@@ -40,7 +43,7 @@ class TierConfigTest {
 
     @Test
     void codecRoundTripsEmptyLootTable() {
-        TierConfig original = new TierConfig(1.0, 1.0, "", 600, false);
+        TierConfig original = new TierConfig(1.0, 1.0, "", 600, true);
         Tag encoded = TierConfig.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow();
         TierConfig decoded = TierConfig.CODEC.parse(NbtOps.INSTANCE, encoded).getOrThrow();
         assertEquals("", decoded.perPlayerLootTable());

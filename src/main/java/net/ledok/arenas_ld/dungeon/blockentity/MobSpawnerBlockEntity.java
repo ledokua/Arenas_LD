@@ -26,6 +26,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -38,6 +40,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -86,63 +89,84 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
     private record State(EntityDefinition entity) {}
 
     /**
-     * Spawn one mob using this spawner's EntityDefinition, scaled by the given health multiplier.
-     * Called by the v4.0 RoomController.
+     * Spawn all mobs for this spawner (spawnCount mobs distributed across spawnOffsets),
+     * scaled by the given health multiplier. Called by the RoomController.
      *
-     * @return the spawned entity, or null on failure
+     * @return list of successfully spawned entities (may be empty on failure)
      */
-    @Nullable
-    public LivingEntity spawnSingleScaled(ServerLevel world, double healthMultiplier) {
+    public List<LivingEntity> spawnScaled(ServerLevel world, double healthMultiplier) {
         Optional<EntityType<?>> entityTypeOpt = EntityType.byString(this.entityDefinition.mobId());
         if (entityTypeOpt.isEmpty()) {
-            ArenasLdMod.LOGGER.warn("MobSpawner (v4.0): invalid mob ID {} at {}", entityDefinition.mobId(), worldPosition);
-            return null;
+            ArenasLdMod.LOGGER.warn("MobSpawner: invalid mob ID {} at {}", entityDefinition.mobId(), worldPosition);
+            return List.of();
         }
 
-        Entity mob = entityTypeOpt.get().create(world);
-        if (!(mob instanceof LivingEntity living)) {
-            ArenasLdMod.LOGGER.warn("MobSpawner (v4.0): not a LivingEntity: {}", entityDefinition.mobId());
-            return null;
-        }
+        List<BlockPos> offsets = this.entityDefinition.spawnOffsets();
+        int count = Math.max(1, this.entityDefinition.spawnCount());
+        List<LivingEntity> result = new ArrayList<>(count);
 
-        for (AttributeData attr : this.entityDefinition.attributes()) {
-            ResourceLocation attrLoc = ResourceLocation.tryParse(attr.id());
-            if (attrLoc == null) continue;
-            var attrRegistry = world.registryAccess().registryOrThrow(Registries.ATTRIBUTE);
-            ResourceKey<Attribute> key = ResourceKey.create(Registries.ATTRIBUTE, attrLoc);
-            attrRegistry.getHolder(key).ifPresent(holder -> {
-                AttributeInstance inst = living.getAttribute(holder);
-                if (inst != null) {
-                    double value = attr.value();
-                    if ("minecraft:generic.max_health".equals(attr.id())) {
-                        value *= healthMultiplier;
+        for (int i = 0; i < count; i++) {
+            Entity mob = entityTypeOpt.get().create(world);
+            if (!(mob instanceof LivingEntity living)) {
+                ArenasLdMod.LOGGER.warn("MobSpawner: not a LivingEntity: {}", entityDefinition.mobId());
+                continue;
+            }
+
+            for (AttributeData attr : this.entityDefinition.attributes()) {
+                ResourceLocation attrLoc = ResourceLocation.tryParse(attr.id());
+                if (attrLoc == null) continue;
+                var attrRegistry = world.registryAccess().registryOrThrow(Registries.ATTRIBUTE);
+                ResourceKey<Attribute> key = ResourceKey.create(Registries.ATTRIBUTE, attrLoc);
+                attrRegistry.getHolder(key).ifPresent(holder -> {
+                    AttributeInstance inst = living.getAttribute(holder);
+                    if (inst != null) {
+                        double value = attr.value();
+                        if ("minecraft:generic.max_health".equals(attr.id())) {
+                            value *= healthMultiplier;
+                        }
+                        inst.setBaseValue(value);
                     }
-                    inst.setBaseValue(value);
-                }
-            });
+                });
+            }
+
+            EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.HEAD, entityDefinition.equipment().head, false);
+            EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.CHEST, entityDefinition.equipment().chest, false);
+            EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.LEGS, entityDefinition.equipment().legs, false);
+            EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.FEET, entityDefinition.equipment().feet, false);
+            EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.MAINHAND, entityDefinition.equipment().mainHand, false);
+            EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.OFFHAND, entityDefinition.equipment().offHand, false);
+
+            living.heal(living.getMaxHealth());
+
+            double spawnX, spawnY, spawnZ;
+            if (offsets.isEmpty()) {
+                spawnX = worldPosition.getX() + 0.5;
+                spawnY = worldPosition.getY() + 1;
+                spawnZ = worldPosition.getZ() + 0.5;
+            } else {
+                BlockPos offset = offsets.get(i % offsets.size());
+                spawnX = worldPosition.getX() + offset.getX() + 0.5;
+                spawnY = worldPosition.getY() + offset.getY();
+                spawnZ = worldPosition.getZ() + offset.getZ() + 0.5;
+            }
+            living.moveTo(spawnX, spawnY, spawnZ, world.random.nextFloat() * 360.0F, 0.0F);
+
+            if (world.addFreshEntity(living)) {
+                addToArenasTeam(world, living);
+                result.add(living);
+            }
         }
+        return result;
+    }
 
-        EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.HEAD, entityDefinition.equipment().head, false);
-        EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.CHEST, entityDefinition.equipment().chest, false);
-        EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.LEGS, entityDefinition.equipment().legs, false);
-        EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.FEET, entityDefinition.equipment().feet, false);
-        EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.MAINHAND, entityDefinition.equipment().mainHand, false);
-        EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.OFFHAND, entityDefinition.equipment().offHand, false);
-
-        living.heal(living.getMaxHealth());
-
-        living.moveTo(
-            worldPosition.getX() + 0.5,
-            worldPosition.getY() + 1,
-            worldPosition.getZ() + 0.5,
-            world.random.nextFloat() * 360.0F,
-            0.0F
-        );
-
-        if (!world.addFreshEntity(living)) {
-            return null;
+    static void addToArenasTeam(ServerLevel world, LivingEntity living) {
+        Scoreboard scoreboard = world.getScoreboard();
+        PlayerTeam team = scoreboard.getPlayerTeam("arenas_dungeon");
+        if (team == null) {
+            team = scoreboard.addPlayerTeam("arenas_dungeon");
+            team.setAllowFriendlyFire(false);
         }
-        return living;
+        scoreboard.addPlayerToTeam(living.getStringUUID(), team);
     }
 
     @Override
@@ -188,6 +212,6 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
 
     @Override
     public MobSpawnerData getScreenOpeningData(ServerPlayer player) {
-        return new MobSpawnerData(worldPosition, entityDefinition.mobId());
+        return new MobSpawnerData(worldPosition, entityDefinition.mobId(), entityDefinition.spawnCount(), entityDefinition.spawnOffsets());
     }
 }
