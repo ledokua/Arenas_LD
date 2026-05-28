@@ -17,6 +17,7 @@ import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.util.InstanceStatus;
 import net.ledok.arenas_ld.raid.run.RaidDifficulty;
+import net.ledok.arenas_ld.raid.run.RaidRun;
 import net.ledok.arenas_ld.raid.run.RaidRunCallback;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -165,6 +166,14 @@ public class RaidControllerBlockEntity extends BlockEntity
     private final List<PendingJoinRequest> pendingJoinRequests = new ArrayList<>();
     /** Maps a running lobbyId → the spawnerPos of the instance it is running on. */
     private final Map<UUID, BlockPos> lobbyToInstance = new HashMap<>();
+
+    /**
+     * Active raid runs, keyed by spawner position. Mirror of {@code DungeonControllerBlockEntity#activeRuns}.
+     * Populated alongside {@link #lobbyToInstance} (double-write) while the raid pipeline still
+     * reads runtime state from {@link RaidBossSpawnerBlockEntity}. Read by {@code RaidRunLifecycle}
+     * once it lands.
+     */
+    private final Map<BlockPos, RaidRun> activeRuns = new HashMap<>();
     /** Per-player offline timestamp for grace-period tracking. */
     private final Map<UUID, Long> offlineSinceTick = new HashMap<>();
     /** Leaderboard entries, top 10 per tier. */
@@ -206,6 +215,13 @@ public class RaidControllerBlockEntity extends BlockEntity
         ).apply(i, LobbyInstanceEntry::new));
     }
 
+    private record InstanceRunEntry(BlockPos spawnerPos, RaidRun run) {
+        static final Codec<InstanceRunEntry> CODEC = RecordCodecBuilder.create(i -> i.group(
+            BlockPos.CODEC.fieldOf("spawnerPos").forGetter(InstanceRunEntry::spawnerPos),
+            RaidRun.CODEC.fieldOf("run").forGetter(InstanceRunEntry::run)
+        ).apply(i, InstanceRunEntry::new));
+    }
+
     private record State(
         int respawnTimeTicks,
         int maxPartySize,
@@ -221,7 +237,8 @@ public class RaidControllerBlockEntity extends BlockEntity
         List<LobbyInstanceEntry> lobbyToInstance,
         Map<DifficultyTier, List<LeaderboardEntry>> leaderboards,
         Map<DifficultyTier, RaidTierConfig> tierConfigs,
-        List<BlockPos> pendingInstanceRemovals
+        List<BlockPos> pendingInstanceRemovals,
+        List<InstanceRunEntry> activeRuns
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.optionalFieldOf("respawnTimeTicks", DEFAULT_RESPAWN_TIME_TICKS).forGetter(State::respawnTimeTicks),
@@ -240,7 +257,8 @@ public class RaidControllerBlockEntity extends BlockEntity
                 .optionalFieldOf("leaderboards", Map.of()).forGetter(State::leaderboards),
             Codec.unboundedMap(DifficultyTier.CODEC, RaidTierConfig.CODEC)
                 .optionalFieldOf("tierConfigs", Map.of()).forGetter(State::tierConfigs),
-            BlockPos.CODEC.listOf().optionalFieldOf("pendingInstanceRemovals", List.of()).forGetter(State::pendingInstanceRemovals)
+            BlockPos.CODEC.listOf().optionalFieldOf("pendingInstanceRemovals", List.of()).forGetter(State::pendingInstanceRemovals),
+            InstanceRunEntry.CODEC.listOf().optionalFieldOf("activeRuns", List.of()).forGetter(State::activeRuns)
         ).apply(i, State::new));
     }
 
@@ -376,6 +394,14 @@ public class RaidControllerBlockEntity extends BlockEntity
         markDirtyAndSync();
     }
 
+    /**
+     * Live read-only view of in-progress raid runs, keyed by spawner position.
+     * Populated alongside {@link #lobbyToInstance} until the lifecycle migration completes.
+     */
+    public Map<BlockPos, RaidRun> getActiveRuns() {
+        return Collections.unmodifiableMap(activeRuns);
+    }
+
     public Set<BlockPos> getPendingInstanceRemovals() {
         return Collections.unmodifiableSet(pendingInstanceRemovals);
     }
@@ -446,6 +472,7 @@ public class RaidControllerBlockEntity extends BlockEntity
                 }
                 it.remove();
                 lobbyToInstance.values().removeIf(p -> p.equals(spawnerPos));
+                activeRuns.remove(spawnerPos);
                 pendingInstanceRemovals.remove(spawnerPos);
                 markDirtyAndSync();
                 return true;
@@ -921,6 +948,9 @@ public class RaidControllerBlockEntity extends BlockEntity
         // Release instance
         releaseInstance(spawnerPos);
 
+        // Tear down the run-side mirror entry.
+        activeRuns.remove(spawnerPos);
+
         // Promote next queued lobby
         promoteNextQueuedLobby();
         markDirtyAndSync();
@@ -1078,6 +1108,20 @@ public class RaidControllerBlockEntity extends BlockEntity
         Lobby running = lobby.withStatus(net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN);
         replaceLobby(running);
         lobbyToInstance.put(lobby.lobbyId(), instance.spawnerPos());
+
+        RaidTierConfig resolvedTier = tierConfigs.getOrDefault(
+            lobby.selectedTier(), RaidTierConfig.defaultFor(lobby.selectedTier()));
+        activeRuns.put(instance.spawnerPos(), new RaidRun(
+            lobby.lobbyId(),
+            lobby.ownerName(),
+            lobby.selectedTier(),
+            resolvedTier,
+            lobby.hardcoreEnabled(),
+            instance.spawnerPos(),
+            serverLevel.dimension(),
+            serverLevel.getGameTime()
+        ));
+
         markDirtyAndSync();
         return true;
     }
@@ -1094,7 +1138,10 @@ public class RaidControllerBlockEntity extends BlockEntity
         pendingJoinRequests.removeIf(req -> req.lobbyId().equals(lobby.lobbyId()));
         queuedLobbyIds.remove(lobby.lobbyId());
         lobbies.remove(lobby);
-        lobbyToInstance.remove(lobby.lobbyId());
+        BlockPos spawnerPos = lobbyToInstance.remove(lobby.lobbyId());
+        if (spawnerPos != null) {
+            activeRuns.remove(spawnerPos);
+        }
     }
 
     private @Nullable PendingInvite findInvite(UUID lobbyId, UUID invitedUuid) {
@@ -1161,6 +1208,11 @@ public class RaidControllerBlockEntity extends BlockEntity
             ));
         }
 
+        List<InstanceRunEntry> runEntries = new ArrayList<>(activeRuns.size());
+        for (Map.Entry<BlockPos, RaidRun> entry : activeRuns.entrySet()) {
+            runEntries.add(new InstanceRunEntry(entry.getKey(), entry.getValue()));
+        }
+
         State state = new State(
             respawnTimeTicks,
             maxPartySize,
@@ -1176,7 +1228,8 @@ public class RaidControllerBlockEntity extends BlockEntity
             lobbyInstanceEntries,
             new EnumMap<>(leaderboards),
             new EnumMap<>(tierConfigs),
-            new ArrayList<>(pendingInstanceRemovals)
+            new ArrayList<>(pendingInstanceRemovals),
+            runEntries
         );
 
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
@@ -1252,6 +1305,11 @@ public class RaidControllerBlockEntity extends BlockEntity
 
                     pendingInstanceRemovals.clear();
                     pendingInstanceRemovals.addAll(state.pendingInstanceRemovals());
+
+                    activeRuns.clear();
+                    for (InstanceRunEntry ire : state.activeRuns()) {
+                        activeRuns.put(ire.spawnerPos(), ire.run());
+                    }
                 });
         } else {
             // Legacy NBT fallback — migrate old-format data
