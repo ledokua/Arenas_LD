@@ -88,6 +88,7 @@ public final class DungeonRunLifecycle {
             BusyStateCompat.setBusy(uuid, BUSY_REASON);
 
             BlockPos entrance = dbs.getAbsoluteEntrancePos();
+            player.setGameMode(GameType.ADVENTURE);
             player.teleportTo(targetLevel, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0f, 0.0f);
         }
 
@@ -301,6 +302,7 @@ public final class DungeonRunLifecycle {
             if (target != null) {
                 player.teleportTo(target, rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
             }
+            player.setGameMode(rp.previousGameMode());
         }
 
         hideBossBars(run);
@@ -449,7 +451,7 @@ public final class DungeonRunLifecycle {
             PlayerReturnPoint returnPoint = run.returnPoints().get(player.getUUID());
             run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, world.getGameTime()));
             player.setHealth(player.getMaxHealth());
-            player.setGameMode(GameType.SURVIVAL);
+            player.setGameMode(returnPoint != null ? returnPoint.previousGameMode() : GameType.SURVIVAL);
             if (returnPoint != null) {
                 ServerLevel target = world.getServer().getLevel(returnPoint.dimension());
                 if (target == null) {
@@ -495,7 +497,7 @@ public final class DungeonRunLifecycle {
                 target = world;
             }
             BlockPos entrance = dbs.getAbsoluteEntrancePos();
-            player.setGameMode(GameType.SURVIVAL);
+            player.setGameMode(GameType.ADVENTURE);
             player.setHealth(player.getMaxHealth() * 0.5F);
             player.teleportTo(target, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0F, 0.0F);
         }
