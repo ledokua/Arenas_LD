@@ -55,12 +55,9 @@ import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.AttributeProvider;
 import net.ledok.arenas_ld.util.EquipmentProvider;
 import net.ledok.arenas_ld.util.LinkerModeDataComponent;
-import net.ledok.arenas_ld.raid.run.RaidDifficulty;
-import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -85,34 +82,6 @@ final class SpawnerPacketHandlers {
                 BlockEntity be = world.getBlockEntity(payload.pos());
                 if (be instanceof RaidBossSpawnerBlockEntity blockEntity) {
                     blockEntity.setMobId(payload.mobId());
-                    blockEntity.respawnTime = payload.respawnTime();
-                    blockEntity.lootTableId = payload.lootTable();
-                    blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
-                    blockEntity.battleRadius = payload.battleRadius();
-                    blockEntity.regeneration = payload.regeneration();
-                    blockEntity.skillExperiencePerWin = payload.skillExperiencePerWin();
-                    blockEntity.battleTimeLimitTicks = payload.battleTimeLimitTicks();
-                    blockEntity.hpScalePerPlayer = payload.hpScalePerPlayer();
-                    markDirtyAndSync(world, blockEntity);
-                }
-            });
-        });
-
-        ServerPlayNetworking.registerGlobalReceiver(UpdateBossSpawnerTierConfigsPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                Level world = context.player().level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
-                if (be instanceof RaidBossSpawnerBlockEntity blockEntity) {
-                    CompoundTag tierConfigsTag = payload.tierConfigs();
-                    blockEntity.hpScalePerPlayer = payload.hpScalePerPlayer();
-                    blockEntity.getTierConfigs().clear();
-                    for (RaidDifficulty tier : RaidDifficulty.values()) {
-                        RaidTierConfig config = RaidTierConfig.defaultFor(tier);
-                        if (tierConfigsTag.contains(tier.name(), net.minecraft.nbt.Tag.TAG_COMPOUND)) {
-                            config = RaidTierConfig.fromNbt(tierConfigsTag.getCompound(tier.name()));
-                        }
-                        blockEntity.getTierConfigs().put(tier, config);
-                    }
                     markDirtyAndSync(world, blockEntity);
                 }
             });

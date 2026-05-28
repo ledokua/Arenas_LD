@@ -41,11 +41,7 @@ import java.util.UUID;
 public class ModPackets {
 
     public record UpdateBossSpawnerPayload(
-            BlockPos pos, String mobId, int respawnTime, String lootTable, String perPlayerLootTable,
-            int triggerRadius, int battleRadius, int regeneration, int minPlayers, int skillExperiencePerWin,
-            int battleTimeLimitTicks,
-            double hpScalePerPlayer,
-            String groupId
+            BlockPos pos, String mobId
     ) implements CustomPacketPayload {
         public static final Type<UpdateBossSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_boss_spawner"));
 
@@ -53,60 +49,16 @@ public class ModPackets {
                 (buf, payload) -> payload.write(buf), UpdateBossSpawnerPayload::new);
 
         public UpdateBossSpawnerPayload(FriendlyByteBuf buf) {
-            this(
-                    buf.readBlockPos(), buf.readUtf(), buf.readVarInt(), buf.readUtf(), buf.readUtf(),
-                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(),
-                    buf.readVarInt(),
-                    buf.readDouble(),
-                    buf.readUtf()
-            );
+            this(buf.readBlockPos(), buf.readUtf());
         }
 
         public void write(FriendlyByteBuf buf) {
             buf.writeBlockPos(pos);
             buf.writeUtf(mobId);
-            buf.writeVarInt(respawnTime);
-            buf.writeUtf(lootTable);
-            buf.writeUtf(perPlayerLootTable);
-            buf.writeVarInt(triggerRadius);
-            buf.writeVarInt(battleRadius);
-            buf.writeVarInt(regeneration);
-            buf.writeVarInt(minPlayers);
-            buf.writeVarInt(skillExperiencePerWin);
-            buf.writeVarInt(battleTimeLimitTicks);
-            buf.writeDouble(hpScalePerPlayer);
-            buf.writeUtf(groupId);
         }
 
         @Override
         public Type<? extends CustomPacketPayload> type() { return TYPE; }
-    }
-
-    public record UpdateBossSpawnerTierConfigsPayload(
-            BlockPos pos,
-            double hpScalePerPlayer,
-            CompoundTag tierConfigs
-    ) implements CustomPacketPayload {
-        public static final Type<UpdateBossSpawnerTierConfigsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_boss_spawner_tier_configs"));
-
-        public static final StreamCodec<FriendlyByteBuf, UpdateBossSpawnerTierConfigsPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> {
-                    buf.writeBlockPos(payload.pos);
-                    buf.writeDouble(payload.hpScalePerPlayer);
-                    buf.writeNbt(payload.tierConfigs);
-                },
-                buf -> {
-                    BlockPos pos = buf.readBlockPos();
-                    double hpScalePerPlayer = buf.readDouble();
-                    CompoundTag tierConfigs = buf.readNbt();
-                    return new UpdateBossSpawnerTierConfigsPayload(pos, hpScalePerPlayer, tierConfigs != null ? tierConfigs : new CompoundTag());
-                }
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
     }
 
     public record UpdateDungeonBossSpawnerPayload(

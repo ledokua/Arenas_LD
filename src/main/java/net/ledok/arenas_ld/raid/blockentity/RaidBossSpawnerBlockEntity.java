@@ -60,7 +60,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
@@ -73,22 +72,13 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private static final int REGEN_INTERVAL_TICKS = 100;
     private static final int DEATH_TIME_PENALTY_TICKS = 10 * 20;
 
-    // --- Config ---
-    public int respawnTime = 6000;
-    public String lootTableId = "minecraft:chests/simple_dungeon";
-    public String perPlayerLootTableId = "";
-    public int battleRadius = 64;
-    public int regeneration = 0;
-    public int skillExperiencePerWin = 100;
+    // --- Config (arena geometry + mob definition only) ---
     private String groupId = "";
-    public double hpScalePerPlayer = 0.10;
-    public int battleTimeLimitTicks = 0;
     public BlockPos entrancePosition = BlockPos.ZERO; // relative to spawner
     public ResourceKey<Level> entranceDimension = Level.OVERWORLD;
     public BlockPos exitPosition = BlockPos.ZERO; // absolute
     public ResourceKey<Level> exitDimension = Level.OVERWORLD;
     private final List<BlockPos> respawnPointOffsets = new ArrayList<>();
-    private final Map<RaidDifficulty, RaidTierConfig> tierConfigs = new EnumMap<>(RaidDifficulty.class);
     /** Bundled entity config (mobId + attributes + equipment). Mirrors dungeon spawners. */
     private EntityDefinition entityDefinition = new EntityDefinition(
         "minecraft:zombie",
@@ -106,12 +96,9 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             BossEvent.BossBarOverlay.PROGRESS
     );
     protected int respawnCooldown = 0;
-    private AABB cachedBattleBounds = null;
-    private int cachedBattleBoundsRadius = Integer.MIN_VALUE;
 
     public RaidBossSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.RAID_BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
-        initializeTierConfigs();
     }
 
     private void markDirty() {
@@ -132,30 +119,12 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         return RaidRunLifecycle.findRun(sl.getServer(), worldPosition);
     }
 
-    private void initializeTierConfigs() {
-        for (RaidDifficulty tier : RaidDifficulty.values()) {
-            tierConfigs.putIfAbsent(tier, RaidTierConfig.defaultFor(tier));
-        }
-    }
-
-    public Map<RaidDifficulty, RaidTierConfig> getTierConfigs() {
-        return tierConfigs;
-    }
-
     public String getGroupId() {
         return groupId;
     }
 
     public void setGroupId(String groupId) {
         this.groupId = groupId == null ? "" : groupId.trim();
-        markDirtyAndSync();
-    }
-
-    public void setTierConfig(RaidDifficulty tier, RaidTierConfig config) {
-        if (tier == null || config == null) {
-            return;
-        }
-        tierConfigs.put(tier, config);
         markDirtyAndSync();
     }
 
@@ -182,31 +151,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public List<BlockPos> getRespawnPointOffsets() {
         return Collections.unmodifiableList(respawnPointOffsets);
-    }
-
-    public double computeExpectedHp(RaidDifficulty tier, int playerCount) {
-        RaidDifficulty safeTier = tier != null ? tier : RaidDifficulty.NORMAL;
-        RaidTierConfig config = tierConfigs.getOrDefault(safeTier, RaidTierConfig.defaultFor(safeTier));
-        return computeExpectedHp(safeTier, playerCount, config, hpScalePerPlayer);
-    }
-
-    public double computeExpectedHp(RaidDifficulty tier, int playerCount, RaidTierConfig config, double hpScale) {
-        RaidDifficulty safeTier = tier != null ? tier : RaidDifficulty.NORMAL;
-        RaidTierConfig safeConfig = config != null ? config : tierConfigs.getOrDefault(safeTier, RaidTierConfig.defaultFor(safeTier));
-        int safePlayerCount = Math.max(1, playerCount);
-        double baseHp = getConfiguredBaseMaxHealth();
-        double healthMult = safeConfig.healthMultiplier();
-        double perPlayerMult = Math.pow(1.0 + hpScale, Math.max(0, safePlayerCount - 1));
-        return baseHp * healthMult * perPlayerMult;
-    }
-
-    private double getConfiguredBaseMaxHealth() {
-        for (AttributeData attr : entityDefinition.attributes()) {
-            if ("minecraft:generic.max_health".equals(attr.id())) {
-                return attr.value();
-            }
-        }
-        return 20.0;
     }
 
     public EntityDefinition getEntityDefinition() {
@@ -368,8 +312,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             ServerLevel world,
             List<ServerPlayer> players,
             RaidDifficulty difficulty,
-            boolean hardcoreEnabled,
-            int battleTimeLimitTicks
+            boolean hardcoreEnabled
     ) {
         if (players == null || players.isEmpty()) {
             return;
@@ -770,38 +713,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
     }
 
-    private void enforceBattleBounds(ServerLevel world) {
-        AABB battleBox = getCachedBattleBounds();
-        RaidRun run = findRun();
-        if (run == null) return;
-        Map<UUID, DownedPlayer> downed = run.downedPlayers();
-        for (UUID uuid : run.participants().keySet()) {
-            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            if (player == null || player.isSpectator() || downed.containsKey(uuid)) {
-                continue;
-            }
-            if (player.level() != world || !battleBox.contains(player.position())) {
-                player.teleportTo(
-                        world,
-                        worldPosition.getX() + 0.5,
-                        worldPosition.getY() + 1,
-                        worldPosition.getZ() + 0.5,
-                        player.getYRot(),
-                        player.getXRot()
-                );
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.raid_out_of_bounds"));
-            }
-        }
-    }
-
-    private AABB getCachedBattleBounds() {
-        if (cachedBattleBounds == null || cachedBattleBoundsRadius != battleRadius) {
-            cachedBattleBounds = new AABB(worldPosition).inflate(battleRadius);
-            cachedBattleBoundsRadius = battleRadius;
-        }
-        return cachedBattleBounds;
-    }
-
     private void notifyController(ServerLevel world, boolean wasWin, @Nullable RaidRun run) {
         RaidControllerBlockEntity controller = RaidRunLifecycle.findOwningController(world.getServer(), worldPosition);
         if (controller == null) return;
@@ -820,43 +731,19 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         EntityDefinition.CODEC.encodeStart(NbtOps.INSTANCE, entityDefinition)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save EntityDefinition at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("EntityDefinition", tag));
-        nbt.putInt("RespawnTime", respawnTime);
-        nbt.putString("LootTableId", lootTableId);
-        nbt.putString("PerPlayerLootTableId", perPlayerLootTableId);
-        nbt.putInt("BattleRadius", battleRadius);
-        nbt.putInt("Regeneration", regeneration);
-        nbt.putInt("SkillExperiencePerWin", skillExperiencePerWin);
         nbt.putString("GroupId", groupId);
-        nbt.putDouble("HpScalePerPlayer", hpScalePerPlayer);
-        nbt.putInt("BattleTimeLimitTicks", battleTimeLimitTicks);
         nbt.putLong("EntrancePosition", entrancePosition.asLong());
         nbt.putString("EntranceDimension", entranceDimension.location().toString());
         nbt.putLong("ExitPosition", exitPosition.asLong());
         nbt.putString("ExitDimension", exitDimension.location().toString());
         nbt.putLongArray("RespawnPointOffsets", respawnPointOffsets.stream().mapToLong(BlockPos::asLong).toArray());
-
         nbt.putInt("RespawnCooldown", respawnCooldown);
-
-        CompoundTag tierConfigsTag = new CompoundTag();
-        for (RaidDifficulty tier : RaidDifficulty.values()) {
-            tierConfigsTag.put(tier.name(), tierConfigs.getOrDefault(tier, RaidTierConfig.defaultFor(tier)).toNbt());
-        }
-        nbt.put("RaidTierConfigs", tierConfigsTag);
-
     }
 
     @Override
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.loadAdditional(nbt, registryLookup);
-        respawnTime = nbt.getInt("RespawnTime");
-        lootTableId = nbt.getString("LootTableId");
-        perPlayerLootTableId = nbt.getString("PerPlayerLootTableId");
-        battleRadius = nbt.getInt("BattleRadius");
-        regeneration = nbt.getInt("Regeneration");
-        skillExperiencePerWin = nbt.getInt("SkillExperiencePerWin");
         groupId = nbt.getString("GroupId");
-        hpScalePerPlayer = nbt.contains("HpScalePerPlayer") ? nbt.getDouble("HpScalePerPlayer") : 0.10;
-        battleTimeLimitTicks = nbt.contains("BattleTimeLimitTicks") ? nbt.getInt("BattleTimeLimitTicks") : 0;
         entrancePosition = nbt.contains("EntrancePosition", Tag.TAG_LONG) ? BlockPos.of(nbt.getLong("EntrancePosition")) : BlockPos.ZERO;
         if (nbt.contains("EntranceDimension")) {
             entranceDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("EntranceDimension")));
@@ -877,17 +764,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
 
         respawnCooldown = nbt.getInt("RespawnCooldown");
-
-        tierConfigs.clear();
-        initializeTierConfigs();
-        if (nbt.contains("RaidTierConfigs", Tag.TAG_COMPOUND)) {
-            CompoundTag tierConfigsTag = nbt.getCompound("RaidTierConfigs");
-            for (RaidDifficulty tier : RaidDifficulty.values()) {
-                if (tierConfigsTag.contains(tier.name(), Tag.TAG_COMPOUND)) {
-                    tierConfigs.put(tier, RaidTierConfig.fromNbt(tierConfigsTag.getCompound(tier.name())));
-                }
-            }
-        }
 
         if (nbt.contains("EntityDefinition", Tag.TAG_COMPOUND)) {
             EntityDefinition.CODEC.parse(NbtOps.INSTANCE, nbt.getCompound("EntityDefinition"))
