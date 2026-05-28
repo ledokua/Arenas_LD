@@ -6,6 +6,7 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,8 @@ class PlayerReturnPointTest {
             Level.OVERWORLD,
             new Vec3(123.5, 64.0, -47.875),
             180.0f,
-            -10.5f
+            -10.5f,
+            GameType.CREATIVE
         );
         Tag encoded = PlayerReturnPoint.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow();
         DataResult<PlayerReturnPoint> decoded = PlayerReturnPoint.CODEC.parse(NbtOps.INSTANCE, encoded);
@@ -37,7 +39,8 @@ class PlayerReturnPointTest {
             custom,
             new Vec3(0.0, 100.0, 0.0),
             0.0f,
-            0.0f
+            0.0f,
+            GameType.SURVIVAL
         );
         PlayerReturnPoint decoded = PlayerReturnPoint.CODEC.parse(NbtOps.INSTANCE,
             PlayerReturnPoint.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow()
@@ -52,7 +55,8 @@ class PlayerReturnPointTest {
             Level.OVERWORLD,
             Vec3.ZERO,
             47.123f,
-            -89.456f
+            -89.456f,
+            GameType.ADVENTURE
         );
         PlayerReturnPoint decoded = PlayerReturnPoint.CODEC.parse(NbtOps.INSTANCE,
             PlayerReturnPoint.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow()

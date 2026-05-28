@@ -4,6 +4,7 @@ import com.mojang.serialization.DataResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.Test;
 
@@ -122,11 +123,11 @@ class DungeonRunTest {
         original.addParticipant(new RunParticipant(UUID_C, "Cara", ParticipantStatus.DISCONNECTED, 200L));
 
         original.setReturnPoint(UUID_A, new PlayerReturnPoint(
-            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(0, 64, 0), 0f, 0f));
+            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(0, 64, 0), 0f, 0f, GameType.SURVIVAL));
         original.setReturnPoint(UUID_B, new PlayerReturnPoint(
-            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(10, 64, 10), 90f, 0f));
+            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(10, 64, 10), 90f, 0f, GameType.SURVIVAL));
         original.setReturnPoint(UUID_C, new PlayerReturnPoint(
-            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(20, 64, 20), 180f, -10f));
+            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(20, 64, 20), 180f, -10f, GameType.SURVIVAL));
 
         original.setDowned(new DownedPlayer(UUID_B, 25));
 
