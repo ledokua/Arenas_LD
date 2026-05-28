@@ -18,7 +18,6 @@ import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.util.InstanceStatus;
 import net.ledok.arenas_ld.raid.run.RaidDifficulty;
 import net.ledok.arenas_ld.raid.run.RaidRun;
-import net.ledok.arenas_ld.raid.run.RaidRunCallback;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
@@ -56,7 +55,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public class RaidControllerBlockEntity extends BlockEntity
-    implements RaidRunCallback, ExtendedScreenHandlerFactory<RaidControllerData> {
+    implements ExtendedScreenHandlerFactory<RaidControllerData> {
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Inner types
@@ -867,10 +866,9 @@ public class RaidControllerBlockEntity extends BlockEntity
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  RaidRunCallback
+    //  Run end notification (called by RaidBossSpawnerBlockEntity)
     // ─────────────────────────────────────────────────────────────────────────
 
-    @Override
     public void onRaidEnded(
         BlockPos spawnerPos,
         boolean wasWin,

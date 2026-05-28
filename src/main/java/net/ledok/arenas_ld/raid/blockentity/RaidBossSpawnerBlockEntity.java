@@ -9,7 +9,6 @@ import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.raid.run.RaidDifficulty;
-import net.ledok.arenas_ld.raid.run.RaidRunCallback;
 import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.ledok.arenas_ld.raid.screen.RaidBossSpawnerData;
 import net.ledok.arenas_ld.raid.screen.RaidBossSpawnerScreenHandler;
@@ -820,12 +819,12 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         ServerLevel controllerWorld = world.getServer().getLevel(controllerDimension);
         if (controllerWorld == null) return;
         BlockEntity be = controllerWorld.getBlockEntity(controllerPos);
-        if (!(be instanceof RaidRunCallback callback)) {
+        if (!(be instanceof RaidControllerBlockEntity controller)) {
             return;
         }
 
         int elapsed = battleStartTime > 0 ? Math.max(0, (int) ((world.getGameTime() - battleStartTime) / 20L)) : 0;
-        callback.onRaidEnded(this.worldPosition, wasWin, activeDifficulty, new ArrayList<>(trackedPlayerNames), elapsed);
+        controller.onRaidEnded(this.worldPosition, wasWin, activeDifficulty, new ArrayList<>(trackedPlayerNames), elapsed);
     }
 
     @Override
