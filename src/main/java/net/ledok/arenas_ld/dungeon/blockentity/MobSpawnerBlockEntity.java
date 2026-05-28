@@ -26,6 +26,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -150,10 +152,21 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
             living.moveTo(spawnX, spawnY, spawnZ, world.random.nextFloat() * 360.0F, 0.0F);
 
             if (world.addFreshEntity(living)) {
+                addToArenasTeam(world, living);
                 result.add(living);
             }
         }
         return result;
+    }
+
+    static void addToArenasTeam(ServerLevel world, LivingEntity living) {
+        Scoreboard scoreboard = world.getScoreboard();
+        PlayerTeam team = scoreboard.getPlayerTeam("arenas_dungeon");
+        if (team == null) {
+            team = scoreboard.addPlayerTeam("arenas_dungeon");
+            team.setAllowFriendlyFire(false);
+        }
+        scoreboard.addPlayerToTeam(living.getStringUUID(), team);
     }
 
     @Override

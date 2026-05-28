@@ -201,6 +201,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
             );
             return null;
         }
+        MobSpawnerBlockEntity.addToArenasTeam(world, living);
         return living;
     }
 
