@@ -5,6 +5,8 @@ import net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
+import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
+import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.LinkerModeDataComponent;
 import net.minecraft.ChatFormatting;
@@ -83,6 +85,11 @@ public class LinkerItem extends Item {
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.dungeon_controller_selected", pos.toShortString()));
                 return InteractionResult.SUCCESS;
             }
+            if (blockEntity instanceof RaidControllerBlockEntity) {
+                selectSource(stack, pos, world.dimension(), modeData);
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.raid_controller_selected", pos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
             player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
             return InteractionResult.SUCCESS;
         }
@@ -99,16 +106,31 @@ public class LinkerItem extends Item {
         }
 
         BlockEntity sourceBe = sourceWorld.getBlockEntity(sourcePosOpt.get());
-        if (!(sourceBe instanceof DungeonControllerBlockEntity controller) || !(blockEntity instanceof DungeonBossSpawnerBlockEntity)) {
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
+        if (sourceBe instanceof DungeonControllerBlockEntity dungeonController) {
+            if (!(blockEntity instanceof DungeonBossSpawnerBlockEntity)) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
+                return InteractionResult.SUCCESS;
+            }
+            boolean added = dungeonController.addInstance(pos);
+            player.sendSystemMessage(Component.translatable(
+                    added ? "message.arenas_ld.linker.controller_instance.added"
+                            : "message.arenas_ld.linker.controller_instance.duplicate"
+            ));
             return InteractionResult.SUCCESS;
         }
-
-        boolean added = controller.addInstance(pos);
-        player.sendSystemMessage(Component.translatable(
-                added ? "message.arenas_ld.linker.controller_instance.added"
-                        : "message.arenas_ld.linker.controller_instance.duplicate"
-        ));
+        if (sourceBe instanceof RaidControllerBlockEntity raidController) {
+            if (!(blockEntity instanceof RaidBossSpawnerBlockEntity)) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
+                return InteractionResult.SUCCESS;
+            }
+            boolean added = raidController.addInstance(pos, world.dimension());
+            player.sendSystemMessage(Component.translatable(
+                    added ? "message.arenas_ld.linker.controller_instance.added"
+                            : "message.arenas_ld.linker.controller_instance.duplicate"
+            ));
+            return InteractionResult.SUCCESS;
+        }
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
         return InteractionResult.SUCCESS;
     }
 
