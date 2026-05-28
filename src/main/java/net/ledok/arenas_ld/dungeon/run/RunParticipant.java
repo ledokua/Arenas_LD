@@ -25,6 +25,26 @@ public record RunParticipant(
     ParticipantStatus status,
     long lastSeenTick
 ) {
+    public enum ParticipantStatus {
+        ACTIVE,
+        DOWNED,
+        DISCONNECTED,
+        REMOVED;
+
+        public static final Codec<ParticipantStatus> CODEC = Codec.STRING.xmap(
+            ParticipantStatus::fromStringOrDefault,
+            Enum::name
+        );
+
+        private static ParticipantStatus fromStringOrDefault(String name) {
+            try {
+                return ParticipantStatus.valueOf(name);
+            } catch (IllegalArgumentException e) {
+                return REMOVED;
+            }
+        }
+    }
+
     public static final Codec<RunParticipant> CODEC = RecordCodecBuilder.create(instance ->
         instance.group(
             UUIDUtil.CODEC.fieldOf("uuid").forGetter(RunParticipant::playerUuid),

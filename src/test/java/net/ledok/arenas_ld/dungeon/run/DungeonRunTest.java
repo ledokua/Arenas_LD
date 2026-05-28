@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.dungeon.run;
 
 import com.mojang.serialization.DataResult;
+import net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;

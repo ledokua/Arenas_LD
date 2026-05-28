@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.dungeon.run;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;

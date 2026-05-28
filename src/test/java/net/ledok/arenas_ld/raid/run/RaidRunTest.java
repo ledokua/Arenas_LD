@@ -3,7 +3,7 @@ package net.ledok.arenas_ld.raid.run;
 import com.mojang.serialization.DataResult;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.DownedPlayer;
-import net.ledok.arenas_ld.dungeon.run.ParticipantStatus;
+import net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus;
 import net.ledok.arenas_ld.dungeon.run.PlayerReturnPoint;
 import net.ledok.arenas_ld.dungeon.run.RunParticipant;
 import net.minecraft.core.BlockPos;

@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.dungeon.run;
 
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
