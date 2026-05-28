@@ -1061,7 +1061,8 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         }
 
         boolean enabled = enabledInputs.getOrDefault(tier, current.enabled());
-        RaidTierConfig updated = new RaidTierConfig(health, damage, loot, time, enabled, Math.max(0L, reward));
+        RaidTierConfig updated = new RaidTierConfig(health, damage, loot, time, enabled, Math.max(0L, reward),
+            current.skillExperiencePerWin(), current.regeneration(), current.hpScalePerPlayer());
         tierConfigs.put(tier, updated);
         footerError = null;
         ClientPlayNetworking.send(new RaidSetTierConfigPayload(menu.getBlockPos(), tier, updated));

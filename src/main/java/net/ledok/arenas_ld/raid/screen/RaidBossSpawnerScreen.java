@@ -585,7 +585,8 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
         String perPlayer = tierPerPlayerLootTableValue == null ? "" : tierPerPlayerLootTableValue.trim();
         tierConfigDraft.put(selectedTier, new RaidTierConfig(
             health, damage, perPlayer,
-            existing.raidTimeSeconds(), existing.enabled(), existing.rewardCurrency()));
+            existing.raidTimeSeconds(), existing.enabled(), existing.rewardCurrency(),
+            existing.skillExperiencePerWin(), existing.regeneration(), existing.hpScalePerPlayer()));
     }
 
     private void onSaveGeneral() {
