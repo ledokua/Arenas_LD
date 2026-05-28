@@ -58,6 +58,10 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         return pos;
     }
 
+    public BlockPos getBlockPos() {
+        return pos;
+    }
+
     public List<Lobby> getVisibleLobbies() {
         return List.copyOf(visibleLobbies);
     }

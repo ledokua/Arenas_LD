@@ -60,6 +60,7 @@ final class RaidPacketHandlers {
                 if (controller == null) return;
                 if (controller.getLobbyByMember(player.getUUID()) != null) return;
                 controller.createLobby(player);
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -70,6 +71,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.leaveLobby(player);
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -85,6 +87,7 @@ final class RaidPacketHandlers {
                 if (controller == null) return;
                 if (!(player.level() instanceof ServerLevel sl)) return;
                 controller.startRaid(player);
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -95,6 +98,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.invitePlayer(player, payload.playerName());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -110,6 +114,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findControllerByLobbyId(player.server, payload.lobbyId());
                 if (controller == null) return;
                 controller.acceptInvite(player, payload.lobbyId());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -120,6 +125,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findControllerByLobbyId(player.server, payload.lobbyId());
                 if (controller == null) return;
                 controller.declineInvite(player, payload.lobbyId());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -130,6 +136,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.kickFromLobby(player, payload.targetUuid());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -140,6 +147,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.setTier(player, payload.tier());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -150,6 +158,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.setHardcore(player, payload.hardcore());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -160,6 +169,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.setVisibility(player, payload.visibility());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -170,6 +180,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.toggleReady(player);
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -184,6 +195,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.joinLobby(player, payload.lobbyId());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -198,6 +210,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.requestJoin(player, payload.lobbyId());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -208,6 +221,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.acceptJoinRequest(player, payload.requesterUuid());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -218,6 +232,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.declineJoinRequest(player, payload.requesterUuid());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -229,6 +244,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.setRespawnTimeTicks(payload.ticks());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -240,6 +256,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.setMaxPartySize(payload.size());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -260,9 +277,7 @@ final class RaidPacketHandlers {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
-                // Map hardcore
                 controller.setHardcore(player, payload.hardcoreEnabled());
-                // Map difficulty name → DifficultyTier
                 DifficultyTier tier;
                 try {
                     RaidDifficulty rd = RaidDifficulty.valueOf(payload.selectedDifficulty());
@@ -271,6 +286,7 @@ final class RaidPacketHandlers {
                     tier = DifficultyTier.NORMAL;
                 }
                 controller.setTier(player, tier);
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -287,6 +303,7 @@ final class RaidPacketHandlers {
                     vis = net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility.PUBLIC;
                 }
                 controller.setVisibility(player, vis);
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -299,6 +316,7 @@ final class RaidPacketHandlers {
                 if (controller == null) return;
                 controller.setRespawnTimeTicks(payload.respawnTimeTicks());
                 controller.setMaxPartySize(payload.maxPartySize());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -309,10 +327,11 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 switch (payload.action()) {
-                    case 0 -> controller.startRaid(player);       // start / queue
-                    case 1 -> controller.leaveLobby(player);      // leave queue (same as leave lobby)
-                    case 2 -> controller.leaveLobby(player);      // leave party
+                    case 0 -> controller.startRaid(player);
+                    case 1 -> controller.leaveLobby(player);
+                    case 2 -> controller.leaveLobby(player);
                 }
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -328,6 +347,7 @@ final class RaidPacketHandlers {
                 if (controller == null) return;
                 if (controller.getLobbyByMember(player.getUUID()) != null) return;
                 controller.createLobby(player);
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -338,6 +358,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.pos());
                 if (controller == null) return;
                 controller.leaveLobby(player);
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -348,6 +369,7 @@ final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.pos());
                 if (controller == null) return;
                 controller.invitePlayer(player, payload.playerName());
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
 
@@ -363,6 +385,7 @@ final class RaidPacketHandlers {
                 if (controller == null) return;
                 try {
                     controller.joinLobby(player, UUID.fromString(payload.lobbyId()));
+                    broadcastRaidControllerSnapshot(player, controller);
                 } catch (IllegalArgumentException ignored) {}
             })
         );
@@ -388,6 +411,7 @@ final class RaidPacketHandlers {
                 } else {
                     controller.declineInvite(player, lobbyId);
                 }
+                broadcastRaidControllerSnapshot(player, controller);
             })
         );
     }
@@ -403,6 +427,13 @@ final class RaidPacketHandlers {
 
     private static RaidControllerBlockEntity findControllerByLobbyId(net.minecraft.server.MinecraftServer server, UUID lobbyId) {
         return ModPackets.findRaidControllerByLobbyId(server, lobbyId);
+    }
+
+    static void broadcastRaidControllerSnapshot(ServerPlayer actor, RaidControllerBlockEntity controller) {
+        if (actor.server == null) return;
+        for (net.minecraft.server.level.ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(target, new RaidControllerSnapshotPayload(controller.getScreenOpeningData(target)));
+        }
     }
 
     /**

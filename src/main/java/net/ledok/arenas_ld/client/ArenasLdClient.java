@@ -88,7 +88,7 @@ public class ArenasLdClient implements ClientModInitializer {
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof RaidControllerScreen screen
                         && payload.data().blockPos().equals(screen.getMenu().getPos())) {
-                    screen.getMenu().applyData(payload.data());
+                    screen.applyData(payload.data());
                 }
             }));
     }
