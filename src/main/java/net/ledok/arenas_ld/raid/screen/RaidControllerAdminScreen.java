@@ -105,6 +105,9 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
     private final Map<DifficultyTier, String> lootInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> timeInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> rewardInputs = new EnumMap<>(DifficultyTier.class);
+    private final Map<DifficultyTier, String> xpInputs = new EnumMap<>(DifficultyTier.class);
+    private final Map<DifficultyTier, String> regenInputs = new EnumMap<>(DifficultyTier.class);
+    private final Map<DifficultyTier, String> hpScaleInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, Boolean> enabledInputs = new EnumMap<>(DifficultyTier.class);
 
     public RaidControllerAdminScreen(RaidControllerAdminScreenHandler handler, Inventory inventory, Component title) {
@@ -665,8 +668,17 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
 
         contentArea.child(spacer(6));
         contentArea.child(twoColumnRow(
-            rewardCurrencyField(tier, config),
-            Containers.verticalFlow(Sizing.fill(100), Sizing.content())
+            stepperField(tr("gui.arenas_ld.raid_controller_admin.ui.tier.xp"), tr("gui.arenas_ld.raid_controller_admin.ui.tier.xp_hint"), "XP", 10, 0, 1_000_000,
+                xpInputs.getOrDefault(tier, Integer.toString(config.skillExperiencePerWin())), v -> xpInputs.put(tier, v)),
+            stepperField(tr("gui.arenas_ld.raid_controller_admin.ui.tier.regen"), tr("gui.arenas_ld.raid_controller_admin.ui.tier.regen_hint"), "HP", 1, 0, 1_000_000,
+                regenInputs.getOrDefault(tier, Integer.toString(config.regeneration())), v -> regenInputs.put(tier, v))
+        ));
+
+        contentArea.child(spacer(6));
+        contentArea.child(twoColumnRow(
+            stepperFieldDouble(tr("gui.arenas_ld.raid_controller_admin.ui.tier.hp_scale_per_player"), tr("gui.arenas_ld.raid_controller_admin.ui.tier.hp_scale_per_player_hint"), "×", 0.05, -0.99, 10.0,
+                hpScaleInputs.getOrDefault(tier, trimDouble(config.hpScalePerPlayer())), v -> hpScaleInputs.put(tier, v)),
+            rewardCurrencyField(tier, config)
         ));
 
         contentArea.child(spacer(8));
@@ -1053,16 +1065,21 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         Integer time = parseInt(timeInputs.getOrDefault(tier, Integer.toString(current.raidTimeSeconds())));
         String loot = lootInputs.getOrDefault(tier, current.perPlayerLootTable());
         Long reward = parseLong(rewardInputs.getOrDefault(tier, Long.toString(current.rewardCurrency())));
+        Integer xp = parseInt(xpInputs.getOrDefault(tier, Integer.toString(current.skillExperiencePerWin())));
+        Integer regen = parseInt(regenInputs.getOrDefault(tier, Integer.toString(current.regeneration())));
+        Double hpScale = parseDouble(hpScaleInputs.getOrDefault(tier, Double.toString(current.hpScalePerPlayer())));
 
-        if (health == null || damage == null || time == null || reward == null) {
+        if (health == null || damage == null || time == null || reward == null
+            || xp == null || regen == null || hpScale == null) {
             footerError = Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value").getString();
             rebuildUi();
             return;
         }
 
         boolean enabled = enabledInputs.getOrDefault(tier, current.enabled());
-        RaidTierConfig updated = new RaidTierConfig(health, damage, loot, time, enabled, Math.max(0L, reward),
-            current.skillExperiencePerWin(), current.regeneration(), current.hpScalePerPlayer());
+        RaidTierConfig updated = new RaidTierConfig(
+            health, damage, loot, time, enabled, Math.max(0L, reward),
+            Math.max(0, xp), Math.max(0, regen), hpScale);
         tierConfigs.put(tier, updated);
         footerError = null;
         ClientPlayNetworking.send(new RaidSetTierConfigPayload(menu.getBlockPos(), tier, updated));
@@ -1128,6 +1145,9 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         lootInputs.put(tier, config.perPlayerLootTable());
         timeInputs.put(tier, Integer.toString(config.raidTimeSeconds()));
         rewardInputs.put(tier, Long.toString(config.rewardCurrency()));
+        xpInputs.put(tier, Integer.toString(config.skillExperiencePerWin()));
+        regenInputs.put(tier, Integer.toString(config.regeneration()));
+        hpScaleInputs.put(tier, trimDouble(config.hpScalePerPlayer()));
         enabledInputs.put(tier, config.enabled());
     }
 

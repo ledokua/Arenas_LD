@@ -383,6 +383,12 @@
   "gui.arenas_ld.raid_controller_admin.ui.summary.hint_post": ", щоб зареєструвати його.",
   "gui.arenas_ld.raid_controller_admin.ui.general.respawn_time": "ЧАС ВІДРОДЖЕННЯ",
   "gui.arenas_ld.raid_controller_admin.ui.general.respawn_time_hint": "тіки до повернення полеглих гравців",
+  "gui.arenas_ld.raid_controller_admin.ui.tier.xp": "ДОСВІД НАВИЧОК ЗА ПЕРЕМОГУ",
+  "gui.arenas_ld.raid_controller_admin.ui.tier.xp_hint": "Puffish XP, що отримує кожен гравець за перемогу",
+  "gui.arenas_ld.raid_controller_admin.ui.tier.regen": "РЕГЕНЕРАЦІЯ БОСА",
+  "gui.arenas_ld.raid_controller_admin.ui.tier.regen_hint": "HP, що відновлюється кожні 5 сек у бою",
+  "gui.arenas_ld.raid_controller_admin.ui.tier.hp_scale_per_player": "HP НА КОЖНОГО ГРАВЦЯ",
+  "gui.arenas_ld.raid_controller_admin.ui.tier.hp_scale_per_player_hint": "додаткове HP боса за кожного зайвого гравця",
 
   "item.arenas_ld.linker.mode.controller_instance": "Контролер \u2192 Інстанс",
   "item.arenas_ld.linker.mode.dbs_room": "DBS \u2192 Кімната",

@@ -385,6 +385,12 @@
   "gui.arenas_ld.raid_controller_admin.ui.summary.hint_post": "to register it.",
   "gui.arenas_ld.raid_controller_admin.ui.general.respawn_time": "RESPAWN TIME",
   "gui.arenas_ld.raid_controller_admin.ui.general.respawn_time_hint": "ticks before fallen players return",
+  "gui.arenas_ld.raid_controller_admin.ui.tier.xp": "SKILL XP PER WIN",
+  "gui.arenas_ld.raid_controller_admin.ui.tier.xp_hint": "Puffish skills XP each player gets on win",
+  "gui.arenas_ld.raid_controller_admin.ui.tier.regen": "BOSS REGENERATION",
+  "gui.arenas_ld.raid_controller_admin.ui.tier.regen_hint": "HP healed every 5s while engaged",
+  "gui.arenas_ld.raid_controller_admin.ui.tier.hp_scale_per_player": "HP SCALE PER PLAYER",
+  "gui.arenas_ld.raid_controller_admin.ui.tier.hp_scale_per_player_hint": "additional boss HP for each extra player",
 
   "item.arenas_ld.linker.mode.controller_instance": "Controller \u2192 Instance",
   "item.arenas_ld.linker.mode.dbs_room": "DBS \u2192 Room",
