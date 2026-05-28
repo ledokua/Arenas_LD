@@ -9,6 +9,7 @@ import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
+import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.raid.screen.RaidControllerData;
 import net.ledok.arenas_ld.raid.screen.RaidControllerScreenHandler;
@@ -135,6 +136,8 @@ public class RaidControllerBlockEntity extends BlockEntity
     private static final int DEFAULT_RESPAWN_TIME_TICKS = 6000;
     private static final int DEFAULT_MAX_PARTY_SIZE = 10;
     private static final int DEFAULT_INVITE_EXPIRY_TICKS = 30 * 20;
+    private static final int DEFAULT_COOLDOWN_TICKS = 5 * 60 * 20;
+    private static final int DEFAULT_CLOSE_TIMER_SECONDS = 30;
     private static final int OFFLINE_GRACE_TICKS = 5 * 60 * 20;
     private static final int MAX_LEADERBOARD_ENTRIES = 10;
 
@@ -169,6 +172,12 @@ public class RaidControllerBlockEntity extends BlockEntity
     private int respawnTimeTicks = DEFAULT_RESPAWN_TIME_TICKS;
     private int maxPartySize = DEFAULT_MAX_PARTY_SIZE;
     private int inviteExpiryTicks = DEFAULT_INVITE_EXPIRY_TICKS;
+    private int cooldownTicks = DEFAULT_COOLDOWN_TICKS;
+    private int closeTimerSeconds = DEFAULT_CLOSE_TIMER_SECONDS;
+    /** Per-tier raid configs (health/damage multipliers, time limit, enabled, reward currency). */
+    private final Map<DifficultyTier, RaidTierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
+    /** Instances queued for removal once their current run ends. */
+    private final Set<BlockPos> pendingInstanceRemovals = new HashSet<>();
 
     // ─────────────────────────────────────────────────────────────────────────
     //  NBT codecs
@@ -199,18 +208,24 @@ public class RaidControllerBlockEntity extends BlockEntity
         int respawnTimeTicks,
         int maxPartySize,
         int inviteExpiryTicks,
+        int cooldownTicks,
+        int closeTimerSeconds,
         List<InstanceEntry> instances,
         List<Lobby> lobbies,
         List<UUID> queuedLobbyIds,
         List<PendingInvite> pendingInvites,
         List<PendingJoinRequest> pendingJoinRequests,
         List<LobbyInstanceEntry> lobbyToInstance,
-        Map<DifficultyTier, List<LeaderboardEntry>> leaderboards
+        Map<DifficultyTier, List<LeaderboardEntry>> leaderboards,
+        Map<DifficultyTier, RaidTierConfig> tierConfigs,
+        List<BlockPos> pendingInstanceRemovals
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.optionalFieldOf("respawnTimeTicks", DEFAULT_RESPAWN_TIME_TICKS).forGetter(State::respawnTimeTicks),
             Codec.INT.optionalFieldOf("maxPartySize", DEFAULT_MAX_PARTY_SIZE).forGetter(State::maxPartySize),
             Codec.INT.optionalFieldOf("inviteExpiryTicks", DEFAULT_INVITE_EXPIRY_TICKS).forGetter(State::inviteExpiryTicks),
+            Codec.INT.optionalFieldOf("cooldownTicks", DEFAULT_COOLDOWN_TICKS).forGetter(State::cooldownTicks),
+            Codec.INT.optionalFieldOf("closeTimerSeconds", DEFAULT_CLOSE_TIMER_SECONDS).forGetter(State::closeTimerSeconds),
             InstanceEntry.CODEC.listOf().optionalFieldOf("instances", List.of()).forGetter(State::instances),
             Lobby.CODEC.listOf().optionalFieldOf("lobbies", List.of()).forGetter(State::lobbies),
             UUIDUtil.CODEC.listOf().optionalFieldOf("queuedLobbyIds", List.of()).forGetter(State::queuedLobbyIds),
@@ -218,7 +233,10 @@ public class RaidControllerBlockEntity extends BlockEntity
             PendingJoinRequest.CODEC.listOf().optionalFieldOf("pendingJoinRequests", List.of()).forGetter(State::pendingJoinRequests),
             LobbyInstanceEntry.CODEC.listOf().optionalFieldOf("lobbyToInstance", List.of()).forGetter(State::lobbyToInstance),
             Codec.unboundedMap(DifficultyTier.CODEC, LeaderboardEntry.CODEC.listOf())
-                .optionalFieldOf("leaderboards", Map.of()).forGetter(State::leaderboards)
+                .optionalFieldOf("leaderboards", Map.of()).forGetter(State::leaderboards),
+            Codec.unboundedMap(DifficultyTier.CODEC, RaidTierConfig.CODEC)
+                .optionalFieldOf("tierConfigs", Map.of()).forGetter(State::tierConfigs),
+            BlockPos.CODEC.listOf().optionalFieldOf("pendingInstanceRemovals", List.of()).forGetter(State::pendingInstanceRemovals)
         ).apply(i, State::new));
     }
 
@@ -230,6 +248,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         super(BlockEntitiesRegistry.RAID_CONTROLLER_BLOCK_ENTITY, pos, state);
         for (DifficultyTier tier : DifficultyTier.values()) {
             leaderboards.putIfAbsent(tier, new ArrayList<>());
+            tierConfigs.putIfAbsent(tier, RaidTierConfig.defaultFor(tier));
         }
     }
 
@@ -295,6 +314,57 @@ public class RaidControllerBlockEntity extends BlockEntity
         markDirtyAndSync();
     }
 
+    public int getInviteExpiryTicks() {
+        return inviteExpiryTicks;
+    }
+
+    public boolean setInviteExpiryTicks(int ticks) {
+        if (ticks <= 0) return false;
+        this.inviteExpiryTicks = ticks;
+        markDirtyAndSync();
+        return true;
+    }
+
+    public int getCooldownTicks() {
+        return cooldownTicks;
+    }
+
+    public boolean setCooldownTicks(int ticks) {
+        if (ticks < 0) return false;
+        this.cooldownTicks = ticks;
+        markDirtyAndSync();
+        return true;
+    }
+
+    public int getCloseTimerSeconds() {
+        return closeTimerSeconds;
+    }
+
+    public boolean setCloseTimerSeconds(int seconds) {
+        if (seconds <= 0) return false;
+        this.closeTimerSeconds = seconds;
+        markDirtyAndSync();
+        return true;
+    }
+
+    public Map<DifficultyTier, RaidTierConfig> getTierConfigs() {
+        return Collections.unmodifiableMap(tierConfigs);
+    }
+
+    public RaidTierConfig getTierConfig(DifficultyTier tier) {
+        return tierConfigs.getOrDefault(tier, RaidTierConfig.defaultFor(tier));
+    }
+
+    public void setTierConfig(DifficultyTier tier, RaidTierConfig config) {
+        if (tier == null || config == null) return;
+        tierConfigs.put(tier, config);
+        markDirtyAndSync();
+    }
+
+    public Set<BlockPos> getPendingInstanceRemovals() {
+        return Collections.unmodifiableSet(pendingInstanceRemovals);
+    }
+
     /**
      * Convenience UUID-only leave, used by cross-controller lobby cleanup.
      * No server-player reference is needed; member is simply removed.
@@ -349,14 +419,34 @@ public class RaidControllerBlockEntity extends BlockEntity
         for (Iterator<RaidInstanceState> it = instances.iterator(); it.hasNext(); ) {
             RaidInstanceState inst = it.next();
             if (inst.spawnerPos().equals(spawnerPos) && inst.dimension().equals(dimension)) {
-                if (inst.status() == InstanceStatus.RUNNING) return false;
+                if (inst.status() == InstanceStatus.RUNNING) {
+                    // Toggle pending-removal flag — actual removal happens when the run ends.
+                    if (pendingInstanceRemovals.contains(spawnerPos)) {
+                        pendingInstanceRemovals.remove(spawnerPos);
+                    } else {
+                        pendingInstanceRemovals.add(spawnerPos);
+                    }
+                    markDirtyAndSync();
+                    return true;
+                }
                 it.remove();
                 lobbyToInstance.values().removeIf(p -> p.equals(spawnerPos));
+                pendingInstanceRemovals.remove(spawnerPos);
                 markDirtyAndSync();
                 return true;
             }
         }
         return false;
+    }
+
+    /** Move an instance within the pool from index {@code from} to index {@code to}. */
+    public boolean moveInstance(int from, int to) {
+        if (from < 0 || from >= instances.size() || to < 0 || to >= instances.size()) return false;
+        if (from == to) return false;
+        RaidInstanceState moved = instances.remove(from);
+        instances.add(to, moved);
+        markDirtyAndSync();
+        return true;
     }
 
     private @Nullable RaidInstanceState reserveFreeInstance() {
@@ -1060,13 +1150,17 @@ public class RaidControllerBlockEntity extends BlockEntity
             respawnTimeTicks,
             maxPartySize,
             inviteExpiryTicks,
+            cooldownTicks,
+            closeTimerSeconds,
             instanceEntries,
             new ArrayList<>(lobbies),
             new ArrayList<>(queuedLobbyIds),
             new ArrayList<>(pendingInvites),
             new ArrayList<>(pendingJoinRequests),
             lobbyInstanceEntries,
-            new EnumMap<>(leaderboards)
+            new EnumMap<>(leaderboards),
+            new EnumMap<>(tierConfigs),
+            new ArrayList<>(pendingInstanceRemovals)
         );
 
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
@@ -1085,6 +1179,8 @@ public class RaidControllerBlockEntity extends BlockEntity
                     respawnTimeTicks = state.respawnTimeTicks();
                     maxPartySize = state.maxPartySize();
                     inviteExpiryTicks = state.inviteExpiryTicks();
+                    cooldownTicks = state.cooldownTicks();
+                    closeTimerSeconds = state.closeTimerSeconds();
 
                     instances.clear();
                     for (InstanceEntry ie : state.instances()) {
@@ -1130,6 +1226,15 @@ public class RaidControllerBlockEntity extends BlockEntity
                     for (DifficultyTier tier : DifficultyTier.values()) {
                         leaderboards.putIfAbsent(tier, new ArrayList<>());
                     }
+
+                    tierConfigs.clear();
+                    tierConfigs.putAll(state.tierConfigs());
+                    for (DifficultyTier tier : DifficultyTier.values()) {
+                        tierConfigs.putIfAbsent(tier, RaidTierConfig.defaultFor(tier));
+                    }
+
+                    pendingInstanceRemovals.clear();
+                    pendingInstanceRemovals.addAll(state.pendingInstanceRemovals());
                 });
         } else {
             // Legacy NBT fallback — migrate old-format data
