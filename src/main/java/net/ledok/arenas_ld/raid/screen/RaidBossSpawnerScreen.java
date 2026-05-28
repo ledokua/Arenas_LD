@@ -230,21 +230,21 @@ public class RaidBossSpawnerScreen extends AbstractContainerScreen<RaidBossSpawn
 
     private void loadTierFieldsForSelectedTier() {
         RaidTierConfig cfg = tierConfigDraft.getOrDefault(selectedTier, RaidTierConfig.defaultFor(selectedTier));
-        tierHealthMultField.setValue(Double.toString(cfg.healthMultOverride()));
-        tierDamageMultField.setValue(Double.toString(cfg.damageMultOverride()));
-        tierLootTableField.setValue(cfg.lootTableId());
-        tierPerPlayerLootTableField.setValue(cfg.perPlayerLootTableId());
+        tierHealthMultField.setValue(Double.toString(cfg.healthMultiplier()));
+        tierDamageMultField.setValue(Double.toString(cfg.damageMultiplier()));
+        tierLootTableField.setValue("");
+        tierPerPlayerLootTableField.setValue(cfg.perPlayerLootTable());
         tierHealthMultField.setHint(Component.translatable("gui.arenas_ld.default_hint", formatDecimal(selectedTier.healthMult)));
         tierDamageMultField.setHint(Component.translatable("gui.arenas_ld.default_hint", formatDecimal(selectedTier.damageMult)));
     }
 
     private void captureCurrentTierEdits() {
         RaidTierConfig existing = tierConfigDraft.getOrDefault(selectedTier, RaidTierConfig.defaultFor(selectedTier));
-        double health = parseDoubleOrDefault(tierHealthMultField.getValue(), existing.healthMultOverride());
-        double damage = parseDoubleOrDefault(tierDamageMultField.getValue(), existing.damageMultOverride());
-        String loot = tierLootTableField.getValue().trim();
+        double health = parseDoubleOrDefault(tierHealthMultField.getValue(), existing.healthMultiplier());
+        double damage = parseDoubleOrDefault(tierDamageMultField.getValue(), existing.damageMultiplier());
         String perPlayer = tierPerPlayerLootTableField.getValue().trim();
-        tierConfigDraft.put(selectedTier, new RaidTierConfig(health, damage, loot, perPlayer));
+        tierConfigDraft.put(selectedTier, new RaidTierConfig(
+            health, damage, perPlayer, existing.raidTimeSeconds(), existing.enabled(), existing.rewardCurrency()));
     }
 
     private void updateTierButtonState() {

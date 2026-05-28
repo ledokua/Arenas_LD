@@ -197,7 +197,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         RaidTierConfig safeConfig = config != null ? config : tierConfigs.getOrDefault(safeTier, RaidTierConfig.defaultFor(safeTier));
         int safePlayerCount = Math.max(1, playerCount);
         double baseHp = getConfiguredBaseMaxHealth();
-        double healthMult = safeConfig.healthMultOverride() > 0 ? safeConfig.healthMultOverride() : safeTier.healthMult;
+        double healthMult = safeConfig.healthMultiplier();
         double perPlayerMult = Math.pow(1.0 + hpScale, Math.max(0, safePlayerCount - 1));
         return baseHp * healthMult * perPlayerMult;
     }
@@ -391,8 +391,8 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         if (boss instanceof LivingEntity livingBoss) {
             RaidTierConfig tierCfg = tierConfigs.getOrDefault(activeDifficulty, RaidTierConfig.defaultFor(activeDifficulty));
-            double healthMult = tierCfg.healthMultOverride() > 0 ? tierCfg.healthMultOverride() : activeDifficulty.healthMult;
-            double damageMult = tierCfg.damageMultOverride() > 0 ? tierCfg.damageMultOverride() : activeDifficulty.damageMult;
+            double healthMult = tierCfg.healthMultiplier();
+            double damageMult = tierCfg.damageMultiplier();
             double perPlayerMult = Math.pow(1.0 + hpScalePerPlayer, Math.max(0, players.size() - 1));
 
             for (AttributeData attr : attributes) {
@@ -478,8 +478,8 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
 
         RaidTierConfig tierCfg = tierConfigs.getOrDefault(activeDifficulty, RaidTierConfig.defaultFor(activeDifficulty));
-        String resolvedLootTableId = tierCfg.lootTableId().isEmpty() ? lootTableId : tierCfg.lootTableId();
-        String resolvedPerPlayerLootTableId = tierCfg.perPlayerLootTableId().isEmpty() ? perPlayerLootTableId : tierCfg.perPlayerLootTableId();
+        String resolvedLootTableId = lootTableId;
+        String resolvedPerPlayerLootTableId = tierCfg.perPlayerLootTable().isEmpty() ? perPlayerLootTableId : tierCfg.perPlayerLootTable();
 
         ResourceLocation lootTableIdentifier = ResourceLocation.tryParse(resolvedLootTableId);
         if (lootTableIdentifier != null) {
@@ -599,10 +599,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public double getEffectiveDamageMultiplier() {
         RaidTierConfig tierCfg = tierConfigs.getOrDefault(activeDifficulty, RaidTierConfig.defaultFor(activeDifficulty));
-        if (tierCfg.damageMultOverride() > 0) {
-            return tierCfg.damageMultOverride();
-        }
-        return activeDifficulty.damageMult;
+        return tierCfg.damageMultiplier();
     }
 
     public boolean isTracked(UUID playerId) {
