@@ -873,6 +873,26 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         ).apply(i, InstanceRunEntry::new));
     }
 
+    /** Bundle of int timing settings — kept together so the State codec stays under DFU's 16-field group() limit. */
+    private record LifecycleTimings(
+        int disconnectGraceTicks,
+        int lobbyOfflineTimeoutTicks,
+        int respawnTimeTicks,
+        int deathTimePenaltyTicks
+    ) {
+        static final Codec<LifecycleTimings> CODEC = RecordCodecBuilder.create(i -> i.group(
+            Codec.INT.optionalFieldOf("disconnectGraceTicks", DEFAULT_DISCONNECT_GRACE_TICKS).forGetter(LifecycleTimings::disconnectGraceTicks),
+            Codec.INT.optionalFieldOf("lobbyOfflineTimeoutTicks", DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS).forGetter(LifecycleTimings::lobbyOfflineTimeoutTicks),
+            Codec.INT.optionalFieldOf("respawnTimeTicks", DEFAULT_RESPAWN_TIME_TICKS).forGetter(LifecycleTimings::respawnTimeTicks),
+            Codec.INT.optionalFieldOf("deathTimePenaltyTicks", DEFAULT_DEATH_TIME_PENALTY_TICKS).forGetter(LifecycleTimings::deathTimePenaltyTicks)
+        ).apply(i, LifecycleTimings::new));
+
+        static final LifecycleTimings DEFAULT = new LifecycleTimings(
+            DEFAULT_DISCONNECT_GRACE_TICKS, DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS,
+            DEFAULT_RESPAWN_TIME_TICKS, DEFAULT_DEATH_TIME_PENALTY_TICKS
+        );
+    }
+
     private record State(
         List<BlockPos> instances,
         Map<DifficultyTier, TierConfig> tierConfigs,
@@ -880,10 +900,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         int closeTimerSeconds,
         int maxPartySize,
         int inviteExpiryTicks,
-        int disconnectGraceTicks,
-        int lobbyOfflineTimeoutTicks,
-        int respawnTimeTicks,
-        int deathTimePenaltyTicks,
+        LifecycleTimings lifecycle,
         List<InstanceCooldown> instanceCooldowns,
         List<InstanceRunEntry> activeRuns,
         List<BlockPos> pendingInstanceRemovals,
@@ -900,10 +917,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             Codec.INT.fieldOf("closeTimerSeconds").forGetter(State::closeTimerSeconds),
             Codec.INT.fieldOf("maxPartySize").forGetter(State::maxPartySize),
             Codec.INT.fieldOf("inviteExpiryTicks").forGetter(State::inviteExpiryTicks),
-            Codec.INT.optionalFieldOf("disconnectGraceTicks", DEFAULT_DISCONNECT_GRACE_TICKS).forGetter(State::disconnectGraceTicks),
-            Codec.INT.optionalFieldOf("lobbyOfflineTimeoutTicks", DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS).forGetter(State::lobbyOfflineTimeoutTicks),
-            Codec.INT.optionalFieldOf("respawnTimeTicks", DEFAULT_RESPAWN_TIME_TICKS).forGetter(State::respawnTimeTicks),
-            Codec.INT.optionalFieldOf("deathTimePenaltyTicks", DEFAULT_DEATH_TIME_PENALTY_TICKS).forGetter(State::deathTimePenaltyTicks),
+            LifecycleTimings.CODEC.optionalFieldOf("lifecycle", LifecycleTimings.DEFAULT).forGetter(State::lifecycle),
             InstanceCooldown.CODEC.listOf().fieldOf("instanceCooldowns").forGetter(State::instanceCooldowns),
             InstanceRunEntry.CODEC.listOf().fieldOf("activeRuns").forGetter(State::activeRuns),
             BlockPos.CODEC.listOf().fieldOf("pendingInstanceRemovals").forGetter(State::pendingInstanceRemovals),
@@ -932,10 +946,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             closeTimerSeconds,
             maxPartySize,
             inviteExpiryTicks,
-            disconnectGraceTicks,
-            lobbyOfflineTimeoutTicks,
-            respawnTimeTicks,
-            deathTimePenaltyTicks,
+            new LifecycleTimings(disconnectGraceTicks, lobbyOfflineTimeoutTicks, respawnTimeTicks, deathTimePenaltyTicks),
             cooldowns,
             runs,
             new ArrayList<>(pendingInstanceRemovals),
@@ -966,10 +977,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                     closeTimerSeconds = state.closeTimerSeconds();
                     maxPartySize = state.maxPartySize();
                     inviteExpiryTicks = state.inviteExpiryTicks();
-                    disconnectGraceTicks = state.disconnectGraceTicks();
-                    lobbyOfflineTimeoutTicks = state.lobbyOfflineTimeoutTicks();
-                    respawnTimeTicks = state.respawnTimeTicks();
-                    deathTimePenaltyTicks = state.deathTimePenaltyTicks();
+                    disconnectGraceTicks = state.lifecycle().disconnectGraceTicks();
+                    lobbyOfflineTimeoutTicks = state.lifecycle().lobbyOfflineTimeoutTicks();
+                    respawnTimeTicks = state.lifecycle().respawnTimeTicks();
+                    deathTimePenaltyTicks = state.lifecycle().deathTimePenaltyTicks();
                     instanceCooldownTimers.clear();
                     for (InstanceCooldown c : state.instanceCooldowns()) {
                         instanceCooldownTimers.put(c.pos(), c.ticks());
