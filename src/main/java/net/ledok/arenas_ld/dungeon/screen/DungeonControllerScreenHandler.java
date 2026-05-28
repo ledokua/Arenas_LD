@@ -3,6 +3,7 @@ package net.ledok.arenas_ld.dungeon.screen;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
+import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
@@ -24,6 +25,7 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
     private List<Lobby> visibleLobbies;
     private Optional<Lobby> ownLobby;
     private List<PendingInvite> myInvites;
+    private List<PendingJoinRequest> myJoinRequests;
     private int maxPartySize;
     private Map<DifficultyTier, TierConfig> tiers;
     private long serverGameTick;
@@ -31,11 +33,11 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
     private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerData data) {
-        this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.maxPartySize(), data.tiers(), data.serverGameTick(), data.busyPlayers(), data.topLeaderboards());
+        this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.myJoinRequests(), data.maxPartySize(), data.tiers(), data.serverGameTick(), data.busyPlayers(), data.topLeaderboards());
     }
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerBlockEntity blockEntity) {
-        this(syncId, inventory, blockEntity.getBlockPos(), blockEntity.getLobbies(), Optional.empty(), blockEntity.getPendingInvites(), blockEntity.getMaxPartySize(), blockEntity.getTierConfigs(), 0L, Set.of(), Map.of());
+        this(syncId, inventory, blockEntity.getBlockPos(), blockEntity.getLobbies(), Optional.empty(), blockEntity.getPendingInvites(), blockEntity.getPendingJoinRequests(), blockEntity.getMaxPartySize(), blockEntity.getTierConfigs(), 0L, Set.of(), Map.of());
     }
 
     private DungeonControllerScreenHandler(
@@ -45,6 +47,7 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         List<Lobby> visibleLobbies,
         Optional<Lobby> ownLobby,
         List<PendingInvite> myInvites,
+        List<PendingJoinRequest> myJoinRequests,
         int maxPartySize,
         Map<DifficultyTier, TierConfig> tiers,
         long serverGameTick,
@@ -56,6 +59,7 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         this.visibleLobbies = List.copyOf(visibleLobbies);
         this.ownLobby = ownLobby;
         this.myInvites = List.copyOf(myInvites);
+        this.myJoinRequests = List.copyOf(myJoinRequests);
         this.maxPartySize = maxPartySize;
         this.tiers = Map.copyOf(tiers);
         this.serverGameTick = serverGameTick;
@@ -77,6 +81,10 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
 
     public List<PendingInvite> getMyInvites() {
         return List.copyOf(myInvites);
+    }
+
+    public List<PendingJoinRequest> getMyJoinRequests() {
+        return List.copyOf(myJoinRequests);
     }
 
     public int getMaxPartySize() {
@@ -103,6 +111,7 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         this.visibleLobbies = List.copyOf(data.visibleLobbies());
         this.ownLobby = data.ownLobby();
         this.myInvites = List.copyOf(data.myInvites());
+        this.myJoinRequests = List.copyOf(data.myJoinRequests());
         this.maxPartySize = data.maxPartySize();
         this.tiers = Map.copyOf(data.tiers());
         this.serverGameTick = data.serverGameTick();

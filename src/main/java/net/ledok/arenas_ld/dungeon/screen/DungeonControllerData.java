@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.dungeon.screen;
 
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
+import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
@@ -25,6 +26,7 @@ public record DungeonControllerData(
     List<Lobby> visibleLobbies,
     Optional<Lobby> ownLobby,
     List<PendingInvite> myInvites,
+    List<PendingJoinRequest> myJoinRequests,
     int maxPartySize,
     Map<DifficultyTier, TierConfig> tiers,
     long serverGameTick,
@@ -51,6 +53,11 @@ public record DungeonControllerData(
         buf.writeVarInt(data.myInvites().size());
         for (PendingInvite invite : data.myInvites()) {
             writeTag(buf, (CompoundTag) PendingInvite.CODEC.encodeStart(NbtOps.INSTANCE, invite).getOrThrow());
+        }
+
+        buf.writeVarInt(data.myJoinRequests().size());
+        for (PendingJoinRequest req : data.myJoinRequests()) {
+            writeTag(buf, (CompoundTag) PendingJoinRequest.CODEC.encodeStart(NbtOps.INSTANCE, req).getOrThrow());
         }
 
         buf.writeVarInt(data.maxPartySize());
@@ -96,6 +103,12 @@ public record DungeonControllerData(
             invites.add(PendingInvite.CODEC.parse(NbtOps.INSTANCE, readTag(buf)).getOrThrow());
         }
 
+        int joinReqCount = buf.readVarInt();
+        List<PendingJoinRequest> joinReqs = new ArrayList<>(joinReqCount);
+        for (int i = 0; i < joinReqCount; i++) {
+            joinReqs.add(PendingJoinRequest.CODEC.parse(NbtOps.INSTANCE, readTag(buf)).getOrThrow());
+        }
+
         int maxPartySize = buf.readVarInt();
         int tierCount = buf.readVarInt();
         Map<DifficultyTier, TierConfig> tiers = new EnumMap<>(DifficultyTier.class);
@@ -123,7 +136,7 @@ public record DungeonControllerData(
             topLeaderboards.put(tier, entries);
         }
 
-        return new DungeonControllerData(blockPos, visible, own, invites, maxPartySize, tiers, serverGameTick, busyPlayers, topLeaderboards);
+        return new DungeonControllerData(blockPos, visible, own, invites, joinReqs, maxPartySize, tiers, serverGameTick, busyPlayers, topLeaderboards);
     }
 
     private static void writeTag(RegistryFriendlyByteBuf buf, CompoundTag tag) {

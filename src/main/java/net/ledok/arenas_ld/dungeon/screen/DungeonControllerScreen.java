@@ -20,11 +20,15 @@ import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
+import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.packet.AcceptInvitePayload;
+import net.ledok.arenas_ld.dungeon.packet.AcceptJoinRequestPayload;
 import net.ledok.arenas_ld.dungeon.packet.CreateLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.DeclineInvitePayload;
+import net.ledok.arenas_ld.dungeon.packet.DeclineJoinRequestPayload;
 import net.ledok.arenas_ld.dungeon.packet.InvitePlayerPayload;
 import net.ledok.arenas_ld.dungeon.packet.JoinLobbyPayload;
+import net.ledok.arenas_ld.dungeon.packet.RequestJoinPayload;
 import net.ledok.arenas_ld.dungeon.packet.KickFromLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.LeaveLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetLobbyHardcorePayload;
@@ -106,6 +110,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
     private final List<Lobby> visibleLobbies;
     private final List<PendingInvite> myInvites;
+    private final List<PendingJoinRequest> myJoinRequests;
     private Optional<Lobby> ownLobby;
     private java.util.Set<UUID> busyPlayers;
     private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards = Map.of();
@@ -134,6 +139,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private double savedScrollProgress = 0.0D;
     private boolean restoreScrollNextTick = false;
     private final Map<UUID, LabelComponent> inviteCountdownLabels = new HashMap<>();
+    private final Map<UUID, LabelComponent> joinRequestCountdownLabels = new HashMap<>();
     private final Map<UUID, MemberRowRefs> memberRowRefs = new HashMap<>();
     private LabelComponent summaryOwnerLabel;
     private LabelComponent summaryMembersLabel;
@@ -151,6 +157,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         this.titleLabelY = 9999;
         this.visibleLobbies = new ArrayList<>(handler.getVisibleLobbies());
         this.myInvites = new ArrayList<>(handler.getMyInvites());
+        this.myJoinRequests = new ArrayList<>(handler.getMyJoinRequests());
         this.ownLobby = handler.getOwnLobby();
         this.busyPlayers = handler.getBusyPlayers();
         this.topLeaderboards = handler.getTopLeaderboards();
@@ -202,11 +209,12 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             contentScroll.scrollTo(savedScrollProgress);
             restoreScrollNextTick = false;
         }
-        if ((currentTab == Tab.LOBBIES || currentTab == Tab.INVITES) && !myInvites.isEmpty()) {
+        if ((currentTab == Tab.LOBBIES || currentTab == Tab.INVITES) && (!myInvites.isEmpty() || !myJoinRequests.isEmpty())) {
             long now = approximateServerTick() / 20L;
             if (now != lastCountdownSecond) {
                 lastCountdownSecond = now;
                 refreshInviteCountdowns();
+                refreshJoinRequestCountdowns();
             }
         }
     }
@@ -367,6 +375,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         contentArea.clearChildren();
         footerActions.clearChildren();
         inviteCountdownLabels.clear();
+        joinRequestCountdownLabels.clear();
         memberRowRefs.clear();
         summaryOwnerLabel = null;
         summaryMembersLabel = null;
@@ -417,6 +426,77 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
                 contentArea.child(inviteRow(invite));
             }
         }
+
+        UUID self = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : null;
+        boolean isOwner = self != null && ownLobby.isPresent() && ownLobby.get().ownerUuid().equals(self);
+        if (isOwner) {
+            UUID ownedLobbyId = ownLobby.get().lobbyId();
+            List<PendingJoinRequest> incoming = myJoinRequests.stream()
+                .filter(r -> r.lobbyId().equals(ownedLobbyId))
+                .toList();
+            contentArea.child(spacer(8));
+            contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.join_requests"), incoming.size()));
+            if (incoming.isEmpty()) {
+                contentArea.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller.no_join_requests")));
+            } else {
+                contentArea.child(joinRequestHeaderRow());
+                for (PendingJoinRequest req : incoming) {
+                    contentArea.child(joinRequestRow(req));
+                }
+            }
+        }
+    }
+
+    private FlowLayout joinRequestHeaderRow() {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.padding(Insets.of(2, 2, 6, 6));
+        row.gap(6);
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.requester"), Sizing.expand()));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.tier"), Sizing.fixed(86)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.expires"), Sizing.fixed(62)));
+        row.child(headerCell("", Sizing.fixed(54)));
+        row.child(headerCell("", Sizing.fixed(58)));
+        return row;
+    }
+
+    private FlowLayout joinRequestRow(PendingJoinRequest req) {
+        FlowLayout row = rowPanel(false);
+        row.gap(6);
+
+        String requesterName = !req.requesterName().isEmpty() ? req.requesterName() : shortUuid(req.requesterUuid());
+
+        FlowLayout info = Containers.verticalFlow(Sizing.expand(), Sizing.content());
+        FlowLayout fromLine = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        fromLine.gap(3);
+        fromLine.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite_row.from"), INK));
+        fromLine.child(text(Component.literal(requesterName), ACCENT));
+        info.child(fromLine);
+        info.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.join_request_row.wants_to_join"), INK_DIM));
+        row.child(info);
+
+        row.child(fixedBadge(Component.literal(req.tier().name()), 86, tierColor(req.tier())));
+
+        long remainingSeconds = Math.max(0L, req.expiresAtTick() - approximateServerTick()) / 20L;
+        LabelComponent countdown = fixedText(Component.literal(formatRemaining(remainingSeconds)), 62, remainingSeconds <= 15 ? WARN : INK_MID, HorizontalAlignment.CENTER);
+        joinRequestCountdownLabels.put(req.requesterUuid(), countdown);
+        row.child(countdown);
+
+        UUID requesterUuid = req.requesterUuid();
+        ButtonComponent accept = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), b -> {
+            footerError = null;
+            ClientPlayNetworking.send(new AcceptJoinRequestPayload(menu.getBlockPos(), requesterUuid));
+        });
+        accept.horizontalSizing(Sizing.fixed(54));
+        row.child(accept);
+
+        ButtonComponent decline = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), b -> {
+            footerError = null;
+            ClientPlayNetworking.send(new DeclineJoinRequestPayload(menu.getBlockPos(), requesterUuid));
+        });
+        decline.horizontalSizing(Sizing.fixed(58));
+        row.child(decline);
+
+        return row;
     }
 
     private void buildLeaderboardContent() {
@@ -652,10 +732,19 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             });
             actionButton.active(!isMine && ownLobby.isEmpty());
         } else {
-            actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.request"), b ->
-                footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.invite_only").getString()
-            );
-            actionButton.active(!isMine);
+            UUID self = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : null;
+            boolean alreadyRequested = self != null && myJoinRequests.stream()
+                .anyMatch(r -> r.lobbyId().equals(lobbyId) && r.requesterUuid().equals(self));
+            if (alreadyRequested) {
+                actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.pending"), b -> {});
+                actionButton.active(false);
+            } else {
+                actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.request"), b -> {
+                    footerError = null;
+                    ClientPlayNetworking.send(new RequestJoinPayload(menu.getBlockPos(), lobbyId));
+                });
+                actionButton.active(!isMine && ownLobby.isEmpty());
+            }
         }
         actionButton.horizontalSizing(Sizing.fill(100));
         actionCell.child(actionButton);
@@ -1464,6 +1553,8 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         this.visibleLobbies.addAll(menu.getVisibleLobbies());
         this.myInvites.clear();
         this.myInvites.addAll(menu.getMyInvites());
+        this.myJoinRequests.clear();
+        this.myJoinRequests.addAll(menu.getMyJoinRequests());
         this.ownLobby = menu.getOwnLobby();
         this.busyPlayers = menu.getBusyPlayers();
         this.topLeaderboards = menu.getTopLeaderboards();
@@ -1598,6 +1689,17 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             LabelComponent label = inviteCountdownLabels.get(invite.lobbyId());
             if (label == null) continue;
             long remainingTicks = Math.max(0L, invite.expiresAtTick() - approximateServerTick());
+            long remainingSeconds = remainingTicks / 20L;
+            label.text(Component.literal(formatRemaining(remainingSeconds)));
+            label.color(Color.ofArgb(remainingSeconds <= 15 ? WARN : INK_MID));
+        }
+    }
+
+    private void refreshJoinRequestCountdowns() {
+        for (PendingJoinRequest req : myJoinRequests) {
+            LabelComponent label = joinRequestCountdownLabels.get(req.requesterUuid());
+            if (label == null) continue;
+            long remainingTicks = Math.max(0L, req.expiresAtTick() - approximateServerTick());
             long remainingSeconds = remainingTicks / 20L;
             label.text(Component.literal(formatRemaining(remainingSeconds)));
             label.color(Color.ofArgb(remainingSeconds <= 15 ? WARN : INK_MID));
