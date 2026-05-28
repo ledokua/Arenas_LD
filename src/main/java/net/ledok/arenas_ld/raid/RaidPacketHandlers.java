@@ -9,8 +9,15 @@ import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptJoinRequestPayload;
+import net.ledok.arenas_ld.raid.packet.RaidAddInstancePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAdminSetMaxPartySizePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAdminSetRespawnTimePayload;
+import net.ledok.arenas_ld.raid.packet.RaidMoveInstancePayload;
+import net.ledok.arenas_ld.raid.packet.RaidRemoveInstancePayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetCloseTimerPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetCooldownPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
 import net.ledok.arenas_ld.raid.packet.RaidCreateLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineJoinRequestPayload;
@@ -31,6 +38,9 @@ import net.ledok.arenas_ld.raid.run.RaidLeaderboardEntry;
 import net.ledok.arenas_ld.util.InstanceStatus;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
@@ -257,6 +267,94 @@ public final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 controller.setMaxPartySize(payload.size());
+                broadcastRaidControllerSnapshot(player, controller);
+            })
+        );
+
+        // ── Admin: Add Instance ───────────────────────────────────────────────
+        ServerPlayNetworking.registerGlobalReceiver(RaidAddInstancePayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) return;
+                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                if (controller == null) return;
+                ResourceKey<Level> dim = parseDim(payload.dimension());
+                if (dim == null) return;
+                controller.addInstance(payload.instancePos(), dim);
+                broadcastRaidControllerSnapshot(player, controller);
+            })
+        );
+
+        // ── Admin: Remove Instance ────────────────────────────────────────────
+        ServerPlayNetworking.registerGlobalReceiver(RaidRemoveInstancePayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) return;
+                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                if (controller == null) return;
+                ResourceKey<Level> dim = parseDim(payload.dimension());
+                if (dim == null) return;
+                controller.removeInstance(payload.instancePos(), dim);
+                broadcastRaidControllerSnapshot(player, controller);
+            })
+        );
+
+        // ── Admin: Move Instance ──────────────────────────────────────────────
+        ServerPlayNetworking.registerGlobalReceiver(RaidMoveInstancePayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) return;
+                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                if (controller == null) return;
+                controller.moveInstance(payload.fromIndex(), payload.toIndex());
+                broadcastRaidControllerSnapshot(player, controller);
+            })
+        );
+
+        // ── Admin: Set Cooldown ───────────────────────────────────────────────
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetCooldownPayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) return;
+                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                if (controller == null) return;
+                controller.setCooldownTicks(payload.cooldownTicks());
+                broadcastRaidControllerSnapshot(player, controller);
+            })
+        );
+
+        // ── Admin: Set Close Timer ────────────────────────────────────────────
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetCloseTimerPayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) return;
+                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                if (controller == null) return;
+                controller.setCloseTimerSeconds(payload.closeTimerSeconds());
+                broadcastRaidControllerSnapshot(player, controller);
+            })
+        );
+
+        // ── Admin: Set Invite Expiry ──────────────────────────────────────────
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetInviteExpiryPayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) return;
+                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                if (controller == null) return;
+                controller.setInviteExpiryTicks(payload.inviteExpiryTicks());
+                broadcastRaidControllerSnapshot(player, controller);
+            })
+        );
+
+        // ── Admin: Set Tier Config ────────────────────────────────────────────
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetTierConfigPayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) return;
+                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                if (controller == null) return;
+                controller.setTierConfig(payload.tier(), payload.config());
                 broadcastRaidControllerSnapshot(player, controller);
             })
         );
@@ -595,5 +693,14 @@ public final class RaidPacketHandlers {
             RaidDifficulty difficulty
     ) {
         return ModPackets.resolveRaidLeaderboardForDifficulty(controller, difficulty);
+    }
+
+    private static ResourceKey<Level> parseDim(String id) {
+        if (id == null || id.isEmpty()) return null;
+        try {
+            return ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(id));
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

@@ -41,8 +41,15 @@ import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptJoinRequestPayload;
+import net.ledok.arenas_ld.raid.packet.RaidAddInstancePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAdminSetMaxPartySizePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAdminSetRespawnTimePayload;
+import net.ledok.arenas_ld.raid.packet.RaidMoveInstancePayload;
+import net.ledok.arenas_ld.raid.packet.RaidRemoveInstancePayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetCloseTimerPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetCooldownPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
 import net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload;
 import net.ledok.arenas_ld.raid.packet.RaidCreateLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
@@ -138,6 +145,13 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(RaidDeclineJoinRequestPayload.TYPE, RaidDeclineJoinRequestPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidAdminSetRespawnTimePayload.TYPE, RaidAdminSetRespawnTimePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidAdminSetMaxPartySizePayload.TYPE, RaidAdminSetMaxPartySizePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidAddInstancePayload.TYPE, RaidAddInstancePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidRemoveInstancePayload.TYPE, RaidRemoveInstancePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidMoveInstancePayload.TYPE, RaidMoveInstancePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidSetCooldownPayload.TYPE, RaidSetCooldownPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidSetCloseTimerPayload.TYPE, RaidSetCloseTimerPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidSetInviteExpiryPayload.TYPE, RaidSetInviteExpiryPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidSetTierConfigPayload.TYPE, RaidSetTierConfigPayload.STREAM_CODEC);
     }
 
     static void registerS2CTypes() {
