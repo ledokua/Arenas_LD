@@ -58,6 +58,19 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
         this.titleLabelY = 9999;
     }
 
+    /**
+     * Swallow the inventory key so tapping E mid-edit doesn't kick the admin out.
+     * Text fields get first crack at the key via the owo focus dispatch, so
+     * typing "e" in the mob-ID field still works. Closing happens via × or Escape.
+     */
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
     @Override
     protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
         return OwoUIAdapter.create(this, Containers::verticalFlow);

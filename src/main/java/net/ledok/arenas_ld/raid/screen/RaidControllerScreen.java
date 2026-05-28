@@ -26,8 +26,6 @@ import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptJoinRequestPayload;
-import net.ledok.arenas_ld.raid.packet.RaidAdminSetMaxPartySizePayload;
-import net.ledok.arenas_ld.raid.packet.RaidAdminSetRespawnTimePayload;
 import net.ledok.arenas_ld.raid.packet.RaidCreateLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineJoinRequestPayload;
@@ -77,11 +75,6 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
     private static final int ACCENT = 0xFFA98BE8;
     private static final int ACCENT_DARK = 0xFF6C4FB5;
 
-    private static final int ADMIN_STEP = 30 * 20;
-    private static final int ADMIN_MAX  = 60 * 60 * 20;
-    private static final int PARTY_MIN  = 1;
-    private static final int PARTY_MAX  = 20;
-
     private enum Tab {
         LOBBIES,
         MY_LOBBY,
@@ -128,11 +121,6 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
     private List<RaidInstanceState> instances = new ArrayList<>();
 
     // Admin draft state
-    private int draftRespawnTicks  = 6000;
-    private int serverRespawnTicks = 6000;
-    private int draftMaxPartySize  = 10;
-    private int serverMaxPartySize = 10;
-
     private Tab currentTab = Tab.LOBBIES;
     private String footerError;
     private long snapshotServerTick;
@@ -837,7 +825,6 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
         Lobby lobby = ownLobby.get();
         UUID self = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : UUID.randomUUID();
         boolean isOwner = lobby.ownerUuid().equals(self);
-        boolean isAdmin = minecraft != null && minecraft.player != null && minecraft.player.hasPermissions(2);
 
         // Queue position banner
         int queuePos = menu.getQueuePosition();
@@ -951,12 +938,6 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
         contentArea.child(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.section.invite_player")));
         contentArea.child(ownerInviteControls(isOwner));
 
-        // Admin section at bottom (ops only)
-        if (isAdmin) {
-            contentArea.child(spacer(8));
-            contentArea.child(buildAdminSection());
-        }
-
         boolean ready = lobby.readyMembers().contains(self);
         boolean allReady = lobby.allReady();
         boolean allOnline = allOnline(lobby);
@@ -1004,90 +985,6 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
         start.active(canStart);
         startRunButton = start;
         footerActions.child(startRunButton);
-    }
-
-    // ── Admin section ────────────────────────────────────────────────────────
-
-    private FlowLayout buildAdminSection() {
-        FlowLayout section = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        section.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        section.padding(Insets.of(8, 8, 10, 10));
-        section.gap(6);
-
-        // Header
-        section.child(text(Component.translatable("gui.arenas_ld.raid_controller.ui.admin.title"), INK_DIM));
-        section.child(rowDivider(HAIRLINE));
-
-        // Respawn time row
-        FlowLayout respawnRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        respawnRow.gap(6);
-        respawnRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-
-        LabelComponent respawnLabel = text(Component.translatable("gui.arenas_ld.raid_controller.ui.admin.respawn"), INK_DIM);
-        respawnLabel.horizontalSizing(Sizing.fixed(90));
-        respawnRow.child(respawnLabel);
-
-        // Current seconds display
-        LabelComponent respawnValueLabel = text(Component.literal((draftRespawnTicks / 20) + "s"), INK);
-        respawnValueLabel.horizontalSizing(Sizing.fixed(40));
-        respawnValueLabel.horizontalTextAlignment(HorizontalAlignment.CENTER);
-        respawnRow.child(respawnValueLabel);
-
-        ButtonComponent minusBtn = smallButton(Component.literal("-"), b -> {
-            draftRespawnTicks = Math.max(0, draftRespawnTicks - ADMIN_STEP);
-            rebuildUi();
-        });
-        minusBtn.horizontalSizing(Sizing.fixed(18));
-        respawnRow.child(minusBtn);
-
-        ButtonComponent plusBtn = smallButton(Component.literal("+"), b -> {
-            draftRespawnTicks = Math.min(ADMIN_MAX, draftRespawnTicks + ADMIN_STEP);
-            rebuildUi();
-        });
-        plusBtn.horizontalSizing(Sizing.fixed(18));
-        respawnRow.child(plusBtn);
-
-        respawnRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-
-        ButtonComponent applyRespawn = smallButton(Component.translatable("gui.arenas_ld.raid_controller.ui.admin.apply"), b -> {
-            ClientPlayNetworking.send(new RaidAdminSetRespawnTimePayload(menu.getBlockPos(), draftRespawnTicks));
-            serverRespawnTicks = draftRespawnTicks;
-        });
-        respawnRow.child(applyRespawn);
-        section.child(respawnRow);
-
-        // Max party size row
-        FlowLayout partySizeRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        partySizeRow.gap(6);
-        partySizeRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-
-        LabelComponent partySizeLabel = text(Component.translatable("gui.arenas_ld.raid_controller.ui.admin.max_party"), INK_DIM);
-        partySizeLabel.horizontalSizing(Sizing.fixed(90));
-        partySizeRow.child(partySizeLabel);
-
-        TextBoxComponent partySizeBox = Components.textBox(Sizing.fixed(40), Integer.toString(draftMaxPartySize));
-        partySizeBox.verticalSizing(Sizing.fixed(18));
-        partySizeBox.setMaxLength(2);
-        partySizeBox.onChanged().subscribe(value -> {
-            if (value == null || value.isBlank()) return;
-            try {
-                int parsed = Integer.parseInt(value.trim());
-                draftMaxPartySize = Math.max(PARTY_MIN, Math.min(PARTY_MAX, parsed));
-            } catch (NumberFormatException ignored) {
-            }
-        });
-        partySizeRow.child(partySizeBox);
-
-        partySizeRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-
-        ButtonComponent applyPartySize = smallButton(Component.translatable("gui.arenas_ld.raid_controller.ui.admin.apply"), b -> {
-            ClientPlayNetworking.send(new RaidAdminSetMaxPartySizePayload(menu.getBlockPos(), draftMaxPartySize));
-            serverMaxPartySize = draftMaxPartySize;
-        });
-        partySizeRow.child(applyPartySize);
-        section.child(partySizeRow);
-
-        return section;
     }
 
     // ── Member row ───────────────────────────────────────────────────────────

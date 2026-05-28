@@ -102,6 +102,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
 
     private final Map<DifficultyTier, String> healthInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> damageInputs = new EnumMap<>(DifficultyTier.class);
+    private final Map<DifficultyTier, String> xpInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> lootInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> timeInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> rewardInputs = new EnumMap<>(DifficultyTier.class);
@@ -636,7 +637,8 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         contentArea.child(spacer(6));
         contentArea.child(twoColumnRow(
             rewardCurrencyField(tier, config),
-            Containers.verticalFlow(Sizing.fill(100), Sizing.content())
+            stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.xp"), tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.xp_hint"), "XP", 10, 0, 1_000_000,
+                xpInputs.getOrDefault(tier, Integer.toString(config.skillExperiencePerWin())), v -> xpInputs.put(tier, v))
         ));
 
         contentArea.child(spacer(8));
@@ -1023,15 +1025,16 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         Integer time = parseInt(timeInputs.getOrDefault(tier, Integer.toString(current.dungeonTimeSeconds())));
         String loot = lootInputs.getOrDefault(tier, current.perPlayerLootTable());
         Long reward = parseLong(rewardInputs.getOrDefault(tier, Long.toString(current.rewardCurrency())));
+        Integer xp = parseInt(xpInputs.getOrDefault(tier, Integer.toString(current.skillExperiencePerWin())));
 
-        if (health == null || damage == null || time == null || reward == null) {
+        if (health == null || damage == null || time == null || reward == null || xp == null) {
             footerError = Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value").getString();
             rebuildUi();
             return;
         }
 
         boolean enabled = enabledInputs.getOrDefault(tier, current.enabled());
-        TierConfig updated = new TierConfig(health, damage, loot, time, enabled, Math.max(0L, reward));
+        TierConfig updated = new TierConfig(health, damage, loot, time, enabled, Math.max(0L, reward), Math.max(0, xp));
         tierConfigs.put(tier, updated);
         footerError = null;
         ClientPlayNetworking.send(new SetTierConfigPayload(menu.getBlockPos(), tier, updated));
@@ -1102,6 +1105,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         lootInputs.put(tier, config.perPlayerLootTable());
         timeInputs.put(tier, Integer.toString(config.dungeonTimeSeconds()));
         rewardInputs.put(tier, Long.toString(config.rewardCurrency()));
+        xpInputs.put(tier, Integer.toString(config.skillExperiencePerWin()));
         enabledInputs.put(tier, config.enabled());
     }
 

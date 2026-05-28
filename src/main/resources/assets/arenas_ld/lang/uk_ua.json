@@ -372,6 +372,8 @@
   "gui.arenas_ld.dungeon_controller_admin.ui.tier.reward_hint": "на гравця при перемозі, зараховується до Economy inbox",
   "gui.arenas_ld.dungeon_controller_admin.ui.tier.time": "ЛІМІТ ЧАСУ ЗАБІГУ",
   "gui.arenas_ld.dungeon_controller_admin.ui.tier.time_hint": "секунди",
+  "gui.arenas_ld.dungeon_controller_admin.ui.tier.xp": "ДОСВІД НАВИЧОК ЗА ПЕРЕМОГУ",
+  "gui.arenas_ld.dungeon_controller_admin.ui.tier.xp_hint": "Puffish XP, що отримує кожен гравець за перемогу",
   "gui.arenas_ld.dungeon_controller_admin.ui.tier.apply": "ЗАСТОСУВАТИ РІВЕНЬ %s",
 
   "gui.arenas_ld.raid_controller_admin.title": "Адмін: Контролер рейду",

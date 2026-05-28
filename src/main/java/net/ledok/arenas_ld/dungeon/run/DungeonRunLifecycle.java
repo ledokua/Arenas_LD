@@ -200,7 +200,9 @@ public final class DungeonRunLifecycle {
         if (run.hardcoreEnabled()) {
             rewardPerPlayer *= 2;
         }
+        int xpReward = run.resolvedTierConfig().skillExperiencePerWin();
         boolean lootViaInbox = controller.isLootViaInbox();
+        boolean puffishLoaded = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("puffish_skills");
 
         for (UUID uuid : run.lootEligibleUuids()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
@@ -224,6 +226,10 @@ public final class DungeonRunLifecycle {
 
             if (rewardPerPlayer > 0L) {
                 net.ledok.arenas_ld.util.EconomyCompat.deliverCurrency(uuid, rewardPerPlayer, "DUNGEON_REWARD");
+            }
+
+            if (xpReward > 0 && puffishLoaded) {
+                net.ledok.arenas_ld.compat.PuffishSkillsCompat.addExperience(player, xpReward);
             }
         }
 

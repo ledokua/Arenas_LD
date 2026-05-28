@@ -374,6 +374,8 @@
   "gui.arenas_ld.dungeon_controller_admin.ui.tier.time_hint": "seconds",
   "gui.arenas_ld.dungeon_controller_admin.ui.tier.reward": "CURRENCY REWARD",
   "gui.arenas_ld.dungeon_controller_admin.ui.tier.reward_hint": "per player on win, paid to Economy inbox",
+  "gui.arenas_ld.dungeon_controller_admin.ui.tier.xp": "SKILL XP PER WIN",
+  "gui.arenas_ld.dungeon_controller_admin.ui.tier.xp_hint": "Puffish skills XP each player gets on win",
   "gui.arenas_ld.dungeon_controller_admin.ui.tier.apply": "APPLY %s TIER",
 
   "gui.arenas_ld.raid_controller_admin.title": "Admin: Raid Controller",

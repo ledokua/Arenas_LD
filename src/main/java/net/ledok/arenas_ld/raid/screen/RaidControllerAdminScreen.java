@@ -17,7 +17,6 @@ import io.wispforest.owo.ui.core.Surface;
 import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
-import net.ledok.arenas_ld.raid.packet.RaidAddInstancePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAdminSetMaxPartySizePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAdminSetRespawnTimePayload;
 import net.ledok.arenas_ld.raid.packet.RaidMoveInstancePayload;
@@ -29,8 +28,6 @@ import net.ledok.arenas_ld.raid.packet.RaidSetDeathPenaltyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
 import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.ledok.arenas_ld.util.InstanceStatus;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -326,8 +323,6 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
             }
         }
 
-        contentArea.child(addCurrentLocationBar());
-        contentArea.child(spacer(4));
         contentArea.child(instancesSummaryBar(running, instances.size(), idleCooldown));
 
         if (instances.isEmpty()) {
@@ -335,7 +330,7 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
             empty.surface(Surface.flat(ROW_BG));
             empty.padding(Insets.of(10));
             empty.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-            empty.child(dimLabel(Component.translatable("gui.arenas_ld.raid_controller_admin.use_add_hint")));
+            empty.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller_admin.use_linker_hint")));
             contentArea.child(empty);
             return;
         }
@@ -350,40 +345,6 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
             list.child(instanceRow(i, instances.get(i)));
         }
         contentArea.child(list);
-    }
-
-    private FlowLayout addCurrentLocationBar() {
-        FlowLayout bar = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
-        bar.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
-        bar.padding(Insets.of(0, 0, 10, 6));
-        bar.gap(8);
-        bar.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        bar.child(accent);
-
-        bar.child(labelLiteral(tr("gui.arenas_ld.raid_controller_admin.ui.add_current"), INK_DIM));
-        bar.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-
-        ButtonComponent addBtn = smallButton(Component.translatable("gui.arenas_ld.raid_controller_admin.ui.action.add_here"), b -> sendAddCurrentLocation());
-        addBtn.horizontalSizing(Sizing.fixed(120));
-        bar.child(addBtn);
-        return bar;
-    }
-
-    private void sendAddCurrentLocation() {
-        footerError = null;
-        Minecraft mc = Minecraft.getInstance();
-        LocalPlayer player = mc.player;
-        if (player == null || player.level() == null) {
-            footerError = Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value").getString();
-            rebuildUi();
-            return;
-        }
-        BlockPos pos = player.blockPosition();
-        String dimension = player.level().dimension().location().toString();
-        ClientPlayNetworking.send(new RaidAddInstancePayload(menu.getBlockPos(), pos, dimension));
     }
 
     private FlowLayout instancesSummaryBar(int running, int total, int idleCooldown) {
@@ -407,9 +368,9 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         FlowLayout hint = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
         hint.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
         hint.gap(3);
-        hint.child(labelLiteral(tr("gui.arenas_ld.raid_controller_admin.ui.summary.hint_pre"), INK_DIM));
-        hint.child(labelLiteral(tr("gui.arenas_ld.raid_controller_admin.ui.summary.hint_link"), ACCENT));
-        hint.child(labelLiteral(tr("gui.arenas_ld.raid_controller_admin.ui.summary.hint_post"), INK_DIM));
+        hint.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.hint_pre"), INK_DIM));
+        hint.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.hint_link"), ACCENT));
+        hint.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.hint_post"), INK_DIM));
         inner.child(hint);
         bar.child(inner);
         return bar;
