@@ -25,6 +25,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     private int maxPartySize;
     private int inviteExpiryTicks;
     private int respawnTimeTicks;
+    private int deathTimePenaltyTicks;
     private boolean lootViaInbox;
     private Map<DifficultyTier, TierConfig> tierConfigs;
     private Map<BlockPos, DungeonControllerAdminData.InstanceRun> runningInstances;
@@ -41,6 +42,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.maxPartySize = data.maxPartySize();
         this.inviteExpiryTicks = data.inviteExpiryTicks();
         this.respawnTimeTicks = data.respawnTimeTicks();
+        this.deathTimePenaltyTicks = data.deathTimePenaltyTicks();
         this.lootViaInbox = data.lootViaInbox();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());
@@ -58,6 +60,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
             controller.getMaxPartySize(),
             controller.getInviteExpiryTicks(),
             controller.getRespawnTimeTicks(),
+            controller.getDeathTimePenaltyTicks(),
             controller.isLootViaInbox(),
             controller.getTierConfigs(),
             Map.of()
@@ -74,6 +77,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     public int getMaxPartySize() { return maxPartySize; }
     public int getInviteExpiryTicks() { return inviteExpiryTicks; }
     public int getRespawnTimeTicks() { return respawnTimeTicks; }
+    public int getDeathTimePenaltyTicks() { return deathTimePenaltyTicks; }
     public boolean isLootViaInbox() { return lootViaInbox; }
     public Map<DifficultyTier, TierConfig> getTierConfigs() { return tierConfigs; }
     public Map<BlockPos, DungeonControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
@@ -88,6 +92,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.maxPartySize = data.maxPartySize();
         this.inviteExpiryTicks = data.inviteExpiryTicks();
         this.respawnTimeTicks = data.respawnTimeTicks();
+        this.deathTimePenaltyTicks = data.deathTimePenaltyTicks();
         this.lootViaInbox = data.lootViaInbox();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());

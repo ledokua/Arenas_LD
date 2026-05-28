@@ -352,6 +352,8 @@
   "gui.arenas_ld.dungeon_controller_admin.ui.general.invite_expiry_hint": "how long invites last",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.respawn_time": "RESPAWN TIME",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.respawn_time_hint": "ticks before a downed player respawns",
+  "gui.arenas_ld.dungeon_controller_admin.ui.general.death_penalty": "DEATH TIME PENALTY",
+  "gui.arenas_ld.dungeon_controller_admin.ui.general.death_penalty_hint": "seconds removed from remaining time per player death",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox": "DELIVER LOOT VIA INBOX",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_desc": "On win, send loot bundles to each player's Economy inbox instead of dropping them into their inventory.",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_on": "INBOX",

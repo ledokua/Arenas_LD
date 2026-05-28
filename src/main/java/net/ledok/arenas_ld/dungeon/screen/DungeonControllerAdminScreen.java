@@ -22,6 +22,7 @@ import net.ledok.arenas_ld.dungeon.packet.SetCloseTimerSecondsPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetCooldownTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetInviteExpiryTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetRespawnTimeTicksPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetDeathTimePenaltyPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetLootViaInboxPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
@@ -96,6 +97,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     private String maxPartyInput;
     private String inviteExpiryInput;
     private String respawnTimeInput;
+    private String deathPenaltyInput;
     private boolean lootViaInboxInput;
 
     private final Map<DifficultyTier, String> healthInputs = new EnumMap<>(DifficultyTier.class);
@@ -488,7 +490,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         contentArea.child(spacer(8));
         contentArea.child(twoColumnRow(
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.respawn_time"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.respawn_time_hint"), "T", 10, 0, 12000, respawnTimeInput, v -> respawnTimeInput = v),
-            spacer(8)
+            stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.death_penalty"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.death_penalty_hint"), "S", 1, 0, 600, deathPenaltyInput, v -> deathPenaltyInput = v)
         ));
         contentArea.child(spacer(10));
 
@@ -998,7 +1000,8 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         Integer maxParty = parseInt(maxPartyInput);
         Integer invite = parseInt(inviteExpiryInput);
         Integer respawn = parseInt(respawnTimeInput);
-        if (cooldown == null || close == null || maxParty == null || invite == null || respawn == null) {
+        Integer death = parseInt(deathPenaltyInput);
+        if (cooldown == null || close == null || maxParty == null || invite == null || respawn == null || death == null) {
             footerError = Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value").getString();
             rebuildUi();
             return;
@@ -1010,6 +1013,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         ClientPlayNetworking.send(new SetMaxPartySizePayload(menu.getBlockPos(), maxParty));
         ClientPlayNetworking.send(new SetInviteExpiryTicksPayload(menu.getBlockPos(), invite * 20));
         ClientPlayNetworking.send(new SetRespawnTimeTicksPayload(menu.getBlockPos(), respawn));
+        ClientPlayNetworking.send(new SetDeathTimePenaltyPayload(menu.getBlockPos(), death * 20));
     }
 
     private void applyTier(DifficultyTier tier) {
@@ -1084,6 +1088,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         maxPartyInput = Integer.toString(menu.getMaxPartySize());
         inviteExpiryInput = Integer.toString(menu.getInviteExpiryTicks() / 20);
         respawnTimeInput = Integer.toString(menu.getRespawnTimeTicks());
+        deathPenaltyInput = Integer.toString(menu.getDeathTimePenaltyTicks() / 20);
         lootViaInboxInput = menu.isLootViaInbox();
 
         for (Map.Entry<DifficultyTier, TierConfig> entry : tierConfigs.entrySet()) {

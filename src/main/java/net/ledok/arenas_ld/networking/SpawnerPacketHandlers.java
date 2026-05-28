@@ -42,6 +42,7 @@ import net.ledok.arenas_ld.dungeon.packet.SetInviteExpiryTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetLootViaInboxPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetRespawnTimeTicksPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetDeathTimePenaltyPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
 import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
@@ -708,6 +709,26 @@ final class SpawnerPacketHandlers {
                 BlockEntity be = world.getBlockEntity(payload.controllerPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     boolean accepted = controller.setRespawnTimeTicks(payload.ticks());
+                    if (!accepted) {
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
+                            .withStyle(ChatFormatting.YELLOW));
+                    }
+                    markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(SetDeathTimePenaltyPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.controllerPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    boolean accepted = controller.setDeathTimePenaltyTicks(payload.ticks());
                     if (!accepted) {
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
                             .withStyle(ChatFormatting.YELLOW));

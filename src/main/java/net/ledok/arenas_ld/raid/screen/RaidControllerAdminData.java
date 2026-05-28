@@ -26,6 +26,7 @@ public record RaidControllerAdminData(
     int maxPartySize,
     int respawnTimeTicks,
     int inviteExpiryTicks,
+    int deathTimePenaltyTicks,
     Map<DifficultyTier, RaidTierConfig> tierConfigs,
     Map<BlockPos, InstanceRun> runningInstances
 ) {
@@ -62,6 +63,7 @@ public record RaidControllerAdminData(
         buf.writeVarInt(data.maxPartySize());
         buf.writeVarInt(data.respawnTimeTicks());
         buf.writeVarInt(data.inviteExpiryTicks());
+        buf.writeVarInt(data.deathTimePenaltyTicks());
 
         buf.writeVarInt(data.tierConfigs().size());
         for (Map.Entry<DifficultyTier, RaidTierConfig> entry : data.tierConfigs().entrySet()) {
@@ -103,6 +105,7 @@ public record RaidControllerAdminData(
         int maxPartySize = buf.readVarInt();
         int respawnTimeTicks = buf.readVarInt();
         int inviteExpiryTicks = buf.readVarInt();
+        int deathTimePenaltyTicks = buf.readVarInt();
 
         int tierConfigSize = buf.readVarInt();
         Map<DifficultyTier, RaidTierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
@@ -132,6 +135,7 @@ public record RaidControllerAdminData(
             maxPartySize,
             respawnTimeTicks,
             inviteExpiryTicks,
+            deathTimePenaltyTicks,
             tierConfigs,
             runningInstances
         );

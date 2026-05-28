@@ -138,6 +138,7 @@ public class RaidControllerBlockEntity extends BlockEntity
     private static final int DEFAULT_INVITE_EXPIRY_TICKS = 30 * 20;
     private static final int DEFAULT_COOLDOWN_TICKS = 5 * 60 * 20;
     private static final int DEFAULT_CLOSE_TIMER_SECONDS = 30;
+    private static final int DEFAULT_DEATH_TIME_PENALTY_TICKS = 10 * 20;
     private static final int OFFLINE_GRACE_TICKS = 5 * 60 * 20;
     private static final int MAX_LEADERBOARD_ENTRIES = 10;
 
@@ -174,6 +175,7 @@ public class RaidControllerBlockEntity extends BlockEntity
     private int inviteExpiryTicks = DEFAULT_INVITE_EXPIRY_TICKS;
     private int cooldownTicks = DEFAULT_COOLDOWN_TICKS;
     private int closeTimerSeconds = DEFAULT_CLOSE_TIMER_SECONDS;
+    private int deathTimePenaltyTicks = DEFAULT_DEATH_TIME_PENALTY_TICKS;
     /** Per-tier raid configs (health/damage multipliers, time limit, enabled, reward currency). */
     private final Map<DifficultyTier, RaidTierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
     /** Instances queued for removal once their current run ends. */
@@ -210,6 +212,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         int inviteExpiryTicks,
         int cooldownTicks,
         int closeTimerSeconds,
+        int deathTimePenaltyTicks,
         List<InstanceEntry> instances,
         List<Lobby> lobbies,
         List<UUID> queuedLobbyIds,
@@ -226,6 +229,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             Codec.INT.optionalFieldOf("inviteExpiryTicks", DEFAULT_INVITE_EXPIRY_TICKS).forGetter(State::inviteExpiryTicks),
             Codec.INT.optionalFieldOf("cooldownTicks", DEFAULT_COOLDOWN_TICKS).forGetter(State::cooldownTicks),
             Codec.INT.optionalFieldOf("closeTimerSeconds", DEFAULT_CLOSE_TIMER_SECONDS).forGetter(State::closeTimerSeconds),
+            Codec.INT.optionalFieldOf("deathTimePenaltyTicks", DEFAULT_DEATH_TIME_PENALTY_TICKS).forGetter(State::deathTimePenaltyTicks),
             InstanceEntry.CODEC.listOf().optionalFieldOf("instances", List.of()).forGetter(State::instances),
             Lobby.CODEC.listOf().optionalFieldOf("lobbies", List.of()).forGetter(State::lobbies),
             UUIDUtil.CODEC.listOf().optionalFieldOf("queuedLobbyIds", List.of()).forGetter(State::queuedLobbyIds),
@@ -343,6 +347,17 @@ public class RaidControllerBlockEntity extends BlockEntity
     public boolean setCloseTimerSeconds(int seconds) {
         if (seconds <= 0) return false;
         this.closeTimerSeconds = seconds;
+        markDirtyAndSync();
+        return true;
+    }
+
+    public int getDeathTimePenaltyTicks() {
+        return deathTimePenaltyTicks;
+    }
+
+    public boolean setDeathTimePenaltyTicks(int ticks) {
+        if (ticks < 0) return false;
+        this.deathTimePenaltyTicks = ticks;
         markDirtyAndSync();
         return true;
     }
@@ -1152,6 +1167,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             inviteExpiryTicks,
             cooldownTicks,
             closeTimerSeconds,
+            deathTimePenaltyTicks,
             instanceEntries,
             new ArrayList<>(lobbies),
             new ArrayList<>(queuedLobbyIds),
@@ -1181,6 +1197,7 @@ public class RaidControllerBlockEntity extends BlockEntity
                     inviteExpiryTicks = state.inviteExpiryTicks();
                     cooldownTicks = state.cooldownTicks();
                     closeTimerSeconds = state.closeTimerSeconds();
+                    deathTimePenaltyTicks = state.deathTimePenaltyTicks();
 
                     instances.clear();
                     for (InstanceEntry ie : state.instances()) {
@@ -1414,6 +1431,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             getMaxPartySize(),
             getRespawnTimeTicks(),
             inviteExpiryTicks,
+            deathTimePenaltyTicks,
             new EnumMap<>(tierConfigs),
             running
         );

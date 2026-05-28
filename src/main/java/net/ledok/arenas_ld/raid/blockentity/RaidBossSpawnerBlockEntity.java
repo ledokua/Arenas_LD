@@ -610,6 +610,21 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         return isBattleActive;
     }
 
+    /**
+     * Resolve the death-time-penalty by querying the linked controller, falling back to the
+     * legacy constant if none is loaded. Controller is the source of truth.
+     */
+    private int resolveDeathTimePenaltyTicks() {
+        if (controllerPos == null || controllerDimension == null) return DEATH_TIME_PENALTY_TICKS;
+        if (!(level instanceof ServerLevel sl) || sl.getServer() == null) return DEATH_TIME_PENALTY_TICKS;
+        ServerLevel controllerLevel = sl.getServer().getLevel(controllerDimension);
+        if (controllerLevel == null) return DEATH_TIME_PENALTY_TICKS;
+        if (controllerLevel.getBlockEntity(controllerPos) instanceof RaidControllerBlockEntity ctrl) {
+            return ctrl.getDeathTimePenaltyTicks();
+        }
+        return DEATH_TIME_PENALTY_TICKS;
+    }
+
     public void handlePlayerDown(ServerPlayer player) {
         if (!isBattleActive || player == null) return;
         if (!isTracked(player.getUUID())) return;
@@ -618,7 +633,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         player.setHealth(1.0F);
         player.setGameMode(GameType.SPECTATOR);
-        battleStartTime -= DEATH_TIME_PENALTY_TICKS;
+        battleStartTime -= resolveDeathTimePenaltyTicks();
         downedPlayers.put(player.getUUID(), new DownedPlayer(DOWNED_RESPAWN_TICKS));
         markDirtyAndSync();
     }
@@ -637,7 +652,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         disconnectedPlayers.add(player.getUUID());
         if (!downedPlayers.containsKey(player.getUUID())) {
             if (battleTimeLimitTicks > 0) {
-                battleStartTime -= DEATH_TIME_PENALTY_TICKS;
+                battleStartTime -= resolveDeathTimePenaltyTicks();
             }
             downedPlayers.put(player.getUUID(), new DownedPlayer(DOWNED_RESPAWN_TICKS));
         }

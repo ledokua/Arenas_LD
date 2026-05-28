@@ -18,6 +18,7 @@ import net.ledok.arenas_ld.raid.packet.RaidSetCloseTimerPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetCooldownPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetDeathPenaltyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidCreateLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineJoinRequestPayload;
@@ -355,6 +356,18 @@ public final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
                 if (controller == null) return;
                 controller.setTierConfig(payload.tier(), payload.config());
+                broadcastRaidControllerSnapshot(player, controller);
+            })
+        );
+
+        // ── Admin: Set Death Time Penalty ─────────────────────────────────────
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetDeathPenaltyPayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) return;
+                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                if (controller == null) return;
+                controller.setDeathTimePenaltyTicks(payload.ticks());
                 broadcastRaidControllerSnapshot(player, controller);
             })
         );

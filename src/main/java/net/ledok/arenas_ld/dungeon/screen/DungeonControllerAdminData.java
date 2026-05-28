@@ -28,6 +28,7 @@ public record DungeonControllerAdminData(
     int maxPartySize,
     int inviteExpiryTicks,
     int respawnTimeTicks,
+    int deathTimePenaltyTicks,
     boolean lootViaInbox,
     Map<DifficultyTier, TierConfig> tierConfigs,
     Map<BlockPos, InstanceRun> runningInstances
@@ -69,6 +70,7 @@ public record DungeonControllerAdminData(
         buf.writeVarInt(data.maxPartySize());
         buf.writeVarInt(data.inviteExpiryTicks());
         buf.writeVarInt(data.respawnTimeTicks());
+        buf.writeVarInt(data.deathTimePenaltyTicks());
         buf.writeBoolean(data.lootViaInbox());
 
         buf.writeVarInt(data.tierConfigs().size());
@@ -119,6 +121,7 @@ public record DungeonControllerAdminData(
         int maxPartySize = buf.readVarInt();
         int inviteExpiryTicks = buf.readVarInt();
         int respawnTimeTicks = buf.readVarInt();
+        int deathTimePenaltyTicks = buf.readVarInt();
         boolean lootViaInbox = buf.readBoolean();
 
         int tierConfigSize = buf.readVarInt();
@@ -151,6 +154,7 @@ public record DungeonControllerAdminData(
             maxPartySize,
             inviteExpiryTicks,
             respawnTimeTicks,
+            deathTimePenaltyTicks,
             lootViaInbox,
             tierConfigs,
             runningInstances

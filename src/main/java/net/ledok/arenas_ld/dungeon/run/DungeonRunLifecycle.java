@@ -473,6 +473,10 @@ public final class DungeonRunLifecycle {
 
         run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
         run.setDowned(new DownedPlayer(player.getUUID(), controller.getRespawnTimeTicks()));
+        int penalty = controller.getDeathTimePenaltyTicks();
+        if (penalty > 0) {
+            run.setDungeonTimerTicks(Math.max(0, run.dungeonTimerTicks() - penalty));
+        }
         player.setGameMode(GameType.SPECTATOR);
         player.setHealth(1.0F);
         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.you_are_downed"));
