@@ -608,7 +608,10 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         ));
 
         contentArea.child(spacer(6));
-        contentArea.child(rewardCurrencyField(tier, config));
+        contentArea.child(twoColumnRow(
+            rewardCurrencyField(tier, config),
+            Containers.verticalFlow(Sizing.fill(100), Sizing.content())
+        ));
 
         contentArea.child(spacer(8));
         FlowLayout applyRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
