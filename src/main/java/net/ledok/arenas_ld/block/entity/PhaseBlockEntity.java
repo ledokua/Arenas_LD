@@ -71,7 +71,7 @@ public class PhaseBlockEntity extends BlockEntity {
             }
             BlockEntity spawnerEntity = level.getBlockEntity(spawnerPos);
             if (spawnerEntity instanceof RaidBossSpawnerBlockEntity bossSpawner) {
-                if (bossSpawner.isBattleActive) {
+                if (bossSpawner.isRaidRunning()) {
                     return false;
                 }
             } else {

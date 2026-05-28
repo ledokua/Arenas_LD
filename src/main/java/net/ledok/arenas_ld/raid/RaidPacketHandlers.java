@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import net.ledok.arenas_ld.networking.ModPackets;
 import static net.ledok.arenas_ld.networking.ModPackets.*;
 
 public final class RaidPacketHandlers {

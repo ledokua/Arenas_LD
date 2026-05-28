@@ -1,5 +1,6 @@
 package net.ledok.arenas_ld.util;
 
+import net.ledok.arenas_ld.dungeon.DungeonContext;
 import net.minecraft.core.BlockPos;
 import java.util.List;
 
