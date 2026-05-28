@@ -195,6 +195,9 @@ public final class DungeonRunLifecycle {
         int runDurationSeconds = (int) (runDurationTicks / 20);
         String lootTableId = run.resolvedTierConfig().perPlayerLootTable();
         long rewardPerPlayer = run.resolvedTierConfig().rewardCurrency();
+        if (run.hardcoreEnabled()) {
+            rewardPerPlayer *= 2;
+        }
         boolean lootViaInbox = controller.isLootViaInbox();
 
         for (UUID uuid : run.lootEligibleUuids()) {
@@ -469,7 +472,7 @@ public final class DungeonRunLifecycle {
         }
 
         run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
-        run.setDowned(new DownedPlayer(player.getUUID(), 40));
+        run.setDowned(new DownedPlayer(player.getUUID(), controller.getRespawnTimeTicks()));
         player.setGameMode(GameType.SPECTATOR);
         player.setHealth(1.0F);
         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.you_are_downed"));

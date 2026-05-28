@@ -350,6 +350,8 @@
   "gui.arenas_ld.dungeon_controller_admin.ui.general.max_party_hint": "players per lobby",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.invite_expiry": "INVITE EXPIRY",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.invite_expiry_hint": "how long invites last",
+  "gui.arenas_ld.dungeon_controller_admin.ui.general.respawn_time": "RESPAWN TIME",
+  "gui.arenas_ld.dungeon_controller_admin.ui.general.respawn_time_hint": "ticks before a downed player respawns",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox": "DELIVER LOOT VIA INBOX",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_desc": "On win, send loot bundles to each player's Economy inbox instead of dropping them into their inventory.",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_on": "INBOX",

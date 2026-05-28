@@ -348,6 +348,8 @@
   "gui.arenas_ld.dungeon_controller_admin.ui.general.max_party_hint": "гравців на лобі",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.invite_expiry": "ТЕРМІН ЗАПРОШЕННЯ",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.invite_expiry_hint": "як довго діють запрошення",
+  "gui.arenas_ld.dungeon_controller_admin.ui.general.respawn_time": "ЧАС ВІДРОДЖЕННЯ",
+  "gui.arenas_ld.dungeon_controller_admin.ui.general.respawn_time_hint": "тики до відродження впалого гравця",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox": "ДОСТАВКА ЗДОБИЧІ ЧЕРЕЗ INBOX",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_desc": "Після перемоги — надсилати пакунки здобичі до Economy inbox кожного гравця замість додавання до інвентарю.",
   "gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_on": "INBOX",

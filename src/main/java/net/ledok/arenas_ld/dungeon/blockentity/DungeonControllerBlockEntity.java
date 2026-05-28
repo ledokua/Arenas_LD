@@ -51,6 +51,7 @@ import java.util.Optional;
 public class DungeonControllerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<DungeonControllerData> {
     private static final int DEFAULT_COOLDOWN_TICKS = 5 * 60 * 20;
     private static final int DEFAULT_CLOSE_TIMER_SECONDS = 30;
+    private static final int DEFAULT_RESPAWN_TIME_TICKS = 40;
     private static final int DEFAULT_MAX_PARTY_SIZE = 4;
     private static final int DEFAULT_INVITE_EXPIRY_TICKS = 30 * 20;
     private static final int DEFAULT_DISCONNECT_GRACE_TICKS = 5 * 60 * 20;
@@ -60,6 +61,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private final Map<DifficultyTier, TierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
     private int cooldownTicks = DEFAULT_COOLDOWN_TICKS;
     private int closeTimerSeconds = DEFAULT_CLOSE_TIMER_SECONDS;
+    private int respawnTimeTicks = DEFAULT_RESPAWN_TIME_TICKS;
     private int maxPartySize = DEFAULT_MAX_PARTY_SIZE;
     private int inviteExpiryTicks = DEFAULT_INVITE_EXPIRY_TICKS;
     private int disconnectGraceTicks = DEFAULT_DISCONNECT_GRACE_TICKS;
@@ -103,6 +105,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     public int getCloseTimerSeconds() {
         return closeTimerSeconds;
+    }
+
+    public int getRespawnTimeTicks() {
+        return respawnTimeTicks;
     }
 
     public int getMaxPartySize() {
@@ -180,6 +186,13 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     public boolean setCloseTimerSeconds(int closeTimerSeconds) {
         if (closeTimerSeconds <= 0) return false;
         this.closeTimerSeconds = closeTimerSeconds;
+        setChanged();
+        return true;
+    }
+
+    public boolean setRespawnTimeTicks(int ticks) {
+        if (ticks < 0) return false;
+        this.respawnTimeTicks = ticks;
         setChanged();
         return true;
     }
@@ -856,6 +869,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         int inviteExpiryTicks,
         int disconnectGraceTicks,
         int lobbyOfflineTimeoutTicks,
+        int respawnTimeTicks,
         List<InstanceCooldown> instanceCooldowns,
         List<InstanceRunEntry> activeRuns,
         List<BlockPos> pendingInstanceRemovals,
@@ -874,6 +888,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             Codec.INT.fieldOf("inviteExpiryTicks").forGetter(State::inviteExpiryTicks),
             Codec.INT.optionalFieldOf("disconnectGraceTicks", DEFAULT_DISCONNECT_GRACE_TICKS).forGetter(State::disconnectGraceTicks),
             Codec.INT.optionalFieldOf("lobbyOfflineTimeoutTicks", DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS).forGetter(State::lobbyOfflineTimeoutTicks),
+            Codec.INT.optionalFieldOf("respawnTimeTicks", DEFAULT_RESPAWN_TIME_TICKS).forGetter(State::respawnTimeTicks),
             InstanceCooldown.CODEC.listOf().fieldOf("instanceCooldowns").forGetter(State::instanceCooldowns),
             InstanceRunEntry.CODEC.listOf().fieldOf("activeRuns").forGetter(State::activeRuns),
             BlockPos.CODEC.listOf().fieldOf("pendingInstanceRemovals").forGetter(State::pendingInstanceRemovals),
@@ -904,6 +919,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             inviteExpiryTicks,
             disconnectGraceTicks,
             lobbyOfflineTimeoutTicks,
+            respawnTimeTicks,
             cooldowns,
             runs,
             new ArrayList<>(pendingInstanceRemovals),
@@ -936,6 +952,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                     inviteExpiryTicks = state.inviteExpiryTicks();
                     disconnectGraceTicks = state.disconnectGraceTicks();
                     lobbyOfflineTimeoutTicks = state.lobbyOfflineTimeoutTicks();
+                    respawnTimeTicks = state.respawnTimeTicks();
                     instanceCooldownTimers.clear();
                     for (InstanceCooldown c : state.instanceCooldowns()) {
                         instanceCooldownTimers.put(c.pos(), c.ticks());
