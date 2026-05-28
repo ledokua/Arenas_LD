@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.block.entity;
 
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.PhaseBlock;
+import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -69,7 +70,7 @@ public class PhaseBlockEntity extends BlockEntity {
                 return false;
             }
             BlockEntity spawnerEntity = level.getBlockEntity(spawnerPos);
-            if (spawnerEntity instanceof BossSpawnerBlockEntity bossSpawner) {
+            if (spawnerEntity instanceof RaidBossSpawnerBlockEntity bossSpawner) {
                 if (bossSpawner.isBattleActive) {
                     return false;
                 }

@@ -438,7 +438,7 @@ public final class RaidPacketHandlers {
 
     /**
      * Builds the legacy {@link RaidControllerInfoPayload} from the new block-entity state so
-     * the old {@link net.ledok.arenas_ld.screen.RaidControllerScreen} keeps working.
+     * the old {@link net.ledok.arenas_ld.raid.screen.RaidControllerScreen} keeps working.
      */
     private static RaidControllerInfoPayload buildRaidControllerInfoPayload(
             ServerPlayer player,
