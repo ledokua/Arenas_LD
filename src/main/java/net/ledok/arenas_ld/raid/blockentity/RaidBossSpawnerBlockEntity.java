@@ -41,7 +41,6 @@ import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
-import net.minecraft.world.BossEvent;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -88,14 +87,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         )),
         new EquipmentData()
     );
-
-    // --- Runtime: spawner-local fields not yet migrated to RaidRun ---
-    private final ServerBossEvent raidTimerBossBar = (ServerBossEvent) new ServerBossEvent(
-            Component.translatable("gui.arenas_ld.raid_timer"),
-            BossEvent.BossBarColor.YELLOW,
-            BossEvent.BossBarOverlay.PROGRESS
-    );
-    protected int respawnCooldown = 0;
 
     public RaidBossSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.RAID_BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
@@ -199,8 +190,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         RaidRun run = be.findRun();
         if (run != null) {
             be.handleActiveBattle(serverLevel, run);
-        } else {
-            be.handleIdleState();
         }
     }
 
@@ -208,12 +197,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     public void setRemoved() {
         ArenasLdMod.RAID_BOSS_MANAGER.unregisterSpawner(this);
         super.setRemoved();
-    }
-
-    protected void handleIdleState() {
-        if (respawnCooldown > 0) {
-            respawnCooldown--;
-        }
     }
 
     protected void handleActiveBattle(ServerLevel world, RaidRun run) {
@@ -345,20 +328,23 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         RaidTierConfig runTier = run != null ? run.resolvedTierConfig() : RaidTierConfig.defaultFor(diff);
         int raidTimeTicks = Math.max(0, runTier.raidTimeSeconds() * 20);
 
+        ServerBossEvent bossBar = run != null ? RaidRunLifecycle.ensureRaidTimerBossBar(run) : null;
         for (ServerPlayer p : players) {
             if (run != null) {
                 RaidRunLifecycle.addParticipant(run, new RunParticipant(
                     p.getUUID(), p.getGameProfile().getName(), ParticipantStatus.ACTIVE, now));
                 RaidRunLifecycle.setReturnPoint(run, p.getUUID(), PlayerReturnPoint.capture(p));
             }
-            raidTimerBossBar.addPlayer(p);
+            if (bossBar != null) bossBar.addPlayer(p);
         }
-        if (raidTimeTicks > 0) {
-            raidTimerBossBar.setVisible(true);
-            raidTimerBossBar.setProgress(1.0f);
-            raidTimerBossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(raidTimeTicks / 20)));
-        } else {
-            raidTimerBossBar.setVisible(false);
+        if (bossBar != null) {
+            if (raidTimeTicks > 0) {
+                bossBar.setVisible(true);
+                bossBar.setProgress(1.0f);
+                bossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(raidTimeTicks / 20)));
+            } else {
+                bossBar.setVisible(false);
+            }
         }
 
         if (boss instanceof LivingEntity livingBoss) {
@@ -424,7 +410,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             }
         }
 
-        this.respawnCooldown = 0;
         if (run != null) {
             RaidRunLifecycle.setBossRef(run, boss.getUUID(), world.dimension());
             RaidRunLifecycle.setBoundsTickCounter(run, 0);
@@ -528,10 +513,9 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             }
         }
 
-        // 1-tick safety buffer so controller state can transition instance status first.
-        this.respawnCooldown = 1;
-        this.raidTimerBossBar.removeAllPlayers();
-        this.raidTimerBossBar.setVisible(false);
+        if (run != null) {
+            RaidRunLifecycle.clearRaidTimerBossBar(run);
+        }
         ArenasLdMod.RAID_BOSS_MANAGER.unregisterSpawner(this);
         markDirtyAndSync();
         world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
@@ -692,23 +676,24 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     }
 
     private void updateRaidTimerBossBar(ServerLevel world, RaidRun run) {
+        ServerBossEvent bossBar = RaidRunLifecycle.ensureRaidTimerBossBar(run);
         int raidTimeTicks = Math.max(0, run.resolvedTierConfig().raidTimeSeconds() * 20);
         if (raidTimeTicks <= 0) {
-            raidTimerBossBar.setVisible(false);
+            bossBar.setVisible(false);
             return;
         }
-        if (!raidTimerBossBar.isVisible()) {
-            raidTimerBossBar.setVisible(true);
+        if (!bossBar.isVisible()) {
+            bossBar.setVisible(true);
         }
         int remainingTicks = Math.max(0, run.timerTicks());
         float progress = (float) remainingTicks / (float) raidTimeTicks;
-        raidTimerBossBar.setProgress(Mth.clamp(progress, 0.0f, 1.0f));
-        raidTimerBossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(remainingTicks / 20)));
+        bossBar.setProgress(Mth.clamp(progress, 0.0f, 1.0f));
+        bossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(remainingTicks / 20)));
 
         for (UUID uuid : run.participants().keySet()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            if (player != null && !raidTimerBossBar.getPlayers().contains(player)) {
-                raidTimerBossBar.addPlayer(player);
+            if (player != null && !bossBar.getPlayers().contains(player)) {
+                bossBar.addPlayer(player);
             }
         }
     }
@@ -737,7 +722,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         nbt.putLong("ExitPosition", exitPosition.asLong());
         nbt.putString("ExitDimension", exitDimension.location().toString());
         nbt.putLongArray("RespawnPointOffsets", respawnPointOffsets.stream().mapToLong(BlockPos::asLong).toArray());
-        nbt.putInt("RespawnCooldown", respawnCooldown);
     }
 
     @Override
@@ -762,8 +746,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
                 respawnPointOffsets.add(BlockPos.of(posLong));
             }
         }
-
-        respawnCooldown = nbt.getInt("RespawnCooldown");
 
         if (nbt.contains("EntityDefinition", Tag.TAG_COMPOUND)) {
             EntityDefinition.CODEC.parse(NbtOps.INSTANCE, nbt.getCompound("EntityDefinition"))

@@ -6,9 +6,12 @@ import net.ledok.arenas_ld.dungeon.run.RunParticipant;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity.ControllerKey;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.BossEvent;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jetbrains.annotations.Nullable;
@@ -125,5 +128,35 @@ public final class RaidRunLifecycle {
 
     public static void setBoundsTickCounter(RaidRun run, int ticks) {
         run.setBoundsTickCounter(ticks);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Raid timer boss bar (transient, lazily created)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Returns the raid-timer boss bar bound to this run, creating it on first call.
+     * The bar is transient (not persisted) so it gets recreated after a server restart.
+     */
+    public static ServerBossEvent ensureRaidTimerBossBar(RaidRun run) {
+        ServerBossEvent bar = run.getRaidTimerBossBar();
+        if (bar == null) {
+            bar = new ServerBossEvent(
+                Component.translatable("gui.arenas_ld.raid_timer"),
+                BossEvent.BossBarColor.YELLOW,
+                BossEvent.BossBarOverlay.PROGRESS
+            );
+            run.setRaidTimerBossBar(bar);
+        }
+        return bar;
+    }
+
+    /** Hide the bar (if present) and detach it from the run. Safe when bar is already null. */
+    public static void clearRaidTimerBossBar(RaidRun run) {
+        ServerBossEvent bar = run.getRaidTimerBossBar();
+        if (bar == null) return;
+        bar.removeAllPlayers();
+        bar.setVisible(false);
+        run.setRaidTimerBossBar(null);
     }
 }
