@@ -7,37 +7,6 @@ import net.minecraft.core.UUIDUtil;
 import java.util.UUID;
 
 /**
- * Status of a player within an active dungeon run. Determines loot eligibility at win.
- *
- * <p>Loot eligibility = status != {@link #REMOVED}. So {@link #ACTIVE}, {@link #DOWNED}, and
- * {@link #DISCONNECTED} all receive loot bundles on win; {@link #REMOVED} (hardcore death or
- * explicit leave) does not.
- */
-enum ParticipantStatus {
-    /** Alive, in the dungeon, surviving. */
-    ACTIVE,
-    /** In spectator mode, will respawn after a countdown (see {@link DownedPlayer}). */
-    DOWNED,
-    /** Logged out; may rejoin within the grace period. Counts for loot at win. */
-    DISCONNECTED,
-    /** Hardcore death or explicit leave. Will not rejoin. No loot at win. */
-    REMOVED;
-
-    public static final Codec<ParticipantStatus> CODEC = Codec.STRING.xmap(
-        ParticipantStatus::fromStringOrDefault,
-        Enum::name
-    );
-
-    private static ParticipantStatus fromStringOrDefault(String name) {
-        try {
-            return ParticipantStatus.valueOf(name);
-        } catch (IllegalArgumentException e) {
-            return REMOVED;
-        }
-    }
-}
-
-/**
  * A player's participation record within a dungeon run.
  *
  * <p>Immutable: status transitions use {@link #withStatus(ParticipantStatus, long)} which
