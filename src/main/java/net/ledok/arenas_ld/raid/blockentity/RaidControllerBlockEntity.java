@@ -1383,6 +1383,42 @@ public class RaidControllerBlockEntity extends BlockEntity
         );
     }
 
+    /** Build the admin-screen snapshot. Includes everything needed by RaidControllerAdminScreen. */
+    public net.ledok.arenas_ld.raid.screen.RaidControllerAdminData buildAdminData() {
+        List<net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.InstanceEntry> instanceEntries = new ArrayList<>();
+        for (RaidInstanceState inst : instances) {
+            instanceEntries.add(new net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.InstanceEntry(
+                inst.spawnerPos(),
+                inst.dimension().location().toString(),
+                inst.status(),
+                inst.cooldownTicksRemaining()
+            ));
+        }
+
+        // Running instances: spawnerPos → (tier, ownerName-or-lobby-label).
+        // The raid system tracks lobbyToInstance — invert it for the spawnerPos key.
+        Map<BlockPos, net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.InstanceRun> running = new HashMap<>();
+        for (Map.Entry<UUID, BlockPos> entry : lobbyToInstance.entrySet()) {
+            Lobby lobby = getLobbyById(entry.getKey());
+            if (lobby == null) continue;
+            String owner = lobby.ownerName() == null ? "" : lobby.ownerName();
+            running.put(entry.getValue(), new net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.InstanceRun(lobby.selectedTier(), owner));
+        }
+
+        return new net.ledok.arenas_ld.raid.screen.RaidControllerAdminData(
+            worldPosition,
+            instanceEntries,
+            new HashSet<>(pendingInstanceRemovals),
+            cooldownTicks,
+            closeTimerSeconds,
+            getMaxPartySize(),
+            getRespawnTimeTicks(),
+            inviteExpiryTicks,
+            new EnumMap<>(tierConfigs),
+            running
+        );
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     //  Helpers
     // ─────────────────────────────────────────────────────────────────────────

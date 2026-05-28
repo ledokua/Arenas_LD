@@ -58,6 +58,10 @@ public class ModScreenHandlers {
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller_admin"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreenHandler::new, net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminData.STREAM_CODEC));
 
+    public static final MenuType<net.ledok.arenas_ld.raid.screen.RaidControllerAdminScreenHandler> RAID_CONTROLLER_ADMIN_SCREEN_HANDLER =
+            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_controller_admin"),
+                    new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.raid.screen.RaidControllerAdminScreenHandler::new, net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.STREAM_CODEC));
+
     public static void initialize() {
     }
 }

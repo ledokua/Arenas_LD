@@ -530,8 +530,13 @@ public final class RaidPacketHandlers {
 
     public static void broadcastRaidControllerSnapshot(ServerPlayer actor, RaidControllerBlockEntity controller) {
         if (actor.server == null) return;
+        net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload adminSnap =
+            new net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload(controller.buildAdminData());
         for (net.minecraft.server.level.ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
             ServerPlayNetworking.send(target, new RaidControllerSnapshotPayload(controller.getScreenOpeningData(target)));
+            if (target.hasPermissions(2)) {
+                ServerPlayNetworking.send(target, adminSnap);
+            }
         }
     }
 

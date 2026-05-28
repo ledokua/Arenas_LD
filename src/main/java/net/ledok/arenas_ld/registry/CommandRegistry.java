@@ -5,6 +5,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.config.ArenasLdConfig;
 import net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminMenuProvider;
+import net.ledok.arenas_ld.raid.screen.RaidControllerAdminMenuProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -46,6 +47,23 @@ public class CommandRegistry {
                             return 0;
                         }
                         player.openMenu(new DungeonControllerAdminMenuProvider(controller));
+                        return 1;
+                    })))
+            .then(literal("raid")
+                .then(literal("admin")
+                    .requires(source -> source.hasPermission(2))
+                    .executes(context -> {
+                        ServerPlayer player = context.getSource().getPlayerOrException();
+                        HitResult hitResult = player.pick(10.0D, 0.0F, false);
+                        if (hitResult.getType() != HitResult.Type.BLOCK || !(hitResult instanceof BlockHitResult hit)) {
+                            context.getSource().sendFailure(Component.translatable("gui.arenas_ld.raid_controller_admin.command.failure.not_looking"));
+                            return 0;
+                        }
+                        if (!(player.level().getBlockEntity(hit.getBlockPos()) instanceof net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity controller)) {
+                            context.getSource().sendFailure(Component.translatable("gui.arenas_ld.raid_controller_admin.command.failure.wrong_block"));
+                            return 0;
+                        }
+                        player.openMenu(new RaidControllerAdminMenuProvider(controller));
                         return 1;
                     })));
 

@@ -42,6 +42,7 @@ import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptJoinRequestPayload;
 import net.ledok.arenas_ld.raid.packet.RaidAddInstancePayload;
+import net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload;
 import net.ledok.arenas_ld.raid.packet.RaidAdminSetMaxPartySizePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAdminSetRespawnTimePayload;
 import net.ledok.arenas_ld.raid.packet.RaidMoveInstancePayload;
@@ -163,5 +164,6 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playS2C().register(MobSpawnerSnapshotPayload.TYPE, MobSpawnerSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(DungeonBossSpawnerSnapshotPayload.TYPE, DungeonBossSpawnerSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(DungeonControllerAdminSnapshotPayload.TYPE, DungeonControllerAdminSnapshotPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(RaidControllerAdminSnapshotPayload.TYPE, RaidControllerAdminSnapshotPayload.STREAM_CODEC);
     }
 }
