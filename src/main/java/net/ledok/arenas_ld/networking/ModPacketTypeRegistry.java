@@ -39,6 +39,24 @@ import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
+import net.ledok.arenas_ld.raid.packet.RaidAcceptInvitePayload;
+import net.ledok.arenas_ld.raid.packet.RaidAcceptJoinRequestPayload;
+import net.ledok.arenas_ld.raid.packet.RaidAdminSetMaxPartySizePayload;
+import net.ledok.arenas_ld.raid.packet.RaidAdminSetRespawnTimePayload;
+import net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload;
+import net.ledok.arenas_ld.raid.packet.RaidCreateLobbyPayload;
+import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
+import net.ledok.arenas_ld.raid.packet.RaidDeclineJoinRequestPayload;
+import net.ledok.arenas_ld.raid.packet.RaidInvitePlayerPayload;
+import net.ledok.arenas_ld.raid.packet.RaidJoinLobbyPayload;
+import net.ledok.arenas_ld.raid.packet.RaidKickPlayerPayload;
+import net.ledok.arenas_ld.raid.packet.RaidLeaveLobbyPayload;
+import net.ledok.arenas_ld.raid.packet.RaidRequestJoinPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetHardcorePayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetTierPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetVisibilityPayload;
+import net.ledok.arenas_ld.raid.packet.RaidStartPayload;
+import net.ledok.arenas_ld.raid.packet.RaidToggleReadyPayload;
 
 import static net.ledok.arenas_ld.networking.ModPackets.*;
 
@@ -102,10 +120,29 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(SetInviteExpiryTicksPayload.TYPE, SetInviteExpiryTicksPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetLootViaInboxPayload.TYPE, SetLootViaInboxPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetTierConfigPayload.TYPE, SetTierConfigPayload.STREAM_CODEC);
+        // New raid packets
+        PayloadTypeRegistry.playC2S().register(RaidCreateLobbyPayload.TYPE, RaidCreateLobbyPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidLeaveLobbyPayload.TYPE, RaidLeaveLobbyPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidStartPayload.TYPE, RaidStartPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidInvitePlayerPayload.TYPE, RaidInvitePlayerPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidAcceptInvitePayload.TYPE, RaidAcceptInvitePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidDeclineInvitePayload.TYPE, RaidDeclineInvitePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidKickPlayerPayload.TYPE, RaidKickPlayerPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidSetTierPayload.TYPE, RaidSetTierPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidSetHardcorePayload.TYPE, RaidSetHardcorePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidSetVisibilityPayload.TYPE, RaidSetVisibilityPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidToggleReadyPayload.TYPE, RaidToggleReadyPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidJoinLobbyPayload.TYPE, RaidJoinLobbyPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidRequestJoinPayload.TYPE, RaidRequestJoinPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidAcceptJoinRequestPayload.TYPE, RaidAcceptJoinRequestPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidDeclineJoinRequestPayload.TYPE, RaidDeclineJoinRequestPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidAdminSetRespawnTimePayload.TYPE, RaidAdminSetRespawnTimePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidAdminSetMaxPartySizePayload.TYPE, RaidAdminSetMaxPartySizePayload.STREAM_CODEC);
     }
 
     static void registerS2CTypes() {
         PayloadTypeRegistry.playS2C().register(RaidControllerInfoPayload.TYPE, RaidControllerInfoPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(RaidControllerSnapshotPayload.TYPE, RaidControllerSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(MobArenaControllerInfoPayload.TYPE, MobArenaControllerInfoPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(DungeonControllerSnapshotPayload.TYPE, DungeonControllerSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RoomControllerSnapshotPayload.TYPE, RoomControllerSnapshotPayload.STREAM_CODEC);

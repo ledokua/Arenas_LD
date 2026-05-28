@@ -9,6 +9,8 @@ import net.ledok.arenas_ld.dungeon.packet.DungeonControllerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.MobSpawnerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomControllerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.screen.RoomControllerScreen;
+import net.ledok.arenas_ld.networking.ModPackets;
+import net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload;
 import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.screen.*;
 import net.minecraft.client.Minecraft;
@@ -66,6 +68,27 @@ public class ArenasLdClient implements ClientModInitializer {
                 if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreen screen
                     && screen.matchesController(payload.data().blockPos())) {
                     screen.applyData(payload.data());
+                }
+            }));
+        ClientPlayNetworking.registerGlobalReceiver(ModPackets.RaidControllerInfoPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> {
+                if (Minecraft.getInstance().screen instanceof RaidControllerScreen screen
+                        && payload.pos().equals(screen.getMenu().getPos())) {
+                    screen.applyServerInfo(payload);
+                }
+            }));
+        ClientPlayNetworking.registerGlobalReceiver(ModPackets.MobArenaControllerInfoPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> {
+                if (Minecraft.getInstance().screen instanceof MobArenaControllerScreen screen
+                        && payload.pos().equals(screen.getMenu().getPos())) {
+                    screen.applyServerInfo(payload);
+                }
+            }));
+        ClientPlayNetworking.registerGlobalReceiver(RaidControllerSnapshotPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> {
+                if (Minecraft.getInstance().screen instanceof RaidControllerScreen screen
+                        && payload.data().blockPos().equals(screen.getMenu().getPos())) {
+                    screen.getMenu().applyData(payload.data());
                 }
             }));
     }
