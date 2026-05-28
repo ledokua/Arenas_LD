@@ -516,10 +516,33 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private void completeWave(ServerLevel world) {
         broadcastArenaSummary(world, true, currentWave);
         distributeRewards(world);
+        distributeCurrencyReward(world);
         timeBetweenWavesTicks = timeBetweenWaves * 20;
         reviveSpectators(world);
         applyWaveCompletionBonus(world);
         markDirtyAndSync();
+    }
+
+    private void distributeCurrencyReward(ServerLevel world) {
+        if (controllerPos == null || controllerDimension == null) {
+            return;
+        }
+        ServerLevel controllerLevel = world.getServer().getLevel(controllerDimension);
+        if (controllerLevel == null) {
+            return;
+        }
+        if (!(controllerLevel.getBlockEntity(controllerPos) instanceof MobArenaControllerBlockEntity controller)) {
+            return;
+        }
+        long perPlayer = controller.getRewardCurrencyPerWave();
+        if (perPlayer <= 0L) {
+            return;
+        }
+        int multiplier = hardcoreEnabled ? 2 : 1;
+        long amount = perPlayer * multiplier;
+        for (UUID playerId : participatingPlayers) {
+            net.ledok.arenas_ld.util.EconomyCompat.deliverCurrency(playerId, amount, "MOB_ARENA_WAVE_REWARD");
+        }
     }
 
     private void applyWaveCompletionBonus(ServerLevel world) {

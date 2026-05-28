@@ -34,5 +34,8 @@
     "minecraft": "${minecraft_version}",
     "busylib": "*",
     "owo": ">=0.12.15"
+  },
+  "suggests": {
+    "economy_ld": "*"
   }
 }

@@ -31,7 +31,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public final class DungeonRunLifecycle {
-    public static final String BUSY_REASON = "arenas_ld:dungeon_v2";
+    public static final String BUSY_REASON = net.ledok.busylib.BusyReasons.IN_DUNGEON;
 
     private DungeonRunLifecycle() {
     }
@@ -194,6 +194,7 @@ public final class DungeonRunLifecycle {
         long runDurationTicks = world.getGameTime() - run.startTick();
         int runDurationSeconds = (int) (runDurationTicks / 20);
         String lootTableId = run.resolvedTierConfig().perPlayerLootTable();
+        long rewardPerPlayer = controller.getRewardCurrencyPerPlayer();
 
         for (UUID uuid : run.lootEligibleUuids()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
@@ -211,6 +212,10 @@ public final class DungeonRunLifecycle {
                 if (!player.getInventory().add(bundle)) {
                     player.drop(bundle, false);
                 }
+            }
+
+            if (rewardPerPlayer > 0L) {
+                net.ledok.arenas_ld.util.EconomyCompat.deliverCurrency(uuid, rewardPerPlayer, "DUNGEON_REWARD");
             }
         }
 

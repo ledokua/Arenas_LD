@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.registry;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.config.ArenasLdConfig;
@@ -10,7 +11,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.level.block.entity.BlockEntity;
 
+import static net.minecraft.commands.Commands.argument;
 import static net.minecraft.commands.Commands.literal;
 
 public class CommandRegistry {
@@ -47,6 +50,36 @@ public class CommandRegistry {
                         }
                         player.openMenu(new DungeonControllerAdminMenuProvider(controller));
                         return 1;
+                    })))
+            .then(literal("setReward")
+                .requires(source -> source.hasPermission(2))
+                .then(argument("amount", LongArgumentType.longArg(0L))
+                    .executes(context -> {
+                        ServerPlayer player = context.getSource().getPlayerOrException();
+                        long amount = LongArgumentType.getLong(context, "amount");
+                        HitResult hitResult = player.pick(10.0D, 0.0F, false);
+                        if (hitResult.getType() != HitResult.Type.BLOCK || !(hitResult instanceof BlockHitResult hit)) {
+                            context.getSource().sendFailure(Component.translatable("message.arenas_ld.setreward.not_looking"));
+                            return 0;
+                        }
+                        BlockEntity be = player.level().getBlockEntity(hit.getBlockPos());
+                        if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity dungeon) {
+                            dungeon.setRewardCurrencyPerPlayer(amount);
+                            context.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.setreward.dungeon", amount), true);
+                            return 1;
+                        }
+                        if (be instanceof net.ledok.arenas_ld.block.entity.RaidControllerBlockEntity raid) {
+                            raid.setRewardCurrencyPerPlayer(amount);
+                            context.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.setreward.raid", amount), true);
+                            return 1;
+                        }
+                        if (be instanceof net.ledok.arenas_ld.block.entity.MobArenaControllerBlockEntity mobArena) {
+                            mobArena.setRewardCurrencyPerWave(amount);
+                            context.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.setreward.mob_arena", amount), true);
+                            return 1;
+                        }
+                        context.getSource().sendFailure(Component.translatable("message.arenas_ld.setreward.wrong_block"));
+                        return 0;
                     })));
 
         dispatcher.register(arenasLdNode);

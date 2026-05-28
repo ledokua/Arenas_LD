@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class MobArenaManager {
     public record ArenaInfo(ResourceKey<Level> dimension, BlockPos pos) {}
 
-    private static final String BUSY_REASON = "arenas_ld";
+    private static final String BUSY_REASON = net.ledok.busylib.BusyReasons.IN_MOB_ARENA;
 
     private final Map<UUID, ArenaInfo> playerArenas = new ConcurrentHashMap<>();
     private final Map<UUID, ArenaInfo> disconnectedArenaPlayers = new ConcurrentHashMap<>();
