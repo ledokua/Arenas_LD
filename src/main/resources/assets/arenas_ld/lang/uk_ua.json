@@ -260,7 +260,7 @@
   "gui.arenas_ld.dungeon_controller.ui.section.invite_player": "ЗАПРОСИТИ ГРАВЦЯ",
   "gui.arenas_ld.dungeon_controller.ui.owner_badge": "ВЛАСНИК",
   "gui.arenas_ld.dungeon_controller.ui.hardcore.title": "ХАРДКОР",
-  "gui.arenas_ld.dungeon_controller.ui.hardcore.desc": "Смерть назавжди. Без другої спроби.",
+  "gui.arenas_ld.dungeon_controller.ui.hardcore.desc": "Смерть назавжди. Без другої спроби. 2× нагороди за перемогу.",
   "gui.arenas_ld.dungeon_controller.ui.hardcore.on": "Увімк.",
   "gui.arenas_ld.dungeon_controller.ui.hardcore.off": "Вимк.",
   "gui.arenas_ld.dungeon_controller.ui.member.ready": "ГОТОВИЙ",

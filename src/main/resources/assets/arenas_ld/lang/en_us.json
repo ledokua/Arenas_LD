@@ -262,7 +262,7 @@
   "gui.arenas_ld.dungeon_controller.ui.section.invite_player": "INVITE PLAYER",
   "gui.arenas_ld.dungeon_controller.ui.owner_badge": "OWNER",
   "gui.arenas_ld.dungeon_controller.ui.hardcore.title": "HARDCORE",
-  "gui.arenas_ld.dungeon_controller.ui.hardcore.desc": "Permadeath. No second attempts.",
+  "gui.arenas_ld.dungeon_controller.ui.hardcore.desc": "Permadeath. No second attempts. 2× rewards on win.",
   "gui.arenas_ld.dungeon_controller.ui.hardcore.on": "On",
   "gui.arenas_ld.dungeon_controller.ui.hardcore.off": "Off",
   "gui.arenas_ld.dungeon_controller.ui.member.ready": "READY",
