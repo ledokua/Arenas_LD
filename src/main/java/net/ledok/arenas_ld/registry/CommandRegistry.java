@@ -32,40 +32,27 @@ public class CommandRegistry {
                         context.getSource().sendSuccess(() -> Component.literal("Cleared all tracked players from Mob Arenas."), true);
                         return 1;
                     })))
-            .then(literal("dungeon")
-                .then(literal("admin")
-                    .requires(source -> source.hasPermission(2))
-                    .executes(context -> {
-                        ServerPlayer player = context.getSource().getPlayerOrException();
-                        HitResult hitResult = player.pick(10.0D, 0.0F, false);
-                        if (hitResult.getType() != HitResult.Type.BLOCK || !(hitResult instanceof BlockHitResult hit)) {
-                            context.getSource().sendFailure(Component.translatable("gui.arenas_ld.dungeon_controller_admin.command.failure.not_looking"));
-                            return 0;
-                        }
-                        if (!(player.level().getBlockEntity(hit.getBlockPos()) instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller)) {
-                            context.getSource().sendFailure(Component.translatable("gui.arenas_ld.dungeon_controller_admin.command.failure.wrong_block"));
-                            return 0;
-                        }
-                        player.openMenu(new DungeonControllerAdminMenuProvider(controller));
+            .then(literal("admin")
+                .requires(source -> source.hasPermission(2))
+                .executes(context -> {
+                    ServerPlayer player = context.getSource().getPlayerOrException();
+                    HitResult hitResult = player.pick(10.0D, 0.0F, false);
+                    if (hitResult.getType() != HitResult.Type.BLOCK || !(hitResult instanceof BlockHitResult hit)) {
+                        context.getSource().sendFailure(Component.translatable("gui.arenas_ld.admin.failure.not_looking"));
+                        return 0;
+                    }
+                    var be = player.level().getBlockEntity(hit.getBlockPos());
+                    if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity dungeon) {
+                        player.openMenu(new DungeonControllerAdminMenuProvider(dungeon));
                         return 1;
-                    })))
-            .then(literal("raid")
-                .then(literal("admin")
-                    .requires(source -> source.hasPermission(2))
-                    .executes(context -> {
-                        ServerPlayer player = context.getSource().getPlayerOrException();
-                        HitResult hitResult = player.pick(10.0D, 0.0F, false);
-                        if (hitResult.getType() != HitResult.Type.BLOCK || !(hitResult instanceof BlockHitResult hit)) {
-                            context.getSource().sendFailure(Component.translatable("gui.arenas_ld.raid_controller_admin.command.failure.not_looking"));
-                            return 0;
-                        }
-                        if (!(player.level().getBlockEntity(hit.getBlockPos()) instanceof net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity controller)) {
-                            context.getSource().sendFailure(Component.translatable("gui.arenas_ld.raid_controller_admin.command.failure.wrong_block"));
-                            return 0;
-                        }
-                        player.openMenu(new RaidControllerAdminMenuProvider(controller));
+                    }
+                    if (be instanceof net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity raid) {
+                        player.openMenu(new RaidControllerAdminMenuProvider(raid));
                         return 1;
-                    })));
+                    }
+                    context.getSource().sendFailure(Component.translatable("gui.arenas_ld.admin.failure.no_controller"));
+                    return 0;
+                }));
 
         dispatcher.register(arenasLdNode);
     }
