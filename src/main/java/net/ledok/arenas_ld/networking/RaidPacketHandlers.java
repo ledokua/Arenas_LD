@@ -264,7 +264,7 @@ final class RaidPacketHandlers {
         ServerPlayNetworking.registerGlobalReceiver(RequestRaidControllerInfoPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                RaidControllerBlockEntity controller = findController(player, payload.blockPos());
+                RaidControllerBlockEntity controller = findController(player, payload.pos());
                 if (controller == null) return;
                 RaidControllerInfoPayload info = buildRaidControllerInfoPayload(player, controller, payload.leaderboardDifficulty());
                 ServerPlayNetworking.send(player, info);
@@ -275,7 +275,7 @@ final class RaidPacketHandlers {
         ServerPlayNetworking.registerGlobalReceiver(UpdateRaidControllerSettingsPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                RaidControllerBlockEntity controller = findController(player, payload.blockPos());
+                RaidControllerBlockEntity controller = findController(player, payload.pos());
                 if (controller == null) return;
                 controller.setHardcore(player, payload.hardcoreEnabled());
                 DifficultyTier tier;
@@ -294,7 +294,7 @@ final class RaidPacketHandlers {
         ServerPlayNetworking.registerGlobalReceiver(UpdateRaidLobbyVisibilityPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                RaidControllerBlockEntity controller = findController(player, payload.blockPos());
+                RaidControllerBlockEntity controller = findController(player, payload.pos());
                 if (controller == null) return;
                 net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility vis;
                 if ("INVITE_ONLY".equalsIgnoreCase(payload.visibility())) {
@@ -312,7 +312,7 @@ final class RaidPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.blockPos());
+                RaidControllerBlockEntity controller = findController(player, payload.pos());
                 if (controller == null) return;
                 controller.setRespawnTimeTicks(payload.respawnTimeTicks());
                 controller.setMaxPartySize(payload.maxPartySize());
@@ -324,7 +324,7 @@ final class RaidPacketHandlers {
         ServerPlayNetworking.registerGlobalReceiver(RaidControllerActionPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                RaidControllerBlockEntity controller = findController(player, payload.blockPos());
+                RaidControllerBlockEntity controller = findController(player, payload.pos());
                 if (controller == null) return;
                 switch (payload.action()) {
                     case 0 -> controller.startRaid(player);

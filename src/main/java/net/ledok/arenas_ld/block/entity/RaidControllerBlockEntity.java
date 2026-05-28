@@ -799,8 +799,9 @@ public class RaidControllerBlockEntity extends BlockEntity
                 }
                 lobbies.remove(lobby);
                 // Clean up related invites, requests, queue
-                pendingInvites.removeIf(inv -> inv.lobbyId().equals(lobbyId));
-                pendingJoinRequests.removeIf(req -> req.lobbyId().equals(lobbyId));
+                final UUID finalLobbyId = lobbyId;
+                pendingInvites.removeIf(inv -> inv.lobbyId().equals(finalLobbyId));
+                pendingJoinRequests.removeIf(req -> req.lobbyId().equals(finalLobbyId));
             }
             lobbyToInstance.remove(lobbyId);
             queuedLobbyIds.remove(lobbyId);
