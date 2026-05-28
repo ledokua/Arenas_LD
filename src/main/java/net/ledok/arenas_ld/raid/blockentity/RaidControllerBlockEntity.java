@@ -164,14 +164,10 @@ public class RaidControllerBlockEntity extends BlockEntity
     private final List<PendingInvite> pendingInvites = new ArrayList<>();
     /** All pending join requests across all lobbies. */
     private final List<PendingJoinRequest> pendingJoinRequests = new ArrayList<>();
-    /** Maps a running lobbyId → the spawnerPos of the instance it is running on. */
-    private final Map<UUID, BlockPos> lobbyToInstance = new HashMap<>();
 
     /**
-     * Active raid runs, keyed by spawner position. Mirror of {@code DungeonControllerBlockEntity#activeRuns}.
-     * Populated alongside {@link #lobbyToInstance} (double-write) while the raid pipeline still
-     * reads runtime state from {@link RaidBossSpawnerBlockEntity}. Read by {@code RaidRunLifecycle}
-     * once it lands.
+     * In-progress raid runs, keyed by spawner position. Sole index of active raids; each
+     * {@link RaidRun} carries its lobby id, so reverse lookups iterate this map.
      */
     private final Map<BlockPos, RaidRun> activeRuns = new HashMap<>();
     /** Per-player offline timestamp for grace-period tracking. */
@@ -208,13 +204,6 @@ public class RaidControllerBlockEntity extends BlockEntity
         ).apply(i, InstanceEntry::new));
     }
 
-    private record LobbyInstanceEntry(String lobbyId, String spawnerPos) {
-        static final Codec<LobbyInstanceEntry> CODEC = RecordCodecBuilder.create(i -> i.group(
-            Codec.STRING.fieldOf("lobbyId").forGetter(LobbyInstanceEntry::lobbyId),
-            Codec.STRING.fieldOf("spawnerPos").forGetter(LobbyInstanceEntry::spawnerPos)
-        ).apply(i, LobbyInstanceEntry::new));
-    }
-
     private record InstanceRunEntry(BlockPos spawnerPos, RaidRun run) {
         static final Codec<InstanceRunEntry> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.fieldOf("spawnerPos").forGetter(InstanceRunEntry::spawnerPos),
@@ -234,7 +223,6 @@ public class RaidControllerBlockEntity extends BlockEntity
         List<UUID> queuedLobbyIds,
         List<PendingInvite> pendingInvites,
         List<PendingJoinRequest> pendingJoinRequests,
-        List<LobbyInstanceEntry> lobbyToInstance,
         Map<DifficultyTier, List<LeaderboardEntry>> leaderboards,
         Map<DifficultyTier, RaidTierConfig> tierConfigs,
         List<BlockPos> pendingInstanceRemovals,
@@ -252,7 +240,6 @@ public class RaidControllerBlockEntity extends BlockEntity
             UUIDUtil.CODEC.listOf().optionalFieldOf("queuedLobbyIds", List.of()).forGetter(State::queuedLobbyIds),
             PendingInvite.CODEC.listOf().optionalFieldOf("pendingInvites", List.of()).forGetter(State::pendingInvites),
             PendingJoinRequest.CODEC.listOf().optionalFieldOf("pendingJoinRequests", List.of()).forGetter(State::pendingJoinRequests),
-            LobbyInstanceEntry.CODEC.listOf().optionalFieldOf("lobbyToInstance", List.of()).forGetter(State::lobbyToInstance),
             Codec.unboundedMap(DifficultyTier.CODEC, LeaderboardEntry.CODEC.listOf())
                 .optionalFieldOf("leaderboards", Map.of()).forGetter(State::leaderboards),
             Codec.unboundedMap(DifficultyTier.CODEC, RaidTierConfig.CODEC)
@@ -394,10 +381,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         markDirtyAndSync();
     }
 
-    /**
-     * Live read-only view of in-progress raid runs, keyed by spawner position.
-     * Populated alongside {@link #lobbyToInstance} until the lifecycle migration completes.
-     */
+    /** Live read-only view of in-progress raid runs, keyed by spawner position. */
     public Map<BlockPos, RaidRun> getActiveRuns() {
         return Collections.unmodifiableMap(activeRuns);
     }
@@ -471,7 +455,6 @@ public class RaidControllerBlockEntity extends BlockEntity
                     return true;
                 }
                 it.remove();
-                lobbyToInstance.values().removeIf(p -> p.equals(spawnerPos));
                 activeRuns.remove(spawnerPos);
                 pendingInstanceRemovals.remove(spawnerPos);
                 markDirtyAndSync();
@@ -914,14 +897,9 @@ public class RaidControllerBlockEntity extends BlockEntity
             }
         }
 
-        // Find which lobby this spawner belonged to
-        UUID lobbyId = null;
-        for (Map.Entry<UUID, BlockPos> entry : lobbyToInstance.entrySet()) {
-            if (entry.getValue().equals(spawnerPos)) {
-                lobbyId = entry.getKey();
-                break;
-            }
-        }
+        // Find which lobby this spawner belonged to via the active run
+        RaidRun endingRun = activeRuns.get(spawnerPos);
+        UUID lobbyId = endingRun != null ? endingRun.lobbyId() : null;
 
         // Clear busy state
         if (lobbyId != null) {
@@ -936,7 +914,6 @@ public class RaidControllerBlockEntity extends BlockEntity
                 pendingInvites.removeIf(inv -> inv.lobbyId().equals(finalLobbyId));
                 pendingJoinRequests.removeIf(req -> req.lobbyId().equals(finalLobbyId));
             }
-            lobbyToInstance.remove(lobbyId);
             queuedLobbyIds.remove(lobbyId);
         } else if (playerNames != null && level instanceof ServerLevel sl) {
             for (String name : playerNames) {
@@ -1107,7 +1084,6 @@ public class RaidControllerBlockEntity extends BlockEntity
 
         Lobby running = lobby.withStatus(net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN);
         replaceLobby(running);
-        lobbyToInstance.put(lobby.lobbyId(), instance.spawnerPos());
 
         RaidTierConfig resolvedTier = tierConfigs.getOrDefault(
             lobby.selectedTier(), RaidTierConfig.defaultFor(lobby.selectedTier()));
@@ -1138,10 +1114,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         pendingJoinRequests.removeIf(req -> req.lobbyId().equals(lobby.lobbyId()));
         queuedLobbyIds.remove(lobby.lobbyId());
         lobbies.remove(lobby);
-        BlockPos spawnerPos = lobbyToInstance.remove(lobby.lobbyId());
-        if (spawnerPos != null) {
-            activeRuns.remove(spawnerPos);
-        }
+        activeRuns.entrySet().removeIf(entry -> entry.getValue().lobbyId().equals(lobby.lobbyId()));
     }
 
     private @Nullable PendingInvite findInvite(UUID lobbyId, UUID invitedUuid) {
@@ -1200,14 +1173,6 @@ public class RaidControllerBlockEntity extends BlockEntity
             ));
         }
 
-        List<LobbyInstanceEntry> lobbyInstanceEntries = new ArrayList<>();
-        for (Map.Entry<UUID, BlockPos> entry : lobbyToInstance.entrySet()) {
-            lobbyInstanceEntries.add(new LobbyInstanceEntry(
-                entry.getKey().toString(),
-                entry.getValue().getX() + "," + entry.getValue().getY() + "," + entry.getValue().getZ()
-            ));
-        }
-
         List<InstanceRunEntry> runEntries = new ArrayList<>(activeRuns.size());
         for (Map.Entry<BlockPos, RaidRun> entry : activeRuns.entrySet()) {
             runEntries.add(new InstanceRunEntry(entry.getKey(), entry.getValue()));
@@ -1225,7 +1190,6 @@ public class RaidControllerBlockEntity extends BlockEntity
             new ArrayList<>(queuedLobbyIds),
             new ArrayList<>(pendingInvites),
             new ArrayList<>(pendingJoinRequests),
-            lobbyInstanceEntries,
             new EnumMap<>(leaderboards),
             new EnumMap<>(tierConfigs),
             new ArrayList<>(pendingInstanceRemovals),
@@ -1271,22 +1235,6 @@ public class RaidControllerBlockEntity extends BlockEntity
 
                     pendingJoinRequests.clear();
                     pendingJoinRequests.addAll(state.pendingJoinRequests());
-
-                    lobbyToInstance.clear();
-                    for (LobbyInstanceEntry lie : state.lobbyToInstance()) {
-                        try {
-                            UUID lobbyId = UUID.fromString(lie.lobbyId());
-                            String[] parts = lie.spawnerPos().split(",");
-                            if (parts.length == 3) {
-                                BlockPos spawnerPos = new BlockPos(
-                                    Integer.parseInt(parts[0].trim()),
-                                    Integer.parseInt(parts[1].trim()),
-                                    Integer.parseInt(parts[2].trim())
-                                );
-                                lobbyToInstance.put(lobbyId, spawnerPos);
-                            }
-                        } catch (Exception ignored) {}
-                    }
 
                     leaderboards.clear();
                     for (Map.Entry<DifficultyTier, List<LeaderboardEntry>> entry : state.leaderboards().entrySet()) {
@@ -1470,14 +1418,13 @@ public class RaidControllerBlockEntity extends BlockEntity
             ));
         }
 
-        // Running instances: spawnerPos → (tier, ownerName-or-lobby-label).
-        // The raid system tracks lobbyToInstance — invert it for the spawnerPos key.
+        // Running instances: spawnerPos → (tier, ownerName).
         Map<BlockPos, net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.InstanceRun> running = new HashMap<>();
-        for (Map.Entry<UUID, BlockPos> entry : lobbyToInstance.entrySet()) {
-            Lobby lobby = getLobbyById(entry.getKey());
-            if (lobby == null) continue;
-            String owner = lobby.ownerName() == null ? "" : lobby.ownerName();
-            running.put(entry.getValue(), new net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.InstanceRun(lobby.selectedTier(), owner));
+        for (Map.Entry<BlockPos, RaidRun> entry : activeRuns.entrySet()) {
+            RaidRun run = entry.getValue();
+            Lobby lobby = getLobbyById(run.lobbyId());
+            String owner = lobby != null ? lobby.ownerName() : run.ownerName();
+            running.put(entry.getKey(), new net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.InstanceRun(run.tier(), owner == null ? "" : owner));
         }
 
         return new net.ledok.arenas_ld.raid.screen.RaidControllerAdminData(
