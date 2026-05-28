@@ -1,1247 +1,1989 @@
 package net.ledok.arenas_ld.screen;
 
+import io.wispforest.owo.ui.base.BaseOwoHandledScreen;
+import io.wispforest.owo.ui.component.ButtonComponent;
+import io.wispforest.owo.ui.component.Components;
+import io.wispforest.owo.ui.component.LabelComponent;
+import io.wispforest.owo.ui.component.TextBoxComponent;
+import io.wispforest.owo.ui.container.Containers;
+import io.wispforest.owo.ui.container.FlowLayout;
+import io.wispforest.owo.ui.container.ScrollContainer;
+import io.wispforest.owo.ui.core.Color;
+import io.wispforest.owo.ui.core.HorizontalAlignment;
+import io.wispforest.owo.ui.core.Insets;
+import io.wispforest.owo.ui.core.OwoUIAdapter;
+import io.wispforest.owo.ui.core.Sizing;
+import io.wispforest.owo.ui.core.Surface;
+import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.ledok.arenas_ld.block.entity.RaidControllerBlockEntity.LobbyStatus;
-import net.ledok.arenas_ld.block.entity.RaidControllerBlockEntity.LobbyVisibility;
+import net.ledok.arenas_ld.dungeon.lobby.Lobby;
+import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
+import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
+import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
+import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
+import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
+import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.networking.ModPackets;
-import net.ledok.arenas_ld.util.RaidDifficulty;
-import net.ledok.arenas_ld.util.RaidLeaderboardEntry;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Checkbox;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.ledok.arenas_ld.raid.packet.RaidAcceptInvitePayload;
+import net.ledok.arenas_ld.raid.packet.RaidAcceptJoinRequestPayload;
+import net.ledok.arenas_ld.raid.packet.RaidAdminSetMaxPartySizePayload;
+import net.ledok.arenas_ld.raid.packet.RaidAdminSetRespawnTimePayload;
+import net.ledok.arenas_ld.raid.packet.RaidCreateLobbyPayload;
+import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
+import net.ledok.arenas_ld.raid.packet.RaidDeclineJoinRequestPayload;
+import net.ledok.arenas_ld.raid.packet.RaidInvitePlayerPayload;
+import net.ledok.arenas_ld.raid.packet.RaidJoinLobbyPayload;
+import net.ledok.arenas_ld.raid.packet.RaidKickPlayerPayload;
+import net.ledok.arenas_ld.raid.packet.RaidLeaveLobbyPayload;
+import net.ledok.arenas_ld.raid.packet.RaidRequestJoinPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetHardcorePayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetTierPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetVisibilityPayload;
+import net.ledok.arenas_ld.raid.packet.RaidStartPayload;
+import net.ledok.arenas_ld.raid.packet.RaidToggleReadyPayload;
+import net.ledok.arenas_ld.screen.RaidControllerData.RaidInstanceState;
+import net.ledok.arenas_ld.util.InstanceStatus;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
+import org.jetbrains.annotations.NotNull;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
-public class RaidControllerScreen extends AbstractContainerScreen<RaidControllerScreenHandler> {
-    private static final int BUTTON_SHIFT_X = 2;
-
-    // ── Screen dimensions ────────────────────────────────────────────────────
-    private static final int W  = 270;
-    private static final int H  = 310;
-    private static final int P  = 8;   // horizontal padding
-    private static final int IW = W - P * 2; // inner width = 248
-
-    // ── Fixed layout zones (Y offsets from screen top) ───────────────────────
-    // [0  – 14 ] Title bar
-    // [14 – 52 ] Instances panel
-    // [56 – 224] State content zone  (168 px)
-    // [228– 284] Leaderboard zone    ( 56 px)
-    // [286– 310] Admin bar (ops only)
-    private static final int Y_INST     = 16;
-    private static final int Y_CONTENT  = 62;
-    private static final int Y_ACTIONS  = Y_CONTENT + 148; // 204  action buttons (browsing)
-    private static final int Y_ACTIONS_EXPANDED = Y_ACTIONS + 56; // non-browsing: use freed leaderboard space
-    private static final int Y_LB       = 228;
-    private static final int Y_LB_TABS  = Y_LB + 7;
-    private static final int Y_LB_ENTRY = Y_LB_TABS + 16;
-    private static final int Y_ADMIN    = 286;
-
-    // Within OWNER content zone:
-    private static final int YO_DIFF    = Y_CONTENT + 2;   // 58  "Difficulty" label
-    private static final int YO_TIERS   = Y_CONTENT + 12;  // 68  tier buttons
-    private static final int YO_VIS     = Y_CONTENT + 32;  // 88  visibility buttons
-    private static final int YO_HC      = Y_CONTENT + 52;  // 114 hardcore checkbox
-    private static final int YO_MEMBERS = Y_CONTENT + 68;  // 130 "Members" label
-    private static final int YO_LIST    = Y_CONTENT + 78;  // 140 member list
-    private static final int YO_INVITE  = Y_CONTENT + 130; // 186 invite box
-
-    // Within BROWSING content zone:
-    private static final int YB_BANNER  = Y_CONTENT + 2;   // 58  invite banner
-    private static final int YB_LBABEL  = Y_CONTENT + 28;  // 84  "Open lobbies" label
-    private static final int YB_LIST    = Y_CONTENT + 38;  // 94  lobby list
-    private static final int YB_LIST_H  = 104;             //     list height (≈5 visible rows)
-
-    // Button geometry helpers
-    private static final int BTN_H    = 20;
-    private static final int BTN_HALF = (IW - 8) / 2;  // 118 for two equal buttons
-
-    // Tier button width: 4 buttons with 3-px gaps
-    private static final int TIER_W = (IW - 11) / 4;   // 57
-
-    // ── Colors ───────────────────────────────────────────────────────────────
-    // Backgrounds
-    private static final int C_BG       = 0xFF111622;
-    private static final int C_PANEL    = 0xFF0e1220;
-    private static final int C_TITLEBAR = 0xFF141826;
-    private static final int C_ROW_SEL  = 0xFF1a1e38;
-    private static final int C_ROW_NORM = 0xFF0e1220;
-
-    // Borders
-    private static final int C_BDR      = 0xFF1f2845;
-    private static final int C_BDR_HL   = 0xFF3a4a8a;
-
-    // Text
-    private static final int C_TEXT     = 0xFFFFFFFF;
-    private static final int C_MUTED    = 0xFF6a7aaa;
-    private static final int C_LABEL    = 0xFF4a5580;
-    private static final int C_GREEN    = 0xFF44ee44;
-    private static final int C_AMBER    = 0xFFff9900;
-    private static final int C_RED      = 0xFFff5555;
-    private static final int C_YELLOW   = 0xFFffcc00;
-    private static final int C_CYAN     = 0xFF44ccff;
-    private static final int C_BLUE     = 0xFF4a88ff;
-    private static final int C_PURPLE   = 0xFFcc88ff;
-    private static final int C_NOTIFY   = 0xFF44aa44;
-
-    // Instance pill colors indexed by ordinal: [FREE=0, RUNNING=1, COOLDOWN=2]
-    private static final int[] PILL_BG  = { 0xFF0d2a0d, 0xFF2a1800, 0xFF2a0a0a };
-    private static final int[] PILL_TXT = { 0xFF44ee44, 0xFFff9900, 0xFFff5555 };
-    private static final int[] PILL_BDR = { 0xFF1a5a1a, 0xFF5a3a00, 0xFF5a1a1a };
-
-    // Tier colors indexed by RaidDifficulty.ordinal(): [EASY=0, NORMAL=1, HARD=2, LEGENDARY=3]
-    private static final int[] TIER_BG  = { 0xFF0a2a0a, 0xFF0a0a2a, 0xFF2a1800, 0xFF2a0a2a };
-    private static final int[] TIER_TXT = { 0xFF44ee44, 0xFF4a88ff, 0xFFff9900, 0xFFcc88ff };
-    private static final int[] TIER_BDR = { 0xFF1a5a1a, 0xFF1a3a7a, 0xFF5a3800, 0xFF5a1a5a };
-
-    // ── Server state ─────────────────────────────────────────────────────────
-    private int cooldownSecs;
-    private boolean hardcoreEnabled;
-    private boolean suppressHcSync;
-    private RaidDifficulty selectedDifficulty = RaidDifficulty.NORMAL;
-    private RaidDifficulty myLobbyDifficulty = RaidDifficulty.NORMAL;
-    private int myLobbyMaxSize = 10;
-    private boolean inLobby, isOwner;
-    private LobbyStatus lobbyStatus = LobbyStatus.OPEN;
-    private LobbyVisibility lobbyVis = LobbyVisibility.OPEN;
-    private int queuePos, queueEstSecs;
-    private boolean canAdmin;
-    private int serverRespawnTicks = 6000;
-    private int draftRespawnTicks  = 6000;
-    private int serverMaxPartySize = 10;
-    private int draftMaxPartySize = 10;
-    private int maxPartySize = 10;
-    private List<String>                                               memberNames    = new ArrayList<>();
-    private List<RaidLeaderboardEntry>                              leaderboard    = new ArrayList<>();
-    private List<ModPackets.RaidControllerInfoPayload.InstanceView> instanceViews  = new ArrayList<>();
-    private List<ModPackets.RaidControllerInfoPayload.LobbyView>    allLobbies     = new ArrayList<>();
-    private List<ModPackets.RaidControllerInfoPayload.LobbyView>    visLobbies     = new ArrayList<>();
-    private List<ModPackets.RaidControllerInfoPayload.LobbyView>    invitedLobbies = new ArrayList<>();
-
-    // ── Client-only state ─────────────────────────────────────────────────────
-    private RaidDifficulty lbTab        = RaidDifficulty.NORMAL;
-    private int    selLobby             = 0;
-    private int    selMember            = 0;
-    private double lobbyScroll          = 0;
-    private double memberScroll         = 0;
-    private double lbScroll             = 0;
-    private int refreshTick             = 0;
-    private List<String> inviteSuggestions = List.of();
+public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidControllerScreenHandler> {
+    private static final int BG = 0xFF070E14;
+    private static final int PANEL = 0xFF121922;
+    private static final int PANEL_2 = 0xFF0C1218;
+    private static final int HAIRLINE = 0xFF283442;
+    private static final int HAIRLINE_HI = 0xFF3A4A5C;
+    private static final int ROW_BG = 0xFF19222D;
+    private static final int ROW_BG_ALT = 0xFF16202A;
+    private static final int INK = 0xFFE8EEF5;
+    private static final int INK_MID = 0xFF9AA8B8;
+    private static final int INK_DIM = 0xFF5F6E80;
+    private static final int GOOD = 0xFF86D36C;
+    private static final int WARN = 0xFFF5B042;
+    private static final int DANGER = 0xFFE8624A;
+    private static final int INFO = 0xFF6DA3E8;
+    private static final int ACCENT = 0xFFA98BE8;
+    private static final int ACCENT_DARK = 0xFF6C4FB5;
 
     private static final int ADMIN_STEP = 30 * 20;
     private static final int ADMIN_MAX  = 60 * 60 * 20;
     private static final int PARTY_MIN  = 1;
     private static final int PARTY_MAX  = 20;
-    private static final int ROW_H      = 19; // height of each lobby / member row
-    private static final int INST_PANEL_H = 42;
-    private static final int INST_PILL_GAP_X = 3;
-    private static final int INST_PILL_GAP_Y = 3;
-    private static final int DROPDOWN_MAX_ROWS = 6;
-    private static final int DROPDOWN_ROW_HEIGHT = 12;
 
-    // ── Widget references ─────────────────────────────────────────────────────
-    // BROWSING
-    private Button createLobbyBtn, joinLobbyBtn;
-    // MEMBER
-    private Button leaveLobbyBtn;
-    // OWNER
-    private final Button[] tierBtns = new Button[4];
-    private Button visOpenBtn, visInviteBtn;
-    private Checkbox hcBox;
-    private Button kickBtn;
-    private EditBox inviteBox;
-    private Button sendInviteBtn;
-    private Button startBtn, disbandBtn;
-    // QUEUED
-    private Button leaveQueueBtn;
-    // Leaderboard tabs
-    private final Button[] lbTabBtns = new Button[4];
-    // Admin
-    private Button adminMinusBtn, adminApplyBtn, adminPlusBtn;
-    private EditBox adminPartySizeBox;
-    private boolean suppressAdminPartySync;
+    private enum Tab {
+        LOBBIES,
+        MY_LOBBY,
+        LEADERBOARD,
+        INVITES
+    }
 
-    // ── Constructor ───────────────────────────────────────────────────────────
+    private enum InviteStatus {
+        ONLINE,
+        IN_LOBBY,
+        IN_RUN,
+        BUSY
+    }
+
+    private record InviteCandidate(UUID uuid, String name, InviteStatus status) {
+        boolean selectable() {
+            return status == InviteStatus.ONLINE;
+        }
+    }
+
+    private static final class MemberRowRefs {
+        private final FlowLayout statusSquare;
+        private final LabelComponent statusGlyph;
+        private final LabelComponent connectionLabel;
+        private final FlowLayout readyBadge;
+        private final ButtonComponent kickButton;
+
+        private MemberRowRefs(FlowLayout statusSquare, LabelComponent statusGlyph, LabelComponent connectionLabel, FlowLayout readyBadge, ButtonComponent kickButton) {
+            this.statusSquare = statusSquare;
+            this.statusGlyph = statusGlyph;
+            this.connectionLabel = connectionLabel;
+            this.readyBadge = readyBadge;
+            this.kickButton = kickButton;
+        }
+    }
+
+    private final List<Lobby> visibleLobbies;
+    private final List<PendingInvite> myInvites;
+    private final List<PendingJoinRequest> myJoinRequests;
+    private Optional<Lobby> ownLobby;
+    private java.util.Set<UUID> busyPlayers;
+    private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards = Map.of();
+    private DifficultyTier leaderboardTier = DifficultyTier.NORMAL;
+    private List<RaidInstanceState> instances = new ArrayList<>();
+
+    // Admin draft state
+    private int draftRespawnTicks  = 6000;
+    private int serverRespawnTicks = 6000;
+    private int draftMaxPartySize  = 10;
+    private int serverMaxPartySize = 10;
+
+    private Tab currentTab = Tab.LOBBIES;
+    private String footerError;
+    private long snapshotServerTick;
+    private long snapshotEpochMs;
+    private long lastCountdownSecond = -1L;
+
+    private FlowLayout contentArea;
+    private ScrollContainer<FlowLayout> contentScroll;
+    private FlowLayout footerActions;
+    private LabelComponent footerLabel;
+    private ButtonComponent lobbiesTabButton;
+    private ButtonComponent myLobbyTabButton;
+    private ButtonComponent leaderboardTabButton;
+    private ButtonComponent invitesTabButton;
+    private TextBoxComponent inviteField;
+    private String inviteInput = "";
+    private boolean inviteDropdownOpen = false;
+    private FlowLayout inviteFieldRow;
+    private FlowLayout inviteDropdownPanel;
+    private ButtonComponent inviteChevron;
+    private double savedScrollProgress = 0.0D;
+    private boolean restoreScrollNextTick = false;
+    private final Map<UUID, LabelComponent> inviteCountdownLabels = new HashMap<>();
+    private final Map<UUID, LabelComponent> joinRequestCountdownLabels = new HashMap<>();
+    private final Map<UUID, MemberRowRefs> memberRowRefs = new HashMap<>();
+    private LabelComponent summaryOwnerLabel;
+    private LabelComponent summaryMembersLabel;
+    private LabelComponent membersSummaryLabel;
+    private LabelComponent summaryTierValue;
+    private LabelComponent summaryVisibilityValue;
+    private LabelComponent summaryHardcoreValue;
+    private ButtonComponent readyToggleButton;
+    private ButtonComponent leaveLobbyButton;
+    private ButtonComponent startRunButton;
+
+    // Instances strip panel (rebuilt in rebuildUi)
+    private FlowLayout instancesStrip;
+
     public RaidControllerScreen(RaidControllerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
-        this.imageWidth  = W;
-        this.imageHeight = H;
+        this.inventoryLabelY = 9999;
+        this.titleLabelY = 9999;
+        this.visibleLobbies = new ArrayList<>(handler.getVisibleLobbies());
+        this.myInvites = new ArrayList<>(handler.getMyInvites());
+        this.myJoinRequests = new ArrayList<>(handler.getMyJoinRequests());
+        this.ownLobby = handler.getOwnLobby();
+        this.busyPlayers = handler.getBusyPlayers();
+        this.topLeaderboards = handler.getTopLeaderboards();
+        this.instances = new ArrayList<>(handler.getInstances());
+        this.snapshotServerTick = handler.getServerGameTick();
+        this.snapshotEpochMs = System.currentTimeMillis();
     }
 
-    // ── Init ──────────────────────────────────────────────────────────────────
     @Override
-    protected void init() {
-        super.init();
-        int x = leftPos, y = topPos;
-
-        // ── BROWSING ──
-        createLobbyBtn = addRenderableWidget(Button.builder(
-                Component.translatable("gui.arenas_ld.create_lobby"),
-                b -> { ClientPlayNetworking.send(new ModPackets.CreateRaidLobbyPayload(menu.getPos())); updateInfo(); }
-        ).bounds(x + P + BUTTON_SHIFT_X, y + Y_ACTIONS - 5, BTN_HALF, BTN_H).build());
-
-        joinLobbyBtn = addRenderableWidget(Button.builder(
-                Component.translatable("gui.arenas_ld.join_selected"),
-                b -> {
-                    if (!visLobbies.isEmpty() && selLobby < visLobbies.size()) {
-                        ClientPlayNetworking.send(new ModPackets.JoinRaidLobbyPayload(menu.getPos(), visLobbies.get(selLobby).id()));
-                        updateInfo();
-                    }
-                }
-        ).bounds(x + P + BTN_HALF + 4 + BUTTON_SHIFT_X, y + Y_ACTIONS - 5, BTN_HALF, BTN_H).build());
-
-        // ── MEMBER ──
-        leaveLobbyBtn = addRenderableWidget(Button.builder(
-                Component.translatable("gui.arenas_ld.leave_party"),
-                b -> { ClientPlayNetworking.send(new ModPackets.RaidControllerActionPayload(menu.getPos(), 2)); updateInfo(); }
-        ).bounds(x + P + BUTTON_SHIFT_X, y + Y_ACTIONS + 2, IW - 4, BTN_H - 6).build());
-
-        // ── OWNER: tier buttons ──
-        RaidDifficulty[] tiers = RaidDifficulty.values();
-        for (int i = 0; i < 4; i++) {
-            final RaidDifficulty t = tiers[i];
-            tierBtns[i] = addRenderableWidget(Button.builder(
-                    Component.translatable(t.translationKey()),
-                    b -> { selectedDifficulty = t; syncSettings(); updateInfo(); }
-            ).bounds(x + P + i * (TIER_W + 3) + BUTTON_SHIFT_X, y + YO_TIERS, TIER_W, 16).build());
-        }
-
-        // ── OWNER: visibility buttons ──
-        int visW = ((IW - 3) / 2) - 2;
-        visOpenBtn = addRenderableWidget(Button.builder(
-                Component.translatable("gui.arenas_ld.visibility_open"),
-                b -> { ClientPlayNetworking.send(new ModPackets.UpdateRaidLobbyVisibilityPayload(menu.getPos(), "OPEN")); updateInfo(); }
-        ).bounds(x + P + BUTTON_SHIFT_X, y + YO_VIS, visW, 16).build());
-        visInviteBtn = addRenderableWidget(Button.builder(
-                Component.translatable("gui.arenas_ld.visibility_invite_only"),
-                b -> { ClientPlayNetworking.send(new ModPackets.UpdateRaidLobbyVisibilityPayload(menu.getPos(), "INVITE_ONLY")); updateInfo(); }
-        ).bounds(x + P + ((IW - 3) / 2) + 3 + BUTTON_SHIFT_X, y + YO_VIS, visW, 16).build());
-
-        // ── OWNER: hardcore checkbox ──
-        hcBox = addRenderableWidget(Checkbox.builder(
-                Component.translatable("gui.arenas_ld.hardcore"),
-                font
-        ).pos(x + P + 2, y + YO_HC).selected(false).onValueChange((cb, sel) -> {
-            if (!suppressHcSync) {
-                syncSettings();
-            }
-        }).build());
-        hcBox.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
-                Component.translatable("gui.arenas_ld.hardcore_desc")));
-
-        // ── OWNER: kick button ──
-        kickBtn = addRenderableWidget(Button.builder(
-                Component.translatable("gui.arenas_ld.kick_member"),
-                b -> {
-                    if (selMember > 0 && selMember < memberNames.size()) {
-                        // Raid screen currently keeps kick as local selection affordance only.
-                    }
-                }
-        ).bounds(x + W - P - 46 + BUTTON_SHIFT_X, y + YO_LIST + (selMember * ROW_H) + 2, 44, 14).build());
-
-        // ── OWNER: invite ──
-        inviteBox = new EditBox(font, x + P + 3, y + YO_INVITE, 181, 16, Component.translatable("gui.arenas_ld.invite_player"));
-        inviteBox.setMaxLength(32);
-        addRenderableWidget(inviteBox);
-
-        sendInviteBtn = addRenderableWidget(Button.builder(
-                Component.translatable("gui.arenas_ld.send_invite"),
-                b -> {
-                    String name = inviteBox.getValue().trim();
-                    if (!name.isEmpty()) {
-                        ClientPlayNetworking.send(new ModPackets.InviteRaidLobbyPlayerPayload(menu.getPos(), name));
-                        inviteBox.setValue("");
-                        updateInfo();
-                    }
-                }
-        ).bounds(x + P + 185 + BUTTON_SHIFT_X, y + YO_INVITE, IW - 190, 16).build());
-
-        // ── OWNER: start / disband ──
-        startBtn = addRenderableWidget(Button.builder(
-                Component.translatable("gui.arenas_ld.start_raid"),
-                b -> { ClientPlayNetworking.send(new ModPackets.RaidControllerActionPayload(menu.getPos(), 0)); updateInfo(); }
-        ).bounds(x + P + BUTTON_SHIFT_X, y + Y_ACTIONS, 148, BTN_H - 5).build());
-
-        disbandBtn = addRenderableWidget(Button.builder(
-                Component.translatable("gui.arenas_ld.disband_lobby"),
-                b -> { ClientPlayNetworking.send(new ModPackets.DisbandRaidLobbyPayload(menu.getPos())); updateInfo(); }
-        ).bounds(x + P + 152 + BUTTON_SHIFT_X, y + Y_ACTIONS, IW - 156, BTN_H - 5).build());
-
-        // ── QUEUED ──
-        leaveQueueBtn = addRenderableWidget(Button.builder(
-                Component.translatable("gui.arenas_ld.leave_queue"),
-                b -> { ClientPlayNetworking.send(new ModPackets.RaidControllerActionPayload(menu.getPos(), 1)); updateInfo(); }
-        ).bounds(x + P + BUTTON_SHIFT_X, y + Y_ACTIONS, IW, BTN_H).build());
-
-        // ── Leaderboard tier tabs ──
-        for (int i = 0; i < 4; i++) {
-            final RaidDifficulty t = RaidDifficulty.values()[i];
-            lbTabBtns[i] = addRenderableWidget(Button.builder(
-                    Component.translatable(t.translationKey()),
-                    b -> { lbTab = t; lbScroll = 0; updateInfo(); }
-            ).bounds(x + P + i * (TIER_W + 3) + BUTTON_SHIFT_X, y + Y_LB_TABS, TIER_W, 14).build());
-        }
-
-        // ── Admin bar ──
-        adminMinusBtn = addRenderableWidget(Button.builder(Component.literal("-"), b -> {
-            draftRespawnTicks = Mth.clamp(draftRespawnTicks - ADMIN_STEP, 0, ADMIN_MAX);
-        }).bounds(x + P + BUTTON_SHIFT_X, y + Y_ADMIN + 1, 16, 12).build());
-
-        adminApplyBtn = addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.apply"), b -> {
-            ClientPlayNetworking.send(new ModPackets.UpdateRaidControllerAdminSettingsPayload(
-                    menu.getPos(),
-                    draftRespawnTicks,
-                    draftMaxPartySize
-            ));
-            updateInfo();
-        }).bounds(x + P + 20 + BUTTON_SHIFT_X, y + Y_ADMIN + 1, 40, 12).build());
-
-        adminPlusBtn = addRenderableWidget(Button.builder(Component.literal("+"), b -> {
-            draftRespawnTicks = Mth.clamp(draftRespawnTicks + ADMIN_STEP, 0, ADMIN_MAX);
-        }).bounds(x + P + 64 + BUTTON_SHIFT_X, y + Y_ADMIN + 1, 16, 12).build());
-
-        adminPartySizeBox = new EditBox(
-                font,
-                x + P + 86 + BUTTON_SHIFT_X,
-                y + Y_ADMIN,
-                24,
-                14,
-                Component.translatable("gui.arenas_ld.admin_party_size")
-        );
-        adminPartySizeBox.setFilter(s -> s.length() <= 2 && s.chars().allMatch(Character::isDigit));
-        adminPartySizeBox.setValue(Integer.toString(draftMaxPartySize));
-        adminPartySizeBox.setResponder(s -> {
-            if (suppressAdminPartySync || s == null || s.isBlank()) {
-                return;
-            }
-            try {
-                draftMaxPartySize = Mth.clamp(Integer.parseInt(s), PARTY_MIN, PARTY_MAX);
-            } catch (NumberFormatException ignored) {
-            }
-            if (adminApplyBtn != null) {
-                adminApplyBtn.active = draftRespawnTicks != serverRespawnTicks
-                        || draftMaxPartySize != serverMaxPartySize;
-            }
-        });
-        addRenderableWidget(adminPartySizeBox);
-
-        updateButtons();
-        updateInfo();
+    protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
+        return OwoUIAdapter.create(this, Containers::verticalFlow);
     }
 
-    // ── Tick ─────────────────────────────────────────────────────────────────
+    @Override
+    protected void build(FlowLayout rootComponent) {
+        rootComponent.surface(Surface.flat(BG));
+        rootComponent.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+
+        int shellWidth = Math.max(420, Math.min(560, this.width - 24));
+        int shellHeight = Math.max(300, this.height - 24);
+        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
+        shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
+
+        shell.child(buildHeader());
+
+        instancesStrip = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        instancesStrip.surface(Surface.flat(PANEL_2));
+        instancesStrip.padding(Insets.of(6, 6, 8, 8));
+        shell.child(instancesStrip);
+
+        shell.child(buildTabs());
+
+        contentArea = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        contentArea.surface(Surface.flat(PANEL));
+        contentArea.padding(Insets.of(10));
+        contentArea.gap(4);
+        contentScroll = Containers.verticalScroll(Sizing.fill(100), Sizing.expand(), contentArea);
+        contentScroll.surface(Surface.flat(PANEL));
+        contentScroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
+        contentScroll.scrollbarThiccness(8);
+        contentScroll.fixedScrollbarLength(28);
+        contentScroll.scrollStep(18);
+        shell.child(contentScroll);
+
+        shell.child(buildFooter());
+        rootComponent.child(shell);
+
+        syncFromMenu(false);
+        rebuildUi();
+    }
+
     @Override
     protected void containerTick() {
         super.containerTick();
-        if (++refreshTick >= 20) {
-            refreshTick = 0;
-            updateInfo();
+        if (restoreScrollNextTick && contentScroll != null) {
+            contentScroll.scrollTo(savedScrollProgress);
+            restoreScrollNextTick = false;
         }
-    }
-
-    private void updateInfo() {
-        if (minecraft == null || minecraft.level == null) return;
-        ClientPlayNetworking.send(new ModPackets.RequestRaidControllerInfoPayload(menu.getPos(), lbTab.name()));
-    }
-
-    // ── Apply server payload ──────────────────────────────────────────────────
-    public void applyServerInfo(ModPackets.RaidControllerInfoPayload p) {
-        if (!p.pos().equals(menu.getPos())) return;
-
-        selectedDifficulty = RaidDifficulty.fromNameOrDefault(p.selectedDifficulty(), RaidDifficulty.NORMAL);
-        inLobby           = p.inLobby();
-        isOwner           = p.isLobbyOwner();
-        lobbyStatus       = parseLobbyStatus(p.lobbyStatus());
-        lobbyVis          = parseLobbyVis(p.currentLobbyVisibility());
-        queuePos          = p.queuePosition();
-        canAdmin          = p.canManageAdmin();
-        int prevRespawn   = serverRespawnTicks;
-        serverRespawnTicks = Math.max(0, p.controllerRespawnTimeTicks());
-        if (draftRespawnTicks == prevRespawn) draftRespawnTicks = serverRespawnTicks;
-        int prevMaxParty = serverMaxPartySize;
-        serverMaxPartySize = Mth.clamp(p.controllerMaxPartySize(), PARTY_MIN, PARTY_MAX);
-        if (draftMaxPartySize == prevMaxParty) {
-            draftMaxPartySize = serverMaxPartySize;
-        }
-        if (adminPartySizeBox != null && !adminPartySizeBox.isFocused()) {
-            String target = Integer.toString(draftMaxPartySize);
-            if (!target.equals(adminPartySizeBox.getValue())) {
-                suppressAdminPartySync = true;
-                adminPartySizeBox.setValue(target);
-                suppressAdminPartySync = false;
+        if ((currentTab == Tab.LOBBIES || currentTab == Tab.INVITES) && (!myInvites.isEmpty() || !myJoinRequests.isEmpty())) {
+            long now = approximateServerTick() / 20L;
+            if (now != lastCountdownSecond) {
+                lastCountdownSecond = now;
+                refreshInviteCountdowns();
+                refreshJoinRequestCountdowns();
             }
         }
-        maxPartySize = serverMaxPartySize;
-
-        memberNames  = new ArrayList<>(p.players());
-        leaderboard  = new ArrayList<>(p.leaderboard());
-        instanceViews= new ArrayList<>(p.instances());
-        cooldownSecs = instanceViews.stream()
-                .filter(iv -> "COOLDOWN".equalsIgnoreCase(iv.status()))
-                .mapToInt(ModPackets.RaidControllerInfoPayload.InstanceView::cooldownSeconds)
-                .min()
-                .orElse(0);
-        hardcoreEnabled = p.hardcoreEnabled();
-        queueEstSecs      = queuePos > 0 && cooldownSecs > 0 ? queuePos * cooldownSecs : 0;
-
-        // Partition lobbies
-        allLobbies     = new ArrayList<>(p.lobbies());
-        visLobbies     = new ArrayList<>();
-        invitedLobbies = new ArrayList<>();
-        for (var lv : allLobbies) {
-            if ("IN_DUNGEON".equalsIgnoreCase(lv.status())) continue;
-            visLobbies.add(lv);
-            if (lv.invited()) invitedLobbies.add(lv);
-        }
-        selLobby = Mth.clamp(selLobby, 0, Math.max(0, visLobbies.size() - 1));
-        selMember = Mth.clamp(selMember, 0, Math.max(0, memberNames.size() - 1));
-        myLobbyDifficulty = selectedDifficulty;
-        myLobbyMaxSize = maxPartySize;
-        if (inLobby && !memberNames.isEmpty()) {
-            String ownerName = memberNames.get(0);
-            for (var lv : allLobbies) {
-                if (lv.invited()) {
-                    continue;
-                }
-                if (!ownerName.equalsIgnoreCase(lv.ownerName())) {
-                    continue;
-                }
-                if (lv.size() != memberNames.size()) {
-                    continue;
-                }
-                if (!lv.status().equalsIgnoreCase(lobbyStatus.name())) {
-                    continue;
-                }
-                myLobbyDifficulty = RaidDifficulty.fromNameOrDefault(lv.difficulty(), selectedDifficulty);
-                myLobbyMaxSize = Mth.clamp(lv.maxSize(), PARTY_MIN, PARTY_MAX);
-                break;
-            }
-        }
-        if (hcBox != null && hcBox.selected() != hardcoreEnabled) {
-            suppressHcSync = true;
-            hcBox.onPress();
-            suppressHcSync = false;
-        }
-
-        updateButtons();
     }
 
-    // ── Button visibility ─────────────────────────────────────────────────────
-    private void updateButtons() {
-        if (createLobbyBtn == null) return;
-        UiState s = uiState();
-        int actionsY = actionRowY(s);
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        boolean handled = super.mouseClicked(mouseX, mouseY, button);
+        if (inviteDropdownOpen
+            && !pointInside(inviteFieldRow, mouseX, mouseY)
+            && !pointInside(inviteDropdownPanel, mouseX, mouseY)) {
+            closeInviteDropdown();
+        }
+        return handled;
+    }
 
-        // BROWSING
-        show(createLobbyBtn, s == UiState.BROWSING);
-        show(joinLobbyBtn,   s == UiState.BROWSING);
-        createLobbyBtn.setY(topPos + Y_ACTIONS - 5);
-        joinLobbyBtn.setY(topPos + Y_ACTIONS - 5);
-        boolean canJoin = s == UiState.BROWSING && canJoinSelected();
-        joinLobbyBtn.active = canJoin;
-        if (visLobbies.isEmpty() || selLobby >= visLobbies.size()) {
-            joinLobbyBtn.setMessage(Component.translatable("gui.arenas_ld.no_lobby_selected"));
-        } else if (canJoin) {
-            joinLobbyBtn.setMessage(Component.translatable("gui.arenas_ld.join_selected"));
+    private boolean pointInside(io.wispforest.owo.ui.core.Component component, double mouseX, double mouseY) {
+        if (component == null) {
+            return false;
+        }
+        return mouseX >= component.x() && mouseX < component.x() + component.width()
+            && mouseY >= component.y() && mouseY < component.y() + component.height();
+    }
+
+    private FlowLayout buildHeader() {
+        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(46));
+        header.surface(Surface.flat(PANEL_2));
+        header.padding(Insets.of(8, 8, 10, 10));
+        header.gap(10);
+        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        FlowLayout mark = Containers.verticalFlow(Sizing.fixed(20), Sizing.fixed(20));
+        mark.surface(Surface.flat(ACCENT).and(Surface.outline(ACCENT_DARK)));
+        header.child(mark);
+
+        FlowLayout info = Containers.verticalFlow(Sizing.content(), Sizing.content());
+        info.gap(3);
+
+        FlowLayout titleLine = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        titleLine.gap(8);
+        titleLine.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        LabelComponent titleLabel = Components.label(Component.translatable("container.arenas_ld.raid_controller"));
+        titleLabel.color(Color.ofArgb(INK));
+        titleLine.child(titleLabel);
+        titleLine.child(statusBadge());
+        info.child(titleLine);
+
+        FlowLayout meta = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        meta.gap(10);
+        meta.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        meta.child(smallMeta("POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
+        FlowLayout live = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        live.gap(4);
+        live.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        live.child(text(Component.literal("●"), GOOD));
+        live.child(smallMeta("LIVE", GOOD));
+        meta.child(live);
+        info.child(meta);
+        header.child(info);
+
+        header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+
+        ButtonComponent close = Components.button(Component.literal("×"), b -> onClose());
+        close.sizing(Sizing.fixed(22), Sizing.fixed(18));
+        close.renderer((context, rendered, delta) -> {
+            int fill = rendered.isHoveredOrFocused() ? ROW_BG : PANEL;
+            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
+            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), HAIRLINE_HI);
+        });
+        header.child(close);
+        return header;
+    }
+
+    private FlowLayout statusBadge() {
+        Component label;
+        int color;
+        if (ownLobby.isPresent()) {
+            label = Component.translatable("gui.arenas_ld.dungeon_controller.ui.status.in_lobby");
+            color = INFO;
+        } else if (!myInvites.isEmpty()) {
+            label = Component.translatable("gui.arenas_ld.dungeon_controller.ui.status.invites", myInvites.size());
+            color = ACCENT;
         } else {
-            var lv = visLobbies.get(selLobby);
-            if (lv.size() >= lv.maxSize()) {
-                joinLobbyBtn.setMessage(Component.translatable("gui.arenas_ld.lobby_full"));
-            } else if ("INVITE_ONLY".equalsIgnoreCase(lv.visibility()) && !lv.invited()) {
-                joinLobbyBtn.setMessage(Component.translatable("gui.arenas_ld.invite_only"));
+            label = Component.translatable("gui.arenas_ld.dungeon_controller.ui.status.available");
+            color = GOOD;
+        }
+        return badge(label, color);
+    }
+
+    private FlowLayout buildTabs() {
+        FlowLayout tabs = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(30));
+        tabs.surface(Surface.flat(PANEL_2));
+        tabs.padding(Insets.of(4));
+        tabs.gap(0);
+        tabs.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        lobbiesTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.lobbies", Tab.LOBBIES);
+        myLobbyTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.my_lobby", Tab.MY_LOBBY);
+        leaderboardTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.leaderboard", Tab.LEADERBOARD);
+        invitesTabButton = tabButton("gui.arenas_ld.dungeon_controller.tab.invites", Tab.INVITES);
+
+        tabs.child(tabCell(lobbiesTabButton));
+        tabs.child(tabCell(myLobbyTabButton));
+        tabs.child(tabCell(leaderboardTabButton));
+        tabs.child(tabCell(invitesTabButton));
+        return tabs;
+    }
+
+    private FlowLayout tabCell(ButtonComponent button) {
+        FlowLayout cell = Containers.verticalFlow(Sizing.fill(25), Sizing.content());
+        cell.surface(Surface.BLANK);
+        cell.padding(Insets.of(0, 0, 2, 2));
+        button.horizontalSizing(Sizing.fill(100));
+        cell.child(button);
+        return cell;
+    }
+
+    private FlowLayout buildFooter() {
+        FlowLayout footer = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
+        footer.surface(Surface.flat(PANEL_2));
+        footer.padding(Insets.of(6));
+        footer.gap(6);
+
+        footerLabel = Components.label(Component.empty());
+        footerLabel.color(Color.ofArgb(DANGER));
+        footerLabel.horizontalSizing(Sizing.expand());
+        footer.child(footerLabel);
+
+        footerActions = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        footerActions.gap(4);
+        footer.child(footerActions);
+        return footer;
+    }
+
+    private ButtonComponent tabButton(String key, Tab tab) {
+        ButtonComponent button = Components.button(Component.translatable(key), b -> {
+            currentTab = tab;
+            footerError = null;
+            savedScrollProgress = 0.0D;
+            rebuildUi();
+        });
+        button.sizing(Sizing.fixed(120), Sizing.fixed(20));
+        button.renderer((context, rendered, delta) -> {
+            boolean active = !rendered.active();
+            int fill = active ? PANEL : (rendered.isHoveredOrFocused() ? ROW_BG : PANEL_2);
+            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
+            if (active) {
+                context.fill(rendered.getX(), rendered.getY() + rendered.getHeight() - 2,
+                    rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), ACCENT);
             } else {
-                joinLobbyBtn.setMessage(Component.translatable("gui.arenas_ld.join_selected"));
+                context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), HAIRLINE);
+            }
+        });
+        return button;
+    }
+
+    private void rebuildUi() {
+        captureScrollProgress();
+        contentArea.clearChildren();
+        footerActions.clearChildren();
+        inviteCountdownLabels.clear();
+        joinRequestCountdownLabels.clear();
+        memberRowRefs.clear();
+        summaryOwnerLabel = null;
+        summaryMembersLabel = null;
+        membersSummaryLabel = null;
+        summaryTierValue = null;
+        summaryVisibilityValue = null;
+        summaryHardcoreValue = null;
+        readyToggleButton = null;
+        leaveLobbyButton = null;
+        startRunButton = null;
+        inviteFieldRow = null;
+        inviteDropdownPanel = null;
+        inviteChevron = null;
+        inviteDropdownOpen = false;
+
+        // Rebuild instances strip
+        if (instancesStrip != null) {
+            instancesStrip.clearChildren();
+            buildInstancesStrip();
+        }
+
+        lobbiesTabButton.active(currentTab != Tab.LOBBIES);
+        myLobbyTabButton.active(currentTab != Tab.MY_LOBBY);
+        leaderboardTabButton.active(currentTab != Tab.LEADERBOARD);
+        invitesTabButton.active(currentTab != Tab.INVITES);
+        lobbiesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.lobbies").append(" " + visibleLobbies.size()));
+        myLobbyTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.my_lobby").append(ownLobby.isPresent() ? " " + ownLobby.get().members().size() : ""));
+        leaderboardTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.leaderboard"));
+        invitesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.invites").append(" " + myInvites.size()));
+
+        switch (currentTab) {
+            case LOBBIES -> buildLobbiesContent();
+            case MY_LOBBY -> buildMyLobbyContent();
+            case LEADERBOARD -> buildLeaderboardContent();
+            case INVITES -> buildInvitesContent();
+        }
+
+        footerLabel.text(footerError == null ? Component.empty() : Component.literal(footerError).withStyle(ChatFormatting.RED));
+        if (contentScroll != null && savedScrollProgress > 0.0D) {
+            contentScroll.scrollTo(savedScrollProgress);
+            restoreScrollNextTick = true;
+        } else {
+            restoreScrollNextTick = false;
+        }
+    }
+
+    // ── Instances strip ──────────────────────────────────────────────────────
+
+    private void buildInstancesStrip() {
+        FlowLayout titleRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        titleRow.gap(8);
+        titleRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        titleRow.child(text(Component.translatable("gui.arenas_ld.raid_controller.ui.instance.title"), INK_DIM));
+        instancesStrip.child(titleRow);
+
+        if (instances.isEmpty()) {
+            instancesStrip.child(text(Component.translatable("gui.arenas_ld.raid_controller.ui.instance.no_instances"), INK_DIM));
+            return;
+        }
+
+        FlowLayout pillRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        pillRow.gap(4);
+        pillRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        for (RaidInstanceState inst : instances) {
+            String pillText = inst.status().name()
+                + (inst.cooldownTicks() > 0 ? " " + (inst.cooldownTicks() / 20) + "s" : "");
+            int pillColor = instanceStatusColor(inst.status());
+            pillRow.child(badge(Component.literal(pillText), pillColor));
+        }
+        instancesStrip.child(pillRow);
+    }
+
+    private int instanceStatusColor(InstanceStatus status) {
+        return switch (status) {
+            case FREE -> GOOD;
+            case RUNNING -> WARN;
+            case COOLDOWN -> DANGER;
+        };
+    }
+
+    // ── Invites tab ──────────────────────────────────────────────────────────
+
+    private void buildInvitesContent() {
+        contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.invites"), myInvites.size()));
+        if (myInvites.isEmpty()) {
+            contentArea.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller.no_invites")));
+        } else {
+            contentArea.child(inviteHeaderRow());
+            for (PendingInvite invite : myInvites) {
+                contentArea.child(inviteRow(invite));
             }
         }
 
-        // MEMBER
-        show(leaveLobbyBtn, s == UiState.MEMBER);
-        leaveLobbyBtn.setY(topPos + actionsY + 2);
-
-        // OWNER
-        boolean ownerActive = s == UiState.OWNER;
-        for (int i = 0; i < 4; i++) {
-            show(tierBtns[i], ownerActive);
-            tierBtns[i].active = ownerActive && RaidDifficulty.values()[i] != selectedDifficulty;
-        }
-        show(visOpenBtn,   ownerActive);
-        show(visInviteBtn, ownerActive);
-        show(hcBox, ownerActive);
-        hcBox.active = ownerActive;
-        visOpenBtn.active   = ownerActive && lobbyVis != LobbyVisibility.OPEN;
-        visInviteBtn.active = ownerActive && lobbyVis != LobbyVisibility.INVITE_ONLY;
-        int ownerListStart = topPos + YO_LIST;
-        int ownerListBottom = topPos + Y_ACTIONS_EXPANDED - 20;
-        int ownerListH = Math.max(ROW_H, ownerListBottom - ownerListStart);
-        int ownerVisibleRows = Math.max(1, ownerListH / ROW_H);
-        int ownerMaxScroll = Math.max(0, memberNames.size() * ROW_H - ownerListH);
-        memberScroll = Mth.clamp(memberScroll, 0, ownerMaxScroll);
-        int ownerFirstRow = (int) (memberScroll / ROW_H);
-        int ownerVisibleCount = Math.min(Math.max(0, memberNames.size() - ownerFirstRow), ownerVisibleRows);
-        show(kickBtn, false);
-        kickBtn.active = false;
-        boolean inviteVisible = ownerActive
-                && (lobbyVis == LobbyVisibility.OPEN || lobbyVis == LobbyVisibility.INVITE_ONLY);
-        show(inviteBox, inviteVisible);
-        inviteBox.setEditable(inviteVisible);
-        show(sendInviteBtn, inviteVisible);
-        sendInviteBtn.active = inviteVisible && !inviteBox.getValue().trim().isEmpty();
-        int inviteY = topPos + actionsY - 18;
-        inviteBox.setY(inviteY);
-        sendInviteBtn.setY(inviteY);
-        show(startBtn,   ownerActive);
-        show(disbandBtn, ownerActive);
-        startBtn.setY(topPos + actionsY);
-        disbandBtn.setY(topPos + actionsY);
-        if (ownerActive) {
-            boolean freeExists = instanceViews.stream().anyMatch(iv -> "FREE".equalsIgnoreCase(iv.status()));
-            startBtn.setMessage(Component.translatable(
-                    freeExists ? "gui.arenas_ld.start_raid" : "gui.arenas_ld.join_raid_queue"));
-        }
-
-        // QUEUED
-        show(leaveQueueBtn, s == UiState.QUEUED);
-        leaveQueueBtn.setY(topPos + actionsY);
-
-        // Leaderboard tabs (browsing only)
-        for (int i = 0; i < 4; i++) {
-            lbTabBtns[i].visible = s == UiState.BROWSING;
-            lbTabBtns[i].active  = s == UiState.BROWSING && RaidDifficulty.values()[i] != lbTab;
-        }
-
-        // Admin
-        show(adminMinusBtn, canAdmin);
-        show(adminApplyBtn, canAdmin);
-        show(adminPlusBtn,  canAdmin);
-        show(adminPartySizeBox, canAdmin);
-        adminPartySizeBox.setEditable(canAdmin);
-        if (adminApplyBtn.visible) adminApplyBtn.active = draftRespawnTicks != serverRespawnTicks
-                || draftMaxPartySize != serverMaxPartySize;
-        if (adminMinusBtn.visible) adminMinusBtn.active = draftRespawnTicks > 0;
-        if (adminPlusBtn.visible)  adminPlusBtn.active  = draftRespawnTicks < ADMIN_MAX;
-    }
-
-    private static void show(net.minecraft.client.gui.components.AbstractWidget w, boolean v) {
-        w.visible = v;
-        w.active  = v;
-    }
-
-    private static int actionRowY(UiState s) {
-        return s == UiState.BROWSING ? Y_ACTIONS : Y_ACTIONS_EXPANDED;
-    }
-
-    // ── Background ────────────────────────────────────────────────────────────
-    @Override
-    protected void renderBg(GuiGraphics g, float partialTick, int mx, int my) {
-        int x = leftPos, y = topPos;
-        UiState s = uiState();
-
-        // Full screen background
-        g.fill(x, y, x + W, y + H, C_BG);
-
-        // Outer border
-        drawBorder(g, x, y, W, H, C_BDR);
-
-        // Title bar
-        g.fill(x + 1, y + 1, x + W - 1, y + 14, C_TITLEBAR);
-        drawBorder(g, x + 1, y + 1, W - 2, 13, C_BDR);
-
-        // Instance panel
-        drawPanel(g, x + P, y + Y_INST, IW, INST_PANEL_H);
-
-        // State content panel
-        int contentPanelHeight = s == UiState.BROWSING ? 170 : 226;
-        drawPanel(g, x + P, y + Y_CONTENT - 2, IW, contentPanelHeight);
-
-        // Leaderboard panel (browsing only)
-        if (s == UiState.BROWSING) {
-            drawPanel(g, x + P, y + Y_LB - 2, IW, 58);
-        }
-
-        // Admin bar (subtle divider only)
-        if (canAdmin) {
-            g.fill(x + P, y + Y_ADMIN - 2, x + W - P, y + Y_ADMIN - 1, C_BDR);
-        }
-    }
-
-    // ── Main render ───────────────────────────────────────────────────────────
-    @Override
-    public void render(GuiGraphics g, int mx, int my, float dt) {
-        super.render(g, mx, my, dt);
-        renderTooltip(g, mx, my);
-
-        int x = leftPos, y = topPos;
-        UiState s = uiState();
-
-        renderInstances(g, x, y);
-
-        switch (s) {
-            case BROWSING -> renderBrowsing(g, x, y, mx, my);
-            case MEMBER   -> renderMember(g, x, y, mx, my);
-            case OWNER    -> renderOwner(g, x, y, mx, my);
-            case QUEUED   -> renderQueued(g, x, y);
-        }
-
-        if (s == UiState.BROWSING) {
-            renderLeaderboard(g, x, y);
-        }
-        if (canAdmin) renderAdminBar(g, x, y);
-    }
-
-    @Override
-    protected void renderLabels(GuiGraphics g, int mx, int my) {
-        // Title centered in title bar
-        int tw = font.width(this.title);
-        g.drawString(font, this.title, (imageWidth - tw) / 2, 4, C_TEXT, false);
-    }
-
-    // ── Section renderers ─────────────────────────────────────────────────────
-    private void renderInstances(GuiGraphics g, int x, int y) {
-        smallLabel(g, Component.translatable("gui.arenas_ld.instances"), x + P + 3, y + Y_INST + 4);
-        int panelX = x + P;
-        int panelY = y + Y_INST;
-        int panelInnerLeft = panelX + 3;
-        int panelInnerRight = panelX + IW - 3;
-        int px = panelInnerLeft;
-        int py = panelY + 14;
-        if (instanceViews.isEmpty()) {
-            g.drawString(font, Component.translatable("gui.arenas_ld.no_instances_registered"), px, py, C_MUTED, false);
-            return;
-        }
-        int shown = 0;
-        int maxRows = 2;
-        int row = 0;
-        int rowBottom = py + 12;
-        for (int i = 0; i < instanceViews.size(); i++) {
-            var iv = instanceViews.get(i);
-            int idx = pillIndex(iv.status());
-            String label = pillLabel(iv, i + 1);
-            int pillW = font.width(label) + 8;
-            if (px + pillW > panelInnerRight) {
-                row++;
-                if (row >= maxRows) {
-                    int hidden = instanceViews.size() - shown;
-                    if (hidden > 0) {
-                        Component more = Component.translatable("gui.arenas_ld.more_count", hidden);
-                        g.drawString(font, more, panelInnerRight - font.width(more), y + Y_INST + 4, C_MUTED, false);
-                    }
-                    break;
+        UUID self = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : null;
+        boolean isOwner = self != null && ownLobby.isPresent() && ownLobby.get().ownerUuid().equals(self);
+        if (isOwner) {
+            UUID ownedLobbyId = ownLobby.get().lobbyId();
+            List<PendingJoinRequest> incoming = myJoinRequests.stream()
+                .filter(r -> r.lobbyId().equals(ownedLobbyId))
+                .toList();
+            contentArea.child(spacer(8));
+            contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.join_requests"), incoming.size()));
+            if (incoming.isEmpty()) {
+                contentArea.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller.no_join_requests")));
+            } else {
+                contentArea.child(joinRequestHeaderRow());
+                for (PendingJoinRequest req : incoming) {
+                    contentArea.child(joinRequestRow(req));
                 }
-                px = panelInnerLeft;
-                py += 12 + INST_PILL_GAP_Y;
-                rowBottom = py + 12;
-            }
-            px = drawPill(g, label, px, py, PILL_BG[idx], PILL_TXT[idx], PILL_BDR[idx]);
-            px += INST_PILL_GAP_X;
-            shown++;
-        }
-    }
-
-    private void renderBrowsing(GuiGraphics g, int x, int y, int mx, int my) {
-        int contentY = y + Y_CONTENT + 4;
-
-        // Invite banner (first invite, if any) — only occupies space when present
-        if (!invitedLobbies.isEmpty()) {
-            var inv = invitedLobbies.get(0);
-            int bx = x + P + 3, by = contentY;
-            g.fill(bx, by, bx + IW - 6, by + 20, 0xFF1a1800);
-            drawBorder(g, bx, by, IW - 6, 20, 0xFF4a4000);
-            String ownerTrunc = truncate(inv.ownerName(), 12);
-            Component invitedText = Component.translatable("gui.arenas_ld.owner_invited_you", ownerTrunc);
-            g.drawString(font, invitedText, bx + 4, by + 6, C_AMBER, false);
-            drawTierPill(g, inv.difficulty(), bx + 4 + font.width(invitedText) + 4, by + 4);
-            if (invitedLobbies.size() > 1) {
-                small(g, Component.translatable("gui.arenas_ld.more_count", invitedLobbies.size() - 1), bx + 4, by + 14, C_MUTED);
-            }
-            int btnW = 39;
-            int btnGap = 4;
-            int axBtn = bx + IW - 6 - (btnW * 2 + btnGap);
-            g.fill(axBtn, by + 4, axBtn + btnW, by + 16, 0xFF0a2a0a);
-            drawBorder(g, axBtn, by + 4, btnW, 12, 0xFF1a5a1a);
-            g.drawString(font, Component.translatable("gui.arenas_ld.accept"), axBtn + 4, by + 6, C_GREEN, false);
-            int declineX = axBtn + btnW + btnGap;
-            g.fill(declineX, by + 4, declineX + btnW, by + 16, 0xFF2a0a0a);
-            drawBorder(g, declineX, by + 4, btnW, 12, 0xFF5a1a1a);
-            g.drawString(font, Component.translatable("gui.arenas_ld.decline"), declineX + 4, by + 6, C_RED, false);
-            contentY += 24; // banner height + gap
-        }
-
-        // "OPEN LOBBIES" label
-        smallLabel(g, Component.translatable("gui.arenas_ld.open_lobbies"), x + P + 3, contentY);
-        contentY += 10;
-
-        // Lobby list — fills remaining content zone down to action buttons
-        int listX = x + P + 3, listY = contentY;
-        int listW = IW - 6;
-        int listH = Math.max(20, (y + Y_ACTIONS - 8) - listY);
-
-        g.enableScissor(listX, listY, listX + listW, listY + listH);
-        int maxScroll = Math.max(0, visLobbies.size() * ROW_H - listH);
-        lobbyScroll = Mth.clamp(lobbyScroll, 0, maxScroll);
-
-        if (visLobbies.isEmpty()) {
-            g.drawString(font, Component.translatable("gui.arenas_ld.no_open_lobbies"), listX + 4, listY + 4, C_MUTED, false);
-        }
-        for (int i = 0; i < visLobbies.size(); i++) {
-            var lv = visLobbies.get(i);
-            int ry = (int)(listY + i * ROW_H - lobbyScroll);
-            if (ry + ROW_H < listY || ry > listY + listH) continue;
-
-            boolean sel = (i == selLobby);
-            g.fill(listX, ry, listX + listW, ry + ROW_H - 1, sel ? C_ROW_SEL : C_ROW_NORM);
-            drawBorder(g, listX, ry, listW, ROW_H - 1, sel ? C_BDR_HL : C_BDR);
-
-            // Owner name
-            g.drawString(font, truncate(lv.ownerName(), 10), listX + 4, ry + 5, C_TEXT, false);
-
-            // Size
-            String sizeStr = lv.size() + "/" + lv.maxSize();
-            int sizeX = listX + 90;
-            g.drawString(font, sizeStr, sizeX, ry + 5, C_MUTED, false);
-
-            // Tier pill
-            int tierPx = drawTierPill(g, lv.difficulty(), listX + 115, ry + 3);
-
-            // Action tag
-            String actionKey = lobbyActionLabelKey(lv);
-            Component action = Component.translatable(actionKey);
-            int actionColor = "gui.arenas_ld.action_join".equals(actionKey) ? C_BLUE : C_MUTED;
-            Component actionBracket = Component.literal("[").append(action).append(Component.literal("]"));
-            g.drawString(font, actionBracket, listX + listW - font.width(actionBracket) - 4, ry + 5, actionColor, false);
-        }
-        g.disableScissor();
-
-        // Scroll indicator
-        if (maxScroll > 0) {
-            int sbH = listH;
-            int knobH = Math.max(8, sbH * listH / Math.max(1, visLobbies.size() * ROW_H));
-            int knobY = listY + (int)(lobbyScroll / maxScroll * (sbH - knobH));
-            g.fill(listX + listW + 2, listY, listX + listW + 5, listY + sbH, 0x33FFFFFF);
-            g.fill(listX + listW + 2, knobY, listX + listW + 5, knobY + knobH, 0x88FFFFFF);
-        }
-    }
-
-    private void renderMember(GuiGraphics g, int x, int y, int mx, int my) {
-        // Find our lobby
-        // Use server-pushed member list — first is owner
-        int cy = y + Y_CONTENT + 4;
-
-        // Lobby info row
-        g.drawString(font, Component.translatable("gui.arenas_ld.lobby"), x + P + 3, cy + 3, C_MUTED, false);
-        // Tier badge from lobby selected difficulty
-        int tierPillW = tierPillWidth(myLobbyDifficulty.name());
-        drawTierPill(g, myLobbyDifficulty.name(), x + W - P - 3 - tierPillW, cy + 1);
-        cy += 16;
-
-        // Status
-        g.drawString(font, Component.translatable("gui.arenas_ld.waiting_for_owner"), x + P + 3, cy, C_GREEN, false);
-        cy += 16;
-
-        // Members section
-        smallLabel(g, Component.translatable("gui.arenas_ld.members"), x + P + 3, cy);
-        cy += 12;
-
-        renderMemberList(g, x, y, cy, false, y + Y_ACTIONS_EXPANDED - 4);
-    }
-
-    private void renderOwner(GuiGraphics g, int x, int y, int mx, int my) {
-        // "Difficulty" label above tier buttons
-        smallLabel(g, Component.translatable("gui.arenas_ld.difficulty"), x + P + 3, y + YO_DIFF);
-        int hcTextX = x + P + 28 + font.width(Component.translatable("gui.arenas_ld.hardcore")) + 4;
-        g.drawString(font, Component.translatable("gui.arenas_ld.hardcore_suffix"), hcTextX + 2, y + YO_HC + 5, C_MUTED, false);
-
-        // Members label
-        smallLabel(g, Component.translatable("gui.arenas_ld.members"), x + P + 3, y + YO_MEMBERS);
-
-        renderMemberList(g, x, y, y + YO_LIST, true, y + Y_ACTIONS_EXPANDED - 20);
-        renderInviteDropdown(g);
-    }
-
-    private void renderMemberList(GuiGraphics g, int x, int y, int listStartY, boolean ownerMode, int listBottomY) {
-        if (memberNames.isEmpty()) {
-            g.drawString(font, Component.translatable("gui.arenas_ld.no_members"), x + P + 3, listStartY + 3, C_MUTED, false);
-            return;
-        }
-        int availableH = Math.max(ROW_H, listBottomY - listStartY);
-        int maxVisibleRows = Math.max(1, availableH / ROW_H);
-        int maxScroll = Math.max(0, memberNames.size() * ROW_H - availableH);
-        memberScroll = Mth.clamp(memberScroll, 0, maxScroll);
-        int firstRow = (int) (memberScroll / ROW_H);
-        int visibleCount = Math.min(Math.max(0, memberNames.size() - firstRow), maxVisibleRows);
-        for (int i = 0; i < visibleCount; i++) {
-            int memberIndex = firstRow + i;
-            int ry = listStartY + i * ROW_H;
-            boolean sel = ownerMode && memberIndex == selMember;
-            if (sel) g.fill(x + P, ry, x + W - P, ry + ROW_H - 1, C_ROW_SEL);
-
-            // Star for owner (index 0)
-            if (memberIndex == 0) g.drawString(font, "\u2605", x + P + 3, ry + 4, C_YELLOW, false);
-            // Name — highlight current player
-            int nameColor = C_TEXT;
-            g.drawString(font, memberNames.get(memberIndex), x + P + 14, ry + 4, nameColor, false);
-            // "owner" tag
-            if (memberIndex == 0) {
-                Component ownerTag = Component.translatable("gui.arenas_ld.owner");
-                small(g, ownerTag, x + W - P - 3 - font.width(ownerTag), ry + 6, C_MUTED);
             }
         }
-        // Player count
-        int countY = Math.min(listBottomY - 8, listStartY + visibleCount * ROW_H + 10);
-        small(
-                g,
-                Component.translatable("gui.arenas_ld.players_count", memberNames.size(), Math.max(PARTY_MIN, myLobbyMaxSize)),
-                x + P + 3,
-                countY,
-                C_MUTED
-        );
-        if (maxScroll > 0) {
-            int sbX = x + W - P - 3;
-            int knobH = Math.max(8, availableH * availableH / Math.max(1, memberNames.size() * ROW_H));
-            int knobY = listStartY + (int) (memberScroll / maxScroll * (availableH - knobH));
-            g.fill(sbX, listStartY, sbX + 2, listStartY + availableH, 0x33FFFFFF);
-            g.fill(sbX, knobY, sbX + 2, knobY + knobH, 0x88FFFFFF);
-        }
     }
 
-    private void renderQueued(GuiGraphics g, int x, int y) {
-        int cy = y + Y_CONTENT + 4;
-        int lx = x + P + 3;
-
-        // "Queue  [#2 in line]"
-        Component queueLabel = Component.translatable("gui.arenas_ld.queue");
-        Component queuePosLabel = Component.translatable("gui.arenas_ld.queue_in_line", queuePos);
-        g.drawString(font, queueLabel, lx, cy + 3, C_TEXT, false);
-        int badgeX = lx + font.width(queueLabel) + 6;
-        g.fill(badgeX, cy, badgeX + font.width(queuePosLabel) + 8, cy + 14, 0xFF1a0a2a);
-        drawBorder(g, badgeX, cy, font.width(queuePosLabel) + 8, 14, 0xFF4a2a7a);
-        g.drawString(font, queuePosLabel, badgeX + 4, cy + 3, C_PURPLE, false);
-        cy += 18;
-
-        // Est. wait
-        Component estWaitLabel = Component.translatable("gui.arenas_ld.est_wait");
-        g.drawString(font, estWaitLabel, lx, cy, C_MUTED, false);
-        g.drawString(font, formatTime(queueEstSecs), lx + font.width(estWaitLabel), cy, C_AMBER, false);
-        cy += 13;
-
-        // Next slot
-        if (cooldownSecs > 0) {
-            Component nextSlotLabel = Component.translatable("gui.arenas_ld.next_slot");
-            g.drawString(font, nextSlotLabel, lx, cy, C_MUTED, false);
-            g.drawString(font, formatTime(cooldownSecs), lx + font.width(nextSlotLabel), cy, C_TEXT, false);
-            cy += 13;
-        }
-
-        // Notification
-        cy += 4;
-        g.drawString(font, Component.translatable("gui.arenas_ld.slot_notify"), lx, cy, C_NOTIFY, false);
-        cy += 16;
-
-        // Your party
-        smallLabel(g, Component.translatable("gui.arenas_ld.your_party"), lx, cy);
-        cy += 12;
-        renderMemberList(g, x, y, cy, false, y + Y_ACTIONS_EXPANDED - 4);
+    private FlowLayout joinRequestHeaderRow() {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.padding(Insets.of(2, 2, 6, 6));
+        row.gap(6);
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.requester"), Sizing.expand()));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.tier"), Sizing.fixed(86)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.expires"), Sizing.fixed(62)));
+        row.child(headerCell("", Sizing.fixed(54)));
+        row.child(headerCell("", Sizing.fixed(58)));
+        return row;
     }
 
-    private void renderLeaderboard(GuiGraphics g, int x, int y) {
-        smallLabel(g, Component.translatable("gui.arenas_ld.leaderboard_tiers"), x + P + 3, y + Y_LB + 1);
-        int lx = x + P + 3;
-        int ey = y + Y_LB_ENTRY + 2;
-        int rowH = 10;
-        int viewTop = ey;
-        int viewBottom = y + Y_LB + 56 - 3;
-        int viewH = Math.max(1, viewBottom - viewTop);
+    private FlowLayout joinRequestRow(PendingJoinRequest req) {
+        FlowLayout row = rowPanel(false);
+        row.gap(6);
 
-        List<RaidLeaderboardEntry> entries = leaderboard; // server sends for current tier
+        String requesterName = !req.requesterName().isEmpty() ? req.requesterName() : shortUuid(req.requesterUuid());
+
+        FlowLayout info = Containers.verticalFlow(Sizing.expand(), Sizing.content());
+        FlowLayout fromLine = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        fromLine.gap(3);
+        fromLine.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite_row.from"), INK));
+        fromLine.child(text(Component.literal(requesterName), ACCENT));
+        info.child(fromLine);
+        info.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.join_request_row.wants_to_join"), INK_DIM));
+        row.child(info);
+
+        row.child(fixedBadge(Component.literal(req.tier().name()), 86, tierColor(req.tier())));
+
+        long remainingSeconds = Math.max(0L, req.expiresAtTick() - approximateServerTick()) / 20L;
+        LabelComponent countdown = fixedText(Component.literal(formatRemaining(remainingSeconds)), 62, remainingSeconds <= 15 ? WARN : INK_MID, HorizontalAlignment.CENTER);
+        joinRequestCountdownLabels.put(req.requesterUuid(), countdown);
+        row.child(countdown);
+
+        UUID requesterUuid = req.requesterUuid();
+        ButtonComponent accept = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), b -> {
+            footerError = null;
+            ClientPlayNetworking.send(new RaidAcceptJoinRequestPayload(menu.getBlockPos(), requesterUuid));
+        });
+        accept.horizontalSizing(Sizing.fixed(54));
+        row.child(accept);
+
+        ButtonComponent decline = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), b -> {
+            footerError = null;
+            ClientPlayNetworking.send(new RaidDeclineJoinRequestPayload(menu.getBlockPos(), requesterUuid));
+        });
+        decline.horizontalSizing(Sizing.fixed(58));
+        row.child(decline);
+
+        return row;
+    }
+
+    // ── Leaderboard tab ──────────────────────────────────────────────────────
+
+    private void buildLeaderboardContent() {
+        contentArea.child(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.col.tier")));
+        contentArea.child(leaderboardTierControls());
+
+        contentArea.child(spacer(4));
+        contentArea.child(leaderboardBanner(leaderboardTier));
+
+        List<LeaderboardEntry> entries = new ArrayList<>(topLeaderboards.getOrDefault(leaderboardTier, List.of()));
+        entries.sort(Comparator.comparingInt(LeaderboardEntry::timeSeconds));
+
+        contentArea.child(spacer(4));
+        contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.ui.section.top_runs"), entries.size()));
+
+        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        list.child(leaderboardHeaderRow());
+        list.child(rowDivider(HAIRLINE_HI));
         if (entries.isEmpty()) {
-            Component noRecords = Component.translatable("gui.arenas_ld.no_records_yet");
-            small(g, noRecords, lx + (IW - 6 - font.width(noRecords)) / 2, ey + 4, C_MUTED);
+            FlowLayout empty = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+            empty.surface(Surface.flat(ROW_BG));
+            empty.padding(Insets.of(10));
+            empty.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+            empty.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller.ui.leaderboard.no_runs")));
+            list.child(empty);
+        } else {
+            for (int i = 0; i < entries.size(); i++) {
+                if (i > 0) {
+                    list.child(rowDivider(HAIRLINE));
+                }
+                list.child(leaderboardRow(i + 1, entries.get(i), leaderboardTier));
+            }
+        }
+        contentArea.child(list);
+    }
+
+    private FlowLayout leaderboardTierControls() {
+        ButtonComponent easy = leaderboardTierButton(DifficultyTier.EASY, "EASY");
+        ButtonComponent normal = leaderboardTierButton(DifficultyTier.NORMAL, "NORMAL");
+        ButtonComponent hard = leaderboardTierButton(DifficultyTier.HARD, "HARD");
+        ButtonComponent nightmare = leaderboardTierButton(DifficultyTier.NIGHTMARE, "NIGHTMARE");
+        return segmentedControl(easy, normal, hard, nightmare);
+    }
+
+    private ButtonComponent leaderboardTierButton(DifficultyTier tier, String label) {
+        return segmentButton(label, tierColor(tier), true,
+            () -> leaderboardTier == tier,
+            b -> {
+                leaderboardTier = tier;
+                rebuildUi();
+            });
+    }
+
+    private FlowLayout leaderboardBanner(DifficultyTier tier) {
+        int color = tierColor(tier);
+        FlowLayout banner = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
+        banner.surface(Surface.flat((color & 0x00FFFFFF) | 0x1F000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
+        banner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
+        accent.surface(Surface.flat(color));
+        banner.child(accent);
+        FlowLayout inner = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        inner.padding(Insets.of(0, 0, 10, 10));
+        inner.gap(8);
+        inner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        inner.child(badge(Component.translatable("gui.arenas_ld.dungeon_controller.ui.leaderboard.banner_badge", tier.name()), color));
+        inner.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.leaderboard.banner_desc", titleCase(tier.name())), INK));
+        banner.child(inner);
+        return banner;
+    }
+
+    private FlowLayout leaderboardHeaderRow() {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(PANEL_2));
+        row.padding(Insets.of(5, 5, 8, 8));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.rank"), Sizing.fixed(50)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.player"), Sizing.expand()));
+        LabelComponent timeHeader = headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.time"), Sizing.fixed(64));
+        timeHeader.horizontalTextAlignment(HorizontalAlignment.RIGHT);
+        row.child(timeHeader);
+        return row;
+    }
+
+    private FlowLayout leaderboardRow(int rank, LeaderboardEntry entry, DifficultyTier tier) {
+        boolean top = rank == 1;
+        int color = tierColor(tier);
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(top ? ((color & 0x00FFFFFF) | 0x1A000000) : ROW_BG));
+        row.padding(Insets.of(7, 7, 8, 8));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        LabelComponent rankLabel = text(Component.literal(top ? "★1" : ("#" + rank)), top ? color : INK_MID);
+        rankLabel.horizontalSizing(Sizing.fixed(50));
+        row.child(rankLabel);
+
+        LabelComponent nameLabel = text(Component.literal(entry.playerName()), INK);
+        nameLabel.horizontalSizing(Sizing.expand());
+        row.child(nameLabel);
+
+        LabelComponent timeLabel = text(Component.literal(formatClock(entry.timeSeconds())), top ? color : INK_MID);
+        timeLabel.horizontalSizing(Sizing.fixed(64));
+        timeLabel.horizontalTextAlignment(HorizontalAlignment.RIGHT);
+        row.child(timeLabel);
+        return row;
+    }
+
+    private static String formatClock(int totalSeconds) {
+        int mins = Math.max(0, totalSeconds) / 60;
+        int secs = Math.max(0, totalSeconds) % 60;
+        return String.format("%02d:%02d", mins, secs);
+    }
+
+    // ── Lobbies tab ──────────────────────────────────────────────────────────
+
+    private void buildLobbiesContent() {
+        ButtonComponent create = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.create"), b -> {
+            footerError = null;
+            ClientPlayNetworking.send(new RaidCreateLobbyPayload(menu.getBlockPos()));
+        });
+        create.active(ownLobby.isEmpty());
+        contentArea.child(sectionHeaderWithAction(Component.translatable("gui.arenas_ld.dungeon_controller.public_lobbies"), visibleLobbies.size(), create));
+        if (!visibleLobbies.isEmpty()) {
+            contentArea.child(lobbyHeaderRow());
+        }
+
+        List<Lobby> sorted = visibleLobbies.stream().sorted(Comparator.comparing(Lobby::ownerName)).limit(6).toList();
+        if (sorted.isEmpty()) {
+            contentArea.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller.no_lobbies")));
+        } else {
+            for (Lobby lobby : sorted) {
+                contentArea.child(lobbyRow(lobby));
+            }
+        }
+    }
+
+    private FlowLayout inviteRow(PendingInvite invite) {
+        FlowLayout row = rowPanel(false);
+        row.gap(6);
+
+        Optional<Lobby> inviteLobby = resolveLobbyForInvite(invite);
+        String ownerName = inviteLobby.map(Lobby::ownerName)
+            .filter(n -> !n.isEmpty())
+            .orElseGet(() -> !invite.ownerName().isEmpty() ? invite.ownerName() : shortUuid(invite.lobbyId()));
+        String inviterName = inviteLobby
+            .map(l -> l.memberNames().get(invite.inviterUuid()))
+            .filter(n -> !n.isEmpty())
+            .orElse(ownerName);
+        DifficultyTier inviteTier = inviteLobby.map(Lobby::selectedTier).orElse(invite.tier());
+
+        long remainingTicks = Math.max(0L, invite.expiresAtTick() - approximateServerTick());
+        long remainingSeconds = remainingTicks / 20L;
+        FlowLayout inviteInfo = Containers.verticalFlow(Sizing.expand(), Sizing.content());
+        FlowLayout fromLine = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        fromLine.gap(3);
+        fromLine.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite_row.from"), INK));
+        fromLine.child(text(Component.literal(inviterName), ACCENT));
+        inviteInfo.child(fromLine);
+        inviteInfo.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite_row.owner", ownerName.toUpperCase()), INK_DIM));
+        row.child(inviteInfo);
+        row.child(fixedText(Component.literal("-"), 40, INK_DIM, HorizontalAlignment.CENTER));
+
+        row.child(fixedBadge(Component.literal(inviteTier.name()), 86, tierColor(inviteTier)));
+        LabelComponent countdown = fixedText(Component.literal(formatRemaining(remainingSeconds)), 62, remainingSeconds <= 15 ? WARN : INK_MID, HorizontalAlignment.CENTER);
+        inviteCountdownLabels.put(invite.lobbyId(), countdown);
+        row.child(countdown);
+
+        ButtonComponent accept = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), b -> {
+            footerError = null;
+            ClientPlayNetworking.send(new RaidAcceptInvitePayload(menu.getBlockPos(), invite.lobbyId()));
+        });
+        accept.horizontalSizing(Sizing.fixed(54));
+        row.child(accept);
+
+        ButtonComponent decline = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), b -> {
+            footerError = null;
+            ClientPlayNetworking.send(new RaidDeclineInvitePayload(menu.getBlockPos(), invite.lobbyId()));
+        });
+        decline.horizontalSizing(Sizing.fixed(58));
+        row.child(decline);
+
+        return row;
+    }
+
+    private FlowLayout lobbyRow(Lobby lobby) {
+        FlowLayout row = rowPanel(false);
+        row.gap(8);
+
+        FlowLayout ownerInfo = Containers.verticalFlow(Sizing.expand(), Sizing.content());
+        FlowLayout nameLine = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        nameLine.gap(5);
+        nameLine.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        nameLine.child(text(Component.literal(lobby.ownerName()), INK));
+        if (lobby.hardcoreEnabled()) {
+            nameLine.child(badge(Component.literal("H"), DANGER));
+        }
+        ownerInfo.child(nameLine);
+        ownerInfo.child(text(Component.literal(shortUuid(lobby.lobbyId()).toUpperCase()), INK_DIM));
+        row.child(ownerInfo);
+        row.child(fixedBadge(Component.literal(lobby.members().size() + "/" + menu.getMaxPartySize()), 44, INK_MID));
+        row.child(fixedBadge(Component.literal(lobby.selectedTier().name()), 70, tierColor(lobby.selectedTier())));
+
+        FlowLayout visCell = Containers.horizontalFlow(Sizing.fixed(78), Sizing.content());
+        int visColor = visibilityColor(lobby.visibility());
+        visCell.surface(Surface.flat((visColor & 0x00FFFFFF) | 0x22000000).and(Surface.outline((visColor & 0x00FFFFFF) | 0x55000000)));
+        visCell.padding(Insets.of(4, 2, 4, 4));
+        visCell.gap(4);
+        visCell.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        visCell.child(text(Component.literal("●"), visColor));
+        visCell.child(text(Component.literal(lobby.visibility().name()), visColor));
+        row.child(visCell);
+
+        row.child(fixedBadge(Component.literal(statusLabel(lobby.status())), 82, statusColor(lobby.status())));
+
+        UUID lobbyId = lobby.lobbyId();
+        boolean isMine = ownLobby.isPresent() && ownLobby.get().lobbyId().equals(lobbyId);
+        boolean isFull = lobby.isFull(menu.getMaxPartySize());
+        boolean inRun = lobby.status() == LobbyStatus.IN_RUN;
+
+        FlowLayout actionCell = Containers.horizontalFlow(Sizing.fixed(84), Sizing.content());
+        actionCell.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
+        ButtonComponent actionButton;
+        if (inRun) {
+            actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.running"), b -> {});
+            actionButton.active(false);
+        } else if (isFull) {
+            actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.full"), b -> {});
+            actionButton.active(false);
+        } else if (lobby.visibility() == LobbyVisibility.PUBLIC) {
+            actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.join"), b -> {
+                footerError = null;
+                ClientPlayNetworking.send(new RaidJoinLobbyPayload(menu.getBlockPos(), lobbyId));
+            });
+            actionButton.active(!isMine && ownLobby.isEmpty());
+        } else {
+            UUID self = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : null;
+            boolean alreadyRequested = self != null && myJoinRequests.stream()
+                .anyMatch(r -> r.lobbyId().equals(lobbyId) && r.requesterUuid().equals(self));
+            if (alreadyRequested) {
+                actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.pending"), b -> {});
+                actionButton.active(false);
+            } else {
+                actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.request"), b -> {
+                    footerError = null;
+                    ClientPlayNetworking.send(new RaidRequestJoinPayload(menu.getBlockPos(), lobbyId));
+                });
+                actionButton.active(!isMine && ownLobby.isEmpty());
+            }
+        }
+        actionButton.horizontalSizing(Sizing.fill(100));
+        actionCell.child(actionButton);
+        row.child(actionCell);
+        return row;
+    }
+
+    // ── MY LOBBY tab ─────────────────────────────────────────────────────────
+
+    private void buildMyLobbyContent() {
+        if (ownLobby.isEmpty()) {
+            contentArea.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller.no_own_lobby")));
             return;
         }
-        int totalH = entries.size() * rowH;
-        int maxScroll = Math.max(0, totalH - viewH);
-        lbScroll = Mth.clamp(lbScroll, 0, maxScroll);
 
-        g.enableScissor(lx, viewTop, lx + IW - 6, viewBottom);
-        for (int i = 0; i < entries.size(); i++) {
-            int rowY = (int) (ey + i * rowH - lbScroll);
-            if (rowY + rowH < viewTop || rowY > viewBottom) continue;
-            var e = entries.get(i);
-            int rank_color = i == 0 ? C_YELLOW : (i == 1 ? 0xFFcccccc : (i == 2 ? 0xFFcc8833 : C_MUTED));
-            small(g, (i + 1) + ".", lx, rowY, rank_color);
-            small(g, truncate(e.playerName(), 14), lx + 14, rowY, C_TEXT);
-            String t = formatTime(e.timeSeconds());
-            small(g, t, lx + IW - 6 - font.width(t), rowY, C_CYAN);
+        Lobby lobby = ownLobby.get();
+        UUID self = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : UUID.randomUUID();
+        boolean isOwner = lobby.ownerUuid().equals(self);
+        boolean isAdmin = minecraft != null && minecraft.player != null && minecraft.player.hasPermissions(2);
+
+        // Queue position banner
+        int queuePos = menu.getQueuePosition();
+        if (queuePos >= 1) {
+            FlowLayout queueBanner = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(28));
+            queueBanner.surface(Surface.flat((WARN & 0x00FFFFFF) | 0x1A000000).and(Surface.outline((WARN & 0x00FFFFFF) | 0x55000000)));
+            queueBanner.padding(Insets.of(4, 4, 8, 8));
+            queueBanner.gap(8);
+            queueBanner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+            FlowLayout queueAccent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
+            queueAccent.surface(Surface.flat(WARN));
+            queueBanner.child(queueAccent);
+
+            String inLineText = Component.translatable("gui.arenas_ld.raid_controller.ui.queue.in_line", queuePos).getString();
+            queueBanner.child(badge(Component.literal(inLineText), WARN));
+
+            queueBanner.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+
+            if (isOwner) {
+                ButtonComponent startOrQueue = smallButton(Component.translatable("gui.arenas_ld.raid_controller.button.start"), b -> {
+                    footerError = null;
+                    Lobby currentLobby = ownLobby.orElse(null);
+                    UUID currentSelf2 = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : UUID.randomUUID();
+                    if (currentLobby == null) return;
+                    if (!currentLobby.ownerUuid().equals(currentSelf2)) {
+                        footerError = Component.translatable("gui.arenas_ld.raid_controller.error.only_owner").getString();
+                        rebuildUi();
+                        return;
+                    }
+                    if (!currentLobby.allReady()) {
+                        footerError = Component.translatable("gui.arenas_ld.raid_controller.error.all_ready_required").getString();
+                        rebuildUi();
+                        return;
+                    }
+                    if (!allOnline(currentLobby)) {
+                        footerError = Component.translatable("gui.arenas_ld.raid_controller.error.all_online_required").getString();
+                        rebuildUi();
+                        return;
+                    }
+                    ClientPlayNetworking.send(new RaidStartPayload(menu.getBlockPos()));
+                });
+                queueBanner.child(startOrQueue);
+
+                ButtonComponent leaveQueue = smallButton(Component.translatable("gui.arenas_ld.raid_controller.button.leave_queue"), b -> {
+                    footerError = null;
+                    ClientPlayNetworking.send(new RaidLeaveLobbyPayload(menu.getBlockPos()));
+                });
+                queueBanner.child(leaveQueue);
+            }
+
+            contentArea.child(queueBanner);
+            contentArea.child(spacer(4));
         }
-        g.disableScissor();
 
-        if (maxScroll > 0) {
-            int sbX = lx + IW - 6;
-            int sbH = viewH;
-            int knobH = Math.max(8, sbH * viewH / Math.max(1, totalH));
-            int knobY = viewTop + (int) (lbScroll / maxScroll * (sbH - knobH));
-            g.fill(sbX, viewTop, sbX + 2, viewTop + sbH, 0x33FFFFFF);
-            g.fill(sbX, knobY, sbX + 2, knobY + knobH, 0x88FFFFFF);
+        summaryOwnerLabel = text(Component.literal(lobby.ownerName()), ACCENT);
+        summaryMembersLabel = text(Component.literal(lobby.members().size() + " / " + menu.getMaxPartySize()), INK);
+        summaryTierValue = text(Component.literal(titleCase(lobby.selectedTier().name())), tierColor(lobby.selectedTier()));
+        summaryVisibilityValue = text(Component.literal(titleCase(lobby.visibility().name())), visibilityColor(lobby.visibility()));
+        summaryHardcoreValue = text(Component.translatable(lobby.hardcoreEnabled() ? "gui.arenas_ld.dungeon_controller.ui.hardcore.on" : "gui.arenas_ld.dungeon_controller.ui.hardcore.off"), lobby.hardcoreEnabled() ? DANGER : INK_MID);
+
+        FlowLayout summary = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(40));
+        summary.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
+        summary.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout summaryAccent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
+        summaryAccent.surface(Surface.flat(ACCENT));
+        summary.child(summaryAccent);
+        FlowLayout summaryPad = Containers.verticalFlow(Sizing.fixed(9), Sizing.fill(100));
+        summaryPad.surface(Surface.BLANK);
+        summary.child(summaryPad);
+        summary.child(infoColumn(tr("gui.arenas_ld.dungeon_controller.ui.col.owner"), summaryOwnerLabel, Sizing.fill(24)));
+        summary.child(infoColumn(tr("gui.arenas_ld.dungeon_controller.ui.col.tier"), summaryTierValue, Sizing.fill(18)));
+        summary.child(infoColumn(tr("gui.arenas_ld.dungeon_controller.ui.col.members"), summaryMembersLabel, Sizing.fill(18)));
+        summary.child(infoColumn(tr("gui.arenas_ld.dungeon_controller.ui.col.visibility"), summaryVisibilityValue, Sizing.fill(18)));
+        summary.child(infoColumn(tr("gui.arenas_ld.dungeon_controller.ui.col.hardcore"), summaryHardcoreValue, Sizing.fill(18)));
+        contentArea.child(summary);
+        contentArea.child(membersSectionHeader(lobby.readyMembers().size(), lobby.members().size(), menu.getMaxPartySize()));
+
+        FlowLayout memberList = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        memberList.child(memberHeaderRow(isOwner));
+        memberList.child(rowDivider(HAIRLINE_HI));
+        List<UUID> orderedMembers = lobby.members().stream()
+            .sorted(Comparator.comparing((UUID m) -> m.equals(lobby.ownerUuid()) ? 0 : 1)
+                .thenComparing(m -> lobby.memberNames().getOrDefault(m, shortUuid(m)).toLowerCase(java.util.Locale.ROOT)))
+            .limit(5)
+            .toList();
+        boolean firstMemberRow = true;
+        for (UUID member : orderedMembers) {
+            if (!firstMemberRow) {
+                memberList.child(rowDivider(HAIRLINE));
+            }
+            memberList.child(memberRow(lobby, member, isOwner));
+            firstMemberRow = false;
+        }
+        contentArea.child(memberList);
+
+        contentArea.child(spacer(6));
+        contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.ui.section.owner_controls"), null));
+
+        contentArea.child(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.col.tier")));
+        contentArea.child(ownerTierControls(isOwner));
+
+        contentArea.child(spacer(4));
+        contentArea.child(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.col.visibility")));
+        contentArea.child(ownerVisibilityControls(isOwner));
+
+        contentArea.child(spacer(4));
+        contentArea.child(hardcoreControl(isOwner));
+
+        contentArea.child(spacer(4));
+        contentArea.child(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.section.invite_player")));
+        contentArea.child(ownerInviteControls(isOwner));
+
+        // Admin section at bottom (ops only)
+        if (isAdmin) {
+            contentArea.child(spacer(8));
+            contentArea.child(buildAdminSection());
+        }
+
+        boolean ready = lobby.readyMembers().contains(self);
+        boolean allReady = lobby.allReady();
+        boolean allOnline = allOnline(lobby);
+        boolean canStart = isOwner && allReady && allOnline && queuePos < 1;
+
+        readyToggleButton = smallButton(Component.translatable(ready
+            ? "gui.arenas_ld.dungeon_controller.button.unready"
+            : "gui.arenas_ld.dungeon_controller.button.ready"), b -> {
+            footerError = null;
+            ClientPlayNetworking.send(new RaidToggleReadyPayload(menu.getBlockPos()));
+        });
+        footerActions.child(readyToggleButton);
+
+        leaveLobbyButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.leave"), b -> {
+            footerError = null;
+            ClientPlayNetworking.send(new RaidLeaveLobbyPayload(menu.getBlockPos()));
+        });
+        footerActions.child(leaveLobbyButton);
+
+        ButtonComponent start = smallButton(Component.translatable("gui.arenas_ld.raid_controller.button.start"), b -> {
+            footerError = null;
+            Lobby currentLobby = ownLobby.orElse(null);
+            UUID currentSelf = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : UUID.randomUUID();
+            if (currentLobby == null) {
+                footerError = Component.translatable("gui.arenas_ld.dungeon_controller.no_own_lobby").getString();
+                return;
+            }
+            boolean currentOwner = currentLobby.ownerUuid().equals(currentSelf);
+            boolean currentAllReady = currentLobby.allReady();
+            boolean currentAllOnline = allOnline(currentLobby);
+            if (!currentOwner) {
+                footerError = Component.translatable("gui.arenas_ld.raid_controller.error.only_owner").getString();
+                return;
+            }
+            if (!currentAllReady) {
+                footerError = Component.translatable("gui.arenas_ld.raid_controller.error.all_ready_required").getString();
+                return;
+            }
+            if (!currentAllOnline) {
+                footerError = Component.translatable("gui.arenas_ld.raid_controller.error.all_online_required").getString();
+                return;
+            }
+            ClientPlayNetworking.send(new RaidStartPayload(menu.getBlockPos()));
+        });
+        start.active(canStart);
+        startRunButton = start;
+        footerActions.child(startRunButton);
+    }
+
+    // ── Admin section ────────────────────────────────────────────────────────
+
+    private FlowLayout buildAdminSection() {
+        FlowLayout section = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        section.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        section.padding(Insets.of(8, 8, 10, 10));
+        section.gap(6);
+
+        // Header
+        section.child(text(Component.translatable("gui.arenas_ld.raid_controller.ui.admin.title"), INK_DIM));
+        section.child(rowDivider(HAIRLINE));
+
+        // Respawn time row
+        FlowLayout respawnRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        respawnRow.gap(6);
+        respawnRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        LabelComponent respawnLabel = text(Component.translatable("gui.arenas_ld.raid_controller.ui.admin.respawn"), INK_DIM);
+        respawnLabel.horizontalSizing(Sizing.fixed(90));
+        respawnRow.child(respawnLabel);
+
+        // Current seconds display
+        LabelComponent respawnValueLabel = text(Component.literal((draftRespawnTicks / 20) + "s"), INK);
+        respawnValueLabel.horizontalSizing(Sizing.fixed(40));
+        respawnValueLabel.horizontalTextAlignment(HorizontalAlignment.CENTER);
+        respawnRow.child(respawnValueLabel);
+
+        ButtonComponent minusBtn = smallButton(Component.literal("-"), b -> {
+            draftRespawnTicks = Math.max(0, draftRespawnTicks - ADMIN_STEP);
+            rebuildUi();
+        });
+        minusBtn.horizontalSizing(Sizing.fixed(18));
+        respawnRow.child(minusBtn);
+
+        ButtonComponent plusBtn = smallButton(Component.literal("+"), b -> {
+            draftRespawnTicks = Math.min(ADMIN_MAX, draftRespawnTicks + ADMIN_STEP);
+            rebuildUi();
+        });
+        plusBtn.horizontalSizing(Sizing.fixed(18));
+        respawnRow.child(plusBtn);
+
+        respawnRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+
+        ButtonComponent applyRespawn = smallButton(Component.translatable("gui.arenas_ld.raid_controller.ui.admin.apply"), b -> {
+            ClientPlayNetworking.send(new RaidAdminSetRespawnTimePayload(menu.getBlockPos(), draftRespawnTicks));
+            serverRespawnTicks = draftRespawnTicks;
+        });
+        respawnRow.child(applyRespawn);
+        section.child(respawnRow);
+
+        // Max party size row
+        FlowLayout partySizeRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        partySizeRow.gap(6);
+        partySizeRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        LabelComponent partySizeLabel = text(Component.translatable("gui.arenas_ld.raid_controller.ui.admin.max_party"), INK_DIM);
+        partySizeLabel.horizontalSizing(Sizing.fixed(90));
+        partySizeRow.child(partySizeLabel);
+
+        TextBoxComponent partySizeBox = Components.textBox(Sizing.fixed(40), Integer.toString(draftMaxPartySize));
+        partySizeBox.verticalSizing(Sizing.fixed(18));
+        partySizeBox.setMaxLength(2);
+        partySizeBox.onChanged().subscribe(value -> {
+            if (value == null || value.isBlank()) return;
+            try {
+                int parsed = Integer.parseInt(value.trim());
+                draftMaxPartySize = Math.max(PARTY_MIN, Math.min(PARTY_MAX, parsed));
+            } catch (NumberFormatException ignored) {
+            }
+        });
+        partySizeRow.child(partySizeBox);
+
+        partySizeRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+
+        ButtonComponent applyPartySize = smallButton(Component.translatable("gui.arenas_ld.raid_controller.ui.admin.apply"), b -> {
+            ClientPlayNetworking.send(new RaidAdminSetMaxPartySizePayload(menu.getBlockPos(), draftMaxPartySize));
+            serverMaxPartySize = draftMaxPartySize;
+        });
+        partySizeRow.child(applyPartySize);
+        section.child(partySizeRow);
+
+        return section;
+    }
+
+    // ── Member row ───────────────────────────────────────────────────────────
+
+    private FlowLayout memberRow(Lobby lobby, UUID member, boolean isOwner) {
+        boolean online = isOnline(member);
+        boolean ready = lobby.readyMembers().contains(member);
+        boolean isLobbyOwner = member.equals(lobby.ownerUuid());
+
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(ROW_BG));
+        row.padding(Insets.of(7, 7, 8, 8));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        FlowLayout statusSquare = Containers.horizontalFlow(Sizing.fixed(18), Sizing.fixed(18));
+        statusSquare.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        LabelComponent statusGlyph = text(Component.literal(online ? "✓" : "!"), online ? GOOD : WARN);
+        applyStatusSquare(statusSquare, online);
+        statusSquare.child(statusGlyph);
+        row.child(statusSquare);
+
+        String name = lobby.memberNames().getOrDefault(member, shortUuid(member));
+        FlowLayout nameCell = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        nameCell.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        nameCell.gap(6);
+        nameCell.child(text(Component.literal(name), INK));
+        if (isLobbyOwner) {
+            nameCell.child(badge(Component.literal("★ ").append(Component.translatable("gui.arenas_ld.dungeon_controller.ui.owner_badge")), ACCENT));
+        }
+        row.child(nameCell);
+
+        LabelComponent connectionLabel = text(Component.literal(online ? "● " : "○ ").append(Component.translatable(online ? "gui.arenas_ld.dungeon_controller.ui.member.online" : "gui.arenas_ld.dungeon_controller.ui.member.offline")), online ? GOOD : DANGER);
+        connectionLabel.horizontalSizing(Sizing.fixed(84));
+        row.child(connectionLabel);
+
+        FlowLayout readyBadge = fixedBadge(Component.translatable(ready ? "gui.arenas_ld.dungeon_controller.ui.member.ready" : "gui.arenas_ld.dungeon_controller.ui.member.not_ready"), 84, ready ? GOOD : INK_DIM);
+        row.child(readyBadge);
+
+        ButtonComponent kickButton = null;
+        if (isOwner && !isLobbyOwner) {
+            kickButton = dangerButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.kick"), b -> {
+                footerError = null;
+                ClientPlayNetworking.send(new RaidKickPlayerPayload(menu.getBlockPos(), member));
+            });
+            kickButton.horizontalSizing(Sizing.fixed(54));
+            row.child(kickButton);
+        } else {
+            FlowLayout kickSpace = Containers.horizontalFlow(Sizing.fixed(54), Sizing.content());
+            kickSpace.surface(Surface.BLANK);
+            row.child(kickSpace);
+        }
+        memberRowRefs.put(member, new MemberRowRefs(statusSquare, statusGlyph, connectionLabel, readyBadge, kickButton));
+        return row;
+    }
+
+    // ── Owner controls ───────────────────────────────────────────────────────
+
+    private FlowLayout ownerTierControls(boolean isOwner) {
+        ButtonComponent easy = segmentButton("EASY", tierColor(DifficultyTier.EASY), isOwner,
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.EASY,
+            b -> ClientPlayNetworking.send(new RaidSetTierPayload(menu.getBlockPos(), DifficultyTier.EASY)));
+        ButtonComponent normal = segmentButton("NORMAL", tierColor(DifficultyTier.NORMAL), isOwner,
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NORMAL,
+            b -> ClientPlayNetworking.send(new RaidSetTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
+        ButtonComponent hard = segmentButton("HARD", tierColor(DifficultyTier.HARD), isOwner,
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.HARD,
+            b -> ClientPlayNetworking.send(new RaidSetTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
+        ButtonComponent nightmare = segmentButton("NIGHTMARE", tierColor(DifficultyTier.NIGHTMARE), isOwner,
+            () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NIGHTMARE,
+            b -> ClientPlayNetworking.send(new RaidSetTierPayload(menu.getBlockPos(), DifficultyTier.NIGHTMARE)));
+        return segmentedControl(easy, normal, hard, nightmare);
+    }
+
+    private FlowLayout ownerVisibilityControls(boolean isOwner) {
+        ButtonComponent pub = segmentButton("PUBLIC", visibilityColor(LobbyVisibility.PUBLIC), isOwner,
+            () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.PUBLIC,
+            b -> ClientPlayNetworking.send(new RaidSetVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PUBLIC)));
+        ButtonComponent fr = segmentButton("FRIENDS", visibilityColor(LobbyVisibility.FRIENDS), isOwner,
+            () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.FRIENDS,
+            b -> ClientPlayNetworking.send(new RaidSetVisibilityPayload(menu.getBlockPos(), LobbyVisibility.FRIENDS)));
+        ButtonComponent pr = segmentButton("PRIVATE", visibilityColor(LobbyVisibility.PRIVATE), isOwner,
+            () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.PRIVATE,
+            b -> ClientPlayNetworking.send(new RaidSetVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PRIVATE)));
+        return segmentedControl(pub, fr, pr);
+    }
+
+    private FlowLayout hardcoreControl(boolean isOwner) {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
+        row.padding(Insets.of(8, 8, 10, 10));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        FlowLayout textCol = Containers.verticalFlow(Sizing.expand(), Sizing.content());
+        textCol.gap(2);
+        textCol.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.hardcore.title"), INK_DIM));
+        textCol.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.hardcore.desc"), INK));
+        row.child(textCol);
+
+        ButtonComponent toggle = toggleSwitch(isOwner,
+            () -> ownLobby.map(Lobby::hardcoreEnabled).orElse(false),
+            b -> {
+                footerError = null;
+                boolean currentHardcore = ownLobby.map(Lobby::hardcoreEnabled).orElse(false);
+                ClientPlayNetworking.send(new RaidSetHardcorePayload(menu.getBlockPos(), !currentHardcore));
+            });
+        row.child(toggle);
+        return row;
+    }
+
+    private FlowLayout ownerInviteControls(boolean isOwner) {
+        FlowLayout section = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        section.gap(0);
+
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.gap(6);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        inviteFieldRow = row;
+
+        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
+        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout fieldAccent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fixed(20));
+        fieldAccent.surface(Surface.flat(ACCENT));
+        fieldWrap.child(fieldAccent);
+
+        inviteField = Components.textBox(Sizing.expand(), inviteInput);
+        inviteField.verticalSizing(Sizing.fixed(18));
+        inviteField.active = isOwner;
+        inviteField.onChanged().subscribe(value -> {
+            inviteInput = value;
+            if (inviteDropdownOpen) {
+                refreshInviteDropdown();
+            }
+        });
+        inviteField.mouseDown().subscribe((mouseX, mouseY, button) -> {
+            if (isOwner) {
+                openInviteDropdown();
+            }
+            return false;
+        });
+        fieldWrap.child(inviteField);
+
+        inviteChevron = Components.button(Component.empty(), b -> {
+            if (isOwner) {
+                toggleInviteDropdown();
+            }
+        });
+        inviteChevron.sizing(Sizing.fixed(18), Sizing.fixed(20));
+        inviteChevron.active(isOwner);
+        inviteChevron.renderer((context, rendered, delta) -> {
+            String glyph = inviteDropdownOpen ? "▲" : "▼";
+            int tx = rendered.getX() + (rendered.getWidth() - this.font.width(glyph)) / 2;
+            int ty = rendered.getY() + (rendered.getHeight() - this.font.lineHeight) / 2 + 1;
+            context.drawString(this.font, glyph, tx, ty, INK_MID, false);
+        });
+        fieldWrap.child(inviteChevron);
+        row.child(fieldWrap);
+
+        ButtonComponent invite = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.invite"), b -> sendInvite());
+        invite.active(isOwner);
+        invite.horizontalSizing(Sizing.fixed(58));
+        row.child(invite);
+
+        section.child(row);
+
+        inviteDropdownPanel = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        inviteDropdownPanel.surface(Surface.BLANK);
+        section.child(inviteDropdownPanel);
+        refreshInviteDropdown();
+
+        return section;
+    }
+
+    private void sendInvite() {
+        footerError = null;
+        String trimmed = inviteInput == null ? "" : inviteInput.trim();
+        if (trimmed.isEmpty()) {
+            footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.invitee_not_found").getString();
+            return;
+        }
+        ClientPlayNetworking.send(new RaidInvitePlayerPayload(menu.getBlockPos(), trimmed));
+        inviteInput = "";
+        if (inviteField != null) {
+            inviteField.text("");
+        }
+        closeInviteDropdown();
+    }
+
+    private void openInviteDropdown() {
+        if (!inviteDropdownOpen) {
+            inviteDropdownOpen = true;
+            refreshInviteDropdown();
+            if (contentScroll != null) {
+                contentScroll.scrollTo(1.0D);
+            }
         }
     }
 
-    private void renderAdminBar(GuiGraphics g, int x, int y) {
-        int lx = x + P + 116; // after cooldown buttons + party-size field
-        small(g, Component.translatable("gui.arenas_ld.admin_cd", formatTime(serverRespawnTicks / 20)), lx, y + Y_ADMIN + 3, C_LABEL);
-        small(g, Component.translatable("gui.arenas_ld.admin_draft", formatTime(draftRespawnTicks / 20)), lx + 50, y + Y_ADMIN + 3, C_MUTED);
+    private void closeInviteDropdown() {
+        if (inviteDropdownOpen) {
+            inviteDropdownOpen = false;
+            refreshInviteDropdown();
+        }
     }
 
-    // ── Input handling ─────────────────────────────────────────────────────────
-    @Override
-    public boolean mouseClicked(double mx, double my, int btn) {
-        if (btn == 0 && inviteBox != null && inviteBox.visible && inviteBox.isFocused() && !inviteSuggestions.isEmpty()) {
-            int x = inviteBox.getX();
-            int y = inviteBox.getY() + inviteBox.getHeight() + 1;
-            int w = inviteBox.getWidth();
-            int rows = Math.min(DROPDOWN_MAX_ROWS, inviteSuggestions.size());
-            int h = rows * DROPDOWN_ROW_HEIGHT;
-            if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
-                int index = (int) ((my - y) / DROPDOWN_ROW_HEIGHT);
-                if (index >= 0 && index < rows) {
-                    inviteBox.setValue(inviteSuggestions.get(index));
-                    inviteBox.setFocused(false);
-                    inviteSuggestions = List.of();
-                    return true;
-                }
+    private void toggleInviteDropdown() {
+        if (inviteDropdownOpen) {
+            closeInviteDropdown();
+        } else {
+            openInviteDropdown();
+        }
+    }
+
+    private void refreshInviteDropdown() {
+        if (inviteDropdownPanel == null) {
+            return;
+        }
+        inviteDropdownPanel.clearChildren();
+        if (!inviteDropdownOpen) {
+            inviteDropdownPanel.surface(Surface.BLANK);
+            return;
+        }
+        inviteDropdownPanel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+
+        List<InviteCandidate> candidates = inviteCandidates(inviteInput);
+        long available = candidates.stream().filter(InviteCandidate::selectable).count();
+
+        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        header.surface(Surface.flat(ROW_BG));
+        header.padding(Insets.of(4, 4, 8, 8));
+        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        header.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.header"), INK_DIM));
+        header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+        header.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.available", available), ACCENT));
+        inviteDropdownPanel.child(header);
+        inviteDropdownPanel.child(rowDivider(HAIRLINE_HI));
+
+        if (candidates.isEmpty()) {
+            FlowLayout empty = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+            empty.padding(Insets.of(8));
+            empty.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+            empty.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.empty"), INK_DIM));
+            inviteDropdownPanel.child(empty);
+            return;
+        }
+
+        boolean first = true;
+        for (InviteCandidate candidate : candidates) {
+            if (!first) {
+                inviteDropdownPanel.child(rowDivider(HAIRLINE));
+            }
+            inviteDropdownPanel.child(inviteCandidateRow(candidate));
+            first = false;
+        }
+    }
+
+    private ButtonComponent inviteCandidateRow(InviteCandidate candidate) {
+        boolean selectable = candidate.selectable();
+        ButtonComponent row = Components.button(Component.empty(), b -> {
+            if (!selectable) {
+                return;
+            }
+            footerError = null;
+            // RaidInvitePlayerPayload takes String playerName
+            ClientPlayNetworking.send(new RaidInvitePlayerPayload(menu.getBlockPos(), candidate.name()));
+            inviteInput = "";
+            if (inviteField != null) {
+                inviteField.text("");
+            }
+            closeInviteDropdown();
+        });
+        row.sizing(Sizing.fill(100), Sizing.fixed(22));
+        row.active(selectable);
+        int statusColor = selectable ? GOOD : WARN;
+        int alpha = selectable ? 0xFF000000 : 0x73000000;
+        String statusText = switch (candidate.status()) {
+            case ONLINE -> tr("gui.arenas_ld.dungeon_controller.ui.member.online");
+            case IN_LOBBY -> tr("gui.arenas_ld.dungeon_controller.ui.candidate.in_lobby");
+            case IN_RUN -> tr("gui.arenas_ld.dungeon_controller.ui.candidate.in_run");
+            case BUSY -> tr("gui.arenas_ld.dungeon_controller.ui.candidate.busy");
+        };
+        String nameText = "@" + candidate.name();
+        row.renderer((context, rendered, delta) -> {
+            int x1 = rendered.getX();
+            int y1 = rendered.getY();
+            int w = rendered.getWidth();
+            int h = rendered.getHeight();
+            boolean hover = selectable && rendered.isHoveredOrFocused();
+            context.fill(x1, y1, x1 + w, y1 + h, hover ? ROW_BG : PANEL_2);
+            if (hover) {
+                context.fill(x1, y1, x1 + 2, y1 + h, ACCENT);
+            }
+            int squareColor = (statusColor & 0x00FFFFFF) | alpha;
+            context.fill(x1 + 8, y1 + h / 2 - 4, x1 + 16, y1 + h / 2 + 4, squareColor);
+            int nameColor = (INK & 0x00FFFFFF) | alpha;
+            context.drawString(this.font, nameText, x1 + 24, y1 + (h - this.font.lineHeight) / 2 + 1, nameColor, false);
+            int statusTextColor = (statusColor & 0x00FFFFFF) | alpha;
+            int statusWidth = this.font.width(statusText);
+            context.drawString(this.font, statusText, x1 + w - statusWidth - 10, y1 + (h - this.font.lineHeight) / 2 + 1, statusTextColor, false);
+        });
+        return row;
+    }
+
+    private List<InviteCandidate> inviteCandidates(String filter) {
+        List<InviteCandidate> result = new ArrayList<>();
+        if (minecraft == null || minecraft.getConnection() == null) {
+            return result;
+        }
+        UUID self = minecraft.player != null ? minecraft.player.getUUID() : null;
+        java.util.Set<UUID> myMembers = ownLobby.map(lobby -> new java.util.HashSet<>(lobby.members())).orElseGet(java.util.HashSet::new);
+        String needle = filter == null ? "" : filter.trim().toLowerCase(java.util.Locale.ROOT);
+        if (needle.startsWith("@")) {
+            needle = needle.substring(1);
+        }
+        for (PlayerInfo info : minecraft.getConnection().getOnlinePlayers()) {
+            UUID id = info.getProfile().getId();
+            String name = info.getProfile().getName();
+            if (id == null || name == null) {
+                continue;
+            }
+            if (id.equals(self) || myMembers.contains(id)) {
+                continue;
+            }
+            if (!needle.isEmpty() && !name.toLowerCase(java.util.Locale.ROOT).contains(needle)) {
+                continue;
+            }
+            result.add(new InviteCandidate(id, name, inviteStatusFor(id)));
+        }
+        result.sort(Comparator.comparing((InviteCandidate c) -> c.selectable() ? 0 : 1)
+            .thenComparing(c -> c.name().toLowerCase(java.util.Locale.ROOT)));
+        return result;
+    }
+
+    private InviteStatus inviteStatusFor(UUID uuid) {
+        if (isBusy(uuid)) {
+            return InviteStatus.BUSY;
+        }
+        for (Lobby lobby : visibleLobbies) {
+            if (lobby.members().contains(uuid)) {
+                return lobby.status() == LobbyStatus.IN_RUN ? InviteStatus.IN_RUN : InviteStatus.IN_LOBBY;
+            }
+        }
+        return InviteStatus.ONLINE;
+    }
+
+    private boolean isBusy(UUID uuid) {
+        return busyPlayers != null && busyPlayers.contains(uuid);
+    }
+
+    // ── Header rows ──────────────────────────────────────────────────────────
+
+    private FlowLayout inviteHeaderRow() {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.padding(Insets.of(2, 2, 6, 6));
+        row.gap(6);
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.from"), Sizing.expand()));
+        row.child(headerCell("", Sizing.fixed(40)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.tier"), Sizing.fixed(86)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.expires"), Sizing.fixed(62)));
+        row.child(headerCell("", Sizing.fixed(54)));
+        row.child(headerCell("", Sizing.fixed(58)));
+        return row;
+    }
+
+    private FlowLayout lobbyHeaderRow() {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.padding(Insets.of(2, 2, 6, 6));
+        row.gap(8);
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.owner"), Sizing.expand()));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.size"), Sizing.fixed(44)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.tier"), Sizing.fixed(70)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.visibility"), Sizing.fixed(78)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.status"), Sizing.fixed(82)));
+        row.child(headerCell("", Sizing.fixed(84)));
+        return row;
+    }
+
+    private FlowLayout memberHeaderRow(boolean isOwner) {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(PANEL_2));
+        row.padding(Insets.of(5, 5, 8, 8));
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout statusSpacer = Containers.horizontalFlow(Sizing.fixed(18), Sizing.content());
+        statusSpacer.surface(Surface.BLANK);
+        row.child(statusSpacer);
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.name"), Sizing.expand()));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.connection"), Sizing.fixed(84)));
+        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.ready"), Sizing.fixed(84)));
+        row.child(headerCell(isOwner ? tr("gui.arenas_ld.dungeon_controller.ui.col.action") : "", Sizing.fixed(54)));
+        return row;
+    }
+
+    // ── UI widget helpers ────────────────────────────────────────────────────
+
+    private ButtonComponent smallButton(Component text, java.util.function.Consumer<ButtonComponent> action) {
+        ButtonComponent button = Components.button(text, action);
+        button.sizing(Sizing.content(), Sizing.fixed(18));
+        button.renderer((context, rendered, delta) -> {
+            int fill = rendered.active() ? (rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK) : PANEL;
+            int border = rendered.active() ? ACCENT : HAIRLINE;
+            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
+            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), border);
+        });
+        return button;
+    }
+
+    private LabelComponent dimLabel(Component text) {
+        LabelComponent label = Components.label(text);
+        label.color(Color.ofArgb(INK_DIM));
+        return label;
+    }
+
+    private LabelComponent text(Component text, int color) {
+        LabelComponent label = Components.label(text);
+        label.color(Color.ofArgb(color));
+        return label;
+    }
+
+    private FlowLayout sectionHeader(Component title, Integer count) {
+        return sectionHeaderWithAction(title, count, null);
+    }
+
+    private FlowLayout sectionHeaderWithAction(Component title, Integer count, ButtonComponent action) {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        row.gap(8);
+        LabelComponent titleLabel = text(title, INK_DIM);
+        row.child(titleLabel);
+        if (count != null) {
+            row.child(text(Component.literal("· " + count), ACCENT));
+        }
+        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+        if (action != null) {
+            row.child(action);
+        }
+        return row;
+    }
+
+    private FlowLayout membersSectionHeader(int readyCount, int count, int max) {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        row.gap(6);
+        row.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.section.members"), INK_DIM));
+        membersSummaryLabel = text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.members_summary", readyCount, count, max), ACCENT);
+        row.child(membersSummaryLabel);
+        return row;
+    }
+
+    private FlowLayout rowDivider(int color) {
+        FlowLayout divider = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(1));
+        divider.surface(Surface.flat(color));
+        return divider;
+    }
+
+    private void applyStatusSquare(FlowLayout square, boolean online) {
+        int color = online ? GOOD : WARN;
+        square.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x66000000)));
+    }
+
+    private ButtonComponent dangerButton(Component text, java.util.function.Consumer<ButtonComponent> action) {
+        ButtonComponent button = Components.button(text.copy().withStyle(ChatFormatting.RED), action);
+        button.sizing(Sizing.content(), Sizing.fixed(18));
+        button.renderer((context, rendered, delta) -> {
+            int fill = rendered.isHoveredOrFocused() ? ((DANGER & 0x00FFFFFF) | 0x44000000) : ((DANGER & 0x00FFFFFF) | 0x1F000000);
+            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
+            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), DANGER);
+        });
+        return button;
+    }
+
+    private String tr(String key) {
+        return Component.translatable(key).getString();
+    }
+
+    private LabelComponent controlCaption(String caption) {
+        LabelComponent label = Components.label(Component.literal(caption));
+        label.color(Color.ofArgb(INK_DIM));
+        return label;
+    }
+
+    private ButtonComponent segmentButton(String label, int accentColor, boolean active, java.util.function.BooleanSupplier selected, java.util.function.Consumer<ButtonComponent> action) {
+        ButtonComponent button = Components.button(Component.empty(), action);
+        button.sizing(Sizing.fill(100), Sizing.fixed(26));
+        button.active(active);
+        button.renderer((context, rendered, delta) -> {
+            boolean sel = selected.getAsBoolean();
+            boolean isActive = rendered.active();
+            boolean hover = rendered.isHoveredOrFocused();
+            int x1 = rendered.getX();
+            int y1 = rendered.getY();
+            int w = rendered.getWidth();
+            int h = rendered.getHeight();
+            int fill = sel ? ((accentColor & 0x00FFFFFF) | 0x26000000) : (isActive && hover ? ROW_BG : PANEL_2);
+            int border = sel ? accentColor : HAIRLINE;
+            context.fill(x1, y1, x1 + w, y1 + h, fill);
+            context.drawRectOutline(x1, y1, w, h, border);
+            int textColor = sel ? accentColor : (isActive ? INK : INK_DIM);
+            int tx = x1 + (w - this.font.width(label)) / 2;
+            int ty = y1 + (h - this.font.lineHeight) / 2 + 1;
+            context.drawString(this.font, label, tx, ty, textColor, false);
+        });
+        return button;
+    }
+
+    private FlowLayout segmentedControl(ButtonComponent... buttons) {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        int n = buttons.length;
+        int base = 100 / n;
+        for (int i = 0; i < n; i++) {
+            int pct = (i == n - 1) ? (100 - base * (n - 1)) : base;
+            FlowLayout cell = Containers.verticalFlow(Sizing.fill(pct), Sizing.content());
+            cell.surface(Surface.BLANK);
+            cell.padding(Insets.of(0, 0, i == 0 ? 0 : 3, i == n - 1 ? 0 : 3));
+            cell.child(buttons[i]);
+            row.child(cell);
+        }
+        return row;
+    }
+
+    private ButtonComponent toggleSwitch(boolean active, java.util.function.BooleanSupplier on, java.util.function.Consumer<ButtonComponent> action) {
+        ButtonComponent button = Components.button(Component.empty(), action);
+        button.sizing(Sizing.fixed(38), Sizing.fixed(18));
+        button.active(active);
+        button.renderer((context, rendered, delta) -> {
+            boolean isOn = on.getAsBoolean();
+            int x1 = rendered.getX();
+            int y1 = rendered.getY();
+            int w = rendered.getWidth();
+            int h = rendered.getHeight();
+            int track = isOn ? ((DANGER & 0x00FFFFFF) | 0x55000000) : PANEL_2;
+            int border = isOn ? DANGER : HAIRLINE;
+            context.fill(x1, y1, x1 + w, y1 + h, track);
+            context.drawRectOutline(x1, y1, w, h, border);
+            int knobW = w / 2 - 3;
+            int knobX = isOn ? (x1 + w - knobW - 2) : (x1 + 2);
+            int knobColor = isOn ? DANGER : INK;
+            context.fill(knobX, y1 + 2, knobX + knobW, y1 + h - 2, knobColor);
+        });
+        return button;
+    }
+
+    private FlowLayout infoColumn(String caption, LabelComponent value, Sizing width) {
+        FlowLayout col = Containers.verticalFlow(width, Sizing.content());
+        col.gap(3);
+        LabelComponent captionLabel = Components.label(Component.literal(caption));
+        captionLabel.color(Color.ofArgb(INK_DIM));
+        col.child(captionLabel);
+        col.child(value);
+        return col;
+    }
+
+    private static String titleCase(String value) {
+        if (value.isEmpty()) {
+            return value;
+        }
+        return value.charAt(0) + value.substring(1).toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private LabelComponent headerCell(String text, Sizing sizing) {
+        LabelComponent label = Components.label(Component.literal(text));
+        label.color(Color.ofArgb(INK_DIM));
+        label.horizontalSizing(sizing);
+        return label;
+    }
+
+    private LabelComponent fixedText(Component text, int width, int color, HorizontalAlignment alignment) {
+        LabelComponent label = Components.label(text);
+        label.color(Color.ofArgb(color));
+        label.horizontalSizing(Sizing.fixed(width));
+        label.horizontalTextAlignment(alignment);
+        return label;
+    }
+
+    private FlowLayout badge(Component text, int color) {
+        FlowLayout tag = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        tag.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
+        tag.padding(Insets.of(4, 2, 4, 4));
+        tag.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        tag.child(this.text(text, color));
+        return tag;
+    }
+
+    private FlowLayout fixedBadge(Component text, int width, int color) {
+        FlowLayout tag = Containers.horizontalFlow(Sizing.fixed(width), Sizing.content());
+        tag.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
+        tag.padding(Insets.of(4, 2, 4, 4));
+        tag.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        LabelComponent label = this.text(text, color);
+        label.horizontalSizing(Sizing.expand());
+        label.horizontalTextAlignment(HorizontalAlignment.CENTER);
+        tag.child(label);
+        return tag;
+    }
+
+    private FlowLayout rowPanel(boolean accentLeft) {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.surface(Surface.flat(accentLeft ? ROW_BG_ALT : ROW_BG).and(Surface.outline(accentLeft ? ACCENT_DARK : HAIRLINE)));
+        row.padding(Insets.of(6));
+        return row;
+    }
+
+    private LabelComponent smallMeta(String text) {
+        return smallMeta(text, INK_DIM);
+    }
+
+    private LabelComponent smallMeta(String text, int color) {
+        LabelComponent label = Components.label(Component.literal(text));
+        label.color(Color.ofArgb(color));
+        return label;
+    }
+
+    private int tierColor(DifficultyTier tier) {
+        return switch (tier) {
+            case EASY -> GOOD;
+            case NORMAL -> INFO;
+            case HARD -> WARN;
+            case NIGHTMARE -> DANGER;
+        };
+    }
+
+    private int visibilityColor(LobbyVisibility visibility) {
+        return switch (visibility) {
+            case PUBLIC -> GOOD;
+            case FRIENDS -> INFO;
+            case PRIVATE -> WARN;
+        };
+    }
+
+    private int statusColor(LobbyStatus status) {
+        return switch (status) {
+            case READY -> GOOD;
+            case IN_RUN -> WARN;
+            case DISBANDED -> DANGER;
+            default -> INFO;
+        };
+    }
+
+    private String statusLabel(LobbyStatus status) {
+        return switch (status) {
+            case IN_RUN -> "IN RUN";
+            default -> status.name();
+        };
+    }
+
+    private FlowLayout spacer(int px) {
+        FlowLayout spacer = Containers.verticalFlow(Sizing.fill(100), Sizing.fixed(px));
+        spacer.surface(Surface.BLANK);
+        return spacer;
+    }
+
+    // ── Public API ───────────────────────────────────────────────────────────
+
+    public boolean matchesController(BlockPos blockPos) {
+        return menu.getBlockPos().equals(blockPos);
+    }
+
+    /**
+     * Called when a full snapshot arrives from the server.
+     */
+    public void applyData(RaidControllerData data) {
+        Optional<Lobby> previousOwnLobby = this.ownLobby;
+        menu.applyData(data);
+        syncFromMenu(true);
+
+        if (currentTab == Tab.MY_LOBBY && this.ownLobby.isEmpty()) {
+            currentTab = Tab.LOBBIES;
+            rebuildUi();
+            return;
+        } else if (currentTab == Tab.LOBBIES && previousOwnLobby.isEmpty() && this.ownLobby.isPresent()) {
+            currentTab = Tab.MY_LOBBY;
+            rebuildUi();
+            return;
+        }
+
+        if (currentTab == Tab.MY_LOBBY
+            && previousOwnLobby.isPresent()
+            && this.ownLobby.isPresent()
+            && sameLobbyStructure(previousOwnLobby.get(), this.ownLobby.get())) {
+            refreshTabButtons();
+            refreshMyLobbyInPlace(this.ownLobby.get());
+            return;
+        }
+
+        rebuildUi();
+    }
+
+    /**
+     * Legacy compatibility method — just triggers a full UI rebuild with current data.
+     */
+    public void applyServerInfo(ModPackets.RaidControllerInfoPayload payload) {
+        rebuildUi();
+    }
+
+    // ── Internal sync ────────────────────────────────────────────────────────
+
+    private void syncFromMenu(boolean preserveTab) {
+        this.visibleLobbies.clear();
+        this.visibleLobbies.addAll(menu.getVisibleLobbies());
+        this.myInvites.clear();
+        this.myInvites.addAll(menu.getMyInvites());
+        this.myJoinRequests.clear();
+        this.myJoinRequests.addAll(menu.getMyJoinRequests());
+        this.ownLobby = menu.getOwnLobby();
+        this.busyPlayers = menu.getBusyPlayers();
+        this.topLeaderboards = menu.getTopLeaderboards();
+        this.instances.clear();
+        this.instances.addAll(menu.getInstances());
+        this.snapshotServerTick = menu.getServerGameTick();
+        this.snapshotEpochMs = System.currentTimeMillis();
+
+        if (!preserveTab && this.ownLobby.isPresent()) {
+            this.currentTab = Tab.MY_LOBBY;
+        }
+    }
+
+    private boolean isOnline(UUID uuid) {
+        if (minecraft == null || minecraft.getConnection() == null) {
+            return false;
+        }
+        for (PlayerInfo info : minecraft.getConnection().getOnlinePlayers()) {
+            if (uuid.equals(info.getProfile().getId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean allOnline(Lobby lobby) {
+        for (UUID uuid : lobby.members()) {
+            if (!isOnline(uuid)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private long approximateServerTick() {
+        long elapsedMs = Math.max(0L, System.currentTimeMillis() - snapshotEpochMs);
+        return snapshotServerTick + (elapsedMs / 50L);
+    }
+
+    private void refreshTabButtons() {
+        lobbiesTabButton.active(currentTab != Tab.LOBBIES);
+        myLobbyTabButton.active(currentTab != Tab.MY_LOBBY);
+        lobbiesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.lobbies").append(" " + visibleLobbies.size()));
+        myLobbyTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller.tab.my_lobby").append(ownLobby.isPresent() ? " " + ownLobby.get().members().size() : ""));
+    }
+
+    private void refreshMyLobbyInPlace(Lobby lobby) {
+        UUID self = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : UUID.randomUUID();
+        boolean isOwner = lobby.ownerUuid().equals(self);
+        boolean ready = lobby.readyMembers().contains(self);
+        boolean allReady = lobby.allReady();
+        boolean allOnline = allOnline(lobby);
+        int queuePos = menu.getQueuePosition();
+        boolean canStart = isOwner && allReady && allOnline && queuePos < 1;
+
+        if (summaryOwnerLabel != null) {
+            summaryOwnerLabel.text(Component.literal(lobby.ownerName()));
+        }
+        if (summaryMembersLabel != null) {
+            summaryMembersLabel.text(Component.literal(lobby.members().size() + " / " + menu.getMaxPartySize()));
+        }
+        if (membersSummaryLabel != null) {
+            membersSummaryLabel.text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.members_summary", lobby.readyMembers().size(), lobby.members().size(), menu.getMaxPartySize()));
+        }
+        if (summaryTierValue != null) {
+            summaryTierValue.text(Component.literal(titleCase(lobby.selectedTier().name())));
+            summaryTierValue.color(Color.ofArgb(tierColor(lobby.selectedTier())));
+        }
+        if (summaryVisibilityValue != null) {
+            summaryVisibilityValue.text(Component.literal(titleCase(lobby.visibility().name())));
+            summaryVisibilityValue.color(Color.ofArgb(visibilityColor(lobby.visibility())));
+        }
+        if (summaryHardcoreValue != null) {
+            summaryHardcoreValue.text(Component.translatable(lobby.hardcoreEnabled() ? "gui.arenas_ld.dungeon_controller.ui.hardcore.on" : "gui.arenas_ld.dungeon_controller.ui.hardcore.off"));
+            summaryHardcoreValue.color(Color.ofArgb(lobby.hardcoreEnabled() ? DANGER : INK_MID));
+        }
+        if (readyToggleButton != null) {
+            readyToggleButton.setMessage(Component.translatable(ready
+                ? "gui.arenas_ld.dungeon_controller.button.unready"
+                : "gui.arenas_ld.dungeon_controller.button.ready"));
+        }
+        if (leaveLobbyButton != null) {
+            leaveLobbyButton.active(true);
+        }
+        if (startRunButton != null) {
+            startRunButton.active(canStart);
+        }
+
+        for (UUID member : lobby.members()) {
+            MemberRowRefs refs = memberRowRefs.get(member);
+            if (refs == null) continue;
+            boolean online = isOnline(member);
+            boolean memberReady = lobby.readyMembers().contains(member);
+            applyStatusSquare(refs.statusSquare, online);
+            refs.statusGlyph.text(Component.literal(online ? "✓" : "!"));
+            refs.statusGlyph.color(Color.ofArgb(online ? GOOD : WARN));
+            refs.connectionLabel.text(Component.literal(online ? "● " : "○ ").append(Component.translatable(online ? "gui.arenas_ld.dungeon_controller.ui.member.online" : "gui.arenas_ld.dungeon_controller.ui.member.offline")));
+            refs.connectionLabel.color(Color.ofArgb(online ? GOOD : DANGER));
+            updateBadge(refs.readyBadge, Component.translatable(memberReady ? "gui.arenas_ld.dungeon_controller.ui.member.ready" : "gui.arenas_ld.dungeon_controller.ui.member.not_ready"), memberReady ? GOOD : INK_DIM);
+            if (refs.kickButton != null) {
+                refs.kickButton.active(isOwner && !member.equals(lobby.ownerUuid()));
             }
         }
 
-        int x = leftPos, y = topPos;
-        UiState s = uiState();
-
-        // Lobby list click (BROWSING)
-        if (s == UiState.BROWSING) {
-            int bannerOffset = invitedLobbies.isEmpty() ? 0 : 24;
-            int listX = x + P + 3;
-            int listY = y + Y_CONTENT + 4 + bannerOffset + 10;
-            int listW = IW - 6;
-            int listH = Math.max(20, (y + Y_ACTIONS - 8) - listY);
-            if (mx >= listX && mx < listX + listW && my >= listY && my < listY + listH) {
-                int clicked = (int)((my - listY + lobbyScroll) / ROW_H);
-                if (clicked >= 0 && clicked < visLobbies.size()) {
-                    selLobby = clicked;
-                    updateButtons();
-                    return true;
-                }
-            }
-
-            // Invite banner accept/decline
-            if (!invitedLobbies.isEmpty()) {
-                int bx = x + P + 3, by = y + Y_CONTENT + 4;
-            int btnW = 39;
-            int btnGap = 4;
-            int axBtn = bx + IW - 6 - (btnW * 2 + btnGap);
-            int declineX = axBtn + btnW + btnGap;
-            if (my >= by + 4 && my <= by + 16) {
-                    if (mx >= axBtn && mx < axBtn + btnW) {
-                        respondInvite(invitedLobbies.get(0), true);
-                        return true;
-                    }
-                    if (mx >= declineX && mx < declineX + btnW) {
-                        respondInvite(invitedLobbies.get(0), false);
-                        return true;
-                    }
-                }
-            }
+        if (inviteDropdownOpen) {
+            refreshInviteDropdown();
         }
 
-        // Member list click (OWNER/MEMBER)
-        if (s == UiState.OWNER || s == UiState.MEMBER) {
-            int listStartY = (s == UiState.OWNER) ? y + YO_LIST : y + Y_CONTENT + 56;
-            int listBottomY = (s == UiState.OWNER) ? y + Y_ACTIONS_EXPANDED - 20 : y + Y_ACTIONS_EXPANDED - 4;
-            int listH = Math.max(0, listBottomY - listStartY);
-            int visibleRows = Math.max(1, listH / ROW_H);
-            int maxScroll = Math.max(0, memberNames.size() * ROW_H - Math.max(ROW_H, listH));
-            memberScroll = Mth.clamp(memberScroll, 0, maxScroll);
-            int firstRow = (int) (memberScroll / ROW_H);
-            int visibleCount = Math.min(Math.max(0, memberNames.size() - firstRow), visibleRows);
-            int listX = x + P;
-            if (mx >= listX && mx < listX + IW && my >= listStartY && my < listStartY + listH) {
-                int clicked = firstRow + (int)((my - listStartY) / ROW_H);
-                if (clicked >= firstRow && clicked < firstRow + visibleCount) {
-                    selMember = clicked;
-                    updateButtons();
-                    return true;
-                }
+        footerLabel.text(footerError == null ? Component.empty() : Component.literal(footerError).withStyle(ChatFormatting.RED));
+    }
+
+    private void refreshInviteCountdowns() {
+        for (PendingInvite invite : myInvites) {
+            LabelComponent label = inviteCountdownLabels.get(invite.lobbyId());
+            if (label == null) continue;
+            long remainingTicks = Math.max(0L, invite.expiresAtTick() - approximateServerTick());
+            long remainingSeconds = remainingTicks / 20L;
+            label.text(Component.literal(formatRemaining(remainingSeconds)));
+            label.color(Color.ofArgb(remainingSeconds <= 15 ? WARN : INK_MID));
+        }
+    }
+
+    private void refreshJoinRequestCountdowns() {
+        for (PendingJoinRequest req : myJoinRequests) {
+            LabelComponent label = joinRequestCountdownLabels.get(req.requesterUuid());
+            if (label == null) continue;
+            long remainingTicks = Math.max(0L, req.expiresAtTick() - approximateServerTick());
+            long remainingSeconds = remainingTicks / 20L;
+            label.text(Component.literal(formatRemaining(remainingSeconds)));
+            label.color(Color.ofArgb(remainingSeconds <= 15 ? WARN : INK_MID));
+        }
+    }
+
+    private void captureScrollProgress() {
+        if (contentScroll == null) return;
+        try {
+            Field maxScrollField = ScrollContainer.class.getDeclaredField("maxScroll");
+            Field scrollOffsetField = ScrollContainer.class.getDeclaredField("scrollOffset");
+            maxScrollField.setAccessible(true);
+            scrollOffsetField.setAccessible(true);
+
+            int maxScroll = maxScrollField.getInt(contentScroll);
+            double scrollOffset = scrollOffsetField.getDouble(contentScroll);
+            savedScrollProgress = maxScroll <= 0 ? 0.0D : Math.max(0.0D, Math.min(1.0D, scrollOffset / (double) maxScroll));
+        } catch (ReflectiveOperationException ignored) {
+            savedScrollProgress = 0.0D;
+        }
+    }
+
+    private void updateBadge(FlowLayout badge, Component text, int color) {
+        badge.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
+        if (!badge.children().isEmpty() && badge.children().get(0) instanceof LabelComponent label) {
+            label.text(text);
+            label.color(Color.ofArgb(color));
+        }
+    }
+
+    private boolean sameLobbyStructure(Lobby previous, Lobby current) {
+        return previous.lobbyId().equals(current.lobbyId())
+            && previous.ownerUuid().equals(current.ownerUuid())
+            && previous.members().equals(current.members());
+    }
+
+    private Optional<Lobby> resolveLobbyForInvite(PendingInvite invite) {
+        for (Lobby lobby : visibleLobbies) {
+            if (lobby.lobbyId().equals(invite.lobbyId())) {
+                return Optional.of(lobby);
             }
         }
+        if (ownLobby.isPresent() && ownLobby.get().lobbyId().equals(invite.lobbyId())) {
+            return ownLobby;
+        }
+        return Optional.empty();
+    }
 
-        return super.mouseClicked(mx, my, btn);
+    private static String shortUuid(UUID uuid) {
+        return uuid.toString().substring(0, 8);
+    }
+
+    private static String formatRemaining(long seconds) {
+        long mins = seconds / 60L;
+        long sec = seconds % 60L;
+        return mins + ":" + String.format("%02d", sec);
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // Tab completion for invite field
-        if (inviteBox != null && inviteBox.visible && inviteBox.isFocused() && keyCode == 258) {
-            applyInviteTabCompletion(inviteBox);
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean mouseScrolled(double mx, double my, double dx, double dy) {
-        int x = leftPos, y = topPos;
-        UiState s = uiState();
-        if (s == UiState.BROWSING) {
-            int bannerOffset = invitedLobbies.isEmpty() ? 0 : 24;
-            int dynListY = y + Y_CONTENT + 4 + bannerOffset + 10;
-            int dynListH = Math.max(20, (y + Y_ACTIONS - 8) - dynListY);
-            int maxScroll = Math.max(0, visLobbies.size() * ROW_H - dynListH);
-            if (mx >= x + P + 3 && mx < x + P + IW - 3 && my >= dynListY && my < dynListY + dynListH && maxScroll > 0) {
-                lobbyScroll = Mth.clamp(lobbyScroll - dy * ROW_H, 0, maxScroll);
-                return true;
-            }
-        }
-
-        if (s == UiState.OWNER || s == UiState.MEMBER || s == UiState.QUEUED) {
-            int listStartY = switch (s) {
-                case OWNER -> y + YO_LIST;
-                case MEMBER -> y + Y_CONTENT + 56;
-                case QUEUED -> queuedMemberListStartY(y);
-                default -> y + Y_CONTENT;
-            };
-            int listBottomY = (s == UiState.OWNER) ? y + Y_ACTIONS_EXPANDED - 20 : y + Y_ACTIONS_EXPANDED - 4;
-            int listH = Math.max(ROW_H, listBottomY - listStartY);
-            if (mx >= x + P && mx < x + P + IW && my >= listStartY && my < listStartY + listH) {
-                int maxScroll = Math.max(0, memberNames.size() * ROW_H - listH);
-                if (maxScroll > 0) {
-                    memberScroll = Mth.clamp(memberScroll - dy * ROW_H, 0, maxScroll);
-                    updateButtons();
-                    return true;
-                }
-            }
-        }
-
-        if (s == UiState.BROWSING) {
-            int lbX = x + P + 3;
-            int lbY = y + Y_LB_ENTRY + 2;
-            int lbW = IW - 6;
-            int lbH = Math.max(1, (y + Y_LB + 56 - 3) - lbY);
-            if (mx >= lbX && mx < lbX + lbW && my >= lbY && my < lbY + lbH) {
-                int rowH = 10;
-                int maxScroll = Math.max(0, leaderboard.size() * rowH - lbH);
-                if (maxScroll > 0) {
-                    lbScroll = Mth.clamp(lbScroll - dy * rowH, 0, maxScroll);
-                    return true;
-                }
-            }
-        }
-        return super.mouseScrolled(mx, my, dx, dy);
-    }
-
-    private int queuedMemberListStartY(int y) {
-        int cy = y + Y_CONTENT + 4;
-        cy += 18; // queue row
-        cy += 13; // est wait
-        if (cooldownSecs > 0) {
-            cy += 13; // next slot
-        }
-        cy += 4;   // spacer
-        cy += 16;  // notify
-        cy += 12;  // your party label/spacer
-        return cy;
-    }
-
-    private void applyInviteTabCompletion(EditBox field) {
-        if (minecraft == null || minecraft.getConnection() == null) return;
-        String prefix = field.getValue().trim().toLowerCase();
-        if (prefix.isEmpty()) return;
-        String best = null;
-        for (var info : minecraft.getConnection().getOnlinePlayers()) {
-            String name = info.getProfile().getName();
-            if (name.toLowerCase().startsWith(prefix) && (best == null || name.length() < best.length())) {
-                best = name;
-            }
-        }
-        if (best != null) field.setValue(best);
-    }
-
-    private void renderInviteDropdown(GuiGraphics g) {
-        inviteSuggestions = getInviteSuggestions();
-        if (inviteSuggestions.isEmpty() || inviteBox == null || !inviteBox.visible) {
-            return;
-        }
-        int x = inviteBox.getX();
-        int y = inviteBox.getY() + inviteBox.getHeight() + 1;
-        int w = inviteBox.getWidth();
-        int rows = Math.min(DROPDOWN_MAX_ROWS, inviteSuggestions.size());
-        int h = rows * DROPDOWN_ROW_HEIGHT;
-        g.fill(x, y, x + w, y + h, C_PANEL);
-        drawBorder(g, x, y, w, h, C_BDR);
-
-        for (int i = 0; i < rows; i++) {
-            int rowY = y + i * DROPDOWN_ROW_HEIGHT;
-            String name = inviteSuggestions.get(i);
-            g.fill(x + 1, rowY + 1, x + w - 1, rowY + DROPDOWN_ROW_HEIGHT - 1, C_BG);
-            g.drawString(font, name, x + 4, rowY + 2, C_TEXT, false);
-        }
-    }
-
-    private List<String> getInviteSuggestions() {
-        if (minecraft == null || minecraft.getConnection() == null || inviteBox == null || !inviteBox.visible || !inviteBox.isFocused()) {
-            return List.of();
-        }
-        String prefix = inviteBox.getValue().trim().toLowerCase();
-        List<String> names = new ArrayList<>();
-        for (var info : minecraft.getConnection().getOnlinePlayers()) {
-            String name = info.getProfile().getName();
-            if (minecraft.player != null && name.equalsIgnoreCase(minecraft.player.getGameProfile().getName())) {
-                continue;
-            }
-            if (prefix.isEmpty() || name.toLowerCase().contains(prefix)) {
-                names.add(name);
-            }
-        }
-        names.sort(Comparator.naturalOrder());
-        return names;
-    }
-
-    private void respondInvite(ModPackets.RaidControllerInfoPayload.LobbyView lv, boolean accept) {
-        ClientPlayNetworking.send(new ModPackets.RespondRaidLobbyInvitePayload(lv.id(), accept));
-        updateInfo();
-    }
-
-    // ── Drawing helpers ───────────────────────────────────────────────────────
-    /** Fill rect then draw 1-px border. */
-    private static void drawPanel(GuiGraphics g, int x, int y, int w, int h) {
-        g.fill(x, y, x + w, y + h, 0xFF0e1220);
-        drawBorder(g, x, y, w, h, 0xFF1f2845);
-    }
-
-    private static void drawBorder(GuiGraphics g, int x, int y, int w, int h, int color) {
-        g.fill(x,         y,         x + w,     y + 1,     color); // top
-        g.fill(x,         y + h - 1, x + w,     y + h,     color); // bottom
-        g.fill(x,         y,         x + 1,     y + h,     color); // left
-        g.fill(x + w - 1, y,         x + w,     y + h,     color); // right
-    }
-
-    /** Draws a colored pill. Returns new x after the pill. */
-    private int drawPill(GuiGraphics g, String text, int x, int y, int bg, int textColor, int border) {
-        int pw = font.width(text) + 6;
-        int ph = 9;
-        g.fill(x, y, x + pw, y + ph, bg);
-        drawBorder(g, x, y, pw, ph, border);
-        g.pose().pushPose();
-        g.pose().translate(x + 3, y + 1, 0);
-        g.pose().scale(0.9f, 0.9f, 1f);
-        g.drawString(font, text, 0, 0, textColor, false);
-        g.pose().popPose();
-        return x + pw;
-    }
-
-    /** Draw tier pill, returns X after pill. */
-    private int drawTierPill(GuiGraphics g, String tierName, int x, int y) {
-        RaidDifficulty t = RaidDifficulty.fromNameOrDefault(tierName, RaidDifficulty.NORMAL);
-        int i = t.ordinal();
-        String label = t.name().charAt(0) + t.name().substring(1).toLowerCase();
-        int pw = font.width(label) + 6;
-        g.fill(x, y, x + pw, y + 12, TIER_BG[i]);
-        drawBorder(g, x, y, pw, 12, TIER_BDR[i]);
-        g.drawString(font, label, x + 3, y + 2, TIER_TXT[i], false);
-        return x + pw + 3;
-    }
-
-    private int tierPillWidth(String tierName) {
-        RaidDifficulty t = RaidDifficulty.fromNameOrDefault(tierName, RaidDifficulty.NORMAL);
-        String label = t.name().charAt(0) + t.name().substring(1).toLowerCase();
-        return font.width(label) + 6;
-    }
-
-    private void smallLabel(GuiGraphics g, Component text, int x, int y) {
-        g.pose().pushPose();
-        g.pose().translate(x, y, 0);
-        g.pose().scale(0.75f, 0.75f, 1f);
-        g.drawString(font, text, 0, 0, C_LABEL, false);
-        g.pose().popPose();
-    }
-
-    private void smallLabel(GuiGraphics g, String text, int x, int y) {
-        smallLabel(g, Component.literal(text), x, y);
-    }
-
-    private void small(GuiGraphics g, Component text, int x, int y, int color) {
-        g.pose().pushPose();
-        g.pose().translate(x, y, 0);
-        g.pose().scale(0.85f, 0.85f, 1f);
-        g.drawString(font, text, 0, 0, color, false);
-        g.pose().popPose();
-    }
-
-    private void small(GuiGraphics g, String text, int x, int y, int color) {
-        small(g, Component.literal(text), x, y, color);
-    }
-
-    // ── UI state helpers ──────────────────────────────────────────────────────
-    private enum UiState { BROWSING, MEMBER, OWNER, QUEUED }
-
-    private UiState uiState() {
-        if (!inLobby) return UiState.BROWSING;
-        if (lobbyStatus == LobbyStatus.QUEUED) return UiState.QUEUED;
-        return isOwner ? UiState.OWNER : UiState.MEMBER;
-    }
-
-    private boolean canJoinSelected() {
-        if (visLobbies.isEmpty() || selLobby >= visLobbies.size()) return false;
-        var lv = visLobbies.get(selLobby);
-        if ("INVITE_ONLY".equalsIgnoreCase(lv.visibility()) && !lv.invited()) return false;
-        if ("QUEUED".equalsIgnoreCase(lv.status()) || "IN_DUNGEON".equalsIgnoreCase(lv.status())) return false;
-        return lv.size() < lv.maxSize();
-    }
-
-    private void syncSettings() {
-        ClientPlayNetworking.send(new ModPackets.UpdateRaidControllerSettingsPayload(
-                menu.getPos(),
-                hcBox != null && hcBox.selected(),
-                selectedDifficulty.name()));
-    }
-
-    // ── Formatting helpers ────────────────────────────────────────────────────
-    private static String formatTime(int secs) {
-        return String.format("%02d:%02d", secs / 60, secs % 60);
-    }
-
-    private static String truncate(String s, int maxLen) {
-        if (s == null || s.isEmpty()) return "Unknown";
-        return s.length() <= maxLen ? s : s.substring(0, maxLen - 1) + "~";
-    }
-
-    private static int pillIndex(String status) {
-        if ("FREE".equalsIgnoreCase(status))     return 0;
-        if ("RUNNING".equalsIgnoreCase(status))  return 1;
-        return 2; // COOLDOWN
-    }
-
-    private static String pillLabel(ModPackets.RaidControllerInfoPayload.InstanceView iv, int num) {
-        return switch (iv.status().toUpperCase()) {
-            case "FREE"     -> Component.translatable("gui.arenas_ld.instance_free", num).getString();
-            case "RUNNING"  -> Component.translatable("gui.arenas_ld.instance_running", num).getString();
-            default         -> Component.translatable("gui.arenas_ld.instance_cd", num, formatTime(iv.cooldownSeconds())).getString();
-        };
-    }
-
-    private static String lobbyActionLabelKey(ModPackets.RaidControllerInfoPayload.LobbyView lv) {
-        if ("QUEUED".equalsIgnoreCase(lv.status()) || "IN_DUNGEON".equalsIgnoreCase(lv.status())) return "gui.arenas_ld.action_busy";
-        if (lv.size() >= lv.maxSize()) return "gui.arenas_ld.action_full";
-        if ("INVITE_ONLY".equalsIgnoreCase(lv.visibility()) && !lv.invited()) return "gui.arenas_ld.action_locked";
-        return "gui.arenas_ld.action_join";
-    }
-
-    private static LobbyStatus parseLobbyStatus(String s) {
-        try { return LobbyStatus.valueOf(s); } catch (Exception e) { return LobbyStatus.OPEN; }
-    }
-
-    private static LobbyVisibility parseLobbyVis(String s) {
-        try { return LobbyVisibility.valueOf(s); } catch (Exception e) { return LobbyVisibility.OPEN; }
     }
 }
