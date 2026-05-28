@@ -1141,7 +1141,7 @@ public class ModPackets {
         return false;
     }
 
-    static boolean isPlayerBusy(ServerPlayer player) {
+    public static boolean isPlayerBusy(ServerPlayer player) {
         if (player == null) {
             return false;
         }
@@ -1151,7 +1151,7 @@ public class ModPackets {
         return isPlayerInActiveGame(player);
     }
 
-    static List<RaidLeaderboardEntry> resolveRaidLeaderboardForDifficulty(
+    public static List<RaidLeaderboardEntry> resolveRaidLeaderboardForDifficulty(
             RaidControllerBlockEntity controller,
             RaidDifficulty difficulty
     ) {
@@ -1191,7 +1191,7 @@ public class ModPackets {
         }
     }
 
-    static RaidControllerBlockEntity findRaidControllerByLobbyId(net.minecraft.server.MinecraftServer server, UUID lobbyId) {
+    public static RaidControllerBlockEntity findRaidControllerByLobbyId(net.minecraft.server.MinecraftServer server, UUID lobbyId) {
         for (RaidControllerBlockEntity.ControllerKey key : RaidControllerBlockEntity.getControllers()) {
             ServerLevel level = server.getLevel(key.dimension());
             if (level == null) {
