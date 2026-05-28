@@ -27,6 +27,7 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
     private List<RaidControllerData.RaidInstanceState> instances;
     private int queuePosition;
     private int maxPartySize;
+    private int respawnTimeTicks;
     private long serverGameTick;
     private Set<UUID> busyPlayers;
     private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
@@ -49,6 +50,7 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         this.instances = List.of();
         this.queuePosition = -1;
         this.maxPartySize = blockEntity.getMaxPartySize();
+        this.respawnTimeTicks = blockEntity.getRespawnTimeTicks();
         this.serverGameTick = 0L;
         this.busyPlayers = Set.of();
         this.topLeaderboards = Map.of();
@@ -91,6 +93,10 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         return maxPartySize;
     }
 
+    public int getRespawnTimeTicks() {
+        return respawnTimeTicks;
+    }
+
     public long getServerGameTick() {
         return serverGameTick;
     }
@@ -111,6 +117,7 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         this.instances = List.copyOf(data.instances());
         this.queuePosition = data.queuePosition();
         this.maxPartySize = data.maxPartySize();
+        this.respawnTimeTicks = data.respawnTimeTicks();
         this.serverGameTick = data.serverGameTick();
         this.busyPlayers = Set.copyOf(data.busyPlayers());
         this.topLeaderboards = Map.copyOf(data.topLeaderboards());

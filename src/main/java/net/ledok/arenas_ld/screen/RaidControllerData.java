@@ -31,6 +31,7 @@ public record RaidControllerData(
     List<RaidInstanceState> instances,
     int queuePosition,
     int maxPartySize,
+    int respawnTimeTicks,
     long serverGameTick,
     Set<UUID> busyPlayers,
     Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards
@@ -77,6 +78,7 @@ public record RaidControllerData(
 
         buf.writeVarInt(data.queuePosition());
         buf.writeVarInt(data.maxPartySize());
+        buf.writeVarInt(data.respawnTimeTicks());
         buf.writeVarLong(data.serverGameTick());
 
         buf.writeVarInt(data.busyPlayers().size());
@@ -139,6 +141,7 @@ public record RaidControllerData(
 
         int queuePosition = buf.readVarInt();
         int maxPartySize = buf.readVarInt();
+        int respawnTimeTicks = buf.readVarInt();
         long serverGameTick = buf.readVarLong();
 
         int busyCount = buf.readVarInt();
@@ -161,7 +164,7 @@ public record RaidControllerData(
 
         return new RaidControllerData(
             blockPos, visible, own, invites, joinReqs, instances,
-            queuePosition, maxPartySize, serverGameTick, busyPlayers, topLeaderboards
+            queuePosition, maxPartySize, respawnTimeTicks, serverGameTick, busyPlayers, topLeaderboards
         );
     }
 

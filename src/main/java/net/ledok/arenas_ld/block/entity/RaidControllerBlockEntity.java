@@ -1269,6 +1269,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             instanceData,
             queuePosition,
             getMaxPartySize(),
+            getRespawnTimeTicks(),
             serverTick,
             busyPlayers,
             topLeaderboards
