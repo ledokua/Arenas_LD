@@ -1,5 +1,6 @@
 package net.ledok.arenas_ld.raid.run;
 
+import net.ledok.arenas_ld.dungeon.run.DownedPlayer;
 import net.ledok.arenas_ld.dungeon.run.PlayerReturnPoint;
 import net.ledok.arenas_ld.dungeon.run.RunParticipant;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
@@ -100,5 +101,13 @@ public final class RaidRunLifecycle {
 
     public static void clearDisconnected(RaidRun run, UUID uuid) {
         run.clearDisconnected(uuid);
+    }
+
+    public static void setDowned(RaidRun run, DownedPlayer downed) {
+        run.setDowned(downed);
+    }
+
+    public static void clearDowned(RaidRun run, UUID uuid) {
+        run.clearDowned(uuid);
     }
 }

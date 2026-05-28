@@ -8,6 +8,7 @@ import net.ledok.arenas_ld.dungeon.blockentity.EntityDefinition;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
+import net.ledok.arenas_ld.dungeon.run.DownedPlayer;
 import net.ledok.arenas_ld.dungeon.run.PlayerReturnPoint;
 import net.ledok.arenas_ld.dungeon.run.RunParticipant;
 import net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus;
@@ -102,7 +103,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private RaidDifficulty activeDifficulty = RaidDifficulty.NORMAL;
     private long battleStartTime = -1;
     private boolean hardcoreEnabled = false;
-    private final Map<UUID, DownedPlayer> downedPlayers = new HashMap<>();
     private final ServerBossEvent raidTimerBossBar = (ServerBossEvent) new ServerBossEvent(
             Component.translatable("gui.arenas_ld.raid_timer"),
             BossEvent.BossBarColor.YELLOW,
@@ -316,13 +316,14 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         RaidRun run = findRun();
         Set<UUID> participantIds = run != null ? run.participants().keySet() : Set.of();
+        Map<UUID, DownedPlayer> downed = run != null ? run.downedPlayers() : Map.of();
 
         if (++boundsTickCounter >= 20) {
             boundsTickCounter = 0;
             enforceBattleBounds(world);
             for (UUID uuid : participantIds) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-                if (player == null || player.isSpectator() || downedPlayers.containsKey(uuid)) {
+                if (player == null || player.isSpectator() || downed.containsKey(uuid)) {
                     continue;
                 }
                 if (player.getHealth() <= 1.0F) {
@@ -335,14 +336,14 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             }
         }
 
-        tickDownedPlayers(world);
+        tickDownedPlayers(world, run);
 
         if (hardcoreEnabled) {
             boolean anyFighting = participantIds.stream().anyMatch(id -> {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(id);
                 return player != null && player.isAlive() && !player.isSpectator();
             });
-            if (!anyFighting && downedPlayers.isEmpty()) {
+            if (!anyFighting && downed.isEmpty()) {
                 bossEntity.discard();
                 handleBattleLoss(world, "All players eliminated.");
                 return;
@@ -393,7 +394,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         this.battleStartTime = world.getGameTime();
         this.hardcoreEnabled = hardcoreEnabled;
         this.battleTimeLimitTicks = Math.max(0, battleTimeLimitTicks);
-        this.downedPlayers.clear();
 
         RaidRun run = findRun();
         long now = world.getGameTime();
@@ -607,7 +607,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         this.activeDifficulty = RaidDifficulty.NORMAL;
         this.battleStartTime = -1;
         this.hardcoreEnabled = false;
-        this.downedPlayers.clear();
         this.raidTimerBossBar.removeAllPlayers();
         this.raidTimerBossBar.setVisible(false);
         ArenasLdMod.RAID_BOSS_MANAGER.unregisterSpawner(this);
@@ -653,12 +652,13 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (!isBattleActive || player == null) return;
         if (!isTracked(player.getUUID())) return;
         if (player.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) return;
-        if (downedPlayers.containsKey(player.getUUID())) return;
+        RaidRun run = findRun();
+        if (run == null || run.downedPlayers().containsKey(player.getUUID())) return;
 
         player.setHealth(1.0F);
         player.setGameMode(GameType.SPECTATOR);
         battleStartTime -= resolveDeathTimePenaltyTicks();
-        downedPlayers.put(player.getUUID(), new DownedPlayer(DOWNED_RESPAWN_TICKS));
+        RaidRunLifecycle.setDowned(run, new DownedPlayer(player.getUUID(), DOWNED_RESPAWN_TICKS));
         markDirtyAndSync();
     }
 
@@ -677,11 +677,11 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         RaidRunLifecycle.markDisconnected(run, player.getUUID(),
             level instanceof ServerLevel sl ? sl.getGameTime() : 0L);
-        if (!downedPlayers.containsKey(player.getUUID())) {
+        if (!run.downedPlayers().containsKey(player.getUUID())) {
             if (battleTimeLimitTicks > 0) {
                 battleStartTime -= resolveDeathTimePenaltyTicks();
             }
-            downedPlayers.put(player.getUUID(), new DownedPlayer(DOWNED_RESPAWN_TICKS));
+            RaidRunLifecycle.setDowned(run, new DownedPlayer(player.getUUID(), DOWNED_RESPAWN_TICKS));
         }
         markDirtyAndSync();
     }
@@ -700,13 +700,18 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             ArenasLdMod.RAID_BOSS_MANAGER.handlePostBattleReconnect(player);
             return;
         }
+        if (run == null) return;
 
-        DownedPlayer downed = downedPlayers.computeIfAbsent(player.getUUID(), id -> new DownedPlayer(DOWNED_RESPAWN_TICKS));
+        DownedPlayer downed = run.downedPlayers().get(player.getUUID());
+        if (downed == null) {
+            downed = new DownedPlayer(player.getUUID(), DOWNED_RESPAWN_TICKS);
+            RaidRunLifecycle.setDowned(run, downed);
+        }
         player.setGameMode(GameType.SPECTATOR);
         player.setHealth(player.getMaxHealth());
-        if (downed.ticksRemaining <= 0) {
+        if (downed.isReadyToRespawn()) {
             respawnAtEntrance(player.serverLevel(), player);
-            downedPlayers.remove(player.getUUID());
+            RaidRunLifecycle.clearDowned(run, player.getUUID());
         }
     }
 
@@ -715,32 +720,33 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (!isTracked(player.getUUID())) return;
 
         player.setGameMode(GameType.SPECTATOR);
-        downedPlayers.remove(player.getUUID());
         RaidRun run = findRun();
         if (run != null) {
+            RaidRunLifecycle.clearDowned(run, player.getUUID());
             RaidRunLifecycle.removeParticipant(run, player.getUUID());
         }
         markDirtyAndSync();
     }
 
-    private void tickDownedPlayers(ServerLevel world) {
-        if (downedPlayers.isEmpty()) return;
+    private void tickDownedPlayers(ServerLevel world, @Nullable RaidRun run) {
+        if (run == null || run.downedPlayers().isEmpty()) return;
 
-        Iterator<Map.Entry<UUID, DownedPlayer>> iterator = downedPlayers.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<UUID, DownedPlayer> entry = iterator.next();
-            UUID uuid = entry.getKey();
-            DownedPlayer downed = entry.getValue();
+        // Snapshot the keys so we can mutate via the lifecycle while iterating.
+        for (UUID uuid : new ArrayList<>(run.downedPlayers().keySet())) {
+            DownedPlayer downed = run.downedPlayers().get(uuid);
+            if (downed == null) continue;
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
             if (player == null) {
-                downed.ticksRemaining = Math.max(0, downed.ticksRemaining - 1);
+                RaidRunLifecycle.setDowned(run, downed.tick());
                 continue;
             }
             player.setDeltaMovement(0, 0, 0);
-            downed.ticksRemaining--;
-            if (downed.ticksRemaining <= 0) {
+            DownedPlayer ticked = downed.tick();
+            if (ticked.isReadyToRespawn()) {
                 respawnAtEntrance(world, player);
-                iterator.remove();
+                RaidRunLifecycle.clearDowned(run, uuid);
+            } else {
+                RaidRunLifecycle.setDowned(run, ticked);
             }
         }
     }
@@ -802,9 +808,10 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         AABB battleBox = getCachedBattleBounds();
         RaidRun run = findRun();
         if (run == null) return;
+        Map<UUID, DownedPlayer> downed = run.downedPlayers();
         for (UUID uuid : run.participants().keySet()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            if (player == null || player.isSpectator() || downedPlayers.containsKey(uuid)) {
+            if (player == null || player.isSpectator() || downed.containsKey(uuid)) {
                 continue;
             }
             if (player.level() != world || !battleBox.contains(player.position())) {
@@ -989,11 +996,4 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         return String.format("%02d:%02d", minutes, seconds);
     }
 
-    private static class DownedPlayer {
-        private int ticksRemaining;
-
-        private DownedPlayer(int ticksRemaining) {
-            this.ticksRemaining = ticksRemaining;
-        }
-    }
 }
