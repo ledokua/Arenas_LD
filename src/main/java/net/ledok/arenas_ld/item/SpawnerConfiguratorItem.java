@@ -1,6 +1,6 @@
 package net.ledok.arenas_ld.item;
 
-import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
+import net.ledok.arenas_ld.raid.blockentity.RaidRaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.EntityDefinition;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
@@ -67,8 +67,8 @@ public class SpawnerConfiguratorItem extends Item {
         BlockEntity clickedBlockEntity = world.getBlockEntity(clickedPos);
 
         if (player.isShiftKeyDown()) {
-            if (clickedBlockEntity instanceof BossSpawnerBlockEntity
-                || clickedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity
+            if (clickedBlockEntity instanceof RaidBossSpawnerBlockEntity
+                || clickedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonRaidBossSpawnerBlockEntity
                 || clickedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity
                 || clickedBlockEntity instanceof MobArenaSpawnerBlockEntity) {
                 stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(data.mode(), Optional.of(clickedPos), Optional.of(world.dimension())));
@@ -96,8 +96,8 @@ public class SpawnerConfiguratorItem extends Item {
 
         BlockEntity selectedBlockEntity = spawnerWorld.getBlockEntity(selectedSpawnerPos);
 
-        if (!(selectedBlockEntity instanceof BossSpawnerBlockEntity)
-            && !(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity)
+        if (!(selectedBlockEntity instanceof RaidBossSpawnerBlockEntity)
+            && !(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonRaidBossSpawnerBlockEntity)
             && !(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity)
             && !(selectedBlockEntity instanceof MobArenaSpawnerBlockEntity)) {
             player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.invalid_spawner"));
@@ -111,7 +111,7 @@ public class SpawnerConfiguratorItem extends Item {
 
         switch (currentMode) {
             case EXIT_POSITION:
-                if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
+                if (selectedBlockEntity instanceof RaidBossSpawnerBlockEntity bossSpawner) {
                     bossSpawner.exitPosition = clickedPos;
                     bossSpawner.exitDimension = clickedDimension;
                 } else if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
@@ -122,9 +122,9 @@ public class SpawnerConfiguratorItem extends Item {
             case ENTRANCE_POSITION:
                 if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
                     mobArenaSpawner.setArenaEntrancePosition(relativePos, clickedDimension);
-                } else if (selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity newDbs) {
+                } else if (selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonRaidBossSpawnerBlockEntity newDbs) {
                     newDbs.setEntrancePosition(clickedPos, clickedDimension);
-                } else if (selectedBlockEntity instanceof BossSpawnerBlockEntity bossSpawner) {
+                } else if (selectedBlockEntity instanceof RaidBossSpawnerBlockEntity bossSpawner) {
                     bossSpawner.entrancePosition = relativePos;
                     bossSpawner.entranceDimension = clickedDimension;
                 }
@@ -150,7 +150,7 @@ public class SpawnerConfiguratorItem extends Item {
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_added", clickedPos.toShortString(), offsets.size()));
                     }
                     mobSpawner.setEntityDefinition(def.withSpawnOffsets(offsets).withSpawnCount(spawnCount));
-                } else if (selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity bossSpawner) {
+                } else if (selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonRaidBossSpawnerBlockEntity bossSpawner) {
                     // Boss spawner holds a single spawn position: placing replaces it, clicking the same one clears it.
                     EntityDefinition def = bossSpawner.getEntityDefinition();
                     java.util.List<BlockPos> current = def.spawnOffsets();

@@ -3,8 +3,19 @@ package net.ledok.arenas_ld.networking;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
-import net.ledok.arenas_ld.block.entity.*;
-import net.ledok.arenas_ld.util.*;
+import net.ledok.arenas_ld.block.entity.MobArenaControllerBlockEntity;
+import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
+import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
+import net.ledok.arenas_ld.raid.run.RaidDifficulty;
+import net.ledok.arenas_ld.raid.run.RaidLeaderboardEntry;
+import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.BusyStateCompat;
+import net.ledok.arenas_ld.dungeon.run.DungeonLeaderboardEntry;
+import net.ledok.arenas_ld.util.EquipmentData;
+import net.ledok.arenas_ld.util.InstanceStatus;
+import net.ledok.arenas_ld.util.LeaderboardEntry;
+import net.ledok.arenas_ld.util.MobArenaMobData;
+import net.ledok.arenas_ld.util.MobArenaRewardData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
@@ -1119,7 +1130,7 @@ public class ModPackets {
 
     public static void registerC2SPackets() {
         ModPacketTypeRegistry.registerC2STypes();
-        RaidPacketHandlers.register();
+        net.ledok.arenas_ld.raid.RaidPacketHandlers.register();
         SpawnerPacketHandlers.register();
         ArenaPacketHandlers.register();
 

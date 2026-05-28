@@ -1,4 +1,4 @@
-package net.ledok.arenas_ld.screen;
+package net.ledok.arenas_ld.raid.screen;
 
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;

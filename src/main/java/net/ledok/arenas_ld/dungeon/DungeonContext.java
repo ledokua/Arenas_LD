@@ -1,4 +1,6 @@
-package net.ledok.arenas_ld.util;
+package net.ledok.arenas_ld.dungeon;
+
+import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 
 public interface DungeonContext {
     double getHealthMultiplier();

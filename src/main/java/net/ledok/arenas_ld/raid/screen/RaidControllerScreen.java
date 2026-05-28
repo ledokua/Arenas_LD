@@ -1,4 +1,4 @@
-package net.ledok.arenas_ld.screen;
+package net.ledok.arenas_ld.raid.screen;
 
 import io.wispforest.owo.ui.base.BaseOwoHandledScreen;
 import io.wispforest.owo.ui.component.ButtonComponent;
@@ -41,7 +41,7 @@ import net.ledok.arenas_ld.raid.packet.RaidSetTierPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetVisibilityPayload;
 import net.ledok.arenas_ld.raid.packet.RaidStartPayload;
 import net.ledok.arenas_ld.raid.packet.RaidToggleReadyPayload;
-import net.ledok.arenas_ld.screen.RaidControllerData.RaidInstanceState;
+import net.ledok.arenas_ld.raid.screen.RaidControllerData.RaidInstanceState;
 import net.ledok.arenas_ld.util.InstanceStatus;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.multiplayer.PlayerInfo;

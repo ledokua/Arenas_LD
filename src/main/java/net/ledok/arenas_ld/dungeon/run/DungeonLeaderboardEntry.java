@@ -1,4 +1,4 @@
-package net.ledok.arenas_ld.util;
+package net.ledok.arenas_ld.dungeon.run;
 
 import net.minecraft.nbt.CompoundTag;
 

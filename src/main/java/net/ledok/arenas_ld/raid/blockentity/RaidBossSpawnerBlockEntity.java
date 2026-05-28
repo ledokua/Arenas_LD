@@ -1,4 +1,4 @@
-package net.ledok.arenas_ld.block.entity;
+package net.ledok.arenas_ld.raid.blockentity;
 
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.fabricmc.loader.api.FabricLoader;
@@ -7,9 +7,17 @@ import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
-import net.ledok.arenas_ld.screen.BossSpawnerData;
-import net.ledok.arenas_ld.screen.BossSpawnerScreenHandler;
-import net.ledok.arenas_ld.util.*;
+import net.ledok.arenas_ld.raid.run.RaidDifficulty;
+import net.ledok.arenas_ld.raid.run.RaidRunCallback;
+import net.ledok.arenas_ld.raid.run.RaidTierConfig;
+import net.ledok.arenas_ld.raid.screen.RaidBossSpawnerData;
+import net.ledok.arenas_ld.raid.screen.RaidBossSpawnerScreenHandler;
+import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.arenas_ld.util.AttributeProvider;
+import net.ledok.arenas_ld.util.EntityEquipmentHelper;
+import net.ledok.arenas_ld.util.EquipmentData;
+import net.ledok.arenas_ld.util.EquipmentProvider;
+import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
@@ -53,7 +61,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<BossSpawnerData>, AttributeProvider, EquipmentProvider {
+public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<RaidBossSpawnerData>, AttributeProvider, EquipmentProvider {
     private static final int DOWNED_RESPAWN_TICKS = 60;
     private static final int REGEN_INTERVAL_TICKS = 100;
     private static final int DEATH_TIME_PENALTY_TICKS = 10 * 20;
@@ -106,8 +114,8 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     private AABB cachedBattleBounds = null;
     private int cachedBattleBoundsRadius = Integer.MIN_VALUE;
 
-    public BossSpawnerBlockEntity(BlockPos pos, BlockState state) {
-        super(BlockEntitiesRegistry.BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
+    public RaidBossSpawnerBlockEntity(BlockPos pos, BlockState state) {
+        super(BlockEntitiesRegistry.RAID_BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
         initializeTierConfigs();
         if (attributes.isEmpty()) {
             attributes.add(new AttributeData("minecraft:generic.max_health", 300.0));
@@ -226,7 +234,7 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         markDirtyAndSync();
     }
 
-    public static void tick(Level world, BlockPos pos, BlockState state, BossSpawnerBlockEntity be) {
+    public static void tick(Level world, BlockPos pos, BlockState state, RaidBossSpawnerBlockEntity be) {
         if (world.isClientSide() || !(world instanceof ServerLevel serverLevel)) return;
 
         if (be.isBattleActive) {
@@ -956,12 +964,19 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
     @Nullable
     @Override
     public AbstractContainerMenu createMenu(int syncId, Inventory playerInventory, Player player) {
-        return new BossSpawnerScreenHandler(syncId, playerInventory, this);
+        return new RaidBossSpawnerScreenHandler(syncId, playerInventory, this);
     }
 
     @Override
-    public BossSpawnerData getScreenOpeningData(ServerPlayer player) {
-        return new BossSpawnerData(this.worldPosition);
+    public RaidBossSpawnerData getScreenOpeningData(ServerPlayer player) {
+        return new RaidBossSpawnerData(this.worldPosition);
+    }
+
+    private static String formatTime(int totalSeconds) {
+        int clamped = Math.max(0, totalSeconds);
+        int minutes = clamped / 60;
+        int seconds = clamped % 60;
+        return String.format("%02d:%02d", minutes, seconds);
     }
 
     private static class DownedPlayer {
@@ -970,12 +985,5 @@ public class BossSpawnerBlockEntity extends BlockEntity implements ExtendedScree
         private DownedPlayer(int ticksRemaining) {
             this.ticksRemaining = ticksRemaining;
         }
-    }
-
-    private static String formatTime(int totalSeconds) {
-        int clamped = Math.max(0, totalSeconds);
-        int minutes = clamped / 60;
-        int seconds = clamped % 60;
-        return String.format("%02d:%02d", minutes, seconds);
     }
 }

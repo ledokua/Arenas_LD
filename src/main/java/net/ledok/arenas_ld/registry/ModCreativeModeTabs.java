@@ -19,7 +19,7 @@ public class ModCreativeModeTabs {
                 .title(Component.translatable("creativetab.arenas_ld_tab"))
                 .icon(() -> ItemRegistry.LINKER.getDefaultInstance())
                 .displayItems((displayContext, entries) -> {
-                    entries.accept(BlockRegistry.BOSS_SPAWNER_BLOCK);
+                    entries.accept(BlockRegistry.RAID_BOSS_SPAWNER_BLOCK);
                     entries.accept(BlockRegistry.MOB_SPAWNER_BLOCK);
                     entries.accept(BlockRegistry.DUNGEON_BOSS_SPAWNER_BLOCK);
                     entries.accept(BlockRegistry.MOB_ARENA_SPAWNER_BLOCK);

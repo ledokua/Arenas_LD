@@ -8,7 +8,7 @@ import net.ledok.arenas_ld.dungeon.manager.DungeonManager;
 import net.ledok.arenas_ld.dungeon.run.DungeonConnectionListener;
 import net.ledok.arenas_ld.event.PlayerTickHandler;
 import net.ledok.arenas_ld.manager.MobArenaManager;
-import net.ledok.arenas_ld.manager.RaidBossManager;
+import net.ledok.arenas_ld.raid.manager.RaidBossManager;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.registry.*;
 import net.ledok.arenas_ld.screen.ModScreenHandlers;

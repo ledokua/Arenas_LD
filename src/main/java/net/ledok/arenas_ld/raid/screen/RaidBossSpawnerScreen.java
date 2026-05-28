@@ -1,9 +1,9 @@
-package net.ledok.arenas_ld.screen;
+package net.ledok.arenas_ld.raid.screen;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.networking.ModPackets;
-import net.ledok.arenas_ld.util.RaidDifficulty;
-import net.ledok.arenas_ld.util.RaidTierConfig;
+import net.ledok.arenas_ld.raid.run.RaidDifficulty;
+import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -20,7 +20,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreenHandler> {
+public class RaidBossSpawnerScreen extends AbstractContainerScreen<RaidBossSpawnerScreenHandler> {
     private enum Tab {
         GENERAL,
         TIERS
@@ -53,7 +53,7 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
     private final List<AbstractWidget> tierWidgets = new ArrayList<>();
     private final Map<RaidDifficulty, RaidTierConfig> tierConfigDraft = new EnumMap<>(RaidDifficulty.class);
 
-    public BossSpawnerScreen(BossSpawnerScreenHandler handler, Inventory inventory, Component title) {
+    public RaidBossSpawnerScreen(RaidBossSpawnerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
         this.imageWidth = 330;
         this.imageHeight = 290;
@@ -174,15 +174,15 @@ public class BossSpawnerScreen extends AbstractContainerScreen<BossSpawnerScreen
         tierPerPlayerLootTableField.setMaxLength(128);
 
         this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.attributes"), button -> {
-            this.minecraft.setScreen(new MobAttributesScreen(
-                    new MobAttributesScreenHandler(menu.containerId, minecraft.player.getInventory(), new MobAttributesData(menu.blockEntity.getBlockPos())),
+            this.minecraft.setScreen(new net.ledok.arenas_ld.screen.MobAttributesScreen(
+                    new net.ledok.arenas_ld.screen.MobAttributesScreenHandler(menu.containerId, minecraft.player.getInventory(), new net.ledok.arenas_ld.screen.MobAttributesData(menu.blockEntity.getBlockPos())),
                     minecraft.player.getInventory(),
                     Component.translatable("gui.arenas_ld.boss_attributes")));
         }).bounds(this.leftPos + 15, this.topPos + this.imageHeight - 48, 95, 20).build());
 
         this.addRenderableWidget(Button.builder(Component.translatable("gui.arenas_ld.equipment"), button -> {
-            this.minecraft.setScreen(new EquipmentScreen(
-                    new EquipmentScreenHandler(menu.containerId, minecraft.player.getInventory(), new EquipmentScreenData(menu.blockEntity.getBlockPos())),
+            this.minecraft.setScreen(new net.ledok.arenas_ld.screen.EquipmentScreen(
+                    new net.ledok.arenas_ld.screen.EquipmentScreenHandler(menu.containerId, minecraft.player.getInventory(), new net.ledok.arenas_ld.screen.EquipmentScreenData(menu.blockEntity.getBlockPos())),
                     minecraft.player.getInventory(),
                     Component.translatable("gui.arenas_ld.boss_equipment")));
         }).bounds(this.leftPos + 120, this.topPos + this.imageHeight - 48, 95, 20).build());

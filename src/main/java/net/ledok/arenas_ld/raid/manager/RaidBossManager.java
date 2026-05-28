@@ -1,7 +1,7 @@
-package net.ledok.arenas_ld.manager;
+package net.ledok.arenas_ld.raid.manager;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
+import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
@@ -18,13 +18,13 @@ import java.util.WeakHashMap;
 public class RaidBossManager {
     public record PendingRestore(BlockPos exitPos, ResourceKey<Level> exitDim, GameType gameMode) {}
 
-    private final Set<BossSpawnerBlockEntity> activeSpawners = Collections.newSetFromMap(new WeakHashMap<>());
+    private final Set<RaidBossSpawnerBlockEntity> activeSpawners = Collections.newSetFromMap(new WeakHashMap<>());
     private final Map<UUID, PendingRestore> pendingRestores = new HashMap<>();
 
     public void initialize() {
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ServerPlayer player = handler.getPlayer();
-            BossSpawnerBlockEntity spawner = getSpawnerForPlayer(player);
+            RaidBossSpawnerBlockEntity spawner = getSpawnerForPlayer(player);
             if (spawner != null) {
                 spawner.handlePlayerDisconnect(player);
             }
@@ -33,7 +33,7 @@ public class RaidBossManager {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer player = handler.getPlayer();
             server.execute(() -> {
-                BossSpawnerBlockEntity spawner = getSpawnerForOfflinePlayer(player.getUUID());
+                RaidBossSpawnerBlockEntity spawner = getSpawnerForOfflinePlayer(player.getUUID());
                 if (spawner != null) {
                     spawner.handlePlayerReconnect(player);
                     return;
@@ -43,23 +43,23 @@ public class RaidBossManager {
         });
     }
 
-    public void registerSpawner(BossSpawnerBlockEntity spawner) {
+    public void registerSpawner(RaidBossSpawnerBlockEntity spawner) {
         if (spawner != null) {
             activeSpawners.add(spawner);
         }
     }
 
-    public void unregisterSpawner(BossSpawnerBlockEntity spawner) {
+    public void unregisterSpawner(RaidBossSpawnerBlockEntity spawner) {
         if (spawner != null) {
             activeSpawners.remove(spawner);
         }
     }
 
-    public BossSpawnerBlockEntity getSpawnerForPlayer(ServerPlayer player) {
+    public RaidBossSpawnerBlockEntity getSpawnerForPlayer(ServerPlayer player) {
         if (player == null) {
             return null;
         }
-        for (BossSpawnerBlockEntity spawner : activeSpawners) {
+        for (RaidBossSpawnerBlockEntity spawner : activeSpawners) {
             if (spawner.isTracked(player.getUUID()) && spawner.isRaidRunning()) {
                 return spawner;
             }
@@ -67,11 +67,11 @@ public class RaidBossManager {
         return null;
     }
 
-    public BossSpawnerBlockEntity getSpawnerForOfflinePlayer(UUID uuid) {
+    public RaidBossSpawnerBlockEntity getSpawnerForOfflinePlayer(UUID uuid) {
         if (uuid == null) {
             return null;
         }
-        for (BossSpawnerBlockEntity spawner : activeSpawners) {
+        for (RaidBossSpawnerBlockEntity spawner : activeSpawners) {
             if (spawner.isTracked(uuid) && spawner.isRaidRunning()) {
                 return spawner;
             }

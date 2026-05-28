@@ -1,7 +1,7 @@
 package net.ledok.arenas_ld.mixin;
 
 import net.ledok.arenas_ld.ArenasLdMod;
-import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
+import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.run.DungeonRun;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -53,7 +53,7 @@ public abstract class LivingEntityMixin {
             return (float) (amount * multiplier);
         }
 
-        BossSpawnerBlockEntity raidSpawner = ArenasLdMod.RAID_BOSS_MANAGER.getSpawnerForPlayer(player);
+        RaidBossSpawnerBlockEntity raidSpawner = ArenasLdMod.RAID_BOSS_MANAGER.getSpawnerForPlayer(player);
         if (raidSpawner == null) {
             return amount;
         }
@@ -91,7 +91,7 @@ public abstract class LivingEntityMixin {
                     return;
                 }
             }
-            BossSpawnerBlockEntity raidSpawner = ArenasLdMod.RAID_BOSS_MANAGER.getSpawnerForPlayer(player);
+            RaidBossSpawnerBlockEntity raidSpawner = ArenasLdMod.RAID_BOSS_MANAGER.getSpawnerForPlayer(player);
             if (health <= 0.0F && raidSpawner != null) {
                 if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
                     if (raidSpawner.isHardcoreEnabled()) {
@@ -134,7 +134,7 @@ public abstract class LivingEntityMixin {
                 ci.cancel();
                 return;
             }
-            BossSpawnerBlockEntity raidSpawner = ArenasLdMod.RAID_BOSS_MANAGER.getSpawnerForPlayer(player);
+            RaidBossSpawnerBlockEntity raidSpawner = ArenasLdMod.RAID_BOSS_MANAGER.getSpawnerForPlayer(player);
             if (raidSpawner != null) {
                 if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
                     if (raidSpawner.isHardcoreEnabled()) {

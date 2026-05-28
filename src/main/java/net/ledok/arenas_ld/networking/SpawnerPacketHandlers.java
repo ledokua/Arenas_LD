@@ -2,8 +2,8 @@ package net.ledok.arenas_ld.networking;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
-import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
+import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.run.DungeonRun;
 import net.minecraft.ChatFormatting;
@@ -53,8 +53,8 @@ import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.AttributeProvider;
 import net.ledok.arenas_ld.util.EquipmentProvider;
 import net.ledok.arenas_ld.util.LinkerModeDataComponent;
-import net.ledok.arenas_ld.util.RaidDifficulty;
-import net.ledok.arenas_ld.util.RaidTierConfig;
+import net.ledok.arenas_ld.raid.run.RaidDifficulty;
+import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -81,7 +81,7 @@ final class SpawnerPacketHandlers {
             context.server().execute(() -> {
                 Level world = context.player().level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
-                if (be instanceof BossSpawnerBlockEntity blockEntity) {
+                if (be instanceof RaidBossSpawnerBlockEntity blockEntity) {
                     blockEntity.mobId = payload.mobId();
                     blockEntity.respawnTime = payload.respawnTime();
                     blockEntity.lootTableId = payload.lootTable();
@@ -100,7 +100,7 @@ final class SpawnerPacketHandlers {
             context.server().execute(() -> {
                 Level world = context.player().level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
-                if (be instanceof BossSpawnerBlockEntity blockEntity) {
+                if (be instanceof RaidBossSpawnerBlockEntity blockEntity) {
                     CompoundTag tierConfigsTag = payload.tierConfigs();
                     blockEntity.hpScalePerPlayer = payload.hpScalePerPlayer();
                     blockEntity.getTierConfigs().clear();

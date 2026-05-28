@@ -1,11 +1,12 @@
-package net.ledok.arenas_ld.screen;
+package net.ledok.arenas_ld.raid.screen;
 
-import net.ledok.arenas_ld.block.entity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
+import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
+import net.ledok.arenas_ld.screen.ModScreenHandlers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;

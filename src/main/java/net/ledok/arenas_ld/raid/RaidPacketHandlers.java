@@ -1,7 +1,7 @@
-package net.ledok.arenas_ld.networking;
+package net.ledok.arenas_ld.raid;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.ledok.arenas_ld.block.entity.RaidControllerBlockEntity;
+import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
@@ -24,10 +24,10 @@ import net.ledok.arenas_ld.raid.packet.RaidSetTierPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetVisibilityPayload;
 import net.ledok.arenas_ld.raid.packet.RaidStartPayload;
 import net.ledok.arenas_ld.raid.packet.RaidToggleReadyPayload;
-import net.ledok.arenas_ld.screen.RaidControllerData;
+import net.ledok.arenas_ld.raid.screen.RaidControllerData;
 import net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload;
-import net.ledok.arenas_ld.util.RaidDifficulty;
-import net.ledok.arenas_ld.util.RaidLeaderboardEntry;
+import net.ledok.arenas_ld.raid.run.RaidDifficulty;
+import net.ledok.arenas_ld.raid.run.RaidLeaderboardEntry;
 import net.ledok.arenas_ld.util.InstanceStatus;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -43,10 +43,10 @@ import java.util.UUID;
 
 import static net.ledok.arenas_ld.networking.ModPackets.*;
 
-final class RaidPacketHandlers {
+public final class RaidPacketHandlers {
     private RaidPacketHandlers() {}
 
-    static void register() {
+    public static void register() {
 
         // ── Create Lobby ──────────────────────────────────────────────────────
         ServerPlayNetworking.registerGlobalReceiver(RaidCreateLobbyPayload.TYPE, (payload, context) ->
@@ -429,7 +429,7 @@ final class RaidPacketHandlers {
         return ModPackets.findRaidControllerByLobbyId(server, lobbyId);
     }
 
-    static void broadcastRaidControllerSnapshot(ServerPlayer actor, RaidControllerBlockEntity controller) {
+    public static void broadcastRaidControllerSnapshot(ServerPlayer actor, RaidControllerBlockEntity controller) {
         if (actor.server == null) return;
         for (net.minecraft.server.level.ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
             ServerPlayNetworking.send(target, new RaidControllerSnapshotPayload(controller.getScreenOpeningData(target)));

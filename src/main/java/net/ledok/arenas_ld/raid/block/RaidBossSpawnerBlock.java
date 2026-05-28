@@ -1,8 +1,8 @@
-package net.ledok.arenas_ld.block;
+package net.ledok.arenas_ld.raid.block;
 
 import com.mojang.serialization.MapCodec;
-import net.ledok.arenas_ld.block.entity.BossSpawnerBlockEntity;
 import net.ledok.arenas_ld.item.LinkerItem;
+import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -18,11 +18,11 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
 
-public class BossSpawnerBlock extends BaseEntityBlock {
+public class RaidBossSpawnerBlock extends BaseEntityBlock {
 
-    public static final MapCodec<BossSpawnerBlock> CODEC = simpleCodec(BossSpawnerBlock::new);
+    public static final MapCodec<RaidBossSpawnerBlock> CODEC = simpleCodec(RaidBossSpawnerBlock::new);
 
-    public BossSpawnerBlock(Properties settings) {
+    public RaidBossSpawnerBlock(Properties settings) {
         super(settings);
     }
 
@@ -34,7 +34,7 @@ public class BossSpawnerBlock extends BaseEntityBlock {
     @Nullable
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new BossSpawnerBlockEntity(pos, state);
+        return new RaidBossSpawnerBlockEntity(pos, state);
     }
 
     @Override
@@ -54,8 +54,8 @@ public class BossSpawnerBlock extends BaseEntityBlock {
             }
 
             BlockEntity blockEntity = world.getBlockEntity(pos);
-            if (blockEntity instanceof BossSpawnerBlockEntity) {
-                player.openMenu((BossSpawnerBlockEntity) blockEntity);
+            if (blockEntity instanceof RaidBossSpawnerBlockEntity) {
+                player.openMenu((RaidBossSpawnerBlockEntity) blockEntity);
                 return InteractionResult.CONSUME;
             }
         }
@@ -70,6 +70,6 @@ public class BossSpawnerBlock extends BaseEntityBlock {
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level world, BlockState state, BlockEntityType<T> type) {
-        return createTickerHelper(type, BlockEntitiesRegistry.BOSS_SPAWNER_BLOCK_ENTITY, BossSpawnerBlockEntity::tick);
+        return createTickerHelper(type, BlockEntitiesRegistry.RAID_BOSS_SPAWNER_BLOCK_ENTITY, RaidBossSpawnerBlockEntity::tick);
     }
 }

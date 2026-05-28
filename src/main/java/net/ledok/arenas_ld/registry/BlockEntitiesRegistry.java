@@ -4,6 +4,8 @@ import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.*;
 import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
+import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
+import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -11,10 +13,10 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 
 public class BlockEntitiesRegistry {
     // --- Block entities register ---
-    public static final BlockEntityType<BossSpawnerBlockEntity> BOSS_SPAWNER_BLOCK_ENTITY =
+    public static final BlockEntityType<RaidBossSpawnerBlockEntity> RAID_BOSS_SPAWNER_BLOCK_ENTITY =
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
-                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":boss_spawner_be"),
-                    BlockEntityType.Builder.of(BossSpawnerBlockEntity::new, BlockRegistry.BOSS_SPAWNER_BLOCK).build(null));
+                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_boss_spawner_be"),
+                    BlockEntityType.Builder.of(RaidBossSpawnerBlockEntity::new, BlockRegistry.RAID_BOSS_SPAWNER_BLOCK).build(null));
 
     public static final BlockEntityType<MobArenaSpawnerBlockEntity> MOB_ARENA_SPAWNER_BLOCK_ENTITY =
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,

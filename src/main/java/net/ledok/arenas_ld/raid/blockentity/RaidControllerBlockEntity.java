@@ -1,4 +1,4 @@
-package net.ledok.arenas_ld.block.entity;
+package net.ledok.arenas_ld.raid.blockentity;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -10,12 +10,13 @@ import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
-import net.ledok.arenas_ld.screen.RaidControllerData;
-import net.ledok.arenas_ld.screen.RaidControllerScreenHandler;
+import net.ledok.arenas_ld.raid.screen.RaidControllerData;
+import net.ledok.arenas_ld.raid.screen.RaidControllerScreenHandler;
 import net.ledok.arenas_ld.util.BusyStateCompat;
+import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.util.InstanceStatus;
-import net.ledok.arenas_ld.util.RaidDifficulty;
-import net.ledok.arenas_ld.util.RaidRunCallback;
+import net.ledok.arenas_ld.raid.run.RaidDifficulty;
+import net.ledok.arenas_ld.raid.run.RaidRunCallback;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
@@ -321,12 +322,12 @@ public class RaidControllerBlockEntity extends BlockEntity
     /**
      * Returns top leaderboard entries for the given RaidDifficulty (legacy helper for ModPackets).
      */
-    public java.util.List<net.ledok.arenas_ld.util.RaidLeaderboardEntry> getLeaderboardForDifficulty(net.ledok.arenas_ld.util.RaidDifficulty difficulty) {
+    public java.util.List<net.ledok.arenas_ld.raid.run.RaidLeaderboardEntry> getLeaderboardForDifficulty(net.ledok.arenas_ld.raid.run.RaidDifficulty difficulty) {
         if (difficulty == null) return java.util.List.of();
         DifficultyTier tier = difficulty.toDifficultyTier();
         List<LeaderboardEntry> entries = leaderboards.getOrDefault(tier, java.util.List.of());
         return entries.stream()
-            .map(e -> new net.ledok.arenas_ld.util.RaidLeaderboardEntry(e.playerName(), e.timeSeconds()))
+            .map(e -> new net.ledok.arenas_ld.raid.run.RaidLeaderboardEntry(e.playerName(), e.timeSeconds()))
             .toList();
     }
 
@@ -933,7 +934,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
 
         var be = spawnerLevel.getBlockEntity(instance.spawnerPos());
-        if (!(be instanceof BossSpawnerBlockEntity spawner)) {
+        if (!(be instanceof RaidBossSpawnerBlockEntity spawner)) {
             for (int i = 0; i < instances.size(); i++) {
                 if (instances.get(i).spawnerPos().equals(instance.spawnerPos())) {
                     instances.set(i, instances.get(i).withStatus(InstanceStatus.FREE, 0));

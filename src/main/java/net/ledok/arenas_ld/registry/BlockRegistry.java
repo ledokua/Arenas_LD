@@ -2,6 +2,8 @@ package net.ledok.arenas_ld.registry;
 
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.*;
+import net.ledok.arenas_ld.raid.block.RaidBossSpawnerBlock;
+import net.ledok.arenas_ld.raid.block.RaidControllerBlock;
 import net.ledok.arenas_ld.dungeon.block.RoomControllerBlock;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -13,8 +15,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 
 public class BlockRegistry {
-    public static final Block BOSS_SPAWNER_BLOCK = registerBlock("boss_spawner",
-            new BossSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));
+    public static final Block RAID_BOSS_SPAWNER_BLOCK = registerBlock("raid_boss_spawner",
+            new RaidBossSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));
 
     public static final Block MOB_ARENA_SPAWNER_BLOCK = registerBlock("mob_arena_spawner",
             new MobArenaSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));

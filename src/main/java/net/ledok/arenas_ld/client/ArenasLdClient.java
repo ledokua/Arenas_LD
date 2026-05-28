@@ -11,6 +11,8 @@ import net.ledok.arenas_ld.dungeon.packet.RoomControllerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.screen.RoomControllerScreen;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload;
+import net.ledok.arenas_ld.raid.screen.RaidBossSpawnerScreen;
+import net.ledok.arenas_ld.raid.screen.RaidControllerScreen;
 import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.screen.*;
 import net.minecraft.client.Minecraft;
@@ -20,7 +22,7 @@ import net.minecraft.client.renderer.RenderType;
 public class ArenasLdClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
-        MenuScreens.register(ModScreenHandlers.BOSS_SPAWNER_SCREEN_HANDLER, BossSpawnerScreen::new);
+        MenuScreens.register(ModScreenHandlers.RAID_BOSS_SPAWNER_SCREEN_HANDLER, RaidBossSpawnerScreen::new);
         MenuScreens.register(ModScreenHandlers.MOB_ATTRIBUTES_SCREEN_HANDLER, MobAttributesScreen::new);
         MenuScreens.register(ModScreenHandlers.MOB_ARENA_SPAWNER_SCREEN_HANDLER, MobArenaSpawnerScreen::new);
         MenuScreens.register(ModScreenHandlers.MOB_ARENA_CONTROLLER_SCREEN_HANDLER, MobArenaControllerScreen::new);

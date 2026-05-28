@@ -1,7 +1,7 @@
 package net.ledok.arenas_ld.raid.packet;
 
 import net.ledok.arenas_ld.ArenasLdMod;
-import net.ledok.arenas_ld.screen.RaidControllerData;
+import net.ledok.arenas_ld.raid.screen.RaidControllerData;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;

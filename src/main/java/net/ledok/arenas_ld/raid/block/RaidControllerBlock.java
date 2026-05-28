@@ -1,7 +1,7 @@
-package net.ledok.arenas_ld.block;
+package net.ledok.arenas_ld.raid.block;
 
 import com.mojang.serialization.MapCodec;
-import net.ledok.arenas_ld.block.entity.RaidControllerBlockEntity;
+import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
