@@ -44,7 +44,6 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
     private boolean isLocked = false;
     private int currentWave = 0;
     private boolean hardcoreEnabled = false;
-    private long rewardCurrencyPerWave = 0L;
     private List<LeaderboardEntry> leaderboard = new ArrayList<>();
 
     public MobArenaControllerBlockEntity(BlockPos pos, BlockState state) {
@@ -176,18 +175,6 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
         }
     }
 
-    public long getRewardCurrencyPerWave() {
-        return Math.max(0L, rewardCurrencyPerWave);
-    }
-
-    public void setRewardCurrencyPerWave(long amount) {
-        long clamped = Math.max(0L, amount);
-        if (this.rewardCurrencyPerWave != clamped) {
-            this.rewardCurrencyPerWave = clamped;
-            markDirtyAndSync();
-        }
-    }
-
     public List<LeaderboardEntry> getLeaderboard() {
         return Collections.unmodifiableList(leaderboard);
     }
@@ -212,7 +199,6 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
         nbt.putBoolean("IsLocked", isLocked);
         nbt.putInt("CurrentWave", currentWave);
         nbt.putBoolean("HardcoreEnabled", hardcoreEnabled);
-        nbt.putLong("RewardCurrencyPerWave", rewardCurrencyPerWave);
 
         ListTag membersList = new ListTag();
         for (UUID uuid : partyMembers) {
@@ -237,7 +223,6 @@ public class MobArenaControllerBlockEntity extends BlockEntity implements Extend
         isLocked = nbt.getBoolean("IsLocked");
         currentWave = nbt.getInt("CurrentWave");
         hardcoreEnabled = nbt.getBoolean("HardcoreEnabled");
-        rewardCurrencyPerWave = nbt.contains("RewardCurrencyPerWave") ? Math.max(0L, nbt.getLong("RewardCurrencyPerWave")) : 0L;
 
         partyMembers.clear();
         if (nbt.contains("PartyMembers")) {

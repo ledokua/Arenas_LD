@@ -12,22 +12,24 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  * @param perPlayerLootTable loot table ID rolled per player on win. Empty string = no loot.
  * @param dungeonTimeSeconds total time for the run at this tier. Should be > 0.
  * @param enabled whether this tier appears in the lobby tier picker and can be selected.
+ * @param rewardCurrency Economy_LD currency delivered to each loot-eligible player's inbox on win. 0 = none.
  */
 public record TierConfig(
     double healthMultiplier,
     double damageMultiplier,
     String perPlayerLootTable,
     int dungeonTimeSeconds,
-    boolean enabled
+    boolean enabled,
+    long rewardCurrency
 ) {
     public static final TierConfig EASY_DEFAULT =
-        new TierConfig(0.75, 0.75, "", 600, true);
+        new TierConfig(0.75, 0.75, "", 600, true, 0L);
     public static final TierConfig NORMAL_DEFAULT =
-        new TierConfig(1.0, 1.0, "", 600, true);
+        new TierConfig(1.0, 1.0, "", 600, true, 0L);
     public static final TierConfig HARD_DEFAULT =
-        new TierConfig(1.5, 1.5, "", 600, true);
+        new TierConfig(1.5, 1.5, "", 600, true, 0L);
     public static final TierConfig NIGHTMARE_DEFAULT =
-        new TierConfig(2.5, 2.5, "", 600, true);
+        new TierConfig(2.5, 2.5, "", 600, true, 0L);
 
     public static final Codec<TierConfig> CODEC = RecordCodecBuilder.create(instance ->
         instance.group(
@@ -35,7 +37,8 @@ public record TierConfig(
             Codec.DOUBLE.fieldOf("damageMultiplier").forGetter(TierConfig::damageMultiplier),
             Codec.STRING.fieldOf("perPlayerLootTable").forGetter(TierConfig::perPlayerLootTable),
             Codec.INT.fieldOf("dungeonTimeSeconds").forGetter(TierConfig::dungeonTimeSeconds),
-            Codec.BOOL.optionalFieldOf("enabled", true).forGetter(TierConfig::enabled)
+            Codec.BOOL.optionalFieldOf("enabled", true).forGetter(TierConfig::enabled),
+            Codec.LONG.optionalFieldOf("rewardCurrency", 0L).forGetter(TierConfig::rewardCurrency)
         ).apply(instance, TierConfig::new)
     );
 

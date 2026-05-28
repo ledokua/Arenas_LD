@@ -155,7 +155,7 @@ public class RaidControllerBlockEntity extends BlockEntity implements RaidRunCal
     private static final UUID EMPTY_UUID = new UUID(0L, 0L);
     private static final int DEFAULT_RESPAWN_TIME_TICKS = 6000;
     private static final int DEFAULT_MAX_PARTY_SIZE = 10;
-    private static final String BUSY_REASON = net.ledok.busylib.BusyReasons.IN_RAID;
+    private static final String BUSY_REASON = "arenas_ld";
     private static final long INVITE_EXPIRY_TICKS = 5L * 60L * 20L;
     private static final long OFFLINE_GRACE_TICKS = 5L * 60L * 20L;
     private static final long LOBBY_CLEANUP_INTERVAL_TICKS = 30L * 20L;
@@ -170,7 +170,6 @@ public class RaidControllerBlockEntity extends BlockEntity implements RaidRunCal
     // Config
     private int respawnTimeTicks = DEFAULT_RESPAWN_TIME_TICKS;
     private int maxPartySize = DEFAULT_MAX_PARTY_SIZE;
-    private long rewardCurrencyPerPlayer = 0L;
     // Leaderboard
     private final Map<RaidDifficulty, List<RaidLeaderboardEntry>> leaderboardByDifficulty = new EnumMap<>(RaidDifficulty.class);
 
@@ -225,19 +224,6 @@ public class RaidControllerBlockEntity extends BlockEntity implements RaidRunCal
 
     public int getRespawnTimeTicks() {
         return Math.max(0, respawnTimeTicks);
-    }
-
-    public long getRewardCurrencyPerPlayer() {
-        return Math.max(0L, rewardCurrencyPerPlayer);
-    }
-
-    public void setRewardCurrencyPerPlayer(long amount) {
-        long clamped = Math.max(0L, amount);
-        if (this.rewardCurrencyPerPlayer == clamped) {
-            return;
-        }
-        this.rewardCurrencyPerPlayer = clamped;
-        markDirtyAndSync();
     }
 
     public int getMaxPartySize() {
@@ -657,7 +643,6 @@ public class RaidControllerBlockEntity extends BlockEntity implements RaidRunCal
             for (String name : playerNames) {
                 upsertLeaderboardEntry(difficulty != null ? difficulty : RaidDifficulty.NORMAL, name, Math.max(0, timeSeconds));
             }
-            payRewardToPlayers(playerNames);
         }
 
         RaidInstanceState target = mappedInstance != null ? mappedInstance : findInstanceByPos(spawnerPos);
@@ -851,23 +836,6 @@ public class RaidControllerBlockEntity extends BlockEntity implements RaidRunCal
         }
     }
 
-    private void payRewardToPlayers(List<String> playerNames) {
-        long amount = getRewardCurrencyPerPlayer();
-        if (amount <= 0L || playerNames == null || playerNames.isEmpty()) {
-            return;
-        }
-        if (!(level instanceof ServerLevel serverLevel)) {
-            return;
-        }
-        var server = serverLevel.getServer();
-        for (String name : playerNames) {
-            if (name == null || name.isBlank()) {
-                continue;
-            }
-            net.ledok.arenas_ld.util.EconomyCompat.deliverCurrencyByName(server, name, amount, "RAID_REWARD");
-        }
-    }
-
     private void clearBusyByNames(List<String> playerNames) {
         if (!(level instanceof ServerLevel serverLevel) || playerNames == null || playerNames.isEmpty()) {
             return;
@@ -985,7 +953,6 @@ public class RaidControllerBlockEntity extends BlockEntity implements RaidRunCal
         super.saveAdditional(nbt, registryLookup);
         nbt.putInt("RespawnTimeTicks", respawnTimeTicks);
         nbt.putInt("MaxPartySize", maxPartySize);
-        nbt.putLong("RewardCurrencyPerPlayer", rewardCurrencyPerPlayer);
 
         ListTag instancesList = new ListTag();
         for (RaidInstanceState instance : instances) {
@@ -1036,7 +1003,6 @@ public class RaidControllerBlockEntity extends BlockEntity implements RaidRunCal
         super.loadAdditional(nbt, registryLookup);
         respawnTimeTicks = nbt.contains("RespawnTimeTicks") ? nbt.getInt("RespawnTimeTicks") : DEFAULT_RESPAWN_TIME_TICKS;
         maxPartySize = nbt.contains("MaxPartySize") ? nbt.getInt("MaxPartySize") : DEFAULT_MAX_PARTY_SIZE;
-        rewardCurrencyPerPlayer = nbt.contains("RewardCurrencyPerPlayer") ? Math.max(0L, nbt.getLong("RewardCurrencyPerPlayer")) : 0L;
 
         instances.clear();
         if (nbt.contains("Instances", Tag.TAG_LIST)) {

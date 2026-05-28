@@ -194,7 +194,7 @@ public final class DungeonRunLifecycle {
         long runDurationTicks = world.getGameTime() - run.startTick();
         int runDurationSeconds = (int) (runDurationTicks / 20);
         String lootTableId = run.resolvedTierConfig().perPlayerLootTable();
-        long rewardPerPlayer = controller.getRewardCurrencyPerPlayer();
+        long rewardPerPlayer = run.resolvedTierConfig().rewardCurrency();
 
         for (UUID uuid : run.lootEligibleUuids()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);

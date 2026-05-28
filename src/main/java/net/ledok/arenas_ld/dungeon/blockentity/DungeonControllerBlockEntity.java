@@ -64,7 +64,6 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private int inviteExpiryTicks = DEFAULT_INVITE_EXPIRY_TICKS;
     private int disconnectGraceTicks = DEFAULT_DISCONNECT_GRACE_TICKS;
     private int lobbyOfflineTimeoutTicks = DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS;
-    private long rewardCurrencyPerPlayer = 0L;
     private final Map<BlockPos, Integer> instanceCooldownTimers = new HashMap<>();
     private final Set<BlockPos> pendingInstanceRemovals = new HashSet<>();
     private final Map<DifficultyTier, List<LeaderboardEntry>> leaderboards = new EnumMap<>(DifficultyTier.class);
@@ -119,18 +118,6 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     public int getLobbyOfflineTimeoutTicks() {
         return lobbyOfflineTimeoutTicks;
-    }
-
-    public long getRewardCurrencyPerPlayer() {
-        return Math.max(0L, rewardCurrencyPerPlayer);
-    }
-
-    public boolean setRewardCurrencyPerPlayer(long amount) {
-        if (amount < 0L) return false;
-        if (this.rewardCurrencyPerPlayer == amount) return true;
-        this.rewardCurrencyPerPlayer = amount;
-        setChanged();
-        return true;
     }
 
     public Map<BlockPos, Integer> getInstanceCooldownTimers() {
@@ -916,7 +903,6 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save DungeonController at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
-        nbt.putLong("RewardCurrencyPerPlayer", rewardCurrencyPerPlayer);
     }
 
     @Override
@@ -963,7 +949,6 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         } else {
             initializeDefaults();
         }
-        rewardCurrencyPerPlayer = nbt.contains("RewardCurrencyPerPlayer") ? Math.max(0L, nbt.getLong("RewardCurrencyPerPlayer")) : 0L;
     }
 
     @Override

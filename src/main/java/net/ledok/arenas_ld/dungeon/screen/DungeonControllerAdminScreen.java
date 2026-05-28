@@ -98,6 +98,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
     private final Map<DifficultyTier, String> damageInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> lootInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> timeInputs = new EnumMap<>(DifficultyTier.class);
+    private final Map<DifficultyTier, String> rewardInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, Boolean> enabledInputs = new EnumMap<>(DifficultyTier.class);
 
     public DungeonControllerAdminScreen(DungeonControllerAdminScreenHandler handler, Inventory inventory, Component title) {
@@ -606,6 +607,9 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
                 timeInputs.getOrDefault(tier, Integer.toString(config.dungeonTimeSeconds())), v -> timeInputs.put(tier, v))
         ));
 
+        contentArea.child(spacer(6));
+        contentArea.child(rewardCurrencyField(tier, config));
+
         contentArea.child(spacer(8));
         FlowLayout applyRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
         applyRow.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
@@ -680,6 +684,59 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
             context.fill(knobX, y1 + 2, knobX + knobW, y1 + h - 2, knobColor);
         });
         return button;
+    }
+
+    private FlowLayout rewardCurrencyField(DifficultyTier tier, TierConfig config) {
+        String initial = rewardInputs.getOrDefault(tier, Long.toString(config.rewardCurrency()));
+        FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        col.gap(4);
+
+        FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        head.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        head.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.reward"), INK_DIM));
+        head.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+        LabelComponent hintLabel = Components.label(Component.literal(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.reward_hint")).withStyle(net.minecraft.ChatFormatting.ITALIC));
+        hintLabel.color(Color.ofArgb(INK_DIM));
+        head.child(hintLabel);
+        col.child(head);
+
+        FlowLayout stepper = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        stepper.gap(6);
+        stepper.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(22));
+        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
+        accent.surface(Surface.flat(ACCENT));
+        fieldWrap.child(accent);
+        TextBoxComponent field = Components.textBox(Sizing.expand(), initial);
+        field.verticalSizing(Sizing.fixed(18));
+        field.onChanged().subscribe(v -> rewardInputs.put(tier, v));
+        fieldWrap.child(field);
+        FlowLayout unitCell = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        unitCell.padding(Insets.of(0, 0, 6, 6));
+        unitCell.child(labelLiteral("LC", INK_DIM));
+        fieldWrap.child(unitCell);
+
+        stepper.child(stepButton("-", () -> stepLong(field, -10L, 0L, 1_000_000_000L, v -> rewardInputs.put(tier, v))));
+        stepper.child(fieldWrap);
+        stepper.child(stepButton("+", () -> stepLong(field, 10L, 0L, 1_000_000_000L, v -> rewardInputs.put(tier, v))));
+        col.child(stepper);
+        return col;
+    }
+
+    private void stepLong(TextBoxComponent field, long delta, long min, long max, java.util.function.Consumer<String> onChange) {
+        long current;
+        try {
+            current = Long.parseLong(field.getValue().trim());
+        } catch (Exception ignored) {
+            current = min;
+        }
+        long next = Math.max(min, Math.min(max, current + delta));
+        String value = Long.toString(next);
+        field.text(value);
+        onChange.accept(value);
     }
 
     private FlowLayout lootField(String initial, java.util.function.Consumer<String> onChange) {
@@ -932,18 +989,27 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         Double damage = parseDouble(damageInputs.getOrDefault(tier, Double.toString(current.damageMultiplier())));
         Integer time = parseInt(timeInputs.getOrDefault(tier, Integer.toString(current.dungeonTimeSeconds())));
         String loot = lootInputs.getOrDefault(tier, current.perPlayerLootTable());
+        Long reward = parseLong(rewardInputs.getOrDefault(tier, Long.toString(current.rewardCurrency())));
 
-        if (health == null || damage == null || time == null) {
+        if (health == null || damage == null || time == null || reward == null) {
             footerError = Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value").getString();
             rebuildUi();
             return;
         }
 
         boolean enabled = enabledInputs.getOrDefault(tier, current.enabled());
-        TierConfig updated = new TierConfig(health, damage, loot, time, enabled);
+        TierConfig updated = new TierConfig(health, damage, loot, time, enabled, Math.max(0L, reward));
         tierConfigs.put(tier, updated);
         footerError = null;
         ClientPlayNetworking.send(new SetTierConfigPayload(menu.getBlockPos(), tier, updated));
+    }
+
+    private Long parseLong(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private Integer parseInt(String value) {
@@ -999,6 +1065,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         damageInputs.put(tier, trimDouble(config.damageMultiplier()));
         lootInputs.put(tier, config.perPlayerLootTable());
         timeInputs.put(tier, Integer.toString(config.dungeonTimeSeconds()));
+        rewardInputs.put(tier, Long.toString(config.rewardCurrency()));
         enabledInputs.put(tier, config.enabled());
     }
 
