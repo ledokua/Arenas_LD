@@ -10,8 +10,10 @@ import net.ledok.arenas_ld.dungeon.packet.MobSpawnerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomControllerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.screen.RoomControllerScreen;
 import net.ledok.arenas_ld.networking.ModPackets;
+import net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload;
 import net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload;
 import net.ledok.arenas_ld.raid.screen.RaidBossSpawnerScreen;
+import net.ledok.arenas_ld.raid.screen.RaidControllerAdminScreen;
 import net.ledok.arenas_ld.raid.screen.RaidControllerScreen;
 import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.screen.*;
@@ -32,6 +34,7 @@ public class ArenasLdClient implements ClientModInitializer {
         MenuScreens.register(ModScreenHandlers.DUNGEON_BOSS_SPAWNER_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerScreen::new);
         MenuScreens.register(ModScreenHandlers.DUNGEON_CONTROLLER_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen::new);
         MenuScreens.register(ModScreenHandlers.DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreen::new);
+        MenuScreens.register(ModScreenHandlers.RAID_CONTROLLER_ADMIN_SCREEN_HANDLER, RaidControllerAdminScreen::new);
 
         BlockRenderLayerMap.INSTANCE.putBlock(BlockRegistry.PHASE_BLOCK, RenderType.translucent());
 
@@ -84,6 +87,13 @@ public class ArenasLdClient implements ClientModInitializer {
                 if (Minecraft.getInstance().screen instanceof MobArenaControllerScreen screen
                         && payload.pos().equals(screen.getMenu().getPos())) {
                     screen.applyServerInfo(payload);
+                }
+            }));
+        ClientPlayNetworking.registerGlobalReceiver(RaidControllerAdminSnapshotPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> {
+                if (Minecraft.getInstance().screen instanceof RaidControllerAdminScreen screen
+                        && screen.matchesController(payload.data().blockPos())) {
+                    screen.applyData(payload.data());
                 }
             }));
         ClientPlayNetworking.registerGlobalReceiver(RaidControllerSnapshotPayload.TYPE, (payload, context) ->

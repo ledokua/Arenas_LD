@@ -370,6 +370,18 @@
   "gui.arenas_ld.dungeon_controller_admin.ui.tier.time_hint": "секунди",
   "gui.arenas_ld.dungeon_controller_admin.ui.tier.apply": "ЗАСТОСУВАТИ РІВЕНЬ %s",
 
+  "gui.arenas_ld.raid_controller_admin.title": "Адмін: Контролер рейду",
+  "gui.arenas_ld.raid_controller_admin.command.failure.not_looking": "Подивіться на контролер рейду, щоб відкрити адмін.",
+  "gui.arenas_ld.raid_controller_admin.command.failure.wrong_block": "Цей блок не є Контролером рейду.",
+  "gui.arenas_ld.raid_controller_admin.use_add_hint": "(використайте \"Додати поточну позицію\" вище)",
+  "gui.arenas_ld.raid_controller_admin.ui.add_current": "ЗАРЕЄСТРУВАТИ ПОТОЧНУ ПОЗИЦІЮ ЯК СПАВНЕР РЕЙДУ",
+  "gui.arenas_ld.raid_controller_admin.ui.action.add_here": "ДОДАТИ ТУТ",
+  "gui.arenas_ld.raid_controller_admin.ui.summary.hint_pre": "Станьте на блок спавнера рейду та натисніть",
+  "gui.arenas_ld.raid_controller_admin.ui.summary.hint_link": "ДОДАТИ ТУТ",
+  "gui.arenas_ld.raid_controller_admin.ui.summary.hint_post": ", щоб зареєструвати його.",
+  "gui.arenas_ld.raid_controller_admin.ui.general.respawn_time": "ЧАС ВІДРОДЖЕННЯ",
+  "gui.arenas_ld.raid_controller_admin.ui.general.respawn_time_hint": "тіки до повернення полеглих гравців",
+
   "item.arenas_ld.linker.mode.controller_instance": "Контролер \u2192 Інстанс",
   "item.arenas_ld.linker.mode.dbs_room": "DBS \u2192 Кімната",
   "item.arenas_ld.linker.mode.room_spawner": "Кімната \u2192 Спавнер",
