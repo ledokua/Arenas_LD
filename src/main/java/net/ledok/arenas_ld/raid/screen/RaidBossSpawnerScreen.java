@@ -550,7 +550,7 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
     // ── Data loading / save ──────────────────────────────────────────────────
     private void loadFromBlockEntity() {
         if (menu.blockEntity == null) return;
-        mobIdValue                 = menu.blockEntity.mobId;
+        mobIdValue                 = menu.blockEntity.getMobId();
         respawnTimeValue           = Integer.toString(menu.blockEntity.respawnTime);
         lootTableIdValue           = menu.blockEntity.lootTableId;
         perPlayerLootTableIdValue  = menu.blockEntity.perPlayerLootTableId;

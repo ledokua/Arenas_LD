@@ -4,6 +4,7 @@ import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.fabricmc.loader.api.FabricLoader;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
+import net.ledok.arenas_ld.dungeon.blockentity.EntityDefinition;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
@@ -23,6 +24,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
@@ -67,7 +69,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private static final int DEATH_TIME_PENALTY_TICKS = 10 * 20;
 
     // --- Config ---
-    public String mobId = "minecraft:zombie";
     public int respawnTime = 6000;
     public String lootTableId = "minecraft:chests/simple_dungeon";
     public String perPlayerLootTableId = "";
@@ -83,8 +84,15 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     public ResourceKey<Level> exitDimension = Level.OVERWORLD;
     private final List<BlockPos> respawnPointOffsets = new ArrayList<>();
     private final Map<RaidDifficulty, RaidTierConfig> tierConfigs = new EnumMap<>(RaidDifficulty.class);
-    private final List<AttributeData> attributes = new ArrayList<>();
-    private EquipmentData equipment = new EquipmentData();
+    /** Bundled entity config (mobId + attributes + equipment). Mirrors dungeon spawners. */
+    private EntityDefinition entityDefinition = new EntityDefinition(
+        "minecraft:zombie",
+        new ArrayList<>(List.of(
+            new AttributeData("minecraft:generic.max_health", 300.0),
+            new AttributeData("minecraft:generic.attack_damage", 15.0)
+        )),
+        new EquipmentData()
+    );
 
     // --- Runtime from controller ---
     private BlockPos controllerPos = null;
@@ -117,10 +125,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     public RaidBossSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.RAID_BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
         initializeTierConfigs();
-        if (attributes.isEmpty()) {
-            attributes.add(new AttributeData("minecraft:generic.max_health", 300.0));
-            attributes.add(new AttributeData("minecraft:generic.attack_damage", 15.0));
-        }
     }
 
     private void markDirty() {
@@ -203,7 +207,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     }
 
     private double getConfiguredBaseMaxHealth() {
-        for (AttributeData attr : attributes) {
+        for (AttributeData attr : entityDefinition.attributes()) {
             if ("minecraft:generic.max_health".equals(attr.id())) {
                 return attr.value();
             }
@@ -211,26 +215,43 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         return 20.0;
     }
 
+    public EntityDefinition getEntityDefinition() {
+        return entityDefinition;
+    }
+
+    public void setEntityDefinition(EntityDefinition def) {
+        this.entityDefinition = def;
+        markDirtyAndSync();
+    }
+
+    public String getMobId() {
+        return entityDefinition.mobId();
+    }
+
+    public void setMobId(String id) {
+        this.entityDefinition = entityDefinition.withMobId(id);
+        markDirtyAndSync();
+    }
+
     @Override
     public List<AttributeData> getAttributes() {
-        return attributes;
+        return entityDefinition.attributes();
     }
 
     @Override
     public void setAttributes(List<AttributeData> attributes) {
-        this.attributes.clear();
-        this.attributes.addAll(attributes);
+        this.entityDefinition = entityDefinition.withAttributes(new ArrayList<>(attributes));
         markDirtyAndSync();
     }
 
     @Override
     public EquipmentData getEquipment() {
-        return equipment;
+        return entityDefinition.equipment();
     }
 
     @Override
     public void setEquipment(EquipmentData equipment) {
-        this.equipment = equipment;
+        this.entityDefinition = entityDefinition.withEquipment(equipment);
         markDirtyAndSync();
     }
 
@@ -343,8 +364,8 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             return;
         }
 
-        Optional<EntityType<?>> entityTypeOpt = EntityType.byString(this.mobId);
-        Component mobDisplayName = entityTypeOpt.map(EntityType::getDescription).orElse(Component.literal(this.mobId));
+        Optional<EntityType<?>> entityTypeOpt = EntityType.byString(entityDefinition.mobId());
+        Component mobDisplayName = entityTypeOpt.map(EntityType::getDescription).orElse(Component.literal(entityDefinition.mobId()));
         Component announcement = Component.translatable(
                 "message.arenas_ld.raid_start",
                 players.get(0).getDisplayName(),
@@ -353,13 +374,13 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         world.getServer().getPlayerList().broadcastSystemMessage(announcement, false);
 
         if (entityTypeOpt.isEmpty()) {
-            ArenasLdMod.LOGGER.error("Invalid mob ID in spawner at {}: {}", this.worldPosition, this.mobId);
+            ArenasLdMod.LOGGER.error("Invalid mob ID in spawner at {}: {}", this.worldPosition, entityDefinition.mobId());
             return;
         }
 
         Entity boss = entityTypeOpt.get().create(world);
         if (boss == null) {
-            ArenasLdMod.LOGGER.error("Failed to create entity from ID: {}", this.mobId);
+            ArenasLdMod.LOGGER.error("Failed to create entity from ID: {}", entityDefinition.mobId());
             return;
         }
 
@@ -395,7 +416,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             double damageMult = tierCfg.damageMultiplier();
             double perPlayerMult = Math.pow(1.0 + hpScalePerPlayer, Math.max(0, players.size() - 1));
 
-            for (AttributeData attr : attributes) {
+            for (AttributeData attr : entityDefinition.attributes()) {
                 ResourceLocation attrLocation = ResourceLocation.tryParse(attr.id());
                 if (attrLocation == null) continue;
                 var attributeRegistry = world.registryAccess().registryOrThrow(Registries.ATTRIBUTE);
@@ -413,12 +434,13 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
                 });
             }
 
-            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.HEAD, equipment.head, equipment.dropChance);
-            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.CHEST, equipment.chest, equipment.dropChance);
-            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.LEGS, equipment.legs, equipment.dropChance);
-            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.FEET, equipment.feet, equipment.dropChance);
-            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.MAINHAND, equipment.mainHand, equipment.dropChance);
-            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.OFFHAND, equipment.offHand, equipment.dropChance);
+            EquipmentData equip = entityDefinition.equipment();
+            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.HEAD, equip.head, equip.dropChance);
+            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.CHEST, equip.chest, equip.dropChance);
+            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.LEGS, equip.legs, equip.dropChance);
+            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.FEET, equip.feet, equip.dropChance);
+            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.MAINHAND, equip.mainHand, equip.dropChance);
+            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.OFFHAND, equip.offHand, equip.dropChance);
 
             livingBoss.heal(livingBoss.getMaxHealth());
             String teamName = this.groupId == null || this.groupId.isBlank() ? "arenas_ld" : this.groupId;
@@ -461,7 +483,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
         ArenasLdMod.LOGGER.info(
                 "Raid battle started at {} with boss {}, tier={}, players={}",
-                this.worldPosition, this.mobId, this.activeDifficulty, this.trackedPlayerCount
+                this.worldPosition, entityDefinition.mobId(), this.activeDifficulty, this.trackedPlayerCount
         );
     }
 
@@ -809,7 +831,9 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.saveAdditional(nbt, registryLookup);
-        nbt.putString("MobId", mobId);
+        EntityDefinition.CODEC.encodeStart(NbtOps.INSTANCE, entityDefinition)
+            .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save EntityDefinition at {}: {}", worldPosition, err))
+            .ifPresent(tag -> nbt.put("EntityDefinition", tag));
         nbt.putInt("RespawnTime", respawnTime);
         nbt.putString("LootTableId", lootTableId);
         nbt.putString("PerPlayerLootTableId", perPlayerLootTableId);
@@ -858,18 +882,11 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
         nbt.put("RaidTierConfigs", tierConfigsTag);
 
-        ListTag attributeList = new ListTag();
-        for (AttributeData attr : attributes) {
-            attributeList.add(attr.toNbt());
-        }
-        nbt.put("Attributes", attributeList);
-        nbt.put("Equipment", equipment.toNbt());
     }
 
     @Override
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.loadAdditional(nbt, registryLookup);
-        mobId = nbt.getString("MobId");
         respawnTime = nbt.getInt("RespawnTime");
         lootTableId = nbt.getString("LootTableId");
         perPlayerLootTableId = nbt.getString("PerPlayerLootTableId");
@@ -939,17 +956,26 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             }
         }
 
-        attributes.clear();
-        ListTag attributeList = nbt.getList("Attributes", Tag.TAG_COMPOUND);
-        for (Tag tag : attributeList) {
-            attributes.add(AttributeData.fromNbt((CompoundTag) tag));
-        }
-        if (attributes.isEmpty()) {
-            attributes.add(new AttributeData("minecraft:generic.max_health", 300.0));
-            attributes.add(new AttributeData("minecraft:generic.attack_damage", 15.0));
-        }
-        if (nbt.contains("Equipment")) {
-            equipment = EquipmentData.fromNbt(nbt.getCompound("Equipment"));
+        if (nbt.contains("EntityDefinition", Tag.TAG_COMPOUND)) {
+            EntityDefinition.CODEC.parse(NbtOps.INSTANCE, nbt.getCompound("EntityDefinition"))
+                .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load EntityDefinition at {}: {}", worldPosition, err))
+                .ifPresent(def -> this.entityDefinition = def);
+        } else {
+            // Legacy migration: assemble EntityDefinition from old top-level fields.
+            String legacyMobId = nbt.contains("MobId") ? nbt.getString("MobId") : "minecraft:zombie";
+            List<AttributeData> legacyAttrs = new ArrayList<>();
+            ListTag attributeList = nbt.getList("Attributes", Tag.TAG_COMPOUND);
+            for (Tag tag : attributeList) {
+                legacyAttrs.add(AttributeData.fromNbt((CompoundTag) tag));
+            }
+            if (legacyAttrs.isEmpty()) {
+                legacyAttrs.add(new AttributeData("minecraft:generic.max_health", 300.0));
+                legacyAttrs.add(new AttributeData("minecraft:generic.attack_damage", 15.0));
+            }
+            EquipmentData legacyEquip = nbt.contains("Equipment")
+                ? EquipmentData.fromNbt(nbt.getCompound("Equipment"))
+                : new EquipmentData();
+            this.entityDefinition = new EntityDefinition(legacyMobId, legacyAttrs, legacyEquip);
         }
         if (isBattleActive) {
             ArenasLdMod.RAID_BOSS_MANAGER.registerSpawner(this);

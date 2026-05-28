@@ -84,7 +84,7 @@ final class SpawnerPacketHandlers {
                 Level world = context.player().level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
                 if (be instanceof RaidBossSpawnerBlockEntity blockEntity) {
-                    blockEntity.mobId = payload.mobId();
+                    blockEntity.setMobId(payload.mobId());
                     blockEntity.respawnTime = payload.respawnTime();
                     blockEntity.lootTableId = payload.lootTable();
                     blockEntity.perPlayerLootTableId = payload.perPlayerLootTable();
