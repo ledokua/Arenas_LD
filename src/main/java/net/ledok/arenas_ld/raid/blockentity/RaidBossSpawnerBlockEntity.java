@@ -8,7 +8,12 @@ import net.ledok.arenas_ld.dungeon.blockentity.EntityDefinition;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
+import net.ledok.arenas_ld.dungeon.run.PlayerReturnPoint;
+import net.ledok.arenas_ld.dungeon.run.RunParticipant;
+import net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus;
 import net.ledok.arenas_ld.raid.run.RaidDifficulty;
+import net.ledok.arenas_ld.raid.run.RaidRun;
+import net.ledok.arenas_ld.raid.run.RaidRunLifecycle;
 import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.ledok.arenas_ld.raid.screen.RaidBossSpawnerData;
 import net.ledok.arenas_ld.raid.screen.RaidBossSpawnerScreenHandler;
@@ -97,13 +102,9 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private BlockPos controllerPos = null;
     private ResourceKey<Level> controllerDimension = null;
     private RaidDifficulty activeDifficulty = RaidDifficulty.NORMAL;
-    private int trackedPlayerCount = 0;
     private long battleStartTime = -1;
     private boolean hardcoreEnabled = false;
-    private final List<UUID> trackedPlayerIds = new ArrayList<>();
-    private final List<String> trackedPlayerNames = new ArrayList<>();
     private final Map<UUID, DownedPlayer> downedPlayers = new HashMap<>();
-    private final Set<UUID> disconnectedPlayers = new HashSet<>();
     private final ServerBossEvent raidTimerBossBar = (ServerBossEvent) new ServerBossEvent(
             Component.translatable("gui.arenas_ld.raid_timer"),
             BossEvent.BossBarColor.YELLOW,
@@ -117,7 +118,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     protected ResourceKey<Level> bossDimension = null;
     protected int regenerationTickTimer = 0;
     protected int boundsTickCounter = 0;
-    private final Map<UUID, GameType> playerGameModesBeforeRaid = new HashMap<>();
     private AABB cachedBattleBounds = null;
     private int cachedBattleBoundsRadius = Integer.MIN_VALUE;
 
@@ -135,6 +135,13 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (level != null) {
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
         }
+    }
+
+    /** Resolve the live raid run anchored at this spawner, or null when there is none. */
+    @Nullable
+    private RaidRun findRun() {
+        if (!(level instanceof ServerLevel sl)) return null;
+        return RaidRunLifecycle.findRun(sl.getServer(), worldPosition);
     }
 
     private void initializeTierConfigs() {
@@ -309,10 +316,13 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             }
         }
 
+        RaidRun run = findRun();
+        Set<UUID> participantIds = run != null ? run.participants().keySet() : Set.of();
+
         if (++boundsTickCounter >= 20) {
             boundsTickCounter = 0;
             enforceBattleBounds(world);
-            for (UUID uuid : trackedPlayerIds) {
+            for (UUID uuid : participantIds) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
                 if (player == null || player.isSpectator() || downedPlayers.containsKey(uuid)) {
                     continue;
@@ -330,7 +340,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         tickDownedPlayers(world);
 
         if (hardcoreEnabled) {
-            boolean anyFighting = trackedPlayerIds.stream().anyMatch(id -> {
+            boolean anyFighting = participantIds.stream().anyMatch(id -> {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(id);
                 return player != null && player.isAlive() && !player.isSpectator();
             });
@@ -386,19 +396,19 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         this.controllerPos = controllerPos;
         this.controllerDimension = controllerDimension;
         this.activeDifficulty = difficulty != null ? difficulty : RaidDifficulty.NORMAL;
-        this.trackedPlayerCount = players.size();
         this.battleStartTime = world.getGameTime();
         this.hardcoreEnabled = hardcoreEnabled;
         this.battleTimeLimitTicks = Math.max(0, battleTimeLimitTicks);
-        this.trackedPlayerIds.clear();
-        this.trackedPlayerNames.clear();
         this.downedPlayers.clear();
-        this.disconnectedPlayers.clear();
-        this.playerGameModesBeforeRaid.clear();
+
+        RaidRun run = findRun();
+        long now = world.getGameTime();
         for (ServerPlayer p : players) {
-            trackedPlayerIds.add(p.getUUID());
-            trackedPlayerNames.add(p.getGameProfile().getName());
-            playerGameModesBeforeRaid.put(p.getUUID(), p.gameMode.getGameModeForPlayer());
+            if (run != null) {
+                RaidRunLifecycle.addParticipant(run, new RunParticipant(
+                    p.getUUID(), p.getGameProfile().getName(), ParticipantStatus.ACTIVE, now));
+                RaidRunLifecycle.setReturnPoint(run, p.getUUID(), PlayerReturnPoint.capture(p));
+            }
             raidTimerBossBar.addPlayer(p);
         }
         if (this.battleTimeLimitTicks > 0) {
@@ -482,15 +492,19 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         world.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
         ArenasLdMod.LOGGER.info(
                 "Raid battle started at {} with boss {}, tier={}, players={}",
-                this.worldPosition, entityDefinition.mobId(), this.activeDifficulty, this.trackedPlayerCount
+                this.worldPosition, entityDefinition.mobId(), this.activeDifficulty, players.size()
         );
     }
 
     protected void handleBattleWin(ServerLevel world, Entity defeatedBoss) {
         ArenasLdMod.LOGGER.info("Raid battle won at spawner {}", worldPosition);
 
+        // Capture the run before notifyController removes it from activeRuns.
+        RaidRun run = findRun();
+        Set<UUID> participantIds = run != null ? run.participants().keySet() : Set.of();
+
         if (this.skillExperiencePerWin > 0) {
-            for (UUID uuid : trackedPlayerIds) {
+            for (UUID uuid : participantIds) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
                 if (player != null && FabricLoader.getInstance().isModLoaded("puffish_skills")) {
                     PuffishSkillsCompat.addExperience(player, this.skillExperiencePerWin);
@@ -524,9 +538,9 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
 
         if (!resolvedPerPlayerLootTableId.isEmpty()) {
-            for (UUID uuid : trackedPlayerIds) {
+            for (UUID uuid : participantIds) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-                if (player == null || !isTracked(uuid)) {
+                if (player == null) {
                     continue;
                 }
                 ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
@@ -537,12 +551,15 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             }
         }
 
-        notifyController(world, true);
-        resetAfterBattle(world);
+        notifyController(world, true, run);
+        resetAfterBattle(world, run);
     }
 
     protected void handleBattleLoss(ServerLevel world, String reason) {
         ArenasLdMod.LOGGER.info("Raid battle lost at spawner {}: {}", worldPosition, reason);
+
+        // Capture the run before notifyController removes it from activeRuns.
+        RaidRun run = findRun();
 
         if (activeBossUuid != null && bossDimension != null) {
             ServerLevel bossWorld = world.getServer().getLevel(bossDimension);
@@ -555,32 +572,34 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             }
         }
 
-        notifyController(world, false);
-        resetAfterBattle(world);
+        notifyController(world, false, run);
+        resetAfterBattle(world, run);
     }
 
-    private void resetAfterBattle(ServerLevel world) {
+    private void resetAfterBattle(ServerLevel world, @Nullable RaidRun run) {
         ServerLevel exitWorld = world.getServer().getLevel(exitDimension);
         BlockPos absoluteExit = exitPosition;
-        for (UUID uuid : trackedPlayerIds) {
-            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            if (player == null) {
-                GameType restoreMode = playerGameModesBeforeRaid.getOrDefault(uuid, GameType.SURVIVAL);
-                ArenasLdMod.RAID_BOSS_MANAGER.addPendingRestore(uuid, exitPosition, exitDimension, restoreMode);
-                continue;
-            }
-            GameType restoreMode = playerGameModesBeforeRaid.getOrDefault(uuid, GameType.SURVIVAL);
-            player.setGameMode(restoreMode);
-            player.setHealth(player.getMaxHealth());
-            if (exitWorld != null) {
-                player.teleportTo(
-                        exitWorld,
-                        absoluteExit.getX() + 0.5,
-                        absoluteExit.getY(),
-                        absoluteExit.getZ() + 0.5,
-                        player.getYRot(),
-                        player.getXRot()
-                );
+        if (run != null) {
+            for (UUID uuid : run.participants().keySet()) {
+                PlayerReturnPoint rp = run.returnPoints().get(uuid);
+                GameType restoreMode = rp != null ? rp.previousGameMode() : GameType.SURVIVAL;
+                ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+                if (player == null) {
+                    ArenasLdMod.RAID_BOSS_MANAGER.addPendingRestore(uuid, exitPosition, exitDimension, restoreMode);
+                    continue;
+                }
+                player.setGameMode(restoreMode);
+                player.setHealth(player.getMaxHealth());
+                if (exitWorld != null) {
+                    player.teleportTo(
+                            exitWorld,
+                            absoluteExit.getX() + 0.5,
+                            absoluteExit.getY(),
+                            absoluteExit.getZ() + 0.5,
+                            player.getYRot(),
+                            player.getXRot()
+                    );
+                }
             }
         }
 
@@ -594,14 +613,9 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         this.controllerPos = null;
         this.controllerDimension = null;
         this.activeDifficulty = RaidDifficulty.NORMAL;
-        this.trackedPlayerCount = 0;
         this.battleStartTime = -1;
         this.hardcoreEnabled = false;
-        this.disconnectedPlayers.clear();
-        this.trackedPlayerIds.clear();
-        this.trackedPlayerNames.clear();
         this.downedPlayers.clear();
-        this.playerGameModesBeforeRaid.clear();
         this.raidTimerBossBar.removeAllPlayers();
         this.raidTimerBossBar.setVisible(false);
         ArenasLdMod.RAID_BOSS_MANAGER.unregisterSpawner(this);
@@ -624,7 +638,9 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     }
 
     public boolean isTracked(UUID playerId) {
-        return playerId != null && trackedPlayerIds.contains(playerId);
+        if (playerId == null) return false;
+        RaidRun run = findRun();
+        return run != null && run.participants().containsKey(playerId);
     }
 
     public boolean isRaidRunning() {
@@ -663,14 +679,17 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (player == null || !isBattleActive || !isTracked(player.getUUID())) {
             return;
         }
+        RaidRun run = findRun();
+        if (run == null) return;
 
         if (hardcoreEnabled) {
-            disconnectedPlayers.remove(player.getUUID());
+            RaidRunLifecycle.clearDisconnected(run, player.getUUID());
             handlePlayerHardcoreDeath(player);
             return;
         }
 
-        disconnectedPlayers.add(player.getUUID());
+        RaidRunLifecycle.markDisconnected(run, player.getUUID(),
+            level instanceof ServerLevel sl ? sl.getGameTime() : 0L);
         if (!downedPlayers.containsKey(player.getUUID())) {
             if (battleTimeLimitTicks > 0) {
                 battleStartTime -= resolveDeathTimePenaltyTicks();
@@ -685,7 +704,10 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             return;
         }
 
-        disconnectedPlayers.remove(player.getUUID());
+        RaidRun run = findRun();
+        if (run != null) {
+            RaidRunLifecycle.clearDisconnected(run, player.getUUID());
+        }
 
         if (!isBattleActive) {
             ArenasLdMod.RAID_BOSS_MANAGER.handlePostBattleReconnect(player);
@@ -707,8 +729,10 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         player.setGameMode(GameType.SPECTATOR);
         downedPlayers.remove(player.getUUID());
-        trackedPlayerIds.remove(player.getUUID());
-        trackedPlayerNames.remove(player.getGameProfile().getName());
+        RaidRun run = findRun();
+        if (run != null) {
+            RaidRunLifecycle.removeParticipant(run, player.getUUID());
+        }
         markDirtyAndSync();
     }
 
@@ -777,7 +801,9 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         raidTimerBossBar.setProgress(Mth.clamp(progress, 0.0f, 1.0f));
         raidTimerBossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime((int) (remainingTicks / 20L))));
 
-        for (UUID uuid : trackedPlayerIds) {
+        RaidRun run = findRun();
+        if (run == null) return;
+        for (UUID uuid : run.participants().keySet()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
             if (player != null && !raidTimerBossBar.getPlayers().contains(player)) {
                 raidTimerBossBar.addPlayer(player);
@@ -787,7 +813,9 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     private void enforceBattleBounds(ServerLevel world) {
         AABB battleBox = getCachedBattleBounds();
-        for (UUID uuid : trackedPlayerIds) {
+        RaidRun run = findRun();
+        if (run == null) return;
+        for (UUID uuid : run.participants().keySet()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
             if (player == null || player.isSpectator() || downedPlayers.containsKey(uuid)) {
                 continue;
@@ -814,7 +842,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         return cachedBattleBounds;
     }
 
-    private void notifyController(ServerLevel world, boolean wasWin) {
+    private void notifyController(ServerLevel world, boolean wasWin, @Nullable RaidRun run) {
         if (controllerPos == null || controllerDimension == null) return;
         ServerLevel controllerWorld = world.getServer().getLevel(controllerDimension);
         if (controllerWorld == null) return;
@@ -823,8 +851,11 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             return;
         }
 
+        List<String> names = run != null
+            ? run.participants().values().stream().map(RunParticipant::playerName).toList()
+            : List.of();
         int elapsed = battleStartTime > 0 ? Math.max(0, (int) ((world.getGameTime() - battleStartTime) / 20L)) : 0;
-        controller.onRaidEnded(this.worldPosition, wasWin, activeDifficulty, new ArrayList<>(trackedPlayerNames), elapsed);
+        controller.onRaidEnded(this.worldPosition, wasWin, activeDifficulty, new ArrayList<>(names), elapsed);
     }
 
     @Override
@@ -855,25 +886,8 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (controllerPos != null) nbt.putLong("ControllerPos", controllerPos.asLong());
         if (controllerDimension != null) nbt.putString("ControllerDimension", controllerDimension.location().toString());
         nbt.putString("ActiveDifficulty", activeDifficulty.name());
-        nbt.putInt("TrackedPlayerCount", trackedPlayerCount);
         nbt.putLong("BattleStartTime", battleStartTime);
         nbt.putBoolean("HardcoreEnabled", hardcoreEnabled);
-
-        ListTag trackedIdList = new ListTag();
-        for (UUID id : trackedPlayerIds) {
-            CompoundTag t = new CompoundTag();
-            t.putUUID("uuid", id);
-            trackedIdList.add(t);
-        }
-        nbt.put("TrackedPlayerIds", trackedIdList);
-
-        ListTag trackedNameList = new ListTag();
-        for (String name : trackedPlayerNames) {
-            CompoundTag t = new CompoundTag();
-            t.putString("name", name);
-            trackedNameList.add(t);
-        }
-        nbt.put("TrackedPlayerNames", trackedNameList);
 
         CompoundTag tierConfigsTag = new CompoundTag();
         for (RaidDifficulty tier : RaidDifficulty.values()) {
@@ -925,24 +939,8 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             controllerDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ControllerDimension")));
         }
         activeDifficulty = RaidDifficulty.fromNameOrDefault(nbt.getString("ActiveDifficulty"), RaidDifficulty.NORMAL);
-        trackedPlayerCount = nbt.getInt("TrackedPlayerCount");
         battleStartTime = nbt.getLong("BattleStartTime");
         hardcoreEnabled = nbt.getBoolean("HardcoreEnabled");
-
-        trackedPlayerIds.clear();
-        if (nbt.contains("TrackedPlayerIds", Tag.TAG_LIST)) {
-            ListTag trackedIdList = nbt.getList("TrackedPlayerIds", Tag.TAG_COMPOUND);
-            for (Tag t : trackedIdList) {
-                trackedPlayerIds.add(((CompoundTag) t).getUUID("uuid"));
-            }
-        }
-        trackedPlayerNames.clear();
-        if (nbt.contains("TrackedPlayerNames", Tag.TAG_LIST)) {
-            ListTag trackedNameList = nbt.getList("TrackedPlayerNames", Tag.TAG_COMPOUND);
-            for (Tag t : trackedNameList) {
-                trackedPlayerNames.add(((CompoundTag) t).getString("name"));
-            }
-        }
 
         tierConfigs.clear();
         initializeTierConfigs();
@@ -979,7 +977,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         if (isBattleActive) {
             ArenasLdMod.RAID_BOSS_MANAGER.registerSpawner(this);
         }
-        disconnectedPlayers.clear();
     }
 
     @Nullable

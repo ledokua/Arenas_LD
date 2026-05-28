@@ -1066,6 +1066,22 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
 
         RaidDifficulty difficulty = RaidDifficulty.from(lobby.selectedTier());
+
+        // Register the run BEFORE startBattle so the spawner can locate it
+        // (via RaidRunLifecycle.findRun) while wiring its initial state.
+        RaidTierConfig resolvedTier = tierConfigs.getOrDefault(
+            lobby.selectedTier(), RaidTierConfig.defaultFor(lobby.selectedTier()));
+        activeRuns.put(instance.spawnerPos(), new RaidRun(
+            lobby.lobbyId(),
+            lobby.ownerName(),
+            lobby.selectedTier(),
+            resolvedTier,
+            lobby.hardcoreEnabled(),
+            instance.spawnerPos(),
+            serverLevel.dimension(),
+            serverLevel.getGameTime()
+        ));
+
         spawner.startBattle(
             spawnerLevel,
             players,
@@ -1082,19 +1098,6 @@ public class RaidControllerBlockEntity extends BlockEntity
 
         Lobby running = lobby.withStatus(net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN);
         replaceLobby(running);
-
-        RaidTierConfig resolvedTier = tierConfigs.getOrDefault(
-            lobby.selectedTier(), RaidTierConfig.defaultFor(lobby.selectedTier()));
-        activeRuns.put(instance.spawnerPos(), new RaidRun(
-            lobby.lobbyId(),
-            lobby.ownerName(),
-            lobby.selectedTier(),
-            resolvedTier,
-            lobby.hardcoreEnabled(),
-            instance.spawnerPos(),
-            serverLevel.dimension(),
-            serverLevel.getGameTime()
-        ));
 
         markDirtyAndSync();
         return true;
