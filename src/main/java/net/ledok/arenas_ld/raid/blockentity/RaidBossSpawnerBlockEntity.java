@@ -301,7 +301,9 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             return;
         }
 
-        if (battleTimeLimitTicks > 0) {
+        RaidTierConfig runTier = run.resolvedTierConfig();
+        int raidTimeTicks = Math.max(0, runTier.raidTimeSeconds() * 20);
+        if (raidTimeTicks > 0) {
             int remaining = run.timerTicks() - 1;
             RaidRunLifecycle.setTimerTicks(run, Math.max(0, remaining));
             updateRaidTimerBossBar(world, run);
@@ -319,7 +321,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         int nextBounds = run.boundsTickCounter() + 1;
         if (nextBounds >= 20) {
             RaidRunLifecycle.setBoundsTickCounter(run, 0);
-            enforceBattleBounds(world);
             for (UUID uuid : participantIds) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
                 if (player == null || player.isSpectator() || downed.containsKey(uuid)) {
@@ -351,10 +352,11 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             }
         }
 
-        if (regeneration > 0 && bossEntity instanceof LivingEntity livingBoss) {
+        int regenRate = runTier.regeneration();
+        if (regenRate > 0 && bossEntity instanceof LivingEntity livingBoss) {
             int nextRegen = run.regenerationTickTimer() + 1;
             if (nextRegen >= REGEN_INTERVAL_TICKS) {
-                livingBoss.heal((float) regeneration);
+                livingBoss.heal((float) regenRate);
                 RaidRunLifecycle.setRegenerationTickTimer(run, 0);
             } else {
                 RaidRunLifecycle.setRegenerationTickTimer(run, nextRegen);
@@ -394,15 +396,12 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
 
         RaidDifficulty diff = difficulty != null ? difficulty : RaidDifficulty.NORMAL;
-        this.battleTimeLimitTicks = Math.max(0, battleTimeLimitTicks);
 
         RaidRun run = findRun();
         long now = world.getGameTime();
-        // Spawner's battleTimeLimitTicks (UI-configurable) overrides the tier-config
-        // value the run was constructed with. 0 means "no time limit".
-        if (run != null && this.battleTimeLimitTicks > 0) {
-            RaidRunLifecycle.setTimerTicks(run, this.battleTimeLimitTicks);
-        }
+        RaidTierConfig runTier = run != null ? run.resolvedTierConfig() : RaidTierConfig.defaultFor(diff);
+        int raidTimeTicks = Math.max(0, runTier.raidTimeSeconds() * 20);
+
         for (ServerPlayer p : players) {
             if (run != null) {
                 RaidRunLifecycle.addParticipant(run, new RunParticipant(
@@ -411,19 +410,19 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             }
             raidTimerBossBar.addPlayer(p);
         }
-        if (this.battleTimeLimitTicks > 0) {
+        if (raidTimeTicks > 0) {
             raidTimerBossBar.setVisible(true);
             raidTimerBossBar.setProgress(1.0f);
-            raidTimerBossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(this.battleTimeLimitTicks / 20)));
+            raidTimerBossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(raidTimeTicks / 20)));
         } else {
             raidTimerBossBar.setVisible(false);
         }
 
         if (boss instanceof LivingEntity livingBoss) {
-            RaidTierConfig tierCfg = tierConfigs.getOrDefault(diff, RaidTierConfig.defaultFor(diff));
+            RaidTierConfig tierCfg = runTier;
             double healthMult = tierCfg.healthMultiplier();
             double damageMult = tierCfg.damageMultiplier();
-            double perPlayerMult = Math.pow(1.0 + hpScalePerPlayer, Math.max(0, players.size() - 1));
+            double perPlayerMult = Math.pow(1.0 + tierCfg.hpScalePerPlayer(), Math.max(0, players.size() - 1));
 
             for (AttributeData attr : entityDefinition.attributes()) {
                 ResourceLocation attrLocation = ResourceLocation.tryParse(attr.id());
@@ -503,50 +502,29 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         // Capture the run before notifyController removes it from activeRuns.
         RaidRun run = findRun();
         Set<UUID> participantIds = run != null ? run.participants().keySet() : Set.of();
+        RaidTierConfig tierCfg = run != null
+            ? run.resolvedTierConfig()
+            : RaidTierConfig.defaultFor(RaidDifficulty.NORMAL);
 
-        if (this.skillExperiencePerWin > 0) {
+        int xpReward = tierCfg.skillExperiencePerWin();
+        if (xpReward > 0) {
             for (UUID uuid : participantIds) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
                 if (player != null && FabricLoader.getInstance().isModLoaded("puffish_skills")) {
-                    PuffishSkillsCompat.addExperience(player, this.skillExperiencePerWin);
+                    PuffishSkillsCompat.addExperience(player, xpReward);
                 }
             }
         }
 
-        RaidDifficulty diff = run != null ? RaidDifficulty.from(run.tier()) : RaidDifficulty.NORMAL;
-        RaidTierConfig tierCfg = tierConfigs.getOrDefault(diff, RaidTierConfig.defaultFor(diff));
-        String resolvedLootTableId = lootTableId;
-        String resolvedPerPlayerLootTableId = tierCfg.perPlayerLootTable().isEmpty() ? perPlayerLootTableId : tierCfg.perPlayerLootTable();
-
-        ResourceLocation lootTableIdentifier = ResourceLocation.tryParse(resolvedLootTableId);
-        if (lootTableIdentifier != null) {
-            LootTable lootTable = world.getServer().reloadableRegistries().getLootTable(
-                    ResourceKey.create(Registries.LOOT_TABLE, lootTableIdentifier)
-            );
-
-            LootParams.Builder builder = new LootParams.Builder(world)
-                    .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(worldPosition))
-                    .withParameter(LootContextParams.THIS_ENTITY, defeatedBoss);
-
-            LootParams lootParams = builder.create(net.minecraft.world.level.storage.loot.parameters.LootContextParamSets.GIFT);
-            lootTable.getRandomItems(lootParams).forEach(stack -> {
-                double x = worldPosition.getX() + 0.5 + (world.random.nextDouble() * 8.0) - 4.0;
-                double y = worldPosition.getY() + 3.5;
-                double z = worldPosition.getZ() + 0.5 + (world.random.nextDouble() * 8.0) - 4.0;
-                ItemEntity itemEntity = new ItemEntity(world, x, y, z, stack);
-                itemEntity.setDeltaMovement(world.random.nextDouble() * 0.2 - 0.1, 0.4, world.random.nextDouble() * 0.2 - 0.1);
-                world.addFreshEntity(itemEntity);
-            });
-        }
-
-        if (!resolvedPerPlayerLootTableId.isEmpty()) {
+        String perPlayerLoot = tierCfg.perPlayerLootTable();
+        if (!perPlayerLoot.isEmpty()) {
             for (UUID uuid : participantIds) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
                 if (player == null) {
                     continue;
                 }
                 ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
-                bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(resolvedPerPlayerLootTableId));
+                bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(perPlayerLoot));
                 if (!player.getInventory().add(bundle)) {
                     player.drop(bundle, false);
                 }
@@ -623,9 +601,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
     public double getEffectiveDamageMultiplier() {
         RaidRun run = findRun();
-        RaidDifficulty diff = run != null ? RaidDifficulty.from(run.tier()) : RaidDifficulty.NORMAL;
-        RaidTierConfig tierCfg = tierConfigs.getOrDefault(diff, RaidTierConfig.defaultFor(diff));
-        return tierCfg.damageMultiplier();
+        return run != null ? run.resolvedTierConfig().damageMultiplier() : 1.0;
     }
 
     public boolean isTracked(UUID playerId) {
@@ -676,7 +652,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         RaidRunLifecycle.markDisconnected(run, player.getUUID(),
             level instanceof ServerLevel sl ? sl.getGameTime() : 0L);
         if (!run.downedPlayers().containsKey(player.getUUID())) {
-            if (battleTimeLimitTicks > 0) {
+            if (run.resolvedTierConfig().raidTimeSeconds() > 0) {
                 RaidRunLifecycle.setTimerTicks(run, Math.max(0, run.timerTicks() - resolveDeathTimePenaltyTicks()));
             }
             RaidRunLifecycle.setDowned(run, new DownedPlayer(player.getUUID(), DOWNED_RESPAWN_TICKS));
@@ -773,7 +749,8 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     }
 
     private void updateRaidTimerBossBar(ServerLevel world, RaidRun run) {
-        if (battleTimeLimitTicks <= 0) {
+        int raidTimeTicks = Math.max(0, run.resolvedTierConfig().raidTimeSeconds() * 20);
+        if (raidTimeTicks <= 0) {
             raidTimerBossBar.setVisible(false);
             return;
         }
@@ -781,7 +758,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             raidTimerBossBar.setVisible(true);
         }
         int remainingTicks = Math.max(0, run.timerTicks());
-        float progress = (float) remainingTicks / (float) battleTimeLimitTicks;
+        float progress = (float) remainingTicks / (float) raidTimeTicks;
         raidTimerBossBar.setProgress(Mth.clamp(progress, 0.0f, 1.0f));
         raidTimerBossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(remainingTicks / 20)));
 
