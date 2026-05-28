@@ -110,4 +110,16 @@ public final class RaidRunLifecycle {
     public static void clearDowned(RaidRun run, UUID uuid) {
         run.clearDowned(uuid);
     }
+
+    public static void setBossRef(RaidRun run, @Nullable UUID bossUuid, @Nullable ResourceKey<Level> bossDimension) {
+        run.setBossRef(bossUuid, bossDimension);
+    }
+
+    public static void setRegenerationTickTimer(RaidRun run, int ticks) {
+        run.setRegenerationTickTimer(ticks);
+    }
+
+    public static void setBoundsTickCounter(RaidRun run, int ticks) {
+        run.setBoundsTickCounter(ticks);
+    }
 }
