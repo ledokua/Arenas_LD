@@ -44,6 +44,7 @@ import java.util.Optional;
 public final class SelectionOverlayRenderer {
     private static final float[] MAIN_COLOR = {0.96f, 0.69f, 0.26f};   // gold
     private static final float[] TARGET_COLOR = {0.53f, 0.83f, 0.42f}; // green
+    private static final float[] RESPAWN_COLOR = {0.30f, 0.80f, 0.90f}; // cyan
     private static final float ALPHA = 0.95f;
 
     private SelectionOverlayRenderer() {
@@ -161,20 +162,30 @@ public final class SelectionOverlayRenderer {
         BlockPos spawnerPos = posOpt.get();
         BlockEntity be = mc.level.getBlockEntity(spawnerPos);
 
-        List<BlockPos> offsets;
+        List<BlockPos> spawnOffsets = List.of();
+        List<BlockPos> respawnOffsets = List.of();
         if (be instanceof MobSpawnerBlockEntity mobSpawner) {
-            offsets = mobSpawner.getEntityDefinition().spawnOffsets();
+            spawnOffsets = mobSpawner.getEntityDefinition().spawnOffsets();
         } else if (be instanceof DungeonBossSpawnerBlockEntity bossSpawner) {
-            offsets = bossSpawner.getEntityDefinition().spawnOffsets();
+            spawnOffsets = bossSpawner.getEntityDefinition().spawnOffsets();
         } else if (be instanceof net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity raidBossSpawner) {
-            offsets = raidBossSpawner.getEntityDefinition().spawnOffsets();
+            spawnOffsets = raidBossSpawner.getEntityDefinition().spawnOffsets();
+            respawnOffsets = raidBossSpawner.getRespawnPointOffsets();
+        } else if (be instanceof RoomControllerBlockEntity room) {
+            BlockPos respawnOffset = room.getRespawnOffset();
+            if (respawnOffset != null) {
+                respawnOffsets = List.of(respawnOffset);
+            }
         } else {
             return;
         }
 
         boxes.add(new Box(spawnerPos, MAIN_COLOR));
-        for (BlockPos offset : offsets) {
+        for (BlockPos offset : spawnOffsets) {
             boxes.add(new Box(spawnerPos.offset(offset), TARGET_COLOR));
+        }
+        for (BlockPos offset : respawnOffsets) {
+            boxes.add(new Box(spawnerPos.offset(offset), RESPAWN_COLOR));
         }
     }
 

@@ -499,20 +499,43 @@ public final class DungeonRunLifecycle {
 
         BlockEntity dbsBe = world.getBlockEntity(run.dbsPos());
         if (dbsBe instanceof DungeonBossSpawnerBlockEntity dbs) {
-            ServerLevel target = world.getServer().getLevel(dbs.getEntranceDimension());
-            if (target == null) {
-                target = world;
-            }
-            BlockPos entrance = dbs.getAbsoluteEntrancePos();
             player.setGameMode(GameType.ADVENTURE);
-            player.setHealth(player.getMaxHealth() * 0.5F);
-            player.teleportTo(target, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0F, 0.0F);
+            player.setHealth(player.getMaxHealth());
+
+            // Respawn at the currently-active room's respawn point if it has one; the active room
+            // is read now (not when the player went down), so clearing rooms while a teammate is
+            // downed pushes their respawn forward. Falls back to the entrance otherwise.
+            BlockPos roomRespawn = activeRoomRespawnPos(world, dbs, run);
+            if (roomRespawn != null) {
+                player.teleportTo(world,
+                    roomRespawn.getX() + 0.5, roomRespawn.getY(), roomRespawn.getZ() + 0.5, 0.0F, 0.0F);
+            } else {
+                ServerLevel target = world.getServer().getLevel(dbs.getEntranceDimension());
+                if (target == null) {
+                    target = world;
+                }
+                BlockPos entrance = dbs.getAbsoluteEntrancePos();
+                player.teleportTo(target, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0F, 0.0F);
+            }
         }
 
         RunParticipant participant = run.participants().get(uuid);
         if (participant != null) {
             run.updateParticipant(participant.withStatus(ParticipantStatus.ACTIVE, world.getGameTime()));
         }
+    }
+
+    /** Absolute respawn position of the run's active room, or {@code null} if the active room has none. */
+    @Nullable
+    private static BlockPos activeRoomRespawnPos(ServerLevel world, DungeonBossSpawnerBlockEntity dbs, DungeonRun run) {
+        List<BlockPos> rooms = dbs.getRooms();
+        int index = run.currentRoomIndex();
+        if (index < 0 || index >= rooms.size()) {
+            return null;
+        }
+        return world.getBlockEntity(rooms.get(index)) instanceof RoomControllerBlockEntity room
+            ? room.getRespawnPos()
+            : null;
     }
 
     public static void forceLoadChunksForRun(ServerLevel world, BlockPos dbsPos) {

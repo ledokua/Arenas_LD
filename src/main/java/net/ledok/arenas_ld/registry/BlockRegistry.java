@@ -30,12 +30,6 @@ public class BlockRegistry {
     public static final Block RAID_CONTROLLER_BLOCK = registerBlock("raid_controller",
             new RaidControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));
 
-    public static final Block RESPAWN_POINT_BLOCK = registerBlock("respawn_point",
-            new RespawnPointBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.AMETHYST_BLOCK)
-                    .noOcclusion()
-                    .noCollission()
-                    .strength(-1.0f, 3600000.0f)));
-
     public static final Block ROOM_CONTROLLER_BLOCK = registerBlock("room_controller",
             new RoomControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));
 

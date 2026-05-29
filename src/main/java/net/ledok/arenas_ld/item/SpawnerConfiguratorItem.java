@@ -33,7 +33,8 @@ public class SpawnerConfiguratorItem extends Item {
     public enum Mode {
         SPAWNER_SELECTION("item.arenas_ld.configurator.mode.spawner_selection"),
         ENTRANCE_POSITION("item.arenas_ld.configurator.mode.entrance_position"),
-        MOB_SPAWN_POSITION("item.arenas_ld.configurator.mode.mob_spawn_position");
+        MOB_SPAWN_POSITION("item.arenas_ld.configurator.mode.mob_spawn_position"),
+        RESPAWN_POSITION("item.arenas_ld.configurator.mode.respawn_position");
 
         private final String translationKey;
 
@@ -69,6 +70,7 @@ public class SpawnerConfiguratorItem extends Item {
             if (clickedBlockEntity instanceof RaidBossSpawnerBlockEntity
                 || clickedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity
                 || clickedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity
+                || clickedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity
                 || clickedBlockEntity instanceof MobArenaSpawnerBlockEntity) {
                 stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(data.mode(), Optional.of(clickedPos), Optional.of(world.dimension())));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawner_selected", clickedPos.toShortString()));
@@ -98,6 +100,7 @@ public class SpawnerConfiguratorItem extends Item {
         if (!(selectedBlockEntity instanceof RaidBossSpawnerBlockEntity)
             && !(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity)
             && !(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity)
+            && !(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity)
             && !(selectedBlockEntity instanceof MobArenaSpawnerBlockEntity)) {
             player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.invalid_spawner"));
             stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, SpawnerSelectionDataComponent.DEFAULT);
@@ -166,6 +169,37 @@ public class SpawnerConfiguratorItem extends Item {
                     return InteractionResult.FAIL;
                 }
                 break;
+            case RESPAWN_POSITION: {
+                if (!selectedSpawnerDim.equals(clickedDimension)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_wrong_dimension"));
+                    return InteractionResult.FAIL;
+                }
+                // Players respawn standing ON the clicked block, stored relative to the owner.
+                BlockPos respawnAbsolute = clickedPos.above();
+                if (selectedBlockEntity instanceof RaidBossSpawnerBlockEntity raidBossSpawner) {
+                    // Raid spawner holds multiple respawn points: clicking toggles add/remove.
+                    BlockPos respawnOffset = respawnAbsolute.subtract(selectedSpawnerPos);
+                    if (raidBossSpawner.removeRespawnPointOffset(respawnOffset)) {
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.respawn_pos_removed", clickedPos.toShortString()));
+                    } else {
+                        raidBossSpawner.addRespawnPointOffset(respawnOffset);
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.respawn_pos_added", clickedPos.toShortString(), raidBossSpawner.getRespawnPointOffsets().size()));
+                    }
+                } else if (selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity room) {
+                    // Room holds a single respawn point: placing replaces it, clicking the same one clears it.
+                    if (respawnAbsolute.equals(room.getRespawnPos())) {
+                        room.setRespawnPos(null);
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.respawn_pos_removed", clickedPos.toShortString()));
+                    } else {
+                        room.setRespawnPos(respawnAbsolute);
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.respawn_pos_added", clickedPos.toShortString(), 1));
+                    }
+                } else {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.respawn_pos_needs_owner"));
+                    return InteractionResult.FAIL;
+                }
+                break;
+            }
             default:
                 return InteractionResult.PASS;
         }

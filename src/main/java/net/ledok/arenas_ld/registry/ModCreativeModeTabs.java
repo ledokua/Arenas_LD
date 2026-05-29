@@ -26,7 +26,6 @@ public class ModCreativeModeTabs {
                     entries.accept(BlockRegistry.MOB_ARENA_CONTROLLER_BLOCK);
                     entries.accept(BlockRegistry.RAID_CONTROLLER_BLOCK);
                     entries.accept(BlockRegistry.DUNGEON_CONTROLLER_BLOCK);
-                    entries.accept(BlockRegistry.RESPAWN_POINT_BLOCK);
                     entries.accept(BlockRegistry.ROOM_CONTROLLER_BLOCK);
                     entries.accept(BlockRegistry.PHASE_BLOCK);
                     entries.accept(ItemRegistry.LINKER);

@@ -45,6 +45,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
 
     private final List<BlockPos> spawnerOffsets = new ArrayList<>();
     @Nullable private BlockPos doorOffset = null;
+    /** Single respawn point for this room, relative to the controller. Players downed while this room is active respawn here. */
+    @Nullable private BlockPos respawnOffset = null;
     private final Set<UUID> aliveMobs = new HashSet<>();
     private boolean activated = false;
     private boolean cleared = false;
@@ -77,6 +79,17 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     @Nullable
     public BlockPos getDoorOffset() {
         return doorOffset;
+    }
+
+    /** Absolute respawn position for this room, or {@code null} if none is configured. */
+    @Nullable
+    public BlockPos getRespawnPos() {
+        return respawnOffset == null ? null : worldPosition.offset(respawnOffset);
+    }
+
+    @Nullable
+    public BlockPos getRespawnOffset() {
+        return respawnOffset;
     }
 
     public Set<UUID> getAliveMobs() {
@@ -125,6 +138,14 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         BlockPos newDoorOffset = absolutePos == null ? null : absolutePos.subtract(worldPosition);
         if (!Objects.equals(doorOffset, newDoorOffset)) {
             this.doorOffset = newDoorOffset;
+            setChanged();
+        }
+    }
+
+    public void setRespawnPos(@Nullable BlockPos absolutePos) {
+        BlockPos newRespawnOffset = absolutePos == null ? null : absolutePos.subtract(worldPosition);
+        if (!Objects.equals(respawnOffset, newRespawnOffset)) {
+            this.respawnOffset = newRespawnOffset;
             setChanged();
         }
     }
@@ -303,6 +324,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     private record State(
         List<BlockPos> spawnerOffsets,
         Optional<BlockPos> doorOffset,
+        Optional<BlockPos> respawnOffset,
         Set<UUID> aliveMobs,
         boolean activated,
         boolean cleared
@@ -310,6 +332,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("spawnerOffsets").forGetter(State::spawnerOffsets),
             BlockPos.CODEC.optionalFieldOf("doorOffset").forGetter(State::doorOffset),
+            BlockPos.CODEC.optionalFieldOf("respawnOffset").forGetter(State::respawnOffset),
             UUIDUtil.CODEC.listOf()
                 .xmap((List<UUID> list) -> (Set<UUID>) new HashSet<>(list),
                       (Set<UUID> set) -> new ArrayList<>(set))
@@ -322,7 +345,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
-        State state = new State(spawnerOffsets, Optional.ofNullable(doorOffset), aliveMobs, activated, cleared);
+        State state = new State(spawnerOffsets, Optional.ofNullable(doorOffset),
+            Optional.ofNullable(respawnOffset), aliveMobs, activated, cleared);
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save RoomController at {}: {}", worldPosition, err))
@@ -340,6 +364,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     spawnerOffsets.clear();
                     spawnerOffsets.addAll(state.spawnerOffsets());
                     doorOffset = state.doorOffset().orElse(null);
+                    respawnOffset = state.respawnOffset().orElse(null);
                     aliveMobs.clear();
                     aliveMobs.addAll(state.aliveMobs());
                     activated = state.activated();
