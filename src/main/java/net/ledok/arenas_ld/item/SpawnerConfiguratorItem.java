@@ -161,6 +161,17 @@ public class SpawnerConfiguratorItem extends Item {
                         bossSpawner.setEntityDefinition(def.withSpawnOffsets(java.util.List.of(spawnOffset)));
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_added", clickedPos.toShortString(), 1));
                     }
+                } else if (selectedBlockEntity instanceof RaidBossSpawnerBlockEntity raidBossSpawner) {
+                    // Raid boss spawner also holds a single spawn position: placing replaces it, clicking the same one clears it.
+                    EntityDefinition def = raidBossSpawner.getEntityDefinition();
+                    java.util.List<BlockPos> current = def.spawnOffsets();
+                    if (current.size() == 1 && current.get(0).equals(spawnOffset)) {
+                        raidBossSpawner.setEntityDefinition(def.withSpawnOffsets(java.util.List.of()));
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_removed", clickedPos.toShortString()));
+                    } else {
+                        raidBossSpawner.setEntityDefinition(def.withSpawnOffsets(java.util.List.of(spawnOffset)));
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_added", clickedPos.toShortString(), 1));
+                    }
                 } else {
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_needs_mob_spawner"));
                     return InteractionResult.FAIL;

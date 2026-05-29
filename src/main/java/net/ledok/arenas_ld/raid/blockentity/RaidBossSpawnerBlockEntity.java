@@ -386,7 +386,19 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             scoreboard.addPlayerToTeam(livingBoss.getScoreboardName(), team);
         }
 
-        boss.moveTo(worldPosition.getX() + 0.5, worldPosition.getY() + 1, worldPosition.getZ() + 0.5, 0, 0);
+        List<BlockPos> spawnOffsets = entityDefinition.spawnOffsets();
+        double bossX, bossY, bossZ;
+        if (spawnOffsets.isEmpty()) {
+            bossX = worldPosition.getX() + 0.5;
+            bossY = worldPosition.getY() + 1;
+            bossZ = worldPosition.getZ() + 0.5;
+        } else {
+            BlockPos spawnOffset = spawnOffsets.get(0);
+            bossX = worldPosition.getX() + spawnOffset.getX() + 0.5;
+            bossY = worldPosition.getY() + spawnOffset.getY();
+            bossZ = worldPosition.getZ() + spawnOffset.getZ() + 0.5;
+        }
+        boss.moveTo(bossX, bossY, bossZ, 0, 0);
         world.addFreshEntity(boss);
 
         ServerLevel entranceWorld = world.getServer().getLevel(entranceDimension);

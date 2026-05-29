@@ -166,6 +166,8 @@ public final class SelectionOverlayRenderer {
             offsets = mobSpawner.getEntityDefinition().spawnOffsets();
         } else if (be instanceof DungeonBossSpawnerBlockEntity bossSpawner) {
             offsets = bossSpawner.getEntityDefinition().spawnOffsets();
+        } else if (be instanceof net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity raidBossSpawner) {
+            offsets = raidBossSpawner.getEntityDefinition().spawnOffsets();
         } else {
             return;
         }
