@@ -624,9 +624,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (lobby.status() == LobbyStatus.IN_RUN || lobby.status() == LobbyStatus.DISBANDED) return false;
         if (lobby.isFull(maxPartySize)) return false;
 
-        Optional<PendingJoinRequest> requestOpt = pendingJoinRequests.stream()
-            .filter(req -> req.lobbyId().equals(lobby.lobbyId()) && req.requesterUuid().equals(requesterUuid))
-            .findFirst();
+        Optional<PendingJoinRequest> requestOpt = findJoinRequest(lobby.lobbyId(), requesterUuid);
         if (requestOpt.isEmpty()) return false;
         PendingJoinRequest request = requestOpt.get();
         long now = owner.serverLevel().getGameTime();
@@ -655,9 +653,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (lobbyOpt.isEmpty()) return false;
         Lobby lobby = lobbyOpt.get();
         if (!lobby.isOwner(owner.getUUID())) return false;
-        Optional<PendingJoinRequest> req = pendingJoinRequests.stream()
-            .filter(r -> r.lobbyId().equals(lobby.lobbyId()) && r.requesterUuid().equals(requesterUuid))
-            .findFirst();
+        Optional<PendingJoinRequest> req = findJoinRequest(lobby.lobbyId(), requesterUuid);
         if (req.isEmpty()) return false;
         removeJoinRequest(lobby.lobbyId(), requesterUuid);
         return true;
@@ -712,6 +708,12 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private Optional<PendingInvite> findInvite(UUID lobbyId, UUID invitedUuid) {
         return pendingInvites.stream()
             .filter(invite -> invite.lobbyId().equals(lobbyId) && invite.invitedUuid().equals(invitedUuid))
+            .findFirst();
+    }
+
+    private Optional<PendingJoinRequest> findJoinRequest(UUID lobbyId, UUID requesterUuid) {
+        return pendingJoinRequests.stream()
+            .filter(req -> req.lobbyId().equals(lobbyId) && req.requesterUuid().equals(requesterUuid))
             .findFirst();
     }
 
