@@ -32,7 +32,6 @@ public class SpawnerConfiguratorItem extends Item {
 
     public enum Mode {
         SPAWNER_SELECTION("item.arenas_ld.configurator.mode.spawner_selection"),
-        EXIT_POSITION("item.arenas_ld.configurator.mode.exit_position"),
         ENTRANCE_POSITION("item.arenas_ld.configurator.mode.entrance_position"),
         MOB_SPAWN_POSITION("item.arenas_ld.configurator.mode.mob_spawn_position");
 
@@ -110,15 +109,6 @@ public class SpawnerConfiguratorItem extends Item {
         ResourceKey<Level> clickedDimension = world.dimension();
 
         switch (currentMode) {
-            case EXIT_POSITION:
-                if (selectedBlockEntity instanceof RaidBossSpawnerBlockEntity bossSpawner) {
-                    bossSpawner.exitPosition = clickedPos;
-                    bossSpawner.exitDimension = clickedDimension;
-                } else if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
-                    mobArenaSpawner.setExitPosition(relativePos, clickedDimension);
-                }
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.exit_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
-                break;
             case ENTRANCE_POSITION:
                 if (selectedBlockEntity instanceof MobArenaSpawnerBlockEntity mobArenaSpawner) {
                     mobArenaSpawner.setArenaEntrancePosition(relativePos, clickedDimension);

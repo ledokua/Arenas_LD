@@ -71,8 +71,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private String groupId = "";
     public BlockPos entrancePosition = BlockPos.ZERO; // relative to spawner
     public ResourceKey<Level> entranceDimension = Level.OVERWORLD;
-    public BlockPos exitPosition = BlockPos.ZERO; // absolute
-    public ResourceKey<Level> exitDimension = Level.OVERWORLD;
     private final List<BlockPos> respawnPointOffsets = new ArrayList<>();
     /** Bundled entity config (mobId + attributes + equipment). Mirrors dungeon spawners. */
     private EntityDefinition entityDefinition = new EntityDefinition(
@@ -501,28 +499,34 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     }
 
     private void resetAfterBattle(ServerLevel world, @Nullable RaidRun run) {
-        ServerLevel exitWorld = world.getServer().getLevel(exitDimension);
-        BlockPos absoluteExit = exitPosition;
         if (run != null) {
             for (UUID uuid : run.participants().keySet()) {
+                // Players are returned to where they were when the run started (captured on entry),
+                // so no configured exit position is needed.
                 PlayerReturnPoint rp = run.returnPoints().get(uuid);
                 GameType restoreMode = rp != null ? rp.previousGameMode() : GameType.SURVIVAL;
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
                 if (player == null) {
-                    ArenasLdMod.RAID_BOSS_MANAGER.addPendingRestore(uuid, exitPosition, exitDimension, restoreMode);
+                    if (rp != null) {
+                        ArenasLdMod.RAID_BOSS_MANAGER.addPendingRestore(
+                                uuid, BlockPos.containing(rp.pos()), rp.dimension(), restoreMode);
+                    }
                     continue;
                 }
                 player.setGameMode(restoreMode);
                 player.setHealth(player.getMaxHealth());
-                if (exitWorld != null) {
-                    player.teleportTo(
-                            exitWorld,
-                            absoluteExit.getX() + 0.5,
-                            absoluteExit.getY(),
-                            absoluteExit.getZ() + 0.5,
-                            player.getYRot(),
-                            player.getXRot()
-                    );
+                if (rp != null) {
+                    ServerLevel returnWorld = world.getServer().getLevel(rp.dimension());
+                    if (returnWorld != null) {
+                        player.teleportTo(
+                                returnWorld,
+                                rp.pos().x(),
+                                rp.pos().y(),
+                                rp.pos().z(),
+                                rp.yaw(),
+                                rp.pitch()
+                        );
+                    }
                 }
             }
         }
@@ -733,8 +737,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         nbt.putString("GroupId", groupId);
         nbt.putLong("EntrancePosition", entrancePosition.asLong());
         nbt.putString("EntranceDimension", entranceDimension.location().toString());
-        nbt.putLong("ExitPosition", exitPosition.asLong());
-        nbt.putString("ExitDimension", exitDimension.location().toString());
         nbt.putLongArray("RespawnPointOffsets", respawnPointOffsets.stream().mapToLong(BlockPos::asLong).toArray());
     }
 
@@ -747,12 +749,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             entranceDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("EntranceDimension")));
         } else {
             entranceDimension = Level.OVERWORLD;
-        }
-        exitPosition = nbt.contains("ExitPosition", Tag.TAG_LONG) ? BlockPos.of(nbt.getLong("ExitPosition")) : BlockPos.ZERO;
-        if (nbt.contains("ExitDimension")) {
-            exitDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ExitDimension")));
-        } else {
-            exitDimension = Level.OVERWORLD;
         }
         respawnPointOffsets.clear();
         if (nbt.contains("RespawnPointOffsets", Tag.TAG_LONG_ARRAY)) {
