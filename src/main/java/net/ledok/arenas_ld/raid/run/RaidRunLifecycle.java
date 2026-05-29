@@ -13,6 +13,7 @@ import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity.ControllerKey;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
+import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.util.EntityEquipmentHelper;
 import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.minecraft.ChatFormatting;
@@ -39,6 +40,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -260,7 +262,6 @@ public final class RaidRunLifecycle {
         }
 
         run.setBossRef(boss.getUUID(), world.dimension());
-        run.setBoundsTickCounter(0);
         run.setRegenerationTickTimer(0);
         ArenasLdMod.RAID_BOSS_MANAGER.registerSpawner(spawner);
         ArenasLdMod.LOGGER.info("Raid battle started at {} with boss {}, tier={}, players={}",
@@ -316,27 +317,9 @@ public final class RaidRunLifecycle {
         Map<UUID, DownedPlayer> downed = run.downedPlayers();
         boolean hardcore = run.hardcoreEnabled();
 
-        int nextBounds = run.boundsTickCounter() + 1;
-        if (nextBounds >= 20) {
-            run.setBoundsTickCounter(0);
-            for (UUID uuid : participantIds) {
-                ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-                if (player == null || player.isSpectator() || downed.containsKey(uuid)) {
-                    continue;
-                }
-                if (player.getHealth() <= 1.0F) {
-                    if (hardcore) {
-                        handlePlayerHardcoreDeath(world, run, player);
-                    } else {
-                        handlePlayerDown(world, controller, run, player);
-                    }
-                }
-            }
-        } else {
-            run.setBoundsTickCounter(nextBounds);
-        }
-
+        // Downs are detected through the lethal-damage hook in LivingEntityMixin; no health polling here.
         tickDownedPlayers(world, run);
+        tickDisconnectedPlayers(world, controller, run);
 
         if (hardcore) {
             boolean anyFighting = participantIds.stream().anyMatch(id -> {
@@ -483,25 +466,7 @@ public final class RaidRunLifecycle {
     static void finalizeRun(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run) {
         for (UUID uuid : run.participants().keySet()) {
             // Players return to where they were when the run started (captured on entry).
-            PlayerReturnPoint rp = run.returnPoints().get(uuid);
-            GameType restoreMode = rp != null ? rp.previousGameMode() : GameType.SURVIVAL;
-            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            if (player == null) {
-                if (rp != null) {
-                    ArenasLdMod.RAID_BOSS_MANAGER.addPendingRestore(
-                            uuid, BlockPos.containing(rp.pos()), rp.dimension(), restoreMode);
-                }
-                continue;
-            }
-            player.setGameMode(restoreMode);
-            player.setHealth(player.getMaxHealth());
-            if (rp != null) {
-                ServerLevel returnWorld = world.getServer().getLevel(rp.dimension());
-                if (returnWorld != null) {
-                    player.teleportTo(returnWorld,
-                        rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
-                }
-            }
+            restoreToReturnPoint(world, run, uuid);
         }
 
         clearRaidTimerBossBar(run);
@@ -516,6 +481,32 @@ public final class RaidRunLifecycle {
         notifyController(world, controller, run, run.outcome() == RaidOutcome.WIN);
     }
 
+    /**
+     * Send a single participant back to their captured return point, restoring their previous
+     * game mode. If the player is offline, queue a pending restore so they're moved on next login.
+     */
+    private static void restoreToReturnPoint(ServerLevel world, RaidRun run, UUID uuid) {
+        // No captured entry point means there's nothing to restore — e.g. a player already sent
+        // out on hardcore death (whose return point was consumed). Don't touch their game mode.
+        PlayerReturnPoint rp = run.returnPoints().get(uuid);
+        if (rp == null) return;
+
+        GameType restoreMode = rp.previousGameMode();
+        ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+        if (player == null) {
+            ArenasLdMod.RAID_BOSS_MANAGER.addPendingRestore(
+                    uuid, BlockPos.containing(rp.pos()), rp.dimension(), restoreMode);
+            return;
+        }
+        player.setGameMode(restoreMode);
+        player.setHealth(player.getMaxHealth());
+        ServerLevel returnWorld = world.getServer().getLevel(rp.dimension());
+        if (returnWorld != null) {
+            player.teleportTo(returnWorld,
+                rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
+        }
+    }
+
     /** Tell the controller the run ended so it records the leaderboard and releases the instance. */
     private static void notifyController(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, boolean wasWin) {
         List<String> names = run.participants().values().stream().map(RunParticipant::playerName).toList();
@@ -527,18 +518,25 @@ public final class RaidRunLifecycle {
     // ── Per-player handlers (called from mixins/manager via spawner shims) ──────
 
     public static void handlePlayerDown(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, ServerPlayer player) {
-        if (player == null || run == null || !run.participants().containsKey(player.getUUID())) return;
+        if (player == null || run == null) return;
+        RunParticipant participant = run.participants().get(player.getUUID());
+        if (participant == null || participant.status() == ParticipantStatus.REMOVED) return;
         if (player.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) return;
         if (run.downedPlayers().containsKey(player.getUUID())) return;
 
+        run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
         player.setHealth(1.0F);
         player.setGameMode(GameType.SPECTATOR);
         run.setTimerTicks(Math.max(0, run.timerTicks() - resolveDeathTimePenaltyTicks(controller)));
-        run.setDowned(new DownedPlayer(player.getUUID(), DOWNED_RESPAWN_TICKS));
+        run.setDowned(new DownedPlayer(player.getUUID(), resolveRespawnTimeTicks(controller)));
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.raid.you_are_downed"));
     }
 
     public static void handlePlayerDisconnect(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, ServerPlayer player) {
-        if (player == null || run == null || !run.participants().containsKey(player.getUUID())) return;
+        if (player == null || run == null) return;
+        RunParticipant participant = run.participants().get(player.getUUID());
+        // Not a participant, or already removed past the grace window: nothing to track.
+        if (participant == null || participant.status() == ParticipantStatus.REMOVED) return;
 
         if (run.hardcoreEnabled()) {
             run.clearDisconnected(player.getUUID());
@@ -548,21 +546,34 @@ public final class RaidRunLifecycle {
 
         run.markDisconnected(player.getUUID(), world.getGameTime());
         if (!run.downedPlayers().containsKey(player.getUUID())) {
+            run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
             if (run.resolvedTierConfig().raidTimeSeconds() > 0) {
                 run.setTimerTicks(Math.max(0, run.timerTicks() - resolveDeathTimePenaltyTicks(controller)));
             }
-            run.setDowned(new DownedPlayer(player.getUUID(), DOWNED_RESPAWN_TICKS));
+            run.setDowned(new DownedPlayer(player.getUUID(), resolveRespawnTimeTicks(controller)));
         }
     }
 
-    public static void handlePlayerReconnect(ServerLevel world, RaidRun run, ServerPlayer player) {
-        if (player == null || run == null || !run.participants().containsKey(player.getUUID())) return;
+    public static void handlePlayerReconnect(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, ServerPlayer player) {
+        if (player == null || run == null) return;
+        RunParticipant participant = run.participants().get(player.getUUID());
+        if (participant == null) return;
 
         run.clearDisconnected(player.getUUID());
 
+        // Stayed offline past the disconnect-grace window: tickDisconnectedPlayers already
+        // dropped them from the run. Don't revive them as a participant — send them back to
+        // their entry point (restoring their previous game mode) so they aren't stranded as a
+        // spectator inside the arena.
+        if (participant.status() == ParticipantStatus.REMOVED) {
+            run.clearDowned(player.getUUID());
+            restoreToReturnPoint(world, run, player.getUUID());
+            return;
+        }
+
         DownedPlayer downed = run.downedPlayers().get(player.getUUID());
         if (downed == null) {
-            downed = new DownedPlayer(player.getUUID(), DOWNED_RESPAWN_TICKS);
+            downed = new DownedPlayer(player.getUUID(), resolveRespawnTimeTicks(controller));
             run.setDowned(downed);
         }
         player.setGameMode(GameType.SPECTATOR);
@@ -574,11 +585,20 @@ public final class RaidRunLifecycle {
     }
 
     public static void handlePlayerHardcoreDeath(ServerLevel world, RaidRun run, ServerPlayer player) {
-        if (player == null || run == null || !run.participants().containsKey(player.getUUID())) return;
+        if (player == null || run == null) return;
+        RunParticipant participant = run.participants().get(player.getUUID());
+        if (participant == null || participant.status() == ParticipantStatus.REMOVED) return;
 
-        player.setGameMode(GameType.SPECTATOR);
+        // Hardcore: the player is out of the run for good. Mark them removed and send them back
+        // to their entry point (restoring their previous game mode) rather than leaving them
+        // stranded as a spectator inside the arena. Mirrors the dungeon's hardcore handling.
+        run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, world.getGameTime()));
         run.clearDowned(player.getUUID());
-        run.removeParticipant(player.getUUID());
+        run.clearDisconnected(player.getUUID());
+        restoreToReturnPoint(world, run, player.getUUID());
+        run.removeReturnPoint(player.getUUID());
+        BusyStateCompat.clearBusy(player.getUUID(), BUSY_REASON);
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.raid.hardcore_death").withStyle(ChatFormatting.RED));
     }
 
     private static void tickDownedPlayers(ServerLevel world, RaidRun run) {
@@ -600,6 +620,30 @@ public final class RaidRunLifecycle {
             } else {
                 run.setDowned(ticked);
             }
+        }
+    }
+
+    /**
+     * Removes participants who have stayed offline past the controller's disconnect grace
+     * window. Mirrors {@code DungeonRunLifecycle#tickDisconnectedPlayers}: the participant is
+     * marked {@link ParticipantStatus#REMOVED}, its disconnect/downed bookkeeping is dropped,
+     * and its busy-state is released so the player isn't stuck busy after rage-quitting a raid.
+     */
+    private static void tickDisconnectedPlayers(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run) {
+        if (run.disconnectedAt().isEmpty()) return;
+
+        long now = world.getGameTime();
+        int grace = controller.getDisconnectGraceTicks();
+        for (Map.Entry<UUID, Long> entry : new HashMap<>(run.disconnectedAt()).entrySet()) {
+            if (now - entry.getValue() <= grace) continue;
+            UUID uuid = entry.getKey();
+            RunParticipant participant = run.participants().get(uuid);
+            if (participant != null) {
+                run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, now));
+            }
+            run.clearDisconnected(uuid);
+            run.clearDowned(uuid);
+            BusyStateCompat.clearBusy(uuid, BUSY_REASON);
         }
     }
 
@@ -626,6 +670,11 @@ public final class RaidRunLifecycle {
             player.teleportTo(entranceWorld,
                 target.getX() + 0.5, target.getY(), target.getZ() + 0.5,
                 player.getYRot(), player.getXRot());
+        }
+
+        RunParticipant participant = run.participants().get(player.getUUID());
+        if (participant != null) {
+            run.updateParticipant(participant.withStatus(ParticipantStatus.ACTIVE, world.getGameTime()));
         }
     }
 
@@ -655,6 +704,10 @@ public final class RaidRunLifecycle {
     /** Death-time penalty from the controller, falling back to the legacy constant. */
     private static int resolveDeathTimePenaltyTicks(@Nullable RaidControllerBlockEntity controller) {
         return controller != null ? controller.getDeathTimePenaltyTicks() : DEATH_TIME_PENALTY_TICKS;
+    }
+
+    private static int resolveRespawnTimeTicks(@Nullable RaidControllerBlockEntity controller) {
+        return controller != null ? controller.getRespawnTimeTicks() : DOWNED_RESPAWN_TICKS;
     }
 
     private static String formatTime(int totalSeconds) {

@@ -45,7 +45,6 @@ public final class RaidRun {
     private int closeTimerTicks;
     private int initialCloseTimerTicks;
     private int regenerationTickTimer;
-    private int boundsTickCounter;
     private final long startTick;
     @Nullable private BossRef bossRef;
     private final Map<UUID, RunParticipant> participants;
@@ -78,7 +77,6 @@ public final class RaidRun {
         this.closeTimerTicks = 0;
         this.initialCloseTimerTicks = 0;
         this.regenerationTickTimer = 0;
-        this.boundsTickCounter = 0;
         this.startTick = startTick;
         this.bossRef = null;
         this.participants = new LinkedHashMap<>();
@@ -119,7 +117,6 @@ public final class RaidRun {
         this.closeTimerTicks = timers.closeTimerTicks();
         this.initialCloseTimerTicks = timers.initialCloseTimerTicks();
         this.regenerationTickTimer = timers.regenerationTickTimer();
-        this.boundsTickCounter = timers.boundsTickCounter();
         this.startTick = startTick;
         this.bossRef = bossRef.orElse(null);
         this.participants = new LinkedHashMap<>(participants);
@@ -143,7 +140,6 @@ public final class RaidRun {
     public int closeTimerTicks() { return closeTimerTicks; }
     public int initialCloseTimerTicks() { return initialCloseTimerTicks; }
     public int regenerationTickTimer() { return regenerationTickTimer; }
-    public int boundsTickCounter() { return boundsTickCounter; }
     public long startTick() { return startTick; }
     @Nullable public UUID bossUuid() { return bossRef == null ? null : bossRef.bossUuid(); }
     @Nullable public ResourceKey<Level> bossDimension() { return bossRef == null ? null : bossRef.bossDimension(); }
@@ -169,7 +165,6 @@ public final class RaidRun {
     void setCloseTimerTicks(int ticks) { this.closeTimerTicks = ticks; }
     void setInitialCloseTimerTicks(int ticks) { this.initialCloseTimerTicks = ticks; }
     void setRegenerationTickTimer(int ticks) { this.regenerationTickTimer = ticks; }
-    void setBoundsTickCounter(int ticks) { this.boundsTickCounter = ticks; }
     void setBossRef(@Nullable UUID bossUuid, @Nullable ResourceKey<Level> bossDimension) {
         this.bossRef = (bossUuid == null || bossDimension == null) ? null : new BossRef(bossUuid, bossDimension);
     }
@@ -208,7 +203,7 @@ public final class RaidRun {
 
     private RaidRunTimers timersSnapshot() {
         return new RaidRunTimers(timerTicks, closeTimerTicks, initialCloseTimerTicks,
-            regenerationTickTimer, boundsTickCounter);
+            regenerationTickTimer);
     }
 
     private Optional<BossRef> bossRefSnapshot() {
@@ -226,17 +221,15 @@ public final class RaidRun {
         int timerTicks,
         int closeTimerTicks,
         int initialCloseTimerTicks,
-        int regenerationTickTimer,
-        int boundsTickCounter
+        int regenerationTickTimer
     ) {
-        public static final RaidRunTimers ZERO = new RaidRunTimers(0, 0, 0, 0, 0);
+        public static final RaidRunTimers ZERO = new RaidRunTimers(0, 0, 0, 0);
 
         public static final Codec<RaidRunTimers> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.fieldOf("timerTicks").forGetter(RaidRunTimers::timerTicks),
             Codec.INT.fieldOf("closeTimerTicks").forGetter(RaidRunTimers::closeTimerTicks),
             Codec.INT.optionalFieldOf("initialCloseTimerTicks", 0).forGetter(RaidRunTimers::initialCloseTimerTicks),
-            Codec.INT.optionalFieldOf("regenerationTickTimer", 0).forGetter(RaidRunTimers::regenerationTickTimer),
-            Codec.INT.optionalFieldOf("boundsTickCounter", 0).forGetter(RaidRunTimers::boundsTickCounter)
+            Codec.INT.optionalFieldOf("regenerationTickTimer", 0).forGetter(RaidRunTimers::regenerationTickTimer)
         ).apply(i, RaidRunTimers::new));
     }
 

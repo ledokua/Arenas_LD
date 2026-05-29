@@ -58,7 +58,6 @@ class RaidRunTest {
         assertEquals(RaidTierConfig.HARD_DEFAULT.raidTimeSeconds() * 20, run.timerTicks());
         assertEquals(0, run.closeTimerTicks());
         assertEquals(0, run.regenerationTickTimer());
-        assertEquals(0, run.boundsTickCounter());
         assertEquals(12345L, run.startTick());
         assertNull(run.bossUuid());
         assertNull(run.bossDimension());

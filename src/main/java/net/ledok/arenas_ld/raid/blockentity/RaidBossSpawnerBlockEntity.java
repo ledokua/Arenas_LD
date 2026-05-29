@@ -235,7 +235,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             return;
         }
         if (level instanceof ServerLevel sl) {
-            RaidRunLifecycle.handlePlayerReconnect(sl, run, player);
+            RaidRunLifecycle.handlePlayerReconnect(sl, owningController(), run, player);
         }
     }
 
