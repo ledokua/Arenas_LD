@@ -37,6 +37,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -188,6 +189,14 @@ public class RaidControllerBlockEntity extends BlockEntity
     /** Instances queued for removal once their current run ends. */
     private final Set<BlockPos> pendingInstanceRemovals = new HashSet<>();
 
+    /**
+     * Whether this controller has force-loaded its own chunk this session. The controller drives
+     * active runs and ticks instance cooldowns from its block-entity tick, so it must keep ticking
+     * even when no player is nearby — otherwise cooldowns freeze and runs stall. Set once on the
+     * first server tick; the forced-chunk set is released in {@link #setRemoved()}.
+     */
+    private transient boolean chunkForceLoaded = false;
+
     // ─────────────────────────────────────────────────────────────────────────
     //  NBT codecs
     // ─────────────────────────────────────────────────────────────────────────
@@ -275,8 +284,13 @@ public class RaidControllerBlockEntity extends BlockEntity
 
     @Override
     public void setRemoved() {
-        if (level != null && !level.isClientSide) {
-            CONTROLLERS.remove(new ControllerKey(worldPosition, level.dimension()));
+        if (level instanceof ServerLevel serverLevel) {
+            CONTROLLERS.remove(new ControllerKey(worldPosition, serverLevel.dimension()));
+            if (chunkForceLoaded) {
+                ChunkPos chunkPos = new ChunkPos(worldPosition);
+                serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
+                chunkForceLoaded = false;
+            }
         }
         super.setRemoved();
     }
@@ -289,9 +303,18 @@ public class RaidControllerBlockEntity extends BlockEntity
         if (level.isClientSide || !(level instanceof ServerLevel serverLevel)) {
             return;
         }
+        be.ensureChunkForceLoaded(serverLevel);
         be.tickCooldowns(serverLevel);
         be.tickLobbies(serverLevel);
         be.tickActiveRuns(serverLevel);
+    }
+
+    /** Force-load this controller's chunk (once per session) so it keeps ticking unattended. */
+    private void ensureChunkForceLoaded(ServerLevel serverLevel) {
+        if (chunkForceLoaded) return;
+        ChunkPos chunkPos = new ChunkPos(worldPosition);
+        serverLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
+        chunkForceLoaded = true;
     }
 
     /**
