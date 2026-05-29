@@ -71,6 +71,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private static final int INFO = 0xFF6DA3E8;
     private static final int ACCENT = 0xFFA98BE8;
     private static final int ACCENT_DARK = 0xFF6C4FB5;
+    private static final int INVITE_DROPDOWN_MAX_HEIGHT = 154;
 
     private enum Tab {
         LOBBIES,
@@ -1116,14 +1117,21 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
             return;
         }
 
+        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
         boolean first = true;
         for (InviteCandidate candidate : candidates) {
             if (!first) {
-                inviteDropdownPanel.child(rowDivider(HAIRLINE));
+                list.child(rowDivider(HAIRLINE));
             }
-            inviteDropdownPanel.child(inviteCandidateRow(candidate));
+            list.child(inviteCandidateRow(candidate));
             first = false;
         }
+
+        int rowsHeight = candidates.size() * 22 + Math.max(0, candidates.size() - 1);
+        int visibleHeight = Math.min(rowsHeight, INVITE_DROPDOWN_MAX_HEIGHT);
+        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.fixed(visibleHeight), list);
+        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
+        inviteDropdownPanel.child(scroll);
     }
 
     private ButtonComponent inviteCandidateRow(InviteCandidate candidate) {
