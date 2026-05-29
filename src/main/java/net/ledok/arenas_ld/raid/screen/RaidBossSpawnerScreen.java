@@ -21,7 +21,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * Minimal admin view for a raid boss spawner. The spawner is now a passive arena:
@@ -46,6 +49,9 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
     private static final int ACCENT_DARK = 0xFF6C4FB5;
 
     private String mobIdValue = "";
+    private boolean mobIdDropdownOpen = false;
+    private FlowLayout mobIdDropdownPanel;
+    private TextBoxComponent mobIdTextField;
 
     private FlowLayout contentArea;
     private FlowLayout footerActions;
@@ -168,13 +174,17 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
 
     private void rebuildUi() {
         if (contentArea == null) return;
+        mobIdDropdownOpen = false;
+        mobIdDropdownPanel = null;
+        mobIdTextField = null;
+
         contentArea.clearChildren();
         footerActions.clearChildren();
 
         contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.tab_general")));
         contentArea.child(spacer(2));
 
-        contentArea.child(textField(tr("gui.arenas_ld.mob_id"), mobIdValue, v -> mobIdValue = v));
+        contentArea.child(searchableMobIdField(tr("gui.arenas_ld.mob_id"), mobIdValue, v -> mobIdValue = v));
 
         contentArea.child(spacer(8));
         int linkedRespawns = menu.blockEntity.getRespawnPointOffsets().size();
@@ -251,6 +261,105 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
     }
 
     // ── UI Helpers ──────────────────────────────────────────────────────────────
+
+    private FlowLayout searchableMobIdField(String caption, String initial, Consumer<String> onChange) {
+        FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        col.gap(4);
+
+        FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        head.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        head.child(text(Component.literal(caption), INK_DIM));
+        col.child(head);
+
+        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
+        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
+        accent.surface(Surface.flat(ACCENT));
+        fieldRow.child(accent);
+
+        TextBoxComponent field = Components.textBox(Sizing.expand(), initial == null ? "" : initial);
+        field.verticalSizing(Sizing.fixed(18));
+        field.onChanged().subscribe(v -> {
+            onChange.accept(v);
+            if (mobIdDropdownOpen) refreshMobIdDropdown();
+        });
+        field.mouseDown().subscribe((mx, my, btn) -> { openMobIdDropdown(); return false; });
+        mobIdTextField = field;
+        fieldRow.child(field);
+
+        ButtonComponent chevron = Components.button(Component.empty(), b -> toggleMobIdDropdown());
+        chevron.sizing(Sizing.fixed(18), Sizing.fixed(20));
+        chevron.renderer((context, rendered, delta) -> {
+            String glyph = mobIdDropdownOpen ? "▲" : "▼";
+            int tx = rendered.getX() + (rendered.getWidth() - this.font.width(glyph)) / 2;
+            int ty = rendered.getY() + (rendered.getHeight() - this.font.lineHeight) / 2 + 1;
+            context.drawString(this.font, glyph, tx, ty, INK_MID, false);
+        });
+        fieldRow.child(chevron);
+        col.child(fieldRow);
+
+        FlowLayout dropdown = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        dropdown.surface(Surface.BLANK);
+        mobIdDropdownPanel = dropdown;
+        col.child(dropdown);
+
+        return col;
+    }
+
+    private void openMobIdDropdown() {
+        if (!mobIdDropdownOpen) { mobIdDropdownOpen = true; refreshMobIdDropdown(); }
+    }
+
+    private void closeMobIdDropdown() {
+        mobIdDropdownOpen = false;
+        if (mobIdDropdownPanel != null) { mobIdDropdownPanel.clearChildren(); mobIdDropdownPanel.surface(Surface.BLANK); }
+    }
+
+    private void toggleMobIdDropdown() {
+        if (mobIdDropdownOpen) closeMobIdDropdown(); else openMobIdDropdown();
+    }
+
+    private void refreshMobIdDropdown() {
+        if (mobIdDropdownPanel == null) return;
+        List<String> candidates = mobIdCandidates(mobIdTextField != null ? mobIdTextField.getValue() : "");
+        mobIdDropdownPanel.clearChildren();
+        if (!mobIdDropdownOpen || candidates.isEmpty()) { mobIdDropdownPanel.surface(Surface.BLANK); return; }
+        mobIdDropdownPanel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        boolean first = true;
+        for (String id : candidates) {
+            if (!first) mobIdDropdownPanel.child(spacer(1));
+            mobIdDropdownPanel.child(mobIdRow(id));
+            first = false;
+        }
+    }
+
+    private List<String> mobIdCandidates(String filter) {
+        String needle = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
+        return net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.keySet().stream()
+            .map(net.minecraft.resources.ResourceLocation::toString)
+            .filter(id -> needle.isEmpty() || id.toLowerCase(Locale.ROOT).contains(needle))
+            .sorted()
+            .limit(10)
+            .collect(Collectors.toList());
+    }
+
+    private ButtonComponent mobIdRow(String id) {
+        ButtonComponent row = Components.button(Component.empty(), b -> {
+            if (mobIdTextField != null) mobIdTextField.text(id);
+            mobIdValue = id;
+            closeMobIdDropdown();
+        });
+        row.sizing(Sizing.fill(100), Sizing.fixed(20));
+        row.renderer((context, rendered, delta) -> {
+            int x1 = rendered.getX(); int y1 = rendered.getY();
+            boolean hover = rendered.isHoveredOrFocused();
+            context.fill(x1, y1, x1 + rendered.getWidth(), y1 + rendered.getHeight(), hover ? ROW_BG : PANEL_2);
+            if (hover) context.fill(x1, y1, x1 + 2, y1 + rendered.getHeight(), ACCENT);
+            context.drawString(this.font, id, x1 + 8, y1 + (rendered.getHeight() - this.font.lineHeight) / 2 + 1, INK, false);
+        });
+        return row;
+    }
 
     private FlowLayout textField(String caption, String initial, Consumer<String> onChange) {
         FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());

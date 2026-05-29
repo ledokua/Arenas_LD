@@ -29,7 +29,8 @@ public record RaidControllerAdminData(
     int deathTimePenaltyTicks,
     boolean lootViaInbox,
     Map<DifficultyTier, RaidTierConfig> tierConfigs,
-    Map<BlockPos, InstanceRun> runningInstances
+    Map<BlockPos, InstanceRun> runningInstances,
+    List<String> knownLootTableIds
 ) {
     /** One registered raid instance with its current status. */
     public record InstanceEntry(BlockPos spawnerPos, String dimension, InstanceStatus status, int cooldownTicksRemaining) {}
@@ -78,6 +79,11 @@ public record RaidControllerAdminData(
             buf.writeBlockPos(entry.getKey());
             DifficultyTier.STREAM_CODEC.encode(buf, entry.getValue().tier());
             buf.writeUtf(entry.getValue().party());
+        }
+
+        buf.writeVarInt(data.knownLootTableIds().size());
+        for (String id : data.knownLootTableIds()) {
+            buf.writeUtf(id);
         }
     }
 
@@ -129,6 +135,12 @@ public record RaidControllerAdminData(
             runningInstances.put(pos, new InstanceRun(tier, party));
         }
 
+        int lootIdCount = buf.readVarInt();
+        List<String> knownLootTableIds = new ArrayList<>(lootIdCount);
+        for (int i = 0; i < lootIdCount; i++) {
+            knownLootTableIds.add(buf.readUtf());
+        }
+
         return new RaidControllerAdminData(
             blockPos,
             instances,
@@ -141,7 +153,8 @@ public record RaidControllerAdminData(
             deathTimePenaltyTicks,
             lootViaInbox,
             tierConfigs,
-            runningInstances
+            runningInstances,
+            knownLootTableIds
         );
     }
 }

@@ -10,6 +10,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,6 +30,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     private boolean lootViaInbox;
     private Map<DifficultyTier, TierConfig> tierConfigs;
     private Map<BlockPos, DungeonControllerAdminData.InstanceRun> runningInstances;
+    private List<String> knownLootTableIds;
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerAdminData data) {
         super(ModScreenHandlers.DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER, syncId);
@@ -46,6 +48,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.lootViaInbox = data.lootViaInbox();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());
+        this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
     }
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerBlockEntity controller) {
@@ -63,8 +66,23 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
             controller.getDeathTimePenaltyTicks(),
             controller.isLootViaInbox(),
             controller.getTierConfigs(),
-            Map.of()
+            Map.of(),
+            enumerateLootTables(controller.getLevel())
         ));
+    }
+
+    private static List<String> enumerateLootTables(net.minecraft.world.level.Level level) {
+        if (!(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) return List.of();
+        net.minecraft.server.MinecraftServer server = serverLevel.getServer();
+        if (server == null) return List.of();
+        List<String> ids = new ArrayList<>();
+        try {
+            server.registryAccess()
+                .registry(net.minecraft.core.registries.Registries.LOOT_TABLE)
+                .ifPresent(reg -> reg.keySet().forEach(rl -> ids.add(rl.toString())));
+        } catch (Exception ignored) {}
+        ids.sort(null);
+        return ids;
     }
 
     public BlockPos getBlockPos() { return blockPos; }
@@ -81,6 +99,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     public boolean isLootViaInbox() { return lootViaInbox; }
     public Map<DifficultyTier, TierConfig> getTierConfigs() { return tierConfigs; }
     public Map<BlockPos, DungeonControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
+    public List<String> getKnownLootTableIds() { return knownLootTableIds; }
 
     public void applyData(DungeonControllerAdminData data) {
         this.instances = List.copyOf(data.instances());
@@ -96,6 +115,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.lootViaInbox = data.lootViaInbox();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());
+        this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
     }
 
     @Override

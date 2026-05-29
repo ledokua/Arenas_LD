@@ -30,8 +30,10 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 import java.util.function.IntFunction;
+import java.util.stream.Collectors;
 
 public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawnerScreenHandler> {
 
@@ -55,6 +57,8 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
     private static final int POS_MAX_VISIBLE = 6;
 
     private TextBoxComponent mobIdField;
+    private boolean mobIdDropdownOpen = false;
+    private FlowLayout mobIdDropdownPanel;
     private TextBoxComponent spawnCountField;
     private FlowLayout positionsList;
     private ScrollContainer<FlowLayout> positionsScroll;
@@ -141,16 +145,7 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
 
         // MOB ID
         content.child(sectionCaption(tr("gui.arenas_ld.mob_spawner.ui.mob_id")));
-        FlowLayout mobIdRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        mobIdRow.gap(6);
-        mobIdRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        mobIdField = Components.textBox(Sizing.expand(), menu.getMobId());
-        mobIdField.verticalSizing(Sizing.fixed(18));
-        mobIdRow.child(mobIdField);
-        ButtonComponent applyBtn = accentButton(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.apply")), b -> sendApply());
-        applyBtn.sizing(Sizing.fixed(64), Sizing.fixed(18));
-        mobIdRow.child(applyBtn);
-        content.child(mobIdRow);
+        content.child(buildMobIdSection());
 
         content.child(hairline());
 
@@ -338,6 +333,100 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
         row.child(zLbl);
         row.child(addZField);
         row.child(addBtn);
+        return row;
+    }
+
+    private FlowLayout buildMobIdSection() {
+        FlowLayout container = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        container.gap(0);
+
+        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
+        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
+        accent.surface(Surface.flat(ACCENT));
+        fieldRow.child(accent);
+
+        mobIdField = Components.textBox(Sizing.expand(), menu.getMobId());
+        mobIdField.verticalSizing(Sizing.fixed(18));
+        mobIdField.onChanged().subscribe(v -> { if (mobIdDropdownOpen) refreshMobIdDropdown(); });
+        mobIdField.mouseDown().subscribe((mx, my, btn) -> { openMobIdDropdown(); return false; });
+        fieldRow.child(mobIdField);
+
+        ButtonComponent chevron = Components.button(Component.empty(), b -> toggleMobIdDropdown());
+        chevron.sizing(Sizing.fixed(18), Sizing.fixed(20));
+        chevron.renderer((context, rendered, delta) -> {
+            String glyph = mobIdDropdownOpen ? "▲" : "▼";
+            int tx = rendered.getX() + (rendered.getWidth() - this.font.width(glyph)) / 2;
+            int ty = rendered.getY() + (rendered.getHeight() - this.font.lineHeight) / 2 + 1;
+            context.drawString(this.font, glyph, tx, ty, INK_MID, false);
+        });
+        fieldRow.child(chevron);
+
+        ButtonComponent applyBtn = accentButton(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.apply")), b -> sendApply());
+        applyBtn.sizing(Sizing.fixed(64), Sizing.fixed(18));
+        fieldRow.child(applyBtn);
+
+        container.child(fieldRow);
+
+        mobIdDropdownPanel = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        mobIdDropdownPanel.surface(Surface.BLANK);
+        container.child(mobIdDropdownPanel);
+
+        return container;
+    }
+
+    private void openMobIdDropdown() {
+        if (!mobIdDropdownOpen) { mobIdDropdownOpen = true; refreshMobIdDropdown(); }
+    }
+
+    private void closeMobIdDropdown() {
+        mobIdDropdownOpen = false;
+        if (mobIdDropdownPanel != null) { mobIdDropdownPanel.clearChildren(); mobIdDropdownPanel.surface(Surface.BLANK); }
+    }
+
+    private void toggleMobIdDropdown() {
+        if (mobIdDropdownOpen) closeMobIdDropdown(); else openMobIdDropdown();
+    }
+
+    private void refreshMobIdDropdown() {
+        if (mobIdDropdownPanel == null) return;
+        List<String> candidates = mobIdCandidates(mobIdField != null ? mobIdField.getValue() : "");
+        mobIdDropdownPanel.clearChildren();
+        if (!mobIdDropdownOpen || candidates.isEmpty()) { mobIdDropdownPanel.surface(Surface.BLANK); return; }
+        mobIdDropdownPanel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        boolean first = true;
+        for (String id : candidates) {
+            if (!first) mobIdDropdownPanel.child(hairline());
+            mobIdDropdownPanel.child(mobIdRow(id));
+            first = false;
+        }
+    }
+
+    private List<String> mobIdCandidates(String filter) {
+        String needle = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
+        return net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.keySet().stream()
+            .map(net.minecraft.resources.ResourceLocation::toString)
+            .filter(id -> needle.isEmpty() || id.toLowerCase(Locale.ROOT).contains(needle))
+            .sorted()
+            .limit(10)
+            .collect(Collectors.toList());
+    }
+
+    private ButtonComponent mobIdRow(String id) {
+        ButtonComponent row = Components.button(Component.empty(), b -> {
+            if (mobIdField != null) mobIdField.text(id);
+            closeMobIdDropdown();
+        });
+        row.sizing(Sizing.fill(100), Sizing.fixed(20));
+        row.renderer((context, rendered, delta) -> {
+            int x1 = rendered.getX(); int y1 = rendered.getY();
+            boolean hover = rendered.isHoveredOrFocused();
+            context.fill(x1, y1, x1 + rendered.getWidth(), y1 + rendered.getHeight(), hover ? ROW_BG : PANEL_2);
+            if (hover) context.fill(x1, y1, x1 + 2, y1 + rendered.getHeight(), ACCENT);
+            context.drawString(this.font, id, x1 + 8, y1 + (rendered.getHeight() - this.font.lineHeight) / 2 + 1, INK, false);
+        });
         return row;
     }
 

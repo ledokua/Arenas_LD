@@ -31,7 +31,8 @@ public record DungeonControllerAdminData(
     int deathTimePenaltyTicks,
     boolean lootViaInbox,
     Map<DifficultyTier, TierConfig> tierConfigs,
-    Map<BlockPos, InstanceRun> runningInstances
+    Map<BlockPos, InstanceRun> runningInstances,
+    List<String> knownLootTableIds
 ) {
     /** Tier and party label of the run currently occupying an instance. */
     public record InstanceRun(DifficultyTier tier, String party) {}
@@ -84,6 +85,11 @@ public record DungeonControllerAdminData(
             buf.writeBlockPos(entry.getKey());
             DifficultyTier.STREAM_CODEC.encode(buf, entry.getValue().tier());
             buf.writeUtf(entry.getValue().party());
+        }
+
+        buf.writeVarInt(data.knownLootTableIds().size());
+        for (String id : data.knownLootTableIds()) {
+            buf.writeUtf(id);
         }
     }
 
@@ -143,6 +149,12 @@ public record DungeonControllerAdminData(
             runningInstances.put(pos, new InstanceRun(tier, party));
         }
 
+        int lootIdCount = buf.readVarInt();
+        List<String> knownLootTableIds = new ArrayList<>(lootIdCount);
+        for (int i = 0; i < lootIdCount; i++) {
+            knownLootTableIds.add(buf.readUtf());
+        }
+
         return new DungeonControllerAdminData(
             blockPos,
             instances,
@@ -157,7 +169,8 @@ public record DungeonControllerAdminData(
             deathTimePenaltyTicks,
             lootViaInbox,
             tierConfigs,
-            runningInstances
+            runningInstances,
+            knownLootTableIds
         );
     }
 }

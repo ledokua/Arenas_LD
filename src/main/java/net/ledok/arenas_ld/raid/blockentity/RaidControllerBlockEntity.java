@@ -1443,6 +1443,19 @@ public class RaidControllerBlockEntity extends BlockEntity
             running.put(entry.getKey(), new net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.InstanceRun(run.tier(), owner == null ? "" : owner));
         }
 
+        List<String> knownLootTableIds = new ArrayList<>();
+        if (level instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            net.minecraft.server.MinecraftServer server = serverLevel.getServer();
+            if (server != null) {
+                try {
+                    server.registryAccess()
+                        .registry(Registries.LOOT_TABLE)
+                        .ifPresent(reg -> reg.keySet().forEach(rl -> knownLootTableIds.add(rl.toString())));
+                } catch (Exception ignored) {}
+                knownLootTableIds.sort(null);
+            }
+        }
+
         return new net.ledok.arenas_ld.raid.screen.RaidControllerAdminData(
             worldPosition,
             instanceEntries,
@@ -1455,7 +1468,8 @@ public class RaidControllerBlockEntity extends BlockEntity
             deathTimePenaltyTicks,
             lootViaInbox,
             new EnumMap<>(tierConfigs),
-            running
+            running,
+            knownLootTableIds
         );
     }
 

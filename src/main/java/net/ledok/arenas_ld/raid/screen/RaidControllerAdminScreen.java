@@ -39,8 +39,11 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, RaidControllerAdminScreenHandler> {
     private static final int BG = 0xFF070E14;
@@ -90,6 +93,12 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
     private ButtonComponent normalTabButton;
     private ButtonComponent hardTabButton;
     private ButtonComponent nightmareTabButton;
+
+    private List<String> knownLootTableIds = List.of();
+    private boolean lootDropdownOpen = false;
+    private FlowLayout lootDropdownPanel;
+    private TextBoxComponent currentLootField;
+    private Consumer<String> currentLootOnChange;
 
     private String cooldownInput;
     private String closeTimerInput;
@@ -287,6 +296,11 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
     }
 
     private void rebuildUi() {
+        lootDropdownOpen = false;
+        lootDropdownPanel = null;
+        currentLootField = null;
+        currentLootOnChange = null;
+
         contentArea.clearChildren();
         footerActions.clearChildren();
 
@@ -788,7 +802,7 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         onChange.accept(value);
     }
 
-    private FlowLayout lootField(String initial, java.util.function.Consumer<String> onChange) {
+    private FlowLayout lootField(String initial, Consumer<String> onChange) {
         FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
         col.gap(4);
         FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
@@ -796,23 +810,119 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         head.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.loot"), INK_DIM));
         col.child(head);
 
-        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        fieldWrap.gap(4);
+        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
+        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        fieldRow.gap(4);
         FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
         accent.surface(Surface.flat(ACCENT));
-        fieldWrap.child(accent);
+        fieldRow.child(accent);
         FlowLayout idCell = Containers.horizontalFlow(Sizing.content(), Sizing.content());
         idCell.padding(Insets.of(0, 0, 4, 0));
         idCell.child(labelLiteral("id:", INK_DIM));
-        fieldWrap.child(idCell);
+        fieldRow.child(idCell);
+
         TextBoxComponent field = Components.textBox(Sizing.expand(), initial);
         field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(onChange::accept);
-        fieldWrap.child(field);
-        col.child(fieldWrap);
+        field.onChanged().subscribe(v -> {
+            onChange.accept(v);
+            if (lootDropdownOpen) refreshLootDropdown();
+        });
+        field.mouseDown().subscribe((mx, my, btn) -> {
+            currentLootField = field;
+            currentLootOnChange = onChange;
+            openLootDropdown();
+            return false;
+        });
+        currentLootField = field;
+        currentLootOnChange = onChange;
+        fieldRow.child(field);
+
+        ButtonComponent chevron = Components.button(Component.empty(), b -> {
+            currentLootField = field;
+            currentLootOnChange = onChange;
+            toggleLootDropdown();
+        });
+        chevron.sizing(Sizing.fixed(18), Sizing.fixed(20));
+        chevron.renderer((context, rendered, delta) -> {
+            String glyph = lootDropdownOpen ? "▲" : "▼";
+            int tx = rendered.getX() + (rendered.getWidth() - this.font.width(glyph)) / 2;
+            int ty = rendered.getY() + (rendered.getHeight() - this.font.lineHeight) / 2 + 1;
+            context.drawString(this.font, glyph, tx, ty, INK_MID, false);
+        });
+        fieldRow.child(chevron);
+        col.child(fieldRow);
+
+        FlowLayout dropdown = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        dropdown.surface(Surface.BLANK);
+        lootDropdownPanel = dropdown;
+        col.child(dropdown);
+
         return col;
+    }
+
+    private void openLootDropdown() {
+        if (!lootDropdownOpen) {
+            lootDropdownOpen = true;
+            refreshLootDropdown();
+        }
+    }
+
+    private void closeLootDropdown() {
+        lootDropdownOpen = false;
+        if (lootDropdownPanel != null) {
+            lootDropdownPanel.clearChildren();
+            lootDropdownPanel.surface(Surface.BLANK);
+        }
+    }
+
+    private void toggleLootDropdown() {
+        if (lootDropdownOpen) closeLootDropdown();
+        else openLootDropdown();
+    }
+
+    private void refreshLootDropdown() {
+        if (lootDropdownPanel == null) return;
+        String current = currentLootField != null ? currentLootField.getValue() : "";
+        List<String> candidates = lootCandidates(current);
+        lootDropdownPanel.clearChildren();
+        if (!lootDropdownOpen || candidates.isEmpty()) {
+            lootDropdownPanel.surface(Surface.BLANK);
+            return;
+        }
+        lootDropdownPanel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        boolean first = true;
+        for (String id : candidates) {
+            if (!first) lootDropdownPanel.child(rowDivider(HAIRLINE));
+            Consumer<String> captured = currentLootOnChange;
+            lootDropdownPanel.child(registryRow(id, () -> {
+                if (currentLootField != null) currentLootField.text(id);
+                if (captured != null) captured.accept(id);
+                closeLootDropdown();
+            }));
+            first = false;
+        }
+    }
+
+    private List<String> lootCandidates(String filter) {
+        String needle = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
+        return knownLootTableIds.stream()
+            .filter(id -> needle.isEmpty() || id.toLowerCase(Locale.ROOT).contains(needle))
+            .limit(10)
+            .collect(Collectors.toList());
+    }
+
+    private ButtonComponent registryRow(String id, Runnable onClick) {
+        ButtonComponent row = Components.button(Component.empty(), b -> onClick.run());
+        row.sizing(Sizing.fill(100), Sizing.fixed(20));
+        row.renderer((context, rendered, delta) -> {
+            int x1 = rendered.getX(); int y1 = rendered.getY();
+            boolean hover = rendered.isHoveredOrFocused();
+            context.fill(x1, y1, x1 + rendered.getWidth(), y1 + rendered.getHeight(), hover ? ROW_BG : PANEL_2);
+            if (hover) context.fill(x1, y1, x1 + 2, y1 + rendered.getHeight(), ACCENT);
+            context.drawString(this.font, id, x1 + 8, y1 + (rendered.getHeight() - this.font.lineHeight) / 2 + 1, INK, false);
+        });
+        return row;
     }
 
     private FlowLayout stepperFieldDouble(String caption, String hint, String unit, double step, double min, double max,
@@ -1095,6 +1205,8 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
     }
 
     private void syncFromMenu() {
+        knownLootTableIds = new ArrayList<>(menu.getKnownLootTableIds());
+
         instances.clear();
         instances.addAll(menu.getInstances());
         cooldownSnapshotEpochMs = System.currentTimeMillis();

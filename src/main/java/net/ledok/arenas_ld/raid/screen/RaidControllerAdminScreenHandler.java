@@ -27,6 +27,7 @@ public class RaidControllerAdminScreenHandler extends AbstractContainerMenu {
     private boolean lootViaInbox;
     private Map<DifficultyTier, RaidTierConfig> tierConfigs;
     private Map<BlockPos, RaidControllerAdminData.InstanceRun> runningInstances;
+    private List<String> knownLootTableIds;
 
     public RaidControllerAdminScreenHandler(int syncId, Inventory inventory, RaidControllerAdminData data) {
         super(ModScreenHandlers.RAID_CONTROLLER_ADMIN_SCREEN_HANDLER, syncId);
@@ -50,6 +51,7 @@ public class RaidControllerAdminScreenHandler extends AbstractContainerMenu {
     public boolean isLootViaInbox() { return lootViaInbox; }
     public Map<DifficultyTier, RaidTierConfig> getTierConfigs() { return tierConfigs; }
     public Map<BlockPos, RaidControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
+    public List<String> getKnownLootTableIds() { return knownLootTableIds != null ? knownLootTableIds : List.of(); }
 
     public void applyData(RaidControllerAdminData data) {
         this.instances = List.copyOf(data.instances());
@@ -63,6 +65,7 @@ public class RaidControllerAdminScreenHandler extends AbstractContainerMenu {
         this.lootViaInbox = data.lootViaInbox();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());
+        this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
     }
 
     @Override
