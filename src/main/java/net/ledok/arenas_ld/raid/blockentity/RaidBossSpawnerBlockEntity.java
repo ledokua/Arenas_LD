@@ -1,5 +1,7 @@
 package net.ledok.arenas_ld.raid.blockentity;
 
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.dungeon.blockentity.EntityDefinition;
@@ -43,8 +45,8 @@ import java.util.UUID;
 public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<RaidBossSpawnerData>, AttributeProvider, EquipmentProvider {
     // --- Config (arena geometry + mob definition only) ---
     private String groupId = "";
-    public BlockPos entrancePosition = BlockPos.ZERO; // relative to spawner
-    public ResourceKey<Level> entranceDimension = Level.OVERWORLD;
+    private BlockPos entranceOffset = BlockPos.ZERO;
+    private ResourceKey<Level> entranceDimension = Level.OVERWORLD;
     private final List<BlockPos> respawnPointOffsets = new ArrayList<>();
     /** Bundled entity config (mobId + attributes + equipment). Mirrors dungeon spawners. */
     private EntityDefinition entityDefinition = new EntityDefinition(
@@ -76,6 +78,18 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     private RaidRun findRun() {
         if (!(level instanceof ServerLevel sl)) return null;
         return RaidRunLifecycle.findRun(sl.getServer(), worldPosition);
+    }
+
+    public BlockPos getEntranceOffset() { return entranceOffset; }
+
+    public ResourceKey<Level> getEntranceDimension() { return entranceDimension; }
+
+    public BlockPos getAbsoluteEntrancePos() { return worldPosition.offset(entranceOffset); }
+
+    public void setEntrancePosition(BlockPos absolutePos, ResourceKey<Level> dim) {
+        this.entranceOffset = absolutePos.subtract(worldPosition);
+        this.entranceDimension = dim == null ? Level.OVERWORLD : dim;
+        markDirtyAndSync();
     }
 
     public String getGroupId() {
@@ -225,55 +239,83 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
         }
     }
 
+    private record State(
+        EntityDefinition entity,
+        BlockPos entranceOffset,
+        ResourceKey<Level> entranceDim,
+        List<BlockPos> respawnPointOffsets,
+        String groupId
+    ) {
+        static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
+            EntityDefinition.CODEC.fieldOf("entity").forGetter(State::entity),
+            BlockPos.CODEC.fieldOf("entranceOffset").forGetter(State::entranceOffset),
+            ResourceKey.codec(Registries.DIMENSION).fieldOf("entranceDim").forGetter(State::entranceDim),
+            BlockPos.CODEC.listOf().fieldOf("respawnPointOffsets").forGetter(State::respawnPointOffsets),
+            Codec.STRING.fieldOf("groupId").forGetter(State::groupId)
+        ).apply(i, State::new));
+    }
+
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.saveAdditional(nbt, registryLookup);
-        EntityDefinition.CODEC.encodeStart(NbtOps.INSTANCE, entityDefinition)
-            .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save EntityDefinition at {}: {}", worldPosition, err))
-            .ifPresent(tag -> nbt.put("EntityDefinition", tag));
-        nbt.putString("GroupId", groupId);
-        nbt.putLong("EntrancePosition", entrancePosition.asLong());
-        nbt.putString("EntranceDimension", entranceDimension.location().toString());
-        nbt.putLongArray("RespawnPointOffsets", respawnPointOffsets.stream().mapToLong(BlockPos::asLong).toArray());
+        State.CODEC.encodeStart(NbtOps.INSTANCE, new State(
+                entityDefinition, entranceOffset, entranceDimension,
+                new ArrayList<>(respawnPointOffsets), groupId))
+            .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save RaidBossSpawner at {}: {}", worldPosition, err))
+            .ifPresent(tag -> nbt.put("State", tag));
     }
 
     @Override
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.loadAdditional(nbt, registryLookup);
-        groupId = nbt.getString("GroupId");
-        entrancePosition = nbt.contains("EntrancePosition", Tag.TAG_LONG) ? BlockPos.of(nbt.getLong("EntrancePosition")) : BlockPos.ZERO;
-        if (nbt.contains("EntranceDimension")) {
-            entranceDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("EntranceDimension")));
+        if (nbt.contains("State")) {
+            State.CODEC.parse(NbtOps.INSTANCE, nbt.get("State"))
+                .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load RaidBossSpawner at {}: {}", worldPosition, err))
+                .ifPresent(state -> {
+                    this.entityDefinition = state.entity();
+                    this.entranceOffset = state.entranceOffset();
+                    this.entranceDimension = state.entranceDim();
+                    this.respawnPointOffsets.clear();
+                    this.respawnPointOffsets.addAll(state.respawnPointOffsets());
+                    this.groupId = state.groupId();
+                });
         } else {
-            entranceDimension = Level.OVERWORLD;
-        }
-        respawnPointOffsets.clear();
-        if (nbt.contains("RespawnPointOffsets", Tag.TAG_LONG_ARRAY)) {
-            for (long posLong : nbt.getLongArray("RespawnPointOffsets")) {
-                respawnPointOffsets.add(BlockPos.of(posLong));
+            // Legacy migration from the pre-State per-field format.
+            groupId = nbt.getString("GroupId");
+            entranceOffset = nbt.contains("EntrancePosition", Tag.TAG_LONG)
+                ? BlockPos.of(nbt.getLong("EntrancePosition")) : BlockPos.ZERO;
+            if (nbt.contains("EntranceDimension")) {
+                entranceDimension = ResourceKey.create(Registries.DIMENSION,
+                    ResourceLocation.parse(nbt.getString("EntranceDimension")));
+            } else {
+                entranceDimension = Level.OVERWORLD;
             }
-        }
-
-        if (nbt.contains("EntityDefinition", Tag.TAG_COMPOUND)) {
-            EntityDefinition.CODEC.parse(NbtOps.INSTANCE, nbt.getCompound("EntityDefinition"))
-                .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load EntityDefinition at {}: {}", worldPosition, err))
-                .ifPresent(def -> this.entityDefinition = def);
-        } else {
-            // Legacy migration: assemble EntityDefinition from old top-level fields.
-            String legacyMobId = nbt.contains("MobId") ? nbt.getString("MobId") : "minecraft:zombie";
-            List<AttributeData> legacyAttrs = new ArrayList<>();
-            ListTag attributeList = nbt.getList("Attributes", Tag.TAG_COMPOUND);
-            for (Tag tag : attributeList) {
-                legacyAttrs.add(AttributeData.fromNbt((CompoundTag) tag));
+            respawnPointOffsets.clear();
+            if (nbt.contains("RespawnPointOffsets", Tag.TAG_LONG_ARRAY)) {
+                for (long posLong : nbt.getLongArray("RespawnPointOffsets")) {
+                    respawnPointOffsets.add(BlockPos.of(posLong));
+                }
             }
-            if (legacyAttrs.isEmpty()) {
-                legacyAttrs.add(new AttributeData("minecraft:generic.max_health", 300.0));
-                legacyAttrs.add(new AttributeData("minecraft:generic.attack_damage", 15.0));
+            if (nbt.contains("EntityDefinition", Tag.TAG_COMPOUND)) {
+                EntityDefinition.CODEC.parse(NbtOps.INSTANCE, nbt.getCompound("EntityDefinition"))
+                    .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load EntityDefinition at {}: {}", worldPosition, err))
+                    .ifPresent(def -> this.entityDefinition = def);
+            } else {
+                String legacyMobId = nbt.contains("MobId") ? nbt.getString("MobId") : "minecraft:zombie";
+                List<AttributeData> legacyAttrs = new ArrayList<>();
+                ListTag attributeList = nbt.getList("Attributes", Tag.TAG_COMPOUND);
+                for (Tag tag : attributeList) {
+                    legacyAttrs.add(AttributeData.fromNbt((CompoundTag) tag));
+                }
+                if (legacyAttrs.isEmpty()) {
+                    legacyAttrs.add(new AttributeData("minecraft:generic.max_health", 300.0));
+                    legacyAttrs.add(new AttributeData("minecraft:generic.attack_damage", 15.0));
+                }
+                EquipmentData legacyEquip = nbt.contains("Equipment")
+                    ? EquipmentData.fromNbt(nbt.getCompound("Equipment"))
+                    : new EquipmentData();
+                this.entityDefinition = new EntityDefinition(legacyMobId, legacyAttrs, legacyEquip);
             }
-            EquipmentData legacyEquip = nbt.contains("Equipment")
-                ? EquipmentData.fromNbt(nbt.getCompound("Equipment"))
-                : new EquipmentData();
-            this.entityDefinition = new EntityDefinition(legacyMobId, legacyAttrs, legacyEquip);
         }
         // Active-run registration happens lazily on first tick via findRun();
         // we can't reliably consult the controller's activeRuns during loadAdditional

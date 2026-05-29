@@ -115,8 +115,7 @@ public class SpawnerConfiguratorItem extends Item {
                 } else if (selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity newDbs) {
                     newDbs.setEntrancePosition(clickedPos, clickedDimension);
                 } else if (selectedBlockEntity instanceof RaidBossSpawnerBlockEntity bossSpawner) {
-                    bossSpawner.entrancePosition = relativePos;
-                    bossSpawner.entranceDimension = clickedDimension;
+                    bossSpawner.setEntrancePosition(clickedPos, clickedDimension);
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.entrance_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;

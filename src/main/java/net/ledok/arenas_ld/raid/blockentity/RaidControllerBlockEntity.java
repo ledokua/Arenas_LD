@@ -141,7 +141,8 @@ public class RaidControllerBlockEntity extends BlockEntity
     private static final int DEFAULT_COOLDOWN_TICKS = 5 * 60 * 20;
     private static final int DEFAULT_CLOSE_TIMER_SECONDS = 30;
     private static final int DEFAULT_DEATH_TIME_PENALTY_TICKS = 10 * 20;
-    private static final int OFFLINE_GRACE_TICKS = 5 * 60 * 20;
+    private static final int DEFAULT_DISCONNECT_GRACE_TICKS = 5 * 60 * 20;
+    private static final int DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS = 5 * 60 * 20;
     private static final int MAX_LEADERBOARD_ENTRIES = 10;
 
     /** Global registry of all loaded raid controllers (server-side). */
@@ -182,6 +183,8 @@ public class RaidControllerBlockEntity extends BlockEntity
     private int cooldownTicks = DEFAULT_COOLDOWN_TICKS;
     private int closeTimerSeconds = DEFAULT_CLOSE_TIMER_SECONDS;
     private int deathTimePenaltyTicks = DEFAULT_DEATH_TIME_PENALTY_TICKS;
+    private int disconnectGraceTicks = DEFAULT_DISCONNECT_GRACE_TICKS;
+    private int lobbyOfflineTimeoutTicks = DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS;
     /** When true, per-player loot bundles are delivered to the Economy_LD inbox instead of dropped in the world. */
     private boolean lootViaInbox = false;
     /** Per-tier raid configs (health/damage multipliers, time limit, enabled, reward currency). */
@@ -200,6 +203,26 @@ public class RaidControllerBlockEntity extends BlockEntity
     // ─────────────────────────────────────────────────────────────────────────
     //  NBT codecs
     // ─────────────────────────────────────────────────────────────────────────
+
+    /** Groups per-run timing knobs so the State codec stays under DFU's 16-field limit. */
+    private record LifecycleTimings(
+        int disconnectGraceTicks,
+        int lobbyOfflineTimeoutTicks,
+        int respawnTimeTicks,
+        int deathTimePenaltyTicks
+    ) {
+        static final Codec<LifecycleTimings> CODEC = RecordCodecBuilder.create(i -> i.group(
+            Codec.INT.optionalFieldOf("disconnectGraceTicks", DEFAULT_DISCONNECT_GRACE_TICKS).forGetter(LifecycleTimings::disconnectGraceTicks),
+            Codec.INT.optionalFieldOf("lobbyOfflineTimeoutTicks", DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS).forGetter(LifecycleTimings::lobbyOfflineTimeoutTicks),
+            Codec.INT.optionalFieldOf("respawnTimeTicks", DEFAULT_RESPAWN_TIME_TICKS).forGetter(LifecycleTimings::respawnTimeTicks),
+            Codec.INT.optionalFieldOf("deathTimePenaltyTicks", DEFAULT_DEATH_TIME_PENALTY_TICKS).forGetter(LifecycleTimings::deathTimePenaltyTicks)
+        ).apply(i, LifecycleTimings::new));
+
+        static final LifecycleTimings DEFAULT = new LifecycleTimings(
+            DEFAULT_DISCONNECT_GRACE_TICKS, DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS,
+            DEFAULT_RESPAWN_TIME_TICKS, DEFAULT_DEATH_TIME_PENALTY_TICKS
+        );
+    }
 
     private record InstanceEntry(
         BlockPos spawnerPos,
@@ -223,12 +246,11 @@ public class RaidControllerBlockEntity extends BlockEntity
     }
 
     private record State(
-        int respawnTimeTicks,
+        LifecycleTimings lifecycle,
         int maxPartySize,
         int inviteExpiryTicks,
         int cooldownTicks,
         int closeTimerSeconds,
-        int deathTimePenaltyTicks,
         boolean lootViaInbox,
         List<InstanceEntry> instances,
         List<Lobby> lobbies,
@@ -241,12 +263,11 @@ public class RaidControllerBlockEntity extends BlockEntity
         List<InstanceRunEntry> activeRuns
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
-            Codec.INT.optionalFieldOf("respawnTimeTicks", DEFAULT_RESPAWN_TIME_TICKS).forGetter(State::respawnTimeTicks),
+            LifecycleTimings.CODEC.optionalFieldOf("lifecycle", LifecycleTimings.DEFAULT).forGetter(State::lifecycle),
             Codec.INT.optionalFieldOf("maxPartySize", DEFAULT_MAX_PARTY_SIZE).forGetter(State::maxPartySize),
             Codec.INT.optionalFieldOf("inviteExpiryTicks", DEFAULT_INVITE_EXPIRY_TICKS).forGetter(State::inviteExpiryTicks),
             Codec.INT.optionalFieldOf("cooldownTicks", DEFAULT_COOLDOWN_TICKS).forGetter(State::cooldownTicks),
             Codec.INT.optionalFieldOf("closeTimerSeconds", DEFAULT_CLOSE_TIMER_SECONDS).forGetter(State::closeTimerSeconds),
-            Codec.INT.optionalFieldOf("deathTimePenaltyTicks", DEFAULT_DEATH_TIME_PENALTY_TICKS).forGetter(State::deathTimePenaltyTicks),
             Codec.BOOL.optionalFieldOf("lootViaInbox", false).forGetter(State::lootViaInbox),
             InstanceEntry.CODEC.listOf().optionalFieldOf("instances", List.of()).forGetter(State::instances),
             Lobby.CODEC.listOf().optionalFieldOf("lobbies", List.of()).forGetter(State::lobbies),
@@ -406,6 +427,28 @@ public class RaidControllerBlockEntity extends BlockEntity
     public boolean setDeathTimePenaltyTicks(int ticks) {
         if (ticks < 0) return false;
         this.deathTimePenaltyTicks = ticks;
+        markDirtyAndSync();
+        return true;
+    }
+
+    public int getDisconnectGraceTicks() {
+        return disconnectGraceTicks;
+    }
+
+    public boolean setDisconnectGraceTicks(int ticks) {
+        if (ticks < 0) return false;
+        this.disconnectGraceTicks = ticks;
+        markDirtyAndSync();
+        return true;
+    }
+
+    public int getLobbyOfflineTimeoutTicks() {
+        return lobbyOfflineTimeoutTicks;
+    }
+
+    public boolean setLobbyOfflineTimeoutTicks(int ticks) {
+        if (ticks < 0) return false;
+        this.lobbyOfflineTimeoutTicks = ticks;
         markDirtyAndSync();
         return true;
     }
@@ -1031,7 +1074,7 @@ public class RaidControllerBlockEntity extends BlockEntity
                     continue;
                 }
                 long since = offlineSinceTick.computeIfAbsent(memberUuid, id -> now);
-                if (now - since >= OFFLINE_GRACE_TICKS) {
+                if (now - since >= lobbyOfflineTimeoutTicks) {
                     if (lobby.isOwner(memberUuid)) {
                         if (lobby.members().size() <= 1) {
                             toDisband.add(lobby.lobbyId());
@@ -1236,12 +1279,11 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
 
         State state = new State(
-            respawnTimeTicks,
+            new LifecycleTimings(disconnectGraceTicks, lobbyOfflineTimeoutTicks, respawnTimeTicks, deathTimePenaltyTicks),
             maxPartySize,
             inviteExpiryTicks,
             cooldownTicks,
             closeTimerSeconds,
-            deathTimePenaltyTicks,
             lootViaInbox,
             instanceEntries,
             new ArrayList<>(lobbies),
@@ -1267,12 +1309,14 @@ public class RaidControllerBlockEntity extends BlockEntity
             State.CODEC.parse(NbtOps.INSTANCE, nbt.get("State"))
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load RaidController at {}: {}", worldPosition, err))
                 .ifPresent(state -> {
-                    respawnTimeTicks = state.respawnTimeTicks();
+                    disconnectGraceTicks = state.lifecycle().disconnectGraceTicks();
+                    lobbyOfflineTimeoutTicks = state.lifecycle().lobbyOfflineTimeoutTicks();
+                    respawnTimeTicks = state.lifecycle().respawnTimeTicks();
+                    deathTimePenaltyTicks = state.lifecycle().deathTimePenaltyTicks();
                     maxPartySize = state.maxPartySize();
                     inviteExpiryTicks = state.inviteExpiryTicks();
                     cooldownTicks = state.cooldownTicks();
                     closeTimerSeconds = state.closeTimerSeconds();
-                    deathTimePenaltyTicks = state.deathTimePenaltyTicks();
                     lootViaInbox = state.lootViaInbox();
 
                     instances.clear();

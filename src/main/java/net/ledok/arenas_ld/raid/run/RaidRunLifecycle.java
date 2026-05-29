@@ -247,8 +247,8 @@ public final class RaidRunLifecycle {
         boss.moveTo(bossSpawnPos.x, bossSpawnPos.y, bossSpawnPos.z, 0, 0);
         world.addFreshEntity(boss);
 
-        ServerLevel entranceWorld = world.getServer().getLevel(spawner.entranceDimension);
-        BlockPos absoluteEntrance = run.spawnerPos().offset(spawner.entrancePosition);
+        ServerLevel entranceWorld = world.getServer().getLevel(spawner.getEntranceDimension());
+        BlockPos absoluteEntrance = spawner.getAbsoluteEntrancePos();
         for (ServerPlayer player : players) {
             player.setGameMode(GameType.ADVENTURE);
             player.setHealth(player.getMaxHealth());
@@ -608,7 +608,7 @@ public final class RaidRunLifecycle {
         RaidBossSpawnerBlockEntity spawner = spawnerFor(world, run);
         if (spawner == null) return;
 
-        BlockPos target = run.spawnerPos().offset(spawner.entrancePosition);
+        BlockPos target = spawner.getAbsoluteEntrancePos();
         List<BlockPos> respawnOffsets = spawner.getRespawnPointOffsets();
         if (!respawnOffsets.isEmpty()) {
             Vec3 playerPos = player.position();
@@ -619,7 +619,7 @@ public final class RaidRunLifecycle {
                     .orElse(target);
         }
 
-        ServerLevel entranceWorld = world.getServer().getLevel(spawner.entranceDimension);
+        ServerLevel entranceWorld = world.getServer().getLevel(spawner.getEntranceDimension());
         player.setGameMode(GameType.ADVENTURE);
         player.setHealth(player.getMaxHealth());
         if (entranceWorld != null) {
