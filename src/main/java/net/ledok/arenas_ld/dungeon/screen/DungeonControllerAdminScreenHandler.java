@@ -77,9 +77,10 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         if (server == null) return List.of();
         List<String> ids = new ArrayList<>();
         try {
-            server.registryAccess()
-                .registry(net.minecraft.core.registries.Registries.LOOT_TABLE)
-                .ifPresent(reg -> reg.keySet().forEach(rl -> ids.add(rl.toString())));
+            server.reloadableRegistries().lookup()
+                .lookup(net.minecraft.core.registries.Registries.LOOT_TABLE)
+                .ifPresent(lookup -> lookup.listElementIds()
+                    .forEach(key -> ids.add(key.location().toString())));
         } catch (Exception ignored) {}
         ids.sort(null);
         return ids;

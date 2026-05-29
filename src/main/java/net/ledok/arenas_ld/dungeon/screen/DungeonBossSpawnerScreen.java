@@ -53,6 +53,8 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
     private static final int ACCENT      = 0xFFA98BE8;
     private static final int ACCENT_DARK = 0xFF6C4FB5;
     private static final int DANGER      = 0xFFE8624A;
+    private static final int DROPDOWN_MAX_CANDIDATES = 50;
+    private static final int DROPDOWN_MAX_HEIGHT = 140;
 
     private String mobIdValue = "";
     private boolean mobIdDropdownOpen = false;
@@ -301,12 +303,20 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
         mobIdDropdownPanel.clearChildren();
         if (!mobIdDropdownOpen || candidates.isEmpty()) { mobIdDropdownPanel.surface(Surface.BLANK); return; }
         mobIdDropdownPanel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+
+        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
         boolean first = true;
         for (String id : candidates) {
-            if (!first) mobIdDropdownPanel.child(rowDivider());
-            mobIdDropdownPanel.child(mobIdCandidateRow(id));
+            if (!first) list.child(rowDivider());
+            list.child(mobIdCandidateRow(id));
             first = false;
         }
+
+        int rowsHeight = candidates.size() * 20 + Math.max(0, candidates.size() - 1);
+        int visibleHeight = Math.min(rowsHeight, DROPDOWN_MAX_HEIGHT);
+        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.fixed(visibleHeight), list);
+        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
+        mobIdDropdownPanel.child(scroll);
     }
 
     private List<String> mobIdCandidates(String filter) {
@@ -315,7 +325,7 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
             .map(net.minecraft.resources.ResourceLocation::toString)
             .filter(id -> needle.isEmpty() || id.toLowerCase(Locale.ROOT).contains(needle))
             .sorted()
-            .limit(10)
+            .limit(DROPDOWN_MAX_CANDIDATES)
             .collect(Collectors.toList());
     }
 

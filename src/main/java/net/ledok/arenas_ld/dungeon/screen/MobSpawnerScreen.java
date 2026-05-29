@@ -55,6 +55,8 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
 
     private static final int POS_ROW_HEIGHT = 20;
     private static final int POS_MAX_VISIBLE = 6;
+    private static final int DROPDOWN_MAX_CANDIDATES = 50;
+    private static final int DROPDOWN_MAX_HEIGHT = 140;
 
     private TextBoxComponent mobIdField;
     private boolean mobIdDropdownOpen = false;
@@ -396,12 +398,20 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
         mobIdDropdownPanel.clearChildren();
         if (!mobIdDropdownOpen || candidates.isEmpty()) { mobIdDropdownPanel.surface(Surface.BLANK); return; }
         mobIdDropdownPanel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+
+        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
         boolean first = true;
         for (String id : candidates) {
-            if (!first) mobIdDropdownPanel.child(hairline());
-            mobIdDropdownPanel.child(mobIdRow(id));
+            if (!first) list.child(hairline());
+            list.child(mobIdRow(id));
             first = false;
         }
+
+        int rowsHeight = candidates.size() * 20 + Math.max(0, candidates.size() - 1);
+        int visibleHeight = Math.min(rowsHeight, DROPDOWN_MAX_HEIGHT);
+        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.fixed(visibleHeight), list);
+        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
+        mobIdDropdownPanel.child(scroll);
     }
 
     private List<String> mobIdCandidates(String filter) {
@@ -410,7 +420,7 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
             .map(net.minecraft.resources.ResourceLocation::toString)
             .filter(id -> needle.isEmpty() || id.toLowerCase(Locale.ROOT).contains(needle))
             .sorted()
-            .limit(10)
+            .limit(DROPDOWN_MAX_CANDIDATES)
             .collect(Collectors.toList());
     }
 

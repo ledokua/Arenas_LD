@@ -52,9 +52,10 @@ public class DungeonControllerAdminMenuProvider implements ExtendedScreenHandler
         if (server == null) return java.util.List.of();
         java.util.List<String> ids = new java.util.ArrayList<>();
         try {
-            server.registryAccess()
-                .registry(net.minecraft.core.registries.Registries.LOOT_TABLE)
-                .ifPresent(reg -> reg.keySet().forEach(rl -> ids.add(rl.toString())));
+            server.reloadableRegistries().lookup()
+                .lookup(net.minecraft.core.registries.Registries.LOOT_TABLE)
+                .ifPresent(lookup -> lookup.listElementIds()
+                    .forEach(key -> ids.add(key.location().toString())));
         } catch (Exception ignored) {}
         ids.sort(null);
         return ids;

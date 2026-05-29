@@ -1448,9 +1448,10 @@ public class RaidControllerBlockEntity extends BlockEntity
             net.minecraft.server.MinecraftServer server = serverLevel.getServer();
             if (server != null) {
                 try {
-                    server.registryAccess()
-                        .registry(Registries.LOOT_TABLE)
-                        .ifPresent(reg -> reg.keySet().forEach(rl -> knownLootTableIds.add(rl.toString())));
+                    server.reloadableRegistries().lookup()
+                        .lookup(Registries.LOOT_TABLE)
+                        .ifPresent(lookup -> lookup.listElementIds()
+                            .forEach(key -> knownLootTableIds.add(key.location().toString())));
                 } catch (Exception ignored) {}
                 knownLootTableIds.sort(null);
             }
