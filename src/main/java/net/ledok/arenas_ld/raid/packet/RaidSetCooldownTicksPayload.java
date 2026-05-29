@@ -7,17 +7,17 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-public record RaidSetCooldownPayload(BlockPos controllerPos, int cooldownTicks) implements CustomPacketPayload {
-    public static final Type<RaidSetCooldownPayload> TYPE = new Type<>(
+public record RaidSetCooldownTicksPayload(BlockPos controllerPos, int cooldownTicks) implements CustomPacketPayload {
+    public static final Type<RaidSetCooldownTicksPayload> TYPE = new Type<>(
         ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "raid_admin_set_cooldown")
     );
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, RaidSetCooldownPayload> STREAM_CODEC = StreamCodec.of(
+    public static final StreamCodec<RegistryFriendlyByteBuf, RaidSetCooldownTicksPayload> STREAM_CODEC = StreamCodec.of(
         (buf, p) -> {
             buf.writeBlockPos(p.controllerPos());
             buf.writeVarInt(p.cooldownTicks());
         },
-        buf -> new RaidSetCooldownPayload(buf.readBlockPos(), buf.readVarInt())
+        buf -> new RaidSetCooldownTicksPayload(buf.readBlockPos(), buf.readVarInt())
     );
 
     @Override

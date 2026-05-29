@@ -7,17 +7,17 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-public record RaidSetInviteExpiryPayload(BlockPos controllerPos, int inviteExpiryTicks) implements CustomPacketPayload {
-    public static final Type<RaidSetInviteExpiryPayload> TYPE = new Type<>(
+public record RaidSetInviteExpiryTicksPayload(BlockPos controllerPos, int inviteExpiryTicks) implements CustomPacketPayload {
+    public static final Type<RaidSetInviteExpiryTicksPayload> TYPE = new Type<>(
         ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "raid_admin_set_invite_expiry")
     );
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, RaidSetInviteExpiryPayload> STREAM_CODEC = StreamCodec.of(
+    public static final StreamCodec<RegistryFriendlyByteBuf, RaidSetInviteExpiryTicksPayload> STREAM_CODEC = StreamCodec.of(
         (buf, p) -> {
             buf.writeBlockPos(p.controllerPos());
             buf.writeVarInt(p.inviteExpiryTicks());
         },
-        buf -> new RaidSetInviteExpiryPayload(buf.readBlockPos(), buf.readVarInt())
+        buf -> new RaidSetInviteExpiryTicksPayload(buf.readBlockPos(), buf.readVarInt())
     );
 
     @Override

@@ -31,13 +31,13 @@ import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineJoinRequestPayload;
 import net.ledok.arenas_ld.raid.packet.RaidInvitePlayerPayload;
 import net.ledok.arenas_ld.raid.packet.RaidJoinLobbyPayload;
-import net.ledok.arenas_ld.raid.packet.RaidKickPlayerPayload;
+import net.ledok.arenas_ld.raid.packet.RaidKickFromLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidLeaveLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidRequestJoinPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetHardcorePayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetTierPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetVisibilityPayload;
-import net.ledok.arenas_ld.raid.packet.RaidStartPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetLobbyHardcorePayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetLobbyTierPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetLobbyVisibilityPayload;
+import net.ledok.arenas_ld.raid.packet.RaidStartRunPayload;
 import net.ledok.arenas_ld.raid.packet.RaidToggleReadyPayload;
 import net.ledok.arenas_ld.raid.screen.RaidControllerData.RaidInstanceState;
 import net.ledok.arenas_ld.util.InstanceStatus;
@@ -866,7 +866,7 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
                         rebuildUi();
                         return;
                     }
-                    ClientPlayNetworking.send(new RaidStartPayload(menu.getBlockPos()));
+                    ClientPlayNetworking.send(new RaidStartRunPayload(menu.getBlockPos()));
                 });
                 queueBanner.child(startOrQueue);
 
@@ -981,7 +981,7 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
                 footerError = Component.translatable("gui.arenas_ld.raid_controller.error.all_online_required").getString();
                 return;
             }
-            ClientPlayNetworking.send(new RaidStartPayload(menu.getBlockPos()));
+            ClientPlayNetworking.send(new RaidStartRunPayload(menu.getBlockPos()));
         });
         start.active(canStart);
         startRunButton = start;
@@ -1029,7 +1029,7 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
         if (isOwner && !isLobbyOwner) {
             kickButton = dangerButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.kick"), b -> {
                 footerError = null;
-                ClientPlayNetworking.send(new RaidKickPlayerPayload(menu.getBlockPos(), member));
+                ClientPlayNetworking.send(new RaidKickFromLobbyPayload(menu.getBlockPos(), member));
             });
             kickButton.horizontalSizing(Sizing.fixed(54));
             row.child(kickButton);
@@ -1047,29 +1047,29 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
     private FlowLayout ownerTierControls(boolean isOwner) {
         ButtonComponent easy = segmentButton("EASY", tierColor(DifficultyTier.EASY), isOwner,
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.EASY,
-            b -> ClientPlayNetworking.send(new RaidSetTierPayload(menu.getBlockPos(), DifficultyTier.EASY)));
+            b -> ClientPlayNetworking.send(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.EASY)));
         ButtonComponent normal = segmentButton("NORMAL", tierColor(DifficultyTier.NORMAL), isOwner,
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NORMAL,
-            b -> ClientPlayNetworking.send(new RaidSetTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
+            b -> ClientPlayNetworking.send(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
         ButtonComponent hard = segmentButton("HARD", tierColor(DifficultyTier.HARD), isOwner,
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.HARD,
-            b -> ClientPlayNetworking.send(new RaidSetTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
+            b -> ClientPlayNetworking.send(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
         ButtonComponent nightmare = segmentButton("NIGHTMARE", tierColor(DifficultyTier.NIGHTMARE), isOwner,
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NIGHTMARE,
-            b -> ClientPlayNetworking.send(new RaidSetTierPayload(menu.getBlockPos(), DifficultyTier.NIGHTMARE)));
+            b -> ClientPlayNetworking.send(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NIGHTMARE)));
         return segmentedControl(easy, normal, hard, nightmare);
     }
 
     private FlowLayout ownerVisibilityControls(boolean isOwner) {
         ButtonComponent pub = segmentButton("PUBLIC", visibilityColor(LobbyVisibility.PUBLIC), isOwner,
             () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.PUBLIC,
-            b -> ClientPlayNetworking.send(new RaidSetVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PUBLIC)));
+            b -> ClientPlayNetworking.send(new RaidSetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PUBLIC)));
         ButtonComponent fr = segmentButton("FRIENDS", visibilityColor(LobbyVisibility.FRIENDS), isOwner,
             () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.FRIENDS,
-            b -> ClientPlayNetworking.send(new RaidSetVisibilityPayload(menu.getBlockPos(), LobbyVisibility.FRIENDS)));
+            b -> ClientPlayNetworking.send(new RaidSetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.FRIENDS)));
         ButtonComponent pr = segmentButton("PRIVATE", visibilityColor(LobbyVisibility.PRIVATE), isOwner,
             () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.PRIVATE,
-            b -> ClientPlayNetworking.send(new RaidSetVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PRIVATE)));
+            b -> ClientPlayNetworking.send(new RaidSetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PRIVATE)));
         return segmentedControl(pub, fr, pr);
     }
 
@@ -1091,7 +1091,7 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
             b -> {
                 footerError = null;
                 boolean currentHardcore = ownLobby.map(Lobby::hardcoreEnabled).orElse(false);
-                ClientPlayNetworking.send(new RaidSetHardcorePayload(menu.getBlockPos(), !currentHardcore));
+                ClientPlayNetworking.send(new RaidSetLobbyHardcorePayload(menu.getBlockPos(), !currentHardcore));
             });
         row.child(toggle);
         return row;

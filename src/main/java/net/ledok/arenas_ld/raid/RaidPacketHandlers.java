@@ -9,28 +9,28 @@ import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptJoinRequestPayload;
-import net.ledok.arenas_ld.raid.packet.RaidAdminSetMaxPartySizePayload;
-import net.ledok.arenas_ld.raid.packet.RaidAdminSetRespawnTimePayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetMaxPartySizePayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetRespawnTimeTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidMoveInstancePayload;
 import net.ledok.arenas_ld.raid.packet.RaidRemoveInstancePayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetCloseTimerPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetCooldownPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetCloseTimerSecondsPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetCooldownTicksPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetDeathPenaltyPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetDeathTimePenaltyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetLootViaInboxPayload;
 import net.ledok.arenas_ld.raid.packet.RaidCreateLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineJoinRequestPayload;
 import net.ledok.arenas_ld.raid.packet.RaidInvitePlayerPayload;
 import net.ledok.arenas_ld.raid.packet.RaidJoinLobbyPayload;
-import net.ledok.arenas_ld.raid.packet.RaidKickPlayerPayload;
+import net.ledok.arenas_ld.raid.packet.RaidKickFromLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidLeaveLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidRequestJoinPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetHardcorePayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetTierPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetVisibilityPayload;
-import net.ledok.arenas_ld.raid.packet.RaidStartPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetLobbyHardcorePayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetLobbyTierPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetLobbyVisibilityPayload;
+import net.ledok.arenas_ld.raid.packet.RaidStartRunPayload;
 import net.ledok.arenas_ld.raid.packet.RaidToggleReadyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload;
 import net.ledok.arenas_ld.raid.run.RaidDifficulty;
@@ -86,7 +86,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Start Raid ────────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidStartPayload.TYPE, (payload, context) ->
+        ServerPlayNetworking.registerGlobalReceiver(RaidStartRunPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (isPlayerBusy(player)) {
@@ -140,7 +140,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Kick Player ───────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidKickPlayerPayload.TYPE, (payload, context) ->
+        ServerPlayNetworking.registerGlobalReceiver(RaidKickFromLobbyPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -151,7 +151,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Set Tier ──────────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetTierPayload.TYPE, (payload, context) ->
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetLobbyTierPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -162,7 +162,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Set Hardcore ──────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetHardcorePayload.TYPE, (payload, context) ->
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetLobbyHardcorePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -173,7 +173,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Set Visibility ────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetVisibilityPayload.TYPE, (payload, context) ->
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetLobbyVisibilityPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -247,11 +247,11 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Respawn Time ───────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidAdminSetRespawnTimePayload.TYPE, (payload, context) ->
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetRespawnTimeTicksPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.blockPos());
+                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
                 if (controller == null) return;
                 controller.setRespawnTimeTicks(payload.ticks());
                 broadcastRaidControllerSnapshot(player, controller);
@@ -259,11 +259,11 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Max Party Size ─────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidAdminSetMaxPartySizePayload.TYPE, (payload, context) ->
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetMaxPartySizePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.blockPos());
+                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
                 if (controller == null) return;
                 controller.setMaxPartySize(payload.size());
                 broadcastRaidControllerSnapshot(player, controller);
@@ -297,7 +297,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Cooldown ───────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetCooldownPayload.TYPE, (payload, context) ->
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetCooldownTicksPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -309,7 +309,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Close Timer ────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetCloseTimerPayload.TYPE, (payload, context) ->
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetCloseTimerSecondsPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -321,7 +321,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Invite Expiry ──────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetInviteExpiryPayload.TYPE, (payload, context) ->
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetInviteExpiryTicksPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -345,7 +345,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Death Time Penalty ─────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetDeathPenaltyPayload.TYPE, (payload, context) ->
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetDeathTimePenaltyPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;

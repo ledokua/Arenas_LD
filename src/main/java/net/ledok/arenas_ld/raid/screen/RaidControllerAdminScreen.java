@@ -17,14 +17,14 @@ import io.wispforest.owo.ui.core.Surface;
 import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
-import net.ledok.arenas_ld.raid.packet.RaidAdminSetMaxPartySizePayload;
-import net.ledok.arenas_ld.raid.packet.RaidAdminSetRespawnTimePayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetMaxPartySizePayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetRespawnTimeTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidMoveInstancePayload;
 import net.ledok.arenas_ld.raid.packet.RaidRemoveInstancePayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetCloseTimerPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetCooldownPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetDeathPenaltyPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetCloseTimerSecondsPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetCooldownTicksPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryTicksPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetDeathTimePenaltyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetLootViaInboxPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
 import net.ledok.arenas_ld.raid.run.RaidTierConfig;
@@ -1148,12 +1148,12 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         }
 
         footerError = null;
-        ClientPlayNetworking.send(new RaidSetCooldownPayload(menu.getBlockPos(), cooldown * 20));
-        ClientPlayNetworking.send(new RaidSetCloseTimerPayload(menu.getBlockPos(), close));
-        ClientPlayNetworking.send(new RaidAdminSetMaxPartySizePayload(menu.getBlockPos(), maxParty));
-        ClientPlayNetworking.send(new RaidSetInviteExpiryPayload(menu.getBlockPos(), invite * 20));
-        ClientPlayNetworking.send(new RaidAdminSetRespawnTimePayload(menu.getBlockPos(), respawn));
-        ClientPlayNetworking.send(new RaidSetDeathPenaltyPayload(menu.getBlockPos(), death * 20));
+        ClientPlayNetworking.send(new RaidSetCooldownTicksPayload(menu.getBlockPos(), cooldown * 20));
+        ClientPlayNetworking.send(new RaidSetCloseTimerSecondsPayload(menu.getBlockPos(), close));
+        ClientPlayNetworking.send(new RaidSetMaxPartySizePayload(menu.getBlockPos(), maxParty));
+        ClientPlayNetworking.send(new RaidSetInviteExpiryTicksPayload(menu.getBlockPos(), invite * 20));
+        ClientPlayNetworking.send(new RaidSetRespawnTimeTicksPayload(menu.getBlockPos(), respawn));
+        ClientPlayNetworking.send(new RaidSetDeathTimePenaltyPayload(menu.getBlockPos(), death * 20));
     }
 
     private void applyTier(DifficultyTier tier) {

@@ -7,17 +7,17 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-public record RaidSetCloseTimerPayload(BlockPos controllerPos, int closeTimerSeconds) implements CustomPacketPayload {
-    public static final Type<RaidSetCloseTimerPayload> TYPE = new Type<>(
+public record RaidSetCloseTimerSecondsPayload(BlockPos controllerPos, int closeTimerSeconds) implements CustomPacketPayload {
+    public static final Type<RaidSetCloseTimerSecondsPayload> TYPE = new Type<>(
         ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "raid_admin_set_close_timer")
     );
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, RaidSetCloseTimerPayload> STREAM_CODEC = StreamCodec.of(
+    public static final StreamCodec<RegistryFriendlyByteBuf, RaidSetCloseTimerSecondsPayload> STREAM_CODEC = StreamCodec.of(
         (buf, p) -> {
             buf.writeBlockPos(p.controllerPos());
             buf.writeVarInt(p.closeTimerSeconds());
         },
-        buf -> new RaidSetCloseTimerPayload(buf.readBlockPos(), buf.readVarInt())
+        buf -> new RaidSetCloseTimerSecondsPayload(buf.readBlockPos(), buf.readVarInt())
     );
 
     @Override

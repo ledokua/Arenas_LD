@@ -9,15 +9,15 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-public record RaidSetVisibilityPayload(BlockPos blockPos, LobbyVisibility visibility) implements CustomPacketPayload {
-    public static final Type<RaidSetVisibilityPayload> TYPE =
+public record RaidSetLobbyVisibilityPayload(BlockPos blockPos, LobbyVisibility visibility) implements CustomPacketPayload {
+    public static final Type<RaidSetLobbyVisibilityPayload> TYPE =
         new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "raid_set_visibility"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, RaidSetVisibilityPayload> STREAM_CODEC =
+    public static final StreamCodec<RegistryFriendlyByteBuf, RaidSetLobbyVisibilityPayload> STREAM_CODEC =
         StreamCodec.composite(
-            BlockPos.STREAM_CODEC, RaidSetVisibilityPayload::blockPos,
-            ByteBufCodecs.STRING_UTF8.map(LobbyVisibility::valueOf, Enum::name), RaidSetVisibilityPayload::visibility,
-            RaidSetVisibilityPayload::new
+            BlockPos.STREAM_CODEC, RaidSetLobbyVisibilityPayload::blockPos,
+            ByteBufCodecs.STRING_UTF8.map(LobbyVisibility::valueOf, Enum::name), RaidSetLobbyVisibilityPayload::visibility,
+            RaidSetLobbyVisibilityPayload::new
         );
 
     @Override

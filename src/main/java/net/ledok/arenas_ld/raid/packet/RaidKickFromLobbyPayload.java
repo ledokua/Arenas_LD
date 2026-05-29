@@ -10,15 +10,15 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
 
-public record RaidKickPlayerPayload(BlockPos blockPos, UUID targetUuid) implements CustomPacketPayload {
-    public static final Type<RaidKickPlayerPayload> TYPE =
+public record RaidKickFromLobbyPayload(BlockPos blockPos, UUID targetUuid) implements CustomPacketPayload {
+    public static final Type<RaidKickFromLobbyPayload> TYPE =
         new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "raid_kick_player"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, RaidKickPlayerPayload> STREAM_CODEC =
+    public static final StreamCodec<RegistryFriendlyByteBuf, RaidKickFromLobbyPayload> STREAM_CODEC =
         StreamCodec.composite(
-            BlockPos.STREAM_CODEC, RaidKickPlayerPayload::blockPos,
-            ByteBufCodecs.STRING_UTF8.map(UUID::fromString, UUID::toString), RaidKickPlayerPayload::targetUuid,
-            RaidKickPlayerPayload::new
+            BlockPos.STREAM_CODEC, RaidKickFromLobbyPayload::blockPos,
+            ByteBufCodecs.STRING_UTF8.map(UUID::fromString, UUID::toString), RaidKickFromLobbyPayload::targetUuid,
+            RaidKickFromLobbyPayload::new
         );
 
     @Override

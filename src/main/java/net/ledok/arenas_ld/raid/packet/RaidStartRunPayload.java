@@ -7,14 +7,14 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-public record RaidStartPayload(BlockPos blockPos) implements CustomPacketPayload {
-    public static final Type<RaidStartPayload> TYPE =
+public record RaidStartRunPayload(BlockPos blockPos) implements CustomPacketPayload {
+    public static final Type<RaidStartRunPayload> TYPE =
         new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "raid_start"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, RaidStartPayload> STREAM_CODEC =
+    public static final StreamCodec<RegistryFriendlyByteBuf, RaidStartRunPayload> STREAM_CODEC =
         StreamCodec.composite(
-            BlockPos.STREAM_CODEC, RaidStartPayload::blockPos,
-            RaidStartPayload::new
+            BlockPos.STREAM_CODEC, RaidStartRunPayload::blockPos,
+            RaidStartRunPayload::new
         );
 
     @Override

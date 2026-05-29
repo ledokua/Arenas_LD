@@ -8,15 +8,15 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-public record RaidAdminSetMaxPartySizePayload(BlockPos blockPos, int size) implements CustomPacketPayload {
-    public static final Type<RaidAdminSetMaxPartySizePayload> TYPE =
+public record RaidSetMaxPartySizePayload(BlockPos controllerPos, int size) implements CustomPacketPayload {
+    public static final Type<RaidSetMaxPartySizePayload> TYPE =
         new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "raid_admin_set_max_party_size"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, RaidAdminSetMaxPartySizePayload> STREAM_CODEC =
+    public static final StreamCodec<RegistryFriendlyByteBuf, RaidSetMaxPartySizePayload> STREAM_CODEC =
         StreamCodec.composite(
-            BlockPos.STREAM_CODEC, RaidAdminSetMaxPartySizePayload::blockPos,
-            ByteBufCodecs.VAR_INT, RaidAdminSetMaxPartySizePayload::size,
-            RaidAdminSetMaxPartySizePayload::new
+            BlockPos.STREAM_CODEC, RaidSetMaxPartySizePayload::controllerPos,
+            ByteBufCodecs.VAR_INT, RaidSetMaxPartySizePayload::size,
+            RaidSetMaxPartySizePayload::new
         );
 
     @Override
