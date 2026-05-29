@@ -13,21 +13,15 @@ import java.util.Optional;
 public record LinkerModeDataComponent(
         int mode,
         Optional<BlockPos> mainSpawnerPos,
-        Optional<ResourceKey<Level>> mainSpawnerDimension,
-        int respawnPointCount
+        Optional<ResourceKey<Level>> mainSpawnerDimension
 ) {
-    public static final LinkerModeDataComponent DEFAULT = new LinkerModeDataComponent(0, Optional.empty(), Optional.empty(), -1);
-
-    public LinkerModeDataComponent(int mode, Optional<BlockPos> mainSpawnerPos, Optional<ResourceKey<Level>> mainSpawnerDimension) {
-        this(mode, mainSpawnerPos, mainSpawnerDimension, -1);
-    }
+    public static final LinkerModeDataComponent DEFAULT = new LinkerModeDataComponent(0, Optional.empty(), Optional.empty());
 
     public static final Codec<LinkerModeDataComponent> CODEC = RecordCodecBuilder.create(instance ->
             instance.group(
                     Codec.INT.fieldOf("mode").forGetter(LinkerModeDataComponent::mode),
                     BlockPos.CODEC.optionalFieldOf("main_spawner_pos").forGetter(LinkerModeDataComponent::mainSpawnerPos),
-                    ResourceKey.codec(net.minecraft.core.registries.Registries.DIMENSION).optionalFieldOf("main_spawner_dimension").forGetter(LinkerModeDataComponent::mainSpawnerDimension),
-                    Codec.INT.optionalFieldOf("respawn_point_count", -1).forGetter(LinkerModeDataComponent::respawnPointCount)
+                    ResourceKey.codec(net.minecraft.core.registries.Registries.DIMENSION).optionalFieldOf("main_spawner_dimension").forGetter(LinkerModeDataComponent::mainSpawnerDimension)
             ).apply(instance, LinkerModeDataComponent::new)
     );
 
@@ -38,8 +32,6 @@ public record LinkerModeDataComponent(
             LinkerModeDataComponent::mainSpawnerPos,
             ByteBufCodecs.optional(ResourceKey.streamCodec(net.minecraft.core.registries.Registries.DIMENSION)),
             LinkerModeDataComponent::mainSpawnerDimension,
-            ByteBufCodecs.VAR_INT,
-            LinkerModeDataComponent::respawnPointCount,
             LinkerModeDataComponent::new
     );
 }

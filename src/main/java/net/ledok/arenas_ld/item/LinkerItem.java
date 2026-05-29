@@ -283,11 +283,11 @@ public class LinkerItem extends Item {
 
     private static void selectSource(ItemStack stack, BlockPos pos, ResourceKey<Level> dimension, LinkerModeDataComponent modeData) {
         stack.set(DataComponentRegistry.LINKER_MODE_DATA,
-                new LinkerModeDataComponent(Math.floorMod(modeData.mode(), Mode.values().length), Optional.of(pos), Optional.of(dimension), -1));
+                new LinkerModeDataComponent(Math.floorMod(modeData.mode(), Mode.values().length), Optional.of(pos), Optional.of(dimension)));
     }
 
     private static void clearSelection(ItemStack stack, LinkerModeDataComponent modeData) {
         stack.set(DataComponentRegistry.LINKER_MODE_DATA,
-                new LinkerModeDataComponent(Math.floorMod(modeData.mode(), Mode.values().length), Optional.empty(), Optional.empty(), -1));
+                new LinkerModeDataComponent(Math.floorMod(modeData.mode(), Mode.values().length), Optional.empty(), Optional.empty()));
     }
 }
