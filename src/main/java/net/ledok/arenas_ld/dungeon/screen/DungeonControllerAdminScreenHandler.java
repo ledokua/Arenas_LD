@@ -79,8 +79,11 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         try {
             server.reloadableRegistries().lookup()
                 .lookup(net.minecraft.core.registries.Registries.LOOT_TABLE)
-                .ifPresent(lookup -> lookup.listElementIds()
-                    .forEach(key -> ids.add(key.location().toString())));
+                .ifPresent(getter -> {
+                    if (getter instanceof net.minecraft.core.HolderLookup.RegistryLookup<?> reg) {
+                        reg.listElementIds().forEach(key -> ids.add(key.location().toString()));
+                    }
+                });
         } catch (Exception ignored) {}
         ids.sort(null);
         return ids;
