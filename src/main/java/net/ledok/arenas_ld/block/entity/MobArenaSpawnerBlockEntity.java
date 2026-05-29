@@ -31,7 +31,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
@@ -809,12 +808,7 @@ public class MobArenaSpawnerBlockEntity extends BlockEntity implements ExtendedS
                 }
             }
             
-            EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.HEAD, mobData.equipment.head);
-            EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.CHEST, mobData.equipment.chest);
-            EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.LEGS, mobData.equipment.legs);
-            EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.FEET, mobData.equipment.feet);
-            EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.MAINHAND, mobData.equipment.mainHand);
-            EntityEquipmentHelper.applyEquipment(livingEntity, EquipmentSlot.OFFHAND, mobData.equipment.offHand, mobData.equipment.dropChance);
+            EntityEquipmentHelper.applyAllEquipment(livingEntity, mobData.equipment);
 
             livingEntity.heal(livingEntity.getMaxHealth());
             String teamName = this.groupId == null || this.groupId.isBlank() ? "arenas_ld" : this.groupId;

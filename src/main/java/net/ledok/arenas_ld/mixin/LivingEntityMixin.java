@@ -3,6 +3,7 @@ package net.ledok.arenas_ld.mixin;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.run.DungeonRun;
+import net.ledok.arenas_ld.util.EntityEquipmentHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
@@ -164,6 +165,18 @@ public abstract class LivingEntityMixin {
                     ci.cancel();
                 }
             }
+        }
+    }
+
+    /**
+     * Suppress natural loot-table drops (bones, arrows, rotten flesh, …) for arena mobs whose
+     * "Enable drops" toggle is off. Configured equipment never drops regardless (its drop chance
+     * is forced to 0 at spawn), so this only gates the mob's own loot.
+     */
+    @Inject(method = "dropFromLootTable", at = @At("HEAD"), cancellable = true)
+    private void arenasLd$suppressNaturalLoot(DamageSource damageSource, boolean hitByPlayer, CallbackInfo ci) {
+        if (((LivingEntity) (Object) this).getTags().contains(EntityEquipmentHelper.NO_NATURAL_LOOT_TAG)) {
+            ci.cancel();
         }
     }
 

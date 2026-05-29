@@ -21,14 +21,21 @@ public final class EntityEquipmentHelper {
     private static final String MAX_HEALTH_ID = "minecraft:generic.max_health";
     private static final String ATTACK_DAMAGE_ID = "minecraft:generic.attack_damage";
 
+    /**
+     * Scoreboard tag marking a spawned mob whose natural loot-table drops (bones, arrows,
+     * rotten flesh, …) are suppressed. Read by {@code LivingEntityMixin#dropFromLootTable}.
+     */
+    public static final String NO_NATURAL_LOOT_TAG = "arenas_ld_no_loot";
+
     private EntityEquipmentHelper() {
     }
 
+    /**
+     * Equip {@code itemId} in {@code slot}. Configured equipment is never dropped on death — its
+     * drop chance is forced to 0. Whether the mob drops its natural loot is controlled separately
+     * via {@link #setNaturalLootEnabled}.
+     */
     public static void applyEquipment(LivingEntity entity, EquipmentSlot slot, String itemId) {
-        applyEquipment(entity, slot, itemId, false);
-    }
-
-    public static void applyEquipment(LivingEntity entity, EquipmentSlot slot, String itemId, boolean dropChance) {
         if (itemId == null || itemId.isEmpty()) {
             return;
         }
@@ -42,21 +49,37 @@ public final class EntityEquipmentHelper {
         }
         entity.setItemSlot(slot, new ItemStack(item));
         if (entity instanceof Mob mob) {
-            mob.setDropChance(slot, dropChance ? 1.0F : 0.0F);
+            mob.setDropChance(slot, 0.0F);
         }
     }
 
-    /** Apply every equipment slot from {@code equip} to {@code entity}, honouring its drop chance. */
+    /**
+     * Apply every equipment slot from {@code equip} to {@code entity}. Equipment never drops; the
+     * {@code dropChance} flag instead toggles the mob's natural loot-table drops.
+     */
     public static void applyAllEquipment(LivingEntity entity, EquipmentData equip) {
         if (equip == null) {
             return;
         }
-        applyEquipment(entity, EquipmentSlot.HEAD, equip.head, equip.dropChance);
-        applyEquipment(entity, EquipmentSlot.CHEST, equip.chest, equip.dropChance);
-        applyEquipment(entity, EquipmentSlot.LEGS, equip.legs, equip.dropChance);
-        applyEquipment(entity, EquipmentSlot.FEET, equip.feet, equip.dropChance);
-        applyEquipment(entity, EquipmentSlot.MAINHAND, equip.mainHand, equip.dropChance);
-        applyEquipment(entity, EquipmentSlot.OFFHAND, equip.offHand, equip.dropChance);
+        applyEquipment(entity, EquipmentSlot.HEAD, equip.head);
+        applyEquipment(entity, EquipmentSlot.CHEST, equip.chest);
+        applyEquipment(entity, EquipmentSlot.LEGS, equip.legs);
+        applyEquipment(entity, EquipmentSlot.FEET, equip.feet);
+        applyEquipment(entity, EquipmentSlot.MAINHAND, equip.mainHand);
+        applyEquipment(entity, EquipmentSlot.OFFHAND, equip.offHand);
+        setNaturalLootEnabled(entity, equip.dropChance);
+    }
+
+    /**
+     * Enable or suppress the mob's natural loot-table drops. When disabled, a marker tag is added
+     * that {@code LivingEntityMixin} uses to cancel the loot-table roll on death.
+     */
+    public static void setNaturalLootEnabled(LivingEntity entity, boolean enabled) {
+        if (enabled) {
+            entity.removeTag(NO_NATURAL_LOOT_TAG);
+        } else {
+            entity.addTag(NO_NATURAL_LOOT_TAG);
+        }
     }
 
     /**

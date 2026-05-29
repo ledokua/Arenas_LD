@@ -26,7 +26,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -110,12 +109,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
             EntityEquipmentHelper.applyScaledAttributes(
                 living, this.entityDefinition.attributes(), world.registryAccess(), healthMultiplier, 1.0, 1.0);
 
-            EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.HEAD, entityDefinition.equipment().head, false);
-            EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.CHEST, entityDefinition.equipment().chest, false);
-            EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.LEGS, entityDefinition.equipment().legs, false);
-            EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.FEET, entityDefinition.equipment().feet, false);
-            EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.MAINHAND, entityDefinition.equipment().mainHand, false);
-            EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.OFFHAND, entityDefinition.equipment().offHand, false);
+            EntityEquipmentHelper.applyAllEquipment(living, entityDefinition.equipment());
 
             living.heal(living.getMaxHealth());
 
