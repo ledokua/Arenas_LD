@@ -43,10 +43,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.ai.attributes.Attribute;
-import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
@@ -347,31 +344,9 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             double damageMult = tierCfg.damageMultiplier();
             double perPlayerMult = Math.pow(1.0 + tierCfg.hpScalePerPlayer(), Math.max(0, players.size() - 1));
 
-            for (AttributeData attr : entityDefinition.attributes()) {
-                ResourceLocation attrLocation = ResourceLocation.tryParse(attr.id());
-                if (attrLocation == null) continue;
-                var attributeRegistry = world.registryAccess().registryOrThrow(Registries.ATTRIBUTE);
-                ResourceKey<Attribute> key = ResourceKey.create(Registries.ATTRIBUTE, attrLocation);
-                attributeRegistry.getHolder(key).ifPresent(holder -> {
-                    AttributeInstance instance = livingBoss.getAttribute(holder);
-                    if (instance == null) return;
-                    double value = attr.value();
-                    if ("minecraft:generic.max_health".equals(attr.id())) {
-                        value = value * healthMult * perPlayerMult;
-                    } else if ("minecraft:generic.attack_damage".equals(attr.id())) {
-                        value = value * damageMult;
-                    }
-                    instance.setBaseValue(value);
-                });
-            }
-
-            EquipmentData equip = entityDefinition.equipment();
-            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.HEAD, equip.head, equip.dropChance);
-            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.CHEST, equip.chest, equip.dropChance);
-            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.LEGS, equip.legs, equip.dropChance);
-            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.FEET, equip.feet, equip.dropChance);
-            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.MAINHAND, equip.mainHand, equip.dropChance);
-            EntityEquipmentHelper.applyEquipment(livingBoss, EquipmentSlot.OFFHAND, equip.offHand, equip.dropChance);
+            EntityEquipmentHelper.applyScaledAttributes(
+                livingBoss, entityDefinition.attributes(), world.registryAccess(), healthMult, damageMult, perPlayerMult);
+            EntityEquipmentHelper.applyAllEquipment(livingBoss, entityDefinition.equipment());
 
             livingBoss.heal(livingBoss.getMaxHealth());
             String teamName = this.groupId == null || this.groupId.isBlank() ? "arenas_ld" : this.groupId;
@@ -384,19 +359,8 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
             scoreboard.addPlayerToTeam(livingBoss.getScoreboardName(), team);
         }
 
-        List<BlockPos> spawnOffsets = entityDefinition.spawnOffsets();
-        double bossX, bossY, bossZ;
-        if (spawnOffsets.isEmpty()) {
-            bossX = worldPosition.getX() + 0.5;
-            bossY = worldPosition.getY() + 1;
-            bossZ = worldPosition.getZ() + 0.5;
-        } else {
-            BlockPos spawnOffset = spawnOffsets.get(0);
-            bossX = worldPosition.getX() + spawnOffset.getX() + 0.5;
-            bossY = worldPosition.getY() + spawnOffset.getY();
-            bossZ = worldPosition.getZ() + spawnOffset.getZ() + 0.5;
-        }
-        boss.moveTo(bossX, bossY, bossZ, 0, 0);
+        Vec3 bossSpawnPos = EntityEquipmentHelper.resolveBossSpawnPos(worldPosition, entityDefinition.spawnOffsets());
+        boss.moveTo(bossSpawnPos.x, bossSpawnPos.y, bossSpawnPos.z, 0, 0);
         world.addFreshEntity(boss);
 
         ServerLevel entranceWorld = world.getServer().getLevel(entranceDimension);

@@ -14,15 +14,12 @@ import net.ledok.arenas_ld.util.EquipmentData;
 import net.ledok.arenas_ld.util.EquipmentProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -31,8 +28,6 @@ import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.ai.attributes.Attribute;
-import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -112,22 +107,8 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
                 continue;
             }
 
-            for (AttributeData attr : this.entityDefinition.attributes()) {
-                ResourceLocation attrLoc = ResourceLocation.tryParse(attr.id());
-                if (attrLoc == null) continue;
-                var attrRegistry = world.registryAccess().registryOrThrow(Registries.ATTRIBUTE);
-                ResourceKey<Attribute> key = ResourceKey.create(Registries.ATTRIBUTE, attrLoc);
-                attrRegistry.getHolder(key).ifPresent(holder -> {
-                    AttributeInstance inst = living.getAttribute(holder);
-                    if (inst != null) {
-                        double value = attr.value();
-                        if ("minecraft:generic.max_health".equals(attr.id())) {
-                            value *= healthMultiplier;
-                        }
-                        inst.setBaseValue(value);
-                    }
-                });
-            }
+            EntityEquipmentHelper.applyScaledAttributes(
+                living, this.entityDefinition.attributes(), world.registryAccess(), healthMultiplier, 1.0, 1.0);
 
             EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.HEAD, entityDefinition.equipment().head, false);
             EntityEquipmentHelper.applyEquipment(living, EquipmentSlot.CHEST, entityDefinition.equipment().chest, false);
