@@ -1,19 +1,42 @@
 package net.ledok.arenas_ld.raid.run;
 
+import com.mojang.serialization.Codec;
+import io.netty.buffer.ByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 
+/**
+ * Difficulty tiers for a raid. Each tier's effects (HP/damage multipliers, loot, time, etc.)
+ * are defined in {@link RaidTierConfig} on the controller, not on the enum itself.
+ *
+ * <p>Both {@link #CODEC} and {@link #STREAM_CODEC} deserialize unknown strings to {@link #NORMAL}
+ * rather than throwing — this protects against renaming/removing tiers in the future. Mirrors
+ * {@link DifficultyTier}.
+ */
 public enum RaidDifficulty {
-    EASY(0.75, 0.75),
-    NORMAL(1.0, 1.0),
-    HARD(1.5, 1.25),
-    LEGENDARY(2.0, 1.5);
+    EASY,
+    NORMAL,
+    HARD,
+    LEGENDARY;
 
-    public final double healthMult;
-    public final double damageMult;
+    public static final Codec<RaidDifficulty> CODEC = Codec.STRING.xmap(
+        RaidDifficulty::fromStringOrDefault,
+        Enum::name
+    );
 
-    RaidDifficulty(double healthMult, double damageMult) {
-        this.healthMult = healthMult;
-        this.damageMult = damageMult;
+    public static final StreamCodec<ByteBuf, RaidDifficulty> STREAM_CODEC =
+        ByteBufCodecs.STRING_UTF8.map(
+            RaidDifficulty::fromStringOrDefault,
+            Enum::name
+        );
+
+    private static RaidDifficulty fromStringOrDefault(String name) {
+        try {
+            return RaidDifficulty.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            return NORMAL;
+        }
     }
 
     public String translationKey() {
