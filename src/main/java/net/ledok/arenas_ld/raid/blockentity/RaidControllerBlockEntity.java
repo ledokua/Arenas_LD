@@ -9,6 +9,7 @@ import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
+import net.ledok.arenas_ld.raid.run.RaidRunLifecycle;
 import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.raid.screen.RaidControllerData;
@@ -290,6 +291,22 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
         be.tickCooldowns(serverLevel);
         be.tickLobbies(serverLevel);
+        be.tickActiveRuns(serverLevel);
+    }
+
+    /**
+     * Drive every active raid run through {@link RaidRunLifecycle}. Each run is ticked in its
+     * SPAWNER's level (which may differ from the controller's). Iterates a snapshot because the
+     * lifecycle mutates {@code activeRuns} (via {@link #onRaidEnded}) during finalize.
+     */
+    private void tickActiveRuns(ServerLevel controllerLevel) {
+        if (activeRuns.isEmpty()) return;
+        var server = controllerLevel.getServer();
+        for (RaidRun run : new ArrayList<>(activeRuns.values())) {
+            ServerLevel spawnerLevel = server.getLevel(run.spawnerDimension());
+            if (spawnerLevel == null) continue;
+            RaidRunLifecycle.tick(spawnerLevel, this, run);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1083,23 +1100,26 @@ public class RaidControllerBlockEntity extends BlockEntity
 
         RaidDifficulty difficulty = RaidDifficulty.from(lobby.selectedTier());
 
-        // Register the run BEFORE startBattle so the spawner can locate it
-        // (via RaidRunLifecycle.findRun) while wiring its initial state.
+        // Register the run BEFORE startBattle so the lifecycle can wire its initial state.
+        // spawnerDimension is the SPAWNER's level (which the controller's tick loop uses to
+        // resolve where to tick the run); it may differ from the controller's dimension.
         RaidTierConfig resolvedTier = tierConfigs.getOrDefault(
             lobby.selectedTier(), RaidTierConfig.defaultFor(lobby.selectedTier()));
-        activeRuns.put(instance.spawnerPos(), new RaidRun(
+        RaidRun run = new RaidRun(
             lobby.lobbyId(),
             lobby.ownerName(),
             lobby.selectedTier(),
             resolvedTier,
             lobby.hardcoreEnabled(),
             instance.spawnerPos(),
-            serverLevel.dimension(),
+            spawnerLevel.dimension(),
             serverLevel.getGameTime()
-        ));
+        );
+        activeRuns.put(instance.spawnerPos(), run);
 
-        spawner.startBattle(
+        RaidRunLifecycle.startBattle(
             spawnerLevel,
+            run,
             players,
             difficulty,
             lobby.hardcoreEnabled()
