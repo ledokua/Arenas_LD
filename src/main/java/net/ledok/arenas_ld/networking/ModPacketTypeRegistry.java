@@ -43,7 +43,6 @@ import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptJoinRequestPayload;
-import net.ledok.arenas_ld.raid.packet.RaidAddInstancePayload;
 import net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload;
 import net.ledok.arenas_ld.raid.packet.RaidAdminSetMaxPartySizePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAdminSetRespawnTimePayload;
@@ -54,6 +53,7 @@ import net.ledok.arenas_ld.raid.packet.RaidSetCooldownPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetDeathPenaltyPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetLootViaInboxPayload;
 import net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload;
 import net.ledok.arenas_ld.raid.packet.RaidCreateLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
@@ -85,17 +85,7 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(CycleConfiguratorModePayload.TYPE, CycleConfiguratorModePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(MobArenaControllerActionPayload.TYPE, MobArenaControllerActionPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RaidControllerActionPayload.TYPE, RaidControllerActionPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(JoinRaidLobbyPayload.TYPE, JoinRaidLobbyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RespondRaidLobbyInvitePayload.TYPE, RespondRaidLobbyInvitePayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(CreateRaidLobbyPayload.TYPE, CreateRaidLobbyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(DisbandRaidLobbyPayload.TYPE, DisbandRaidLobbyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(InviteRaidLobbyPlayerPayload.TYPE, InviteRaidLobbyPlayerPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RequestRaidControllerInfoPayload.TYPE, RequestRaidControllerInfoPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RequestMobArenaControllerInfoPayload.TYPE, RequestMobArenaControllerInfoPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateRaidControllerSettingsPayload.TYPE, UpdateRaidControllerSettingsPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateRaidLobbyVisibilityPayload.TYPE, UpdateRaidLobbyVisibilityPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdateRaidControllerAdminSettingsPayload.TYPE, UpdateRaidControllerAdminSettingsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobArenaControllerSettingsPayload.TYPE, UpdateMobArenaControllerSettingsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomRemoveSpawnerPayload.TYPE, RoomRemoveSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomClearSpawnersPayload.TYPE, RoomClearSpawnersPayload.STREAM_CODEC);
@@ -150,7 +140,6 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(RaidDeclineJoinRequestPayload.TYPE, RaidDeclineJoinRequestPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidAdminSetRespawnTimePayload.TYPE, RaidAdminSetRespawnTimePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidAdminSetMaxPartySizePayload.TYPE, RaidAdminSetMaxPartySizePayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RaidAddInstancePayload.TYPE, RaidAddInstancePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidRemoveInstancePayload.TYPE, RaidRemoveInstancePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidMoveInstancePayload.TYPE, RaidMoveInstancePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidSetCooldownPayload.TYPE, RaidSetCooldownPayload.STREAM_CODEC);
@@ -158,6 +147,7 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(RaidSetInviteExpiryPayload.TYPE, RaidSetInviteExpiryPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidSetTierConfigPayload.TYPE, RaidSetTierConfigPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidSetDeathPenaltyPayload.TYPE, RaidSetDeathPenaltyPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RaidSetLootViaInboxPayload.TYPE, RaidSetLootViaInboxPayload.STREAM_CODEC);
     }
 
     static void registerS2CTypes() {

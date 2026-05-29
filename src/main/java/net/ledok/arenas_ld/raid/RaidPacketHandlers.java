@@ -9,7 +9,6 @@ import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAcceptJoinRequestPayload;
-import net.ledok.arenas_ld.raid.packet.RaidAddInstancePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAdminSetMaxPartySizePayload;
 import net.ledok.arenas_ld.raid.packet.RaidAdminSetRespawnTimePayload;
 import net.ledok.arenas_ld.raid.packet.RaidMoveInstancePayload;
@@ -19,6 +18,7 @@ import net.ledok.arenas_ld.raid.packet.RaidSetCooldownPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetDeathPenaltyPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetLootViaInboxPayload;
 import net.ledok.arenas_ld.raid.packet.RaidCreateLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineJoinRequestPayload;
@@ -32,7 +32,6 @@ import net.ledok.arenas_ld.raid.packet.RaidSetTierPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetVisibilityPayload;
 import net.ledok.arenas_ld.raid.packet.RaidStartPayload;
 import net.ledok.arenas_ld.raid.packet.RaidToggleReadyPayload;
-import net.ledok.arenas_ld.raid.screen.RaidControllerData;
 import net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload;
 import net.ledok.arenas_ld.raid.run.RaidDifficulty;
 import net.ledok.arenas_ld.raid.run.RaidLeaderboardEntry;
@@ -49,7 +48,6 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import net.ledok.arenas_ld.networking.ModPackets;
@@ -272,20 +270,6 @@ public final class RaidPacketHandlers {
             })
         );
 
-        // ── Admin: Add Instance ───────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidAddInstancePayload.TYPE, (payload, context) ->
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
-                if (controller == null) return;
-                ResourceKey<Level> dim = parseDim(payload.dimension());
-                if (dim == null) return;
-                controller.addInstance(payload.instancePos(), dim);
-                broadcastRaidControllerSnapshot(player, controller);
-            })
-        );
-
         // ── Admin: Remove Instance ────────────────────────────────────────────
         ServerPlayNetworking.registerGlobalReceiver(RaidRemoveInstancePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
@@ -372,157 +356,14 @@ public final class RaidPacketHandlers {
             })
         );
 
-        // ── Legacy: Request Raid Controller Info (used by RaidControllerScreen) ─
-        ServerPlayNetworking.registerGlobalReceiver(RequestRaidControllerInfoPayload.TYPE, (payload, context) ->
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                RaidControllerBlockEntity controller = findController(player, payload.pos());
-                if (controller == null) return;
-                RaidControllerInfoPayload info = buildRaidControllerInfoPayload(player, controller, payload.leaderboardDifficulty());
-                ServerPlayNetworking.send(player, info);
-            })
-        );
-
-        // ── Legacy: Update Raid Controller Settings (used by RaidControllerScreen) ─
-        ServerPlayNetworking.registerGlobalReceiver(UpdateRaidControllerSettingsPayload.TYPE, (payload, context) ->
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                RaidControllerBlockEntity controller = findController(player, payload.pos());
-                if (controller == null) return;
-                controller.setHardcore(player, payload.hardcoreEnabled());
-                DifficultyTier tier;
-                try {
-                    RaidDifficulty rd = RaidDifficulty.valueOf(payload.selectedDifficulty());
-                    tier = rd.toDifficultyTier();
-                } catch (Exception e) {
-                    tier = DifficultyTier.NORMAL;
-                }
-                controller.setTier(player, tier);
-                broadcastRaidControllerSnapshot(player, controller);
-            })
-        );
-
-        // ── Legacy: Update Raid Lobby Visibility (used by RaidControllerScreen) ─
-        ServerPlayNetworking.registerGlobalReceiver(UpdateRaidLobbyVisibilityPayload.TYPE, (payload, context) ->
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                RaidControllerBlockEntity controller = findController(player, payload.pos());
-                if (controller == null) return;
-                net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility vis;
-                if ("INVITE_ONLY".equalsIgnoreCase(payload.visibility())) {
-                    vis = net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility.PRIVATE;
-                } else {
-                    vis = net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility.PUBLIC;
-                }
-                controller.setVisibility(player, vis);
-                broadcastRaidControllerSnapshot(player, controller);
-            })
-        );
-
-        // ── Legacy: Update Raid Controller Admin Settings (used by RaidControllerScreen) ─
-        ServerPlayNetworking.registerGlobalReceiver(UpdateRaidControllerAdminSettingsPayload.TYPE, (payload, context) ->
+        // ── Admin: Set Loot Via Inbox ─────────────────────────────────────────
+        ServerPlayNetworking.registerGlobalReceiver(RaidSetLootViaInboxPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.pos());
+                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
                 if (controller == null) return;
-                controller.setRespawnTimeTicks(payload.respawnTimeTicks());
-                controller.setMaxPartySize(payload.maxPartySize());
-                broadcastRaidControllerSnapshot(player, controller);
-            })
-        );
-
-        // ── Legacy: Raid Controller Action (used by RaidControllerScreen) ─────
-        ServerPlayNetworking.registerGlobalReceiver(RaidControllerActionPayload.TYPE, (payload, context) ->
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                RaidControllerBlockEntity controller = findController(player, payload.pos());
-                if (controller == null) return;
-                switch (payload.action()) {
-                    case 0 -> controller.startRaid(player);
-                    case 1 -> controller.leaveLobby(player);
-                    case 2 -> controller.leaveLobby(player);
-                }
-                broadcastRaidControllerSnapshot(player, controller);
-            })
-        );
-
-        // ── Legacy: Create Raid Lobby (old payload, used by RaidControllerScreen) ─
-        ServerPlayNetworking.registerGlobalReceiver(CreateRaidLobbyPayload.TYPE, (payload, context) ->
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (isPlayerBusy(player)) {
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(ChatFormatting.RED));
-                    return;
-                }
-                RaidControllerBlockEntity controller = findController(player, payload.pos());
-                if (controller == null) return;
-                if (controller.getLobbyByMember(player.getUUID()) != null) return;
-                controller.createLobby(player);
-                broadcastRaidControllerSnapshot(player, controller);
-            })
-        );
-
-        // ── Legacy: Disband Raid Lobby (used by RaidControllerScreen) ────────
-        ServerPlayNetworking.registerGlobalReceiver(DisbandRaidLobbyPayload.TYPE, (payload, context) ->
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                RaidControllerBlockEntity controller = findController(player, payload.pos());
-                if (controller == null) return;
-                controller.leaveLobby(player);
-                broadcastRaidControllerSnapshot(player, controller);
-            })
-        );
-
-        // ── Legacy: Invite Raid Lobby Player (used by RaidControllerScreen) ──
-        ServerPlayNetworking.registerGlobalReceiver(InviteRaidLobbyPlayerPayload.TYPE, (payload, context) ->
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                RaidControllerBlockEntity controller = findController(player, payload.pos());
-                if (controller == null) return;
-                controller.invitePlayer(player, payload.playerName());
-                broadcastRaidControllerSnapshot(player, controller);
-            })
-        );
-
-        // ── Legacy: Join Raid Lobby (old payload, used by RaidControllerScreen) ─
-        ServerPlayNetworking.registerGlobalReceiver(JoinRaidLobbyPayload.TYPE, (payload, context) ->
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (isPlayerBusy(player)) {
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(ChatFormatting.RED));
-                    return;
-                }
-                RaidControllerBlockEntity controller = findController(player, payload.pos());
-                if (controller == null) return;
-                try {
-                    controller.joinLobby(player, UUID.fromString(payload.lobbyId()));
-                    broadcastRaidControllerSnapshot(player, controller);
-                } catch (IllegalArgumentException ignored) {}
-            })
-        );
-
-        // ── Legacy: Respond Raid Lobby Invite (used by RaidControllerScreen) ─
-        ServerPlayNetworking.registerGlobalReceiver(RespondRaidLobbyInvitePayload.TYPE, (payload, context) ->
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                UUID lobbyId;
-                try {
-                    lobbyId = UUID.fromString(payload.lobbyId());
-                } catch (IllegalArgumentException e) {
-                    return;
-                }
-                RaidControllerBlockEntity controller = findControllerByLobbyId(player.server, lobbyId);
-                if (controller == null) return;
-                if (payload.accept()) {
-                    if (isPlayerBusy(player)) {
-                        player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(ChatFormatting.RED));
-                        return;
-                    }
-                    controller.acceptInvite(player, lobbyId);
-                } else {
-                    controller.declineInvite(player, lobbyId);
-                }
+                controller.setLootViaInbox(payload.lootViaInbox());
                 broadcastRaidControllerSnapshot(player, controller);
             })
         );

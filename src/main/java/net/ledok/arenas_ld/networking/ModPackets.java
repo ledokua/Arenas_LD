@@ -402,22 +402,6 @@ public class ModPackets {
         }
     }
 
-    public record RaidControllerActionPayload(BlockPos pos, int action) implements CustomPacketPayload {
-        public static final Type<RaidControllerActionPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "raid_controller_action"));
-        public static final StreamCodec<FriendlyByteBuf, RaidControllerActionPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> {
-                    buf.writeBlockPos(payload.pos);
-                    buf.writeVarInt(payload.action);
-                },
-                buf -> new RaidControllerActionPayload(buf.readBlockPos(), buf.readVarInt())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
     public record JoinDungeonLobbyPayload(BlockPos pos, String lobbyId) implements CustomPacketPayload {
         public static final Type<JoinDungeonLobbyPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "join_dungeon_lobby"));
         public static final StreamCodec<FriendlyByteBuf, JoinDungeonLobbyPayload> STREAM_CODEC = StreamCodec.of(
@@ -524,151 +508,11 @@ public class ModPackets {
         }
     }
 
-    public record RequestRaidControllerInfoPayload(BlockPos pos, String leaderboardDifficulty) implements CustomPacketPayload {
-        public static final Type<RequestRaidControllerInfoPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "request_raid_controller_info"));
-        public static final StreamCodec<FriendlyByteBuf, RequestRaidControllerInfoPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> {
-                    buf.writeBlockPos(payload.pos);
-                    buf.writeUtf(payload.leaderboardDifficulty);
-                },
-                buf -> new RequestRaidControllerInfoPayload(buf.readBlockPos(), buf.readUtf())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
     public record RequestMobArenaControllerInfoPayload(BlockPos pos) implements CustomPacketPayload {
         public static final Type<RequestMobArenaControllerInfoPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "request_mob_arena_controller_info"));
         public static final StreamCodec<FriendlyByteBuf, RequestMobArenaControllerInfoPayload> STREAM_CODEC = StreamCodec.of(
                 (buf, payload) -> buf.writeBlockPos(payload.pos),
                 buf -> new RequestMobArenaControllerInfoPayload(buf.readBlockPos())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
-    public record JoinRaidLobbyPayload(BlockPos pos, String lobbyId) implements CustomPacketPayload {
-        public static final Type<JoinRaidLobbyPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "join_raid_lobby"));
-        public static final StreamCodec<FriendlyByteBuf, JoinRaidLobbyPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> {
-                    buf.writeBlockPos(payload.pos);
-                    buf.writeUtf(payload.lobbyId);
-                },
-                buf -> new JoinRaidLobbyPayload(buf.readBlockPos(), buf.readUtf())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
-    public record RespondRaidLobbyInvitePayload(String lobbyId, boolean accept) implements CustomPacketPayload {
-        public static final Type<RespondRaidLobbyInvitePayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "respond_raid_lobby_invite"));
-        public static final StreamCodec<FriendlyByteBuf, RespondRaidLobbyInvitePayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> {
-                    buf.writeUtf(payload.lobbyId);
-                    buf.writeBoolean(payload.accept);
-                },
-                buf -> new RespondRaidLobbyInvitePayload(buf.readUtf(), buf.readBoolean())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
-    public record CreateRaidLobbyPayload(BlockPos pos) implements CustomPacketPayload {
-        public static final Type<CreateRaidLobbyPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "create_raid_lobby"));
-        public static final StreamCodec<FriendlyByteBuf, CreateRaidLobbyPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> buf.writeBlockPos(payload.pos),
-                buf -> new CreateRaidLobbyPayload(buf.readBlockPos())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
-    public record DisbandRaidLobbyPayload(BlockPos pos) implements CustomPacketPayload {
-        public static final Type<DisbandRaidLobbyPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "disband_raid_lobby"));
-        public static final StreamCodec<FriendlyByteBuf, DisbandRaidLobbyPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> buf.writeBlockPos(payload.pos),
-                buf -> new DisbandRaidLobbyPayload(buf.readBlockPos())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
-    public record InviteRaidLobbyPlayerPayload(BlockPos pos, String playerName) implements CustomPacketPayload {
-        public static final Type<InviteRaidLobbyPlayerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "invite_raid_lobby_player"));
-        public static final StreamCodec<FriendlyByteBuf, InviteRaidLobbyPlayerPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> {
-                    buf.writeBlockPos(payload.pos);
-                    buf.writeUtf(payload.playerName);
-                },
-                buf -> new InviteRaidLobbyPlayerPayload(buf.readBlockPos(), buf.readUtf())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
-    public record UpdateRaidLobbyVisibilityPayload(BlockPos pos, String visibility) implements CustomPacketPayload {
-        public static final Type<UpdateRaidLobbyVisibilityPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_raid_lobby_visibility"));
-        public static final StreamCodec<FriendlyByteBuf, UpdateRaidLobbyVisibilityPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> {
-                    buf.writeBlockPos(payload.pos);
-                    buf.writeUtf(payload.visibility);
-                },
-                buf -> new UpdateRaidLobbyVisibilityPayload(buf.readBlockPos(), buf.readUtf())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
-    public record UpdateRaidControllerSettingsPayload(BlockPos pos, boolean hardcoreEnabled, String selectedDifficulty) implements CustomPacketPayload {
-        public static final Type<UpdateRaidControllerSettingsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_raid_controller_settings"));
-        public static final StreamCodec<FriendlyByteBuf, UpdateRaidControllerSettingsPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> {
-                    buf.writeBlockPos(payload.pos);
-                    buf.writeBoolean(payload.hardcoreEnabled);
-                    buf.writeUtf(payload.selectedDifficulty);
-                },
-                buf -> new UpdateRaidControllerSettingsPayload(buf.readBlockPos(), buf.readBoolean(), buf.readUtf())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
-    public record UpdateRaidControllerAdminSettingsPayload(BlockPos pos, int respawnTimeTicks, int maxPartySize) implements CustomPacketPayload {
-        public static final Type<UpdateRaidControllerAdminSettingsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_raid_controller_admin_settings"));
-        public static final StreamCodec<FriendlyByteBuf, UpdateRaidControllerAdminSettingsPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> {
-                    buf.writeBlockPos(payload.pos);
-                    buf.writeVarInt(payload.respawnTimeTicks);
-                    buf.writeVarInt(payload.maxPartySize);
-                },
-                buf -> new UpdateRaidControllerAdminSettingsPayload(buf.readBlockPos(), buf.readVarInt(), buf.readVarInt())
         );
 
         @Override

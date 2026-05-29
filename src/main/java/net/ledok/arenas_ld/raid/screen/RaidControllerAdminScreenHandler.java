@@ -24,6 +24,7 @@ public class RaidControllerAdminScreenHandler extends AbstractContainerMenu {
     private int respawnTimeTicks;
     private int inviteExpiryTicks;
     private int deathTimePenaltyTicks;
+    private boolean lootViaInbox;
     private Map<DifficultyTier, RaidTierConfig> tierConfigs;
     private Map<BlockPos, RaidControllerAdminData.InstanceRun> runningInstances;
 
@@ -46,6 +47,7 @@ public class RaidControllerAdminScreenHandler extends AbstractContainerMenu {
     public int getRespawnTimeTicks() { return respawnTimeTicks; }
     public int getInviteExpiryTicks() { return inviteExpiryTicks; }
     public int getDeathTimePenaltyTicks() { return deathTimePenaltyTicks; }
+    public boolean isLootViaInbox() { return lootViaInbox; }
     public Map<DifficultyTier, RaidTierConfig> getTierConfigs() { return tierConfigs; }
     public Map<BlockPos, RaidControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
 
@@ -58,6 +60,7 @@ public class RaidControllerAdminScreenHandler extends AbstractContainerMenu {
         this.respawnTimeTicks = data.respawnTimeTicks();
         this.inviteExpiryTicks = data.inviteExpiryTicks();
         this.deathTimePenaltyTicks = data.deathTimePenaltyTicks();
+        this.lootViaInbox = data.lootViaInbox();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());
     }

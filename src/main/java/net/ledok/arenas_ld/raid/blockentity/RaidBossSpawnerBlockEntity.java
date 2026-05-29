@@ -47,7 +47,6 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
@@ -56,9 +55,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.loot.LootParams;
-import net.minecraft.world.level.storage.loot.LootTable;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
@@ -446,13 +442,19 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
 
         String perPlayerLoot = tierCfg.perPlayerLootTable();
         if (!perPlayerLoot.isEmpty()) {
+            RaidControllerBlockEntity controller = RaidRunLifecycle.findOwningController(world.getServer(), worldPosition);
+            boolean viaInbox = controller != null && controller.isLootViaInbox();
             for (UUID uuid : participantIds) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+                ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
+                bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(perPlayerLoot));
+                if (viaInbox) {
+                    net.ledok.arenas_ld.util.EconomyCompat.deliverItem(uuid, bundle, bundle.getCount(), "RAID_LOOT");
+                    continue;
+                }
                 if (player == null) {
                     continue;
                 }
-                ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
-                bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(perPlayerLoot));
                 if (!player.getInventory().add(bundle)) {
                     player.drop(bundle, false);
                 }

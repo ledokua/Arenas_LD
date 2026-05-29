@@ -25,6 +25,7 @@ import net.ledok.arenas_ld.raid.packet.RaidSetCloseTimerPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetCooldownPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetDeathPenaltyPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetLootViaInboxPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
 import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.ledok.arenas_ld.util.InstanceStatus;
@@ -96,6 +97,7 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
     private String inviteExpiryInput;
     private String respawnTimeInput;
     private String deathPenaltyInput;
+    private boolean lootViaInboxInput;
 
     private final Map<DifficultyTier, String> healthInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> damageInputs = new EnumMap<>(DifficultyTier.class);
@@ -500,6 +502,21 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         contentArea.child(twoColumnRow(
             stepperField(tr("gui.arenas_ld.raid_controller_admin.ui.general.respawn_time"), tr("gui.arenas_ld.raid_controller_admin.ui.general.respawn_time_hint"), "T", 20, 0, 1_200_000, respawnTimeInput, v -> respawnTimeInput = v),
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.death_penalty"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.death_penalty_hint"), "S", 1, 0, 600, deathPenaltyInput, v -> deathPenaltyInput = v)
+        ));
+        contentArea.child(spacer(10));
+
+        contentArea.child(togglePanel(
+            tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox"),
+            tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_desc"),
+            lootViaInboxInput ? tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_on") : tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_off"),
+            lootViaInboxInput ? INFO : INK_DIM,
+            INFO,
+            () -> lootViaInboxInput,
+            () -> {
+                lootViaInboxInput = !lootViaInboxInput;
+                ClientPlayNetworking.send(new RaidSetLootViaInboxPayload(menu.getBlockPos(), lootViaInboxInput));
+                rebuildUi();
+            }
         ));
         contentArea.child(spacer(10));
 
@@ -1094,6 +1111,7 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         inviteExpiryInput = Integer.toString(menu.getInviteExpiryTicks() / 20);
         respawnTimeInput = Integer.toString(menu.getRespawnTimeTicks());
         deathPenaltyInput = Integer.toString(menu.getDeathTimePenaltyTicks() / 20);
+        lootViaInboxInput = menu.isLootViaInbox();
 
         for (Map.Entry<DifficultyTier, RaidTierConfig> entry : tierConfigs.entrySet()) {
             syncTierInputs(entry.getKey(), entry.getValue());

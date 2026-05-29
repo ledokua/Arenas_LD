@@ -180,6 +180,8 @@ public class RaidControllerBlockEntity extends BlockEntity
     private int cooldownTicks = DEFAULT_COOLDOWN_TICKS;
     private int closeTimerSeconds = DEFAULT_CLOSE_TIMER_SECONDS;
     private int deathTimePenaltyTicks = DEFAULT_DEATH_TIME_PENALTY_TICKS;
+    /** When true, per-player loot bundles are delivered to the Economy_LD inbox instead of dropped in the world. */
+    private boolean lootViaInbox = false;
     /** Per-tier raid configs (health/damage multipliers, time limit, enabled, reward currency). */
     private final Map<DifficultyTier, RaidTierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
     /** Instances queued for removal once their current run ends. */
@@ -217,6 +219,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         int cooldownTicks,
         int closeTimerSeconds,
         int deathTimePenaltyTicks,
+        boolean lootViaInbox,
         List<InstanceEntry> instances,
         List<Lobby> lobbies,
         List<UUID> queuedLobbyIds,
@@ -234,6 +237,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             Codec.INT.optionalFieldOf("cooldownTicks", DEFAULT_COOLDOWN_TICKS).forGetter(State::cooldownTicks),
             Codec.INT.optionalFieldOf("closeTimerSeconds", DEFAULT_CLOSE_TIMER_SECONDS).forGetter(State::closeTimerSeconds),
             Codec.INT.optionalFieldOf("deathTimePenaltyTicks", DEFAULT_DEATH_TIME_PENALTY_TICKS).forGetter(State::deathTimePenaltyTicks),
+            Codec.BOOL.optionalFieldOf("lootViaInbox", false).forGetter(State::lootViaInbox),
             InstanceEntry.CODEC.listOf().optionalFieldOf("instances", List.of()).forGetter(State::instances),
             Lobby.CODEC.listOf().optionalFieldOf("lobbies", List.of()).forGetter(State::lobbies),
             UUIDUtil.CODEC.listOf().optionalFieldOf("queuedLobbyIds", List.of()).forGetter(State::queuedLobbyIds),
@@ -364,6 +368,18 @@ public class RaidControllerBlockEntity extends BlockEntity
         this.deathTimePenaltyTicks = ticks;
         markDirtyAndSync();
         return true;
+    }
+
+    public boolean isLootViaInbox() {
+        return lootViaInbox;
+    }
+
+    public void setLootViaInbox(boolean lootViaInbox) {
+        if (this.lootViaInbox == lootViaInbox) {
+            return;
+        }
+        this.lootViaInbox = lootViaInbox;
+        markDirtyAndSync();
     }
 
     public Map<DifficultyTier, RaidTierConfig> getTierConfigs() {
@@ -1183,6 +1199,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             cooldownTicks,
             closeTimerSeconds,
             deathTimePenaltyTicks,
+            lootViaInbox,
             instanceEntries,
             new ArrayList<>(lobbies),
             new ArrayList<>(queuedLobbyIds),
@@ -1213,6 +1230,7 @@ public class RaidControllerBlockEntity extends BlockEntity
                     cooldownTicks = state.cooldownTicks();
                     closeTimerSeconds = state.closeTimerSeconds();
                     deathTimePenaltyTicks = state.deathTimePenaltyTicks();
+                    lootViaInbox = state.lootViaInbox();
 
                     instances.clear();
                     for (InstanceEntry ie : state.instances()) {
@@ -1435,6 +1453,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             getRespawnTimeTicks(),
             inviteExpiryTicks,
             deathTimePenaltyTicks,
+            lootViaInbox,
             new EnumMap<>(tierConfigs),
             running
         );
