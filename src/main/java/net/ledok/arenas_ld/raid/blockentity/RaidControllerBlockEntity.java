@@ -625,14 +625,14 @@ public class RaidControllerBlockEntity extends BlockEntity
     /**
      * Invites a player by name to the inviter's lobby.
      */
-    public boolean invitePlayer(ServerPlayer inviter, String targetName) {
+    public boolean invitePlayer(ServerPlayer inviter, UUID inviteeUuid) {
         Lobby lobby = getLobbyByMember(inviter.getUUID());
         if (lobby == null || !lobby.isOwner(inviter.getUUID())) return false;
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
         if (lobby.isFull(getMaxPartySize())) return false;
         if (!(level instanceof ServerLevel sl)) return false;
 
-        ServerPlayer target = sl.getServer().getPlayerList().getPlayerByName(targetName);
+        ServerPlayer target = sl.getServer().getPlayerList().getPlayer(inviteeUuid);
         if (target == null || target.getUUID().equals(inviter.getUUID())) return false;
         if (getLobbyByMember(target.getUUID()) != null) return false;
         // Check if already has pending invite

@@ -1163,17 +1163,38 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
 
     private void sendInvite() {
         footerError = null;
-        String trimmed = inviteInput == null ? "" : inviteInput.trim();
-        if (trimmed.isEmpty()) {
+        UUID invitee = resolveInviteeUuid(inviteInput);
+        if (invitee == null) {
             footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.invitee_not_found").getString();
             return;
         }
-        ClientPlayNetworking.send(new RaidInvitePlayerPayload(menu.getBlockPos(), trimmed));
+        ClientPlayNetworking.send(new RaidInvitePlayerPayload(menu.getBlockPos(), invitee));
         inviteInput = "";
         if (inviteField != null) {
             inviteField.text("");
         }
         closeInviteDropdown();
+    }
+
+    private UUID resolveInviteeUuid(String input) {
+        String trimmed = input == null ? "" : input.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(trimmed);
+        } catch (IllegalArgumentException ignored) {
+            // fallthrough — treat as a player name
+        }
+        if (minecraft == null || minecraft.getConnection() == null) {
+            return null;
+        }
+        for (PlayerInfo info : minecraft.getConnection().getOnlinePlayers()) {
+            if (info.getProfile().getName().equalsIgnoreCase(trimmed)) {
+                return info.getProfile().getId();
+            }
+        }
+        return null;
     }
 
     private void openInviteDropdown() {
@@ -1258,8 +1279,7 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
                 return;
             }
             footerError = null;
-            // RaidInvitePlayerPayload takes String playerName
-            ClientPlayNetworking.send(new RaidInvitePlayerPayload(menu.getBlockPos(), candidate.name()));
+            ClientPlayNetworking.send(new RaidInvitePlayerPayload(menu.getBlockPos(), candidate.uuid()));
             inviteInput = "";
             if (inviteField != null) {
                 inviteField.text("");

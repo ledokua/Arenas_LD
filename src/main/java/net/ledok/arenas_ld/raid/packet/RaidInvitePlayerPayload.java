@@ -8,14 +8,16 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-public record RaidInvitePlayerPayload(BlockPos blockPos, String playerName) implements CustomPacketPayload {
+import java.util.UUID;
+
+public record RaidInvitePlayerPayload(BlockPos blockPos, UUID inviteeUuid) implements CustomPacketPayload {
     public static final Type<RaidInvitePlayerPayload> TYPE =
         new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "raid_invite_player"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, RaidInvitePlayerPayload> STREAM_CODEC =
         StreamCodec.composite(
             BlockPos.STREAM_CODEC, RaidInvitePlayerPayload::blockPos,
-            ByteBufCodecs.STRING_UTF8, RaidInvitePlayerPayload::playerName,
+            ByteBufCodecs.STRING_UTF8.map(UUID::fromString, UUID::toString), RaidInvitePlayerPayload::inviteeUuid,
             RaidInvitePlayerPayload::new
         );
 

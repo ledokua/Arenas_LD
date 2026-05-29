@@ -107,7 +107,7 @@ public final class RaidPacketHandlers {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
-                controller.invitePlayer(player, payload.playerName());
+                controller.invitePlayer(player, payload.inviteeUuid());
                 broadcastRaidControllerSnapshot(player, controller);
             })
         );
