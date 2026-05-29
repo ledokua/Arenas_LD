@@ -238,10 +238,18 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         return true;
     }
 
+    /** Mark dirty for saving and push a block update so clients (selection overlay) refresh. */
+    private void markDirtyAndSync() {
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
     public boolean addInstance(BlockPos pos) {
         if (instances.contains(pos)) return false;
         instances.add(pos);
-        setChanged();
+        markDirtyAndSync();
         return true;
     }
 
@@ -249,16 +257,16 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (!instances.contains(pos)) return false;
         if (pendingInstanceRemovals.contains(pos)) {
             pendingInstanceRemovals.remove(pos);
-            setChanged();
+            markDirtyAndSync();
             return true;
         }
         if (isInstanceInActiveRun(pos)) {
             pendingInstanceRemovals.add(pos);
-            setChanged();
+            markDirtyAndSync();
             return true;
         }
         boolean removed = instances.remove(pos);
-        if (removed) setChanged();
+        if (removed) markDirtyAndSync();
         return removed;
     }
 
@@ -267,7 +275,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (from == to) return false;
         BlockPos moved = instances.remove(from);
         instances.add(to, moved);
-        setChanged();
+        markDirtyAndSync();
         return true;
     }
 

@@ -52,11 +52,19 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         super(BlockEntitiesRegistry.DUNGEON_BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
     }
 
+    /** Mark dirty for saving and push a block update so clients (overlay, screens) refresh. */
+    private void markDirtyAndSync() {
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
     public EntityDefinition getEntityDefinition() { return entityDefinition; }
 
     public void setEntityDefinition(EntityDefinition def) {
         this.entityDefinition = def;
-        setChanged();
+        markDirtyAndSync();
     }
 
     @Override
@@ -90,7 +98,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
     public void setEntrancePosition(BlockPos absolutePos, ResourceKey<Level> dim) {
         this.entranceOffset = absolutePos.subtract(worldPosition);
         this.entranceDimension = dim;
-        setChanged();
+        markDirtyAndSync();
     }
 
     public List<BlockPos> getRooms() {
@@ -109,14 +117,14 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         BlockPos roomOffset = absolutePos.subtract(worldPosition);
         if (roomOffsets.contains(roomOffset)) return false;
         roomOffsets.add(roomOffset);
-        setChanged();
+        markDirtyAndSync();
         return true;
     }
 
     public boolean removeRoom(BlockPos absolutePos) {
         BlockPos roomOffset = absolutePos.subtract(worldPosition);
         boolean removed = roomOffsets.remove(roomOffset);
-        if (removed) setChanged();
+        if (removed) markDirtyAndSync();
         return removed;
     }
 
@@ -125,14 +133,14 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         if (from == to) return false;
         BlockPos moved = roomOffsets.remove(from);
         roomOffsets.add(to, moved);
-        setChanged();
+        markDirtyAndSync();
         return true;
     }
 
     public void clearRooms() {
         if (!roomOffsets.isEmpty()) {
             roomOffsets.clear();
-            setChanged();
+            markDirtyAndSync();
         }
     }
 
