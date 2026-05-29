@@ -41,8 +41,23 @@ public class DungeonControllerAdminMenuProvider implements ExtendedScreenHandler
             controller.getDeathTimePenaltyTicks(),
             controller.isLootViaInbox(),
             controller.getTierConfigs(),
-            runningInstances
+            runningInstances,
+            enumerateLootTables(controller.getLevel())
         );
+    }
+
+    private static java.util.List<String> enumerateLootTables(net.minecraft.world.level.Level level) {
+        if (!(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) return java.util.List.of();
+        net.minecraft.server.MinecraftServer server = serverLevel.getServer();
+        if (server == null) return java.util.List.of();
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        try {
+            server.registryAccess()
+                .registry(net.minecraft.core.registries.Registries.LOOT_TABLE)
+                .ifPresent(reg -> reg.keySet().forEach(rl -> ids.add(rl.toString())));
+        } catch (Exception ignored) {}
+        ids.sort(null);
+        return ids;
     }
 
     @Override
