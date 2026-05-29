@@ -362,12 +362,6 @@ public final class RaidRunLifecycle {
         }
     }
 
-    private static void tickClosing(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run) {
-        // Phase 1: no grace period — win/loss finalize immediately and never enter CLOSING.
-        // (CLOSING handling is added in the follow-up.)
-        finalizeRun(world, controller, run);
-    }
-
     static void handleWin(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run) {
         ArenasLdMod.LOGGER.info("Raid battle won at spawner {}", run.spawnerPos());
         run.setOutcome(RaidOutcome.WIN);
@@ -403,8 +397,7 @@ public final class RaidRunLifecycle {
             }
         }
 
-        notifyController(world, controller, run, true);
-        finalizeRun(world, controller, run);
+        enterClosing(world, controller, run);
     }
 
     static void handleLoss(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, String reason) {
@@ -424,8 +417,66 @@ public final class RaidRunLifecycle {
             }
         }
 
-        notifyController(world, controller, run, false);
-        finalizeRun(world, controller, run);
+        enterClosing(world, controller, run);
+    }
+
+    /**
+     * Transition a finished battle into the CLOSING grace phase. Players linger for
+     * {@code controller.getCloseTimerSeconds()} before being teleported out by
+     * {@link #finalizeRun}. The raid-timer bar is swapped for a close-timer bar.
+     */
+    private static void enterClosing(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run) {
+        clearRaidTimerBossBar(run);
+        run.setPhase(RaidPhase.CLOSING);
+        int closeTicks = Math.max(0, controller.getCloseTimerSeconds() * 20);
+        run.setInitialCloseTimerTicks(closeTicks);
+        run.setCloseTimerTicks(closeTicks);
+        if (closeTicks <= 0) {
+            // No grace configured — finalize immediately.
+            finalizeRun(world, controller, run);
+        }
+    }
+
+    private static void tickClosing(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run) {
+        run.setCloseTimerTicks(run.closeTimerTicks() - 1);
+        updateCloseTimerBossBar(world, run);
+        if (run.closeTimerTicks() <= 0) {
+            finalizeRun(world, controller, run);
+        }
+    }
+
+    private static void updateCloseTimerBossBar(ServerLevel world, RaidRun run) {
+        ServerBossEvent bar = run.getCloseTimerBossBar();
+        if (bar == null) {
+            bar = new ServerBossEvent(
+                Component.translatable("boss_bar.arenas_ld.close_timer"),
+                BossEvent.BossBarColor.RED,
+                BossEvent.BossBarOverlay.PROGRESS
+            );
+            run.setCloseTimerBossBar(bar);
+        }
+        int totalTicks = run.initialCloseTimerTicks();
+        float progress = totalTicks > 0
+            ? Mth.clamp((float) run.closeTimerTicks() / (float) totalTicks, 0.0f, 1.0f)
+            : 0.0f;
+        bar.setProgress(progress);
+        bar.setVisible(true);
+
+        for (UUID uuid : run.participants().keySet()) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            if (player != null && !bar.getPlayers().contains(player)) {
+                bar.addPlayer(player);
+            }
+        }
+    }
+
+    /** Detach the close-timer bar (if present). Safe when null. */
+    private static void clearCloseTimerBossBar(RaidRun run) {
+        ServerBossEvent bar = run.getCloseTimerBossBar();
+        if (bar == null) return;
+        bar.removeAllPlayers();
+        bar.setVisible(false);
+        run.setCloseTimerBossBar(null);
     }
 
     /** Teleport players back to their captured return points and tear down the run's transient state. */
@@ -454,11 +505,15 @@ public final class RaidRunLifecycle {
         }
 
         clearRaidTimerBossBar(run);
+        clearCloseTimerBossBar(run);
         run.setPhase(RaidPhase.DONE);
         RaidBossSpawnerBlockEntity spawner = spawnerFor(world, run);
         if (spawner != null) {
             ArenasLdMod.RAID_BOSS_MANAGER.unregisterSpawner(spawner);
         }
+        // Notify the controller LAST: onRaidEnded removes the run from activeRuns and
+        // releases the instance, so everything above must have run first.
+        notifyController(world, controller, run, run.outcome() == RaidOutcome.WIN);
     }
 
     /** Tell the controller the run ended so it records the leaderboard and releases the instance. */
