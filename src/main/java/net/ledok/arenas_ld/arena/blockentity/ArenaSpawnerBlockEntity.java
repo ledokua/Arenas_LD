@@ -33,7 +33,8 @@ import java.util.List;
  * run state lives in {@code ArenaRun} and is driven by the controller via {@code ArenaRunLifecycle}.
  * Mirrors {@link net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity}.
  */
-public class ArenaSpawnerBlockEntity extends BlockEntity {
+public class ArenaSpawnerBlockEntity extends BlockEntity
+    implements net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory<net.ledok.arenas_ld.arena.screen.ArenaSpawnerMenuData> {
 
     // --- Geometry / identity ---
     private String groupId = "";
@@ -301,5 +302,23 @@ public class ArenaSpawnerBlockEntity extends BlockEntity {
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registryLookup) {
         return saveWithoutMetadata(registryLookup);
+    }
+
+    // ── Screen factory (config editor) ──────────────────────────────────────────
+    @Override
+    public net.minecraft.network.chat.Component getDisplayName() {
+        return net.minecraft.network.chat.Component.translatable("block.arenas_ld.arena_spawner");
+    }
+
+    @Nullable
+    @Override
+    public net.minecraft.world.inventory.AbstractContainerMenu createMenu(
+            int syncId, net.minecraft.world.entity.player.Inventory inventory, net.minecraft.world.entity.player.Player player) {
+        return new net.ledok.arenas_ld.arena.screen.ArenaSpawnerScreenHandler(syncId, inventory, this);
+    }
+
+    @Override
+    public net.ledok.arenas_ld.arena.screen.ArenaSpawnerMenuData getScreenOpeningData(net.minecraft.server.level.ServerPlayer player) {
+        return new net.ledok.arenas_ld.arena.screen.ArenaSpawnerMenuData(worldPosition);
     }
 }

@@ -2,6 +2,11 @@ package net.ledok.arenas_ld.arena;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
+import net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity;
+import net.ledok.arenas_ld.arena.run.ObjectiveType;
+import net.ledok.arenas_ld.arena.packet.ArenaSpawnerMobsPayload;
+import net.ledok.arenas_ld.arena.packet.ArenaSpawnerRewardsPayload;
+import net.ledok.arenas_ld.arena.packet.ArenaSpawnerSettingsPayload;
 import net.ledok.arenas_ld.arena.packet.ArenaAdminSetBoolPayload;
 import net.ledok.arenas_ld.arena.packet.ArenaAdminSetIntPayload;
 import net.ledok.arenas_ld.arena.packet.ArenaLobbyActionPayload;
@@ -23,6 +28,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Server-side receivers for arena controller actions. Mirrors
@@ -141,6 +149,55 @@ public final class ArenaPacketHandlers {
                 ResourceKey<Level> dim = parseDimension(payload.dimension());
                 c.removeInstance(payload.spawnerPos(), dim);
             }));
+
+        // ── Spawner config ──────────────────────────────────────────────────────
+        ServerPlayNetworking.registerGlobalReceiver(ArenaSpawnerSettingsPayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!isAdmin(player)) return;
+                ArenaSpawnerBlockEntity s = findSpawner(player, payload.spawnerPos());
+                if (s == null) return;
+                s.setBattleRadius(payload.battleRadius());
+                s.setSpawnDistance(payload.spawnDistance());
+                s.setAttributeScale(payload.attributeScale());
+                s.setEntityHighlightTime(payload.entityHighlightTime());
+                s.setWaveTimer(payload.waveTimer());
+                s.setAdditionalTime(payload.additionalTime());
+                s.setTimeBetweenWaves(payload.timeBetweenWaves());
+                s.setPrepareTime(payload.prepareTime());
+                s.setBossWaveAdditionalTime(payload.bossWaveAdditionalTime());
+                s.setBossEveryNWaves(payload.bossEveryN());
+                s.setEliteEveryNWaves(payload.eliteEveryN());
+                s.setObjectiveEveryNWaves(payload.objectiveEveryN());
+                List<ObjectiveType> objs = new ArrayList<>();
+                for (String o : payload.objectives()) {
+                    try { objs.add(ObjectiveType.valueOf(o)); } catch (Exception ignored) {}
+                }
+                s.setEnabledObjectives(objs);
+            }));
+
+        ServerPlayNetworking.registerGlobalReceiver(ArenaSpawnerMobsPayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!isAdmin(player)) return;
+                ArenaSpawnerBlockEntity s = findSpawner(player, payload.spawnerPos());
+                if (s != null) s.setMobs(payload.mobs());
+            }));
+
+        ServerPlayNetworking.registerGlobalReceiver(ArenaSpawnerRewardsPayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!isAdmin(player)) return;
+                ArenaSpawnerBlockEntity s = findSpawner(player, payload.spawnerPos());
+                if (s != null) s.setRewards(payload.rewards());
+            }));
+    }
+
+    @Nullable
+    private static ArenaSpawnerBlockEntity findSpawner(ServerPlayer player, BlockPos pos) {
+        if (player == null || pos == null) return null;
+        BlockEntity be = player.level().getBlockEntity(pos);
+        return be instanceof ArenaSpawnerBlockEntity s ? s : null;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

@@ -159,6 +159,9 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaSetRewardCurvePayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaSetRewardCurvePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaMoveInstancePayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaMoveInstancePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaRemoveInstancePayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaRemoveInstancePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaSpawnerSettingsPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaSpawnerSettingsPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaSpawnerMobsPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaSpawnerMobsPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaSpawnerRewardsPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaSpawnerRewardsPayload.STREAM_CODEC);
     }
 
     static void registerS2CTypes() {
