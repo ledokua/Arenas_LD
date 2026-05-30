@@ -26,8 +26,6 @@ public class ArenasLdClient implements ClientModInitializer {
     public void onInitializeClient() {
         MenuScreens.register(ModScreenHandlers.RAID_BOSS_SPAWNER_SCREEN_HANDLER, RaidBossSpawnerScreen::new);
         MenuScreens.register(ModScreenHandlers.MOB_ATTRIBUTES_SCREEN_HANDLER, MobAttributesScreen::new);
-        MenuScreens.register(ModScreenHandlers.MOB_ARENA_SPAWNER_SCREEN_HANDLER, MobArenaSpawnerScreen::new);
-        MenuScreens.register(ModScreenHandlers.MOB_ARENA_CONTROLLER_SCREEN_HANDLER, MobArenaControllerScreen::new);
         MenuScreens.register(ModScreenHandlers.RAID_CONTROLLER_SCREEN_HANDLER, RaidControllerScreen::new);
         MenuScreens.register(ModScreenHandlers.ROOM_CONTROLLER_SCREEN_HANDLER, RoomControllerScreen::new);
         MenuScreens.register(ModScreenHandlers.MOB_SPAWNER_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.MobSpawnerScreen::new);
@@ -81,13 +79,6 @@ public class ArenasLdClient implements ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(ModPackets.RaidControllerInfoPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof RaidControllerScreen screen
-                        && payload.pos().equals(screen.getMenu().getPos())) {
-                    screen.applyServerInfo(payload);
-                }
-            }));
-        ClientPlayNetworking.registerGlobalReceiver(ModPackets.MobArenaControllerInfoPayload.TYPE, (payload, context) ->
-            context.client().execute(() -> {
-                if (Minecraft.getInstance().screen instanceof MobArenaControllerScreen screen
                         && payload.pos().equals(screen.getMenu().getPos())) {
                     screen.applyServerInfo(payload);
                 }

@@ -24,14 +24,6 @@ public class CommandRegistry {
                     context.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.config_reloaded"), true);
                     return 1;
                 }))
-            .then(literal("debug")
-                .requires(source -> source.hasPermission(2))
-                .then(literal("clearTrackedPlayers")
-                    .executes(context -> {
-                        ArenasLdMod.MOB_ARENA_MANAGER.clear();
-                        context.getSource().sendSuccess(() -> Component.literal("Cleared all tracked players from Mob Arenas."), true);
-                        return 1;
-                    })))
             .then(literal("admin")
                 .requires(source -> source.hasPermission(2))
                 .executes(context -> {

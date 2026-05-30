@@ -3,8 +3,6 @@ package net.ledok.arenas_ld.networking;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
-import net.ledok.arenas_ld.block.entity.MobArenaControllerBlockEntity;
-import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.raid.run.RaidDifficulty;
 import net.ledok.arenas_ld.raid.run.RaidLeaderboardEntry;
@@ -159,126 +157,6 @@ public class ModPackets {
         public Type<? extends CustomPacketPayload> type() {return TYPE;}
     }
 
-    public record UpdateMobArenaSpawnerPayload(
-            BlockPos pos, int battleRadius, int spawnDistance,
-            int waveTimer, int additionalTime, int timeBetweenWaves, double attributeScale, int prepareTime,
-            BlockPos exitPosition, ResourceLocation exitDimension,
-            BlockPos arenaEntrancePosition, ResourceLocation arenaEntranceDimension,
-            int bossWaveAdditionalTime, int entityHighlightTime
-    ) implements CustomPacketPayload {
-        public static final Type<UpdateMobArenaSpawnerPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_spawner"));
-
-        public static final StreamCodec<FriendlyByteBuf, UpdateMobArenaSpawnerPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> payload.write(buf), UpdateMobArenaSpawnerPayload::new);
-
-        public UpdateMobArenaSpawnerPayload(FriendlyByteBuf buf) {
-            this(
-                    buf.readBlockPos(), buf.readVarInt(), buf.readVarInt(),
-                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readDouble(), buf.readVarInt(),
-                    buf.readBlockPos(), buf.readResourceLocation(),
-                    buf.readBlockPos(), buf.readResourceLocation(),
-                    buf.readVarInt(), buf.readVarInt()
-            );
-        }
-
-        public void write(FriendlyByteBuf buf) {
-            buf.writeBlockPos(pos);
-            buf.writeVarInt(battleRadius);
-            buf.writeVarInt(spawnDistance);
-            buf.writeVarInt(waveTimer);
-            buf.writeVarInt(additionalTime);
-            buf.writeVarInt(timeBetweenWaves);
-            buf.writeDouble(attributeScale);
-            buf.writeVarInt(prepareTime);
-            buf.writeBlockPos(exitPosition);
-            buf.writeResourceLocation(exitDimension);
-            buf.writeBlockPos(arenaEntrancePosition);
-            buf.writeResourceLocation(arenaEntranceDimension);
-            buf.writeVarInt(bossWaveAdditionalTime);
-            buf.writeVarInt(entityHighlightTime);
-        }
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() { return TYPE; }
-    }
-
-    public record UpdateMobArenaMobsPayload(
-            BlockPos pos, List<MobArenaMobData> mobs
-    ) implements CustomPacketPayload {
-        public static final Type<UpdateMobArenaMobsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_mobs"));
-
-        public static final StreamCodec<FriendlyByteBuf, UpdateMobArenaMobsPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> payload.write(buf), UpdateMobArenaMobsPayload::new);
-
-        public UpdateMobArenaMobsPayload(FriendlyByteBuf buf) {
-            this(
-                    buf.readBlockPos(),
-                    readMobs(buf)
-            );
-        }
-
-        private static List<MobArenaMobData> readMobs(FriendlyByteBuf buf) {
-            List<MobArenaMobData> mobs = new ArrayList<>();
-            int size = buf.readVarInt();
-            for (int i = 0; i < size; i++) {
-                CompoundTag tag = buf.readNbt();
-                if (tag != null) {
-                    mobs.add(MobArenaMobData.fromNbt(tag));
-                }
-            }
-            return mobs;
-        }
-
-        public void write(FriendlyByteBuf buf) {
-            buf.writeBlockPos(pos);
-            buf.writeVarInt(mobs.size());
-            for (MobArenaMobData mob : mobs) {
-                buf.writeNbt(mob.toNbt());
-            }
-        }
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() { return TYPE; }
-    }
-    
-    public record UpdateMobArenaRewardsPayload(
-            BlockPos pos, List<MobArenaRewardData> rewards
-    ) implements CustomPacketPayload {
-        public static final Type<UpdateMobArenaRewardsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_rewards"));
-
-        public static final StreamCodec<FriendlyByteBuf, UpdateMobArenaRewardsPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> payload.write(buf), UpdateMobArenaRewardsPayload::new);
-
-        public UpdateMobArenaRewardsPayload(FriendlyByteBuf buf) {
-            this(
-                    buf.readBlockPos(),
-                    readRewards(buf)
-            );
-        }
-
-        private static List<MobArenaRewardData> readRewards(FriendlyByteBuf buf) {
-            List<MobArenaRewardData> rewards = new ArrayList<>();
-            int size = buf.readVarInt();
-            for (int i = 0; i < size; i++) {
-                CompoundTag tag = buf.readNbt();
-                if (tag != null) {
-                    rewards.add(MobArenaRewardData.fromNbt(tag));
-                }
-            }
-            return rewards;
-        }
-
-        public void write(FriendlyByteBuf buf) {
-            buf.writeBlockPos(pos);
-            buf.writeVarInt(rewards.size());
-            for (MobArenaRewardData reward : rewards) {
-                buf.writeNbt(reward.toNbt());
-            }
-        }
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() { return TYPE; }
-    }
 
     public record UpdateAttributesPayload(
             BlockPos pos, List<AttributeData> attributes
@@ -370,21 +248,6 @@ public class ModPackets {
         }
     }
 
-    public record MobArenaControllerActionPayload(BlockPos pos, int action) implements CustomPacketPayload {
-        public static final Type<MobArenaControllerActionPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "mob_arena_controller_action"));
-        public static final StreamCodec<FriendlyByteBuf, MobArenaControllerActionPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> {
-                    buf.writeBlockPos(payload.pos);
-                    buf.writeVarInt(payload.action);
-                },
-                buf -> new MobArenaControllerActionPayload(buf.readBlockPos(), buf.readVarInt())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
 
     public record DungeonControllerActionPayload(BlockPos pos, int action) implements CustomPacketPayload {
         public static final Type<DungeonControllerActionPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "dungeon_controller_action"));
@@ -508,18 +371,6 @@ public class ModPackets {
         }
     }
 
-    public record RequestMobArenaControllerInfoPayload(BlockPos pos) implements CustomPacketPayload {
-        public static final Type<RequestMobArenaControllerInfoPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "request_mob_arena_controller_info"));
-        public static final StreamCodec<FriendlyByteBuf, RequestMobArenaControllerInfoPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> buf.writeBlockPos(payload.pos),
-                buf -> new RequestMobArenaControllerInfoPayload(buf.readBlockPos())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
 
     public record UpdateDungeonControllerSettingsPayload(BlockPos pos, boolean hardcoreEnabled, String selectedTier) implements CustomPacketPayload {
         public static final Type<UpdateDungeonControllerSettingsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_dungeon_controller_settings"));
@@ -571,21 +422,6 @@ public class ModPackets {
         }
     }
 
-    public record UpdateMobArenaControllerSettingsPayload(BlockPos pos, boolean hardcoreEnabled) implements CustomPacketPayload {
-        public static final Type<UpdateMobArenaControllerSettingsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_arena_controller_settings"));
-        public static final StreamCodec<FriendlyByteBuf, UpdateMobArenaControllerSettingsPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> {
-                    buf.writeBlockPos(payload.pos);
-                    buf.writeBoolean(payload.hardcoreEnabled);
-                },
-                buf -> new UpdateMobArenaControllerSettingsPayload(buf.readBlockPos(), buf.readBoolean())
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
 
     public record DungeonControllerInfoPayload(
             BlockPos pos,
@@ -732,53 +568,6 @@ public class ModPackets {
         }
     }
 
-    public record MobArenaControllerInfoPayload(
-            BlockPos pos,
-            int currentWave,
-            boolean hardcoreEnabled,
-            List<String> players,
-            List<LeaderboardEntry> leaderboard
-    ) implements CustomPacketPayload {
-        public static final Type<MobArenaControllerInfoPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "mob_arena_controller_info"));
-
-        public static final StreamCodec<FriendlyByteBuf, MobArenaControllerInfoPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> {
-                    buf.writeBlockPos(payload.pos);
-                    buf.writeVarInt(payload.currentWave);
-                    buf.writeBoolean(payload.hardcoreEnabled);
-                    buf.writeVarInt(payload.players.size());
-                    for (String name : payload.players) {
-                        buf.writeUtf(name);
-                    }
-                    buf.writeVarInt(payload.leaderboard.size());
-                    for (LeaderboardEntry entry : payload.leaderboard) {
-                        buf.writeUtf(entry.playerName);
-                        buf.writeVarInt(entry.wave);
-                    }
-                },
-                buf -> {
-                    BlockPos pos = buf.readBlockPos();
-                    int currentWave = buf.readVarInt();
-                    boolean hardcoreEnabled = buf.readBoolean();
-                    int playerCount = buf.readVarInt();
-                    List<String> players = new ArrayList<>();
-                    for (int i = 0; i < playerCount; i++) {
-                        players.add(buf.readUtf());
-                    }
-                    int leaderboardCount = buf.readVarInt();
-                    List<LeaderboardEntry> leaderboard = new ArrayList<>();
-                    for (int i = 0; i < leaderboardCount; i++) {
-                        leaderboard.add(new LeaderboardEntry(buf.readUtf(), buf.readVarInt()));
-                    }
-                    return new MobArenaControllerInfoPayload(pos, currentWave, hardcoreEnabled, players, leaderboard);
-                }
-        );
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
 
     public record RaidControllerInfoPayload(
             BlockPos pos,
@@ -928,13 +717,11 @@ public class ModPackets {
         ModPacketTypeRegistry.registerC2STypes();
         net.ledok.arenas_ld.raid.RaidPacketHandlers.register();
         SpawnerPacketHandlers.register();
-        ArenaPacketHandlers.register();
         net.ledok.arenas_ld.arena.ArenaPacketHandlers.register();
 
     }
 
     static boolean isPlayerInActiveGame(ServerPlayer player) {
-        if (ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) return true;
         return false;
     }
 
@@ -961,18 +748,6 @@ public class ModPackets {
     static void removePlayerFromOtherLobbies(ServerPlayer player, BlockPos currentControllerPos, ResourceKey<Level> currentControllerDim) {
         var server = player.server;
         if (server == null) return;
-        for (MobArenaControllerBlockEntity.ControllerKey key : MobArenaControllerBlockEntity.getControllers()) {
-            ServerLevel level = server.getLevel(key.dimension());
-            if (level == null) continue;
-            BlockEntity be = level.getBlockEntity(key.pos());
-            if (be instanceof MobArenaControllerBlockEntity controller) {
-                if (controller.isPartyMember(player.getUUID())) {
-                    if (!(level.dimension().equals(currentControllerDim) && controller.getBlockPos().equals(currentControllerPos))) {
-                        controller.removePartyMember(player.getUUID());
-                    }
-                }
-            }
-        }
         for (RaidControllerBlockEntity.ControllerKey key : RaidControllerBlockEntity.getControllers()) {
             ServerLevel level = server.getLevel(key.dimension());
             if (level == null) continue;

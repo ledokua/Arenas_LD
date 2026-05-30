@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.registry;
 
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.entity.*;
-import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
 import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
@@ -18,11 +17,6 @@ public class BlockEntitiesRegistry {
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_boss_spawner_be"),
                     BlockEntityType.Builder.of(RaidBossSpawnerBlockEntity::new, BlockRegistry.RAID_BOSS_SPAWNER_BLOCK).build(null));
 
-    public static final BlockEntityType<MobArenaSpawnerBlockEntity> MOB_ARENA_SPAWNER_BLOCK_ENTITY =
-            Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
-                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_arena_spawner_be"),
-                    BlockEntityType.Builder.of(MobArenaSpawnerBlockEntity::new, BlockRegistry.MOB_ARENA_SPAWNER_BLOCK).build(null));
-
     public static final BlockEntityType<net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity> ARENA_SPAWNER_BLOCK_ENTITY =
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":arena_spawner_be"),
@@ -37,11 +31,6 @@ public class BlockEntitiesRegistry {
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":phase_block_be"),
                     BlockEntityType.Builder.of(PhaseBlockEntity::new, BlockRegistry.PHASE_BLOCK).build(null));
-
-    public static final BlockEntityType<MobArenaControllerBlockEntity> MOB_ARENA_CONTROLLER_BLOCK_ENTITY =
-            Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
-                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_arena_controller_be"),
-                    BlockEntityType.Builder.of(MobArenaControllerBlockEntity::new, BlockRegistry.MOB_ARENA_CONTROLLER_BLOCK).build(null));
 
     public static final BlockEntityType<RaidControllerBlockEntity> RAID_CONTROLLER_BLOCK_ENTITY =
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,

@@ -18,10 +18,6 @@ public class ModScreenHandlers {
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_boss_spawner"),
                     new ExtendedScreenHandlerType<>(RaidBossSpawnerScreenHandler::new, RaidBossSpawnerData.CODEC));
 
-    public static final MenuType<MobArenaSpawnerScreenHandler> MOB_ARENA_SPAWNER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_arena_spawner"),
-                    new ExtendedScreenHandlerType<>(MobArenaSpawnerScreenHandler::new, MobArenaSpawnerData.STREAM_CODEC));
-
     public static final MenuType<MobAttributesScreenHandler> MOB_ATTRIBUTES_SCREEN_HANDLER =
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_attributes"),
                     new ExtendedScreenHandlerType<>(MobAttributesScreenHandler::new, MobAttributesData.STREAM_CODEC));
@@ -29,10 +25,6 @@ public class ModScreenHandlers {
     public static final MenuType<EquipmentScreenHandler> EQUIPMENT_SCREEN_HANDLER =
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":equipment"),
                     new ExtendedScreenHandlerType<>(EquipmentScreenHandler::new, EquipmentScreenData.STREAM_CODEC));
-
-    public static final MenuType<MobArenaControllerScreenHandler> MOB_ARENA_CONTROLLER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_arena_controller"),
-                    new ExtendedScreenHandlerType<>(MobArenaControllerScreenHandler::new, MobArenaControllerData.STREAM_CODEC));
 
     public static final MenuType<RaidControllerScreenHandler> RAID_CONTROLLER_SCREEN_HANDLER =
             Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_controller"),

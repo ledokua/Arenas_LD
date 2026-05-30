@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.networking;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
-import net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.run.DungeonRun;
@@ -82,50 +81,6 @@ final class SpawnerPacketHandlers {
                 BlockEntity be = world.getBlockEntity(payload.pos());
                 if (be instanceof RaidBossSpawnerBlockEntity blockEntity) {
                     blockEntity.setMobId(payload.mobId());
-                    markDirtyAndSync(world, blockEntity);
-                }
-            });
-        });
-
-        ServerPlayNetworking.registerGlobalReceiver(UpdateMobArenaSpawnerPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                Level world = context.player().level();
-                if (world.getBlockEntity(payload.pos()) instanceof MobArenaSpawnerBlockEntity blockEntity) {
-                    blockEntity.applyConfig(
-                            payload.battleRadius(),
-                            payload.spawnDistance(),
-                            payload.waveTimer(),
-                            payload.additionalTime(),
-                            payload.timeBetweenWaves(),
-                            payload.attributeScale(),
-                            payload.prepareTime(),
-                            payload.exitPosition(),
-                            ResourceKey.create(Registries.DIMENSION, payload.exitDimension()),
-                            payload.arenaEntrancePosition(),
-                            ResourceKey.create(Registries.DIMENSION, payload.arenaEntranceDimension()),
-                            payload.bossWaveAdditionalTime(),
-                            payload.entityHighlightTime()
-                    );
-                    markDirtyAndSync(world, blockEntity);
-                }
-            });
-        });
-
-        ServerPlayNetworking.registerGlobalReceiver(UpdateMobArenaMobsPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                Level world = context.player().level();
-                if (world.getBlockEntity(payload.pos()) instanceof MobArenaSpawnerBlockEntity blockEntity) {
-                    blockEntity.setMobs(payload.mobs());
-                    markDirtyAndSync(world, blockEntity);
-                }
-            });
-        });
-
-        ServerPlayNetworking.registerGlobalReceiver(UpdateMobArenaRewardsPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                Level world = context.player().level();
-                if (world.getBlockEntity(payload.pos()) instanceof MobArenaSpawnerBlockEntity blockEntity) {
-                    blockEntity.setRewards(payload.rewards());
                     markDirtyAndSync(world, blockEntity);
                 }
             });

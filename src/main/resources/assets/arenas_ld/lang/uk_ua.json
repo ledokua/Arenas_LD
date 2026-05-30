@@ -65,8 +65,6 @@
   "block.arenas_ld.raid_boss_spawner": "Спавнер рейд-боса",
   "block.arenas_ld.mob_spawner": "Спавнер мобів",
   "block.arenas_ld.dungeon_boss_spawner": "Спавнер боса підземелля",
-  "block.arenas_ld.mob_arena_spawner": "Спавнер мобів на арені",
-  "block.arenas_ld.mob_arena_controller": "Контролер арени мобів",
   "block.arenas_ld.dungeon_controller": "Контролер підземелля",
   "block.arenas_ld.raid_controller": "Контролер рейду",
   "block.arenas_ld.phase_block": "Фазовий блок",
@@ -556,8 +554,6 @@
   "container.arenas_ld.mob_spawner_config": "Конфігурація спавнера мобів",
   "container.arenas_ld.boss_spawner_config": "Конфігурація спавнера боса",
   "container.arenas_ld.dungeon_boss_spawner_config": "Конфігурація спавнера боса підземелля",
-  "container.arenas_ld.mob_arena_spawner_config": "Конфігурація спавнера мобів на арені",
-  "container.arenas_ld.mob_arena_controller": "Контролер арени мобів",
   "container.arenas_ld.dungeon_controller": "Контролер підземелля",
 
   "bossbar.arenas_ld.dungeon_closing": "Підземелля закривається",

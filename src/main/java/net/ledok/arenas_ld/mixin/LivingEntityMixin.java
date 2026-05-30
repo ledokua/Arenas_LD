@@ -113,25 +113,6 @@ public abstract class LivingEntityMixin {
                 ci.cancel();
                 return;
             }
-            if (health <= 0.0F && ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) {
-                if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
-                    var arenaInfo = ArenasLdMod.MOB_ARENA_MANAGER.getArenaInfo(player);
-                    if (arenaInfo != null) {
-                        var world = player.server.getLevel(arenaInfo.dimension());
-                        if (world != null && world.getBlockEntity(arenaInfo.pos()) instanceof net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity spawner) {
-                            if (spawner.isHardcoreEnabled()) {
-                                spawner.handlePlayerHardcoreDeath(player);
-                                ci.cancel();
-                                return;
-                            }
-                        }
-                    }
-                    player.setGameMode(GameType.SPECTATOR);
-                    float newHealth = player.getMaxHealth() * 0.5f;
-                    player.setHealth(newHealth);
-                    ci.cancel();
-                }
-            }
         }
     }
 
@@ -160,24 +141,6 @@ public abstract class LivingEntityMixin {
                 && arenasLd$handleArenaDeath(player)) {
                 ci.cancel();
                 return;
-            }
-            if (ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) {
-                if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
-                    var arenaInfo = ArenasLdMod.MOB_ARENA_MANAGER.getArenaInfo(player);
-                    if (arenaInfo != null) {
-                        var world = player.server.getLevel(arenaInfo.dimension());
-                        if (world != null && world.getBlockEntity(arenaInfo.pos()) instanceof net.ledok.arenas_ld.block.entity.MobArenaSpawnerBlockEntity spawner) {
-                            if (spawner.isHardcoreEnabled()) {
-                                spawner.handlePlayerHardcoreDeath(player);
-                                ci.cancel();
-                                return;
-                            }
-                        }
-                    }
-                    player.setGameMode(GameType.SPECTATOR);
-                    player.setHealth(player.getMaxHealth() * 0.5f);
-                    ci.cancel();
-                }
             }
         }
     }

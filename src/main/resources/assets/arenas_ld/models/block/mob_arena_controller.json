@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:block/cube_all",
-  "textures": {
-    "all": "arenas_ld:block/mob_arena_controller"
-  }
-}

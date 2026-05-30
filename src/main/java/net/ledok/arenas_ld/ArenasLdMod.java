@@ -6,8 +6,6 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.ledok.arenas_ld.config.ArenasLdConfig;
 import net.ledok.arenas_ld.dungeon.manager.DungeonManager;
 import net.ledok.arenas_ld.dungeon.run.DungeonConnectionListener;
-import net.ledok.arenas_ld.event.PlayerTickHandler;
-import net.ledok.arenas_ld.manager.MobArenaManager;
 import net.ledok.arenas_ld.raid.manager.RaidBossManager;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.registry.*;
@@ -21,7 +19,6 @@ public class ArenasLdMod implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     public static final RaidBossManager RAID_BOSS_MANAGER = new RaidBossManager();
-    public static final MobArenaManager MOB_ARENA_MANAGER = new MobArenaManager();
     public static final DungeonManager DUNGEON_MANAGER = new DungeonManager();
     public static final ArenasLdConfig CONFIG = ArenasLdConfig.load();
 
@@ -41,11 +38,5 @@ public class ArenasLdMod implements ModInitializer {
         RAID_BOSS_MANAGER.initialize();
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> DUNGEON_MANAGER.clearForServerStop());
         DungeonConnectionListener.register();
-
-        ServerTickEvents.END_SERVER_TICK.register(server -> {
-            for (var player : server.getPlayerList().getPlayers()) {
-                PlayerTickHandler.onPlayerTick(player);
-            }
-        });
     }
 }

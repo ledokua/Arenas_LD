@@ -65,8 +65,6 @@
   "block.arenas_ld.raid_boss_spawner": "Raid Boss Spawner",
   "block.arenas_ld.mob_spawner": "Mob Spawner",
   "block.arenas_ld.dungeon_boss_spawner": "Dungeon Boss Spawner",
-  "block.arenas_ld.mob_arena_spawner": "Mob Arena Spawner",
-  "block.arenas_ld.mob_arena_controller": "Mob Arena Controller",
   "block.arenas_ld.dungeon_controller": "Dungeon Controller",
   "block.arenas_ld.raid_controller": "Raid Controller",
   "block.arenas_ld.phase_block": "Phase Block",
@@ -558,8 +556,6 @@
   "container.arenas_ld.mob_spawner_config": "Mob Spawner Config",
   "container.arenas_ld.boss_spawner_config": "Boss Spawner Config",
   "container.arenas_ld.dungeon_boss_spawner_config": "Dungeon Boss Spawner Config",
-  "container.arenas_ld.mob_arena_spawner_config": "Mob Arena Spawner Config",
-  "container.arenas_ld.mob_arena_controller": "Mob Arena Controller",
   "container.arenas_ld.dungeon_controller": "Dungeon Controller",
   "container.arenas_ld.raid_controller": "Raid Controller",
 
