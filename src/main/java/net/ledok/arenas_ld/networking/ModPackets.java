@@ -929,6 +929,7 @@ public class ModPackets {
         net.ledok.arenas_ld.raid.RaidPacketHandlers.register();
         SpawnerPacketHandlers.register();
         ArenaPacketHandlers.register();
+        net.ledok.arenas_ld.arena.ArenaPacketHandlers.register();
 
     }
 

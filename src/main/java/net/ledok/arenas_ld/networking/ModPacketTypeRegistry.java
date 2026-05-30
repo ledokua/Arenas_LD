@@ -148,6 +148,17 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(RaidSetTierConfigPayload.TYPE, RaidSetTierConfigPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidSetDeathTimePenaltyPayload.TYPE, RaidSetDeathTimePenaltyPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidSetLootViaInboxPayload.TYPE, RaidSetLootViaInboxPayload.STREAM_CODEC);
+
+        // ── Arena (reworked) C2S ────────────────────────────────────────────────
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaLobbyActionPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaLobbyActionPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaLobbyTargetPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaLobbyTargetPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaSetVisibilityPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaSetVisibilityPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaSetHardcorePayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaSetHardcorePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaAdminSetIntPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaAdminSetIntPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaAdminSetBoolPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaAdminSetBoolPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaSetRewardCurvePayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaSetRewardCurvePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaMoveInstancePayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaMoveInstancePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaRemoveInstancePayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaRemoveInstancePayload.STREAM_CODEC);
     }
 
     static void registerS2CTypes() {
