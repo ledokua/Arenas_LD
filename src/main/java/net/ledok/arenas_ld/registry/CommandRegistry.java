@@ -50,6 +50,10 @@ public class CommandRegistry {
                         player.openMenu(new RaidControllerAdminMenuProvider(raid));
                         return 1;
                     }
+                    if (be instanceof net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity arena) {
+                        player.openMenu(new net.ledok.arenas_ld.arena.screen.ArenaControllerAdminMenuProvider(arena));
+                        return 1;
+                    }
                     context.getSource().sendFailure(Component.translatable("gui.arenas_ld.admin.failure.no_controller"));
                     return 0;
                 }));

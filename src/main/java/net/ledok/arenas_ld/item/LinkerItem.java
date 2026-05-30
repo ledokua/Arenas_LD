@@ -90,6 +90,11 @@ public class LinkerItem extends Item {
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.raid_controller_selected", pos.toShortString()));
                 return InteractionResult.SUCCESS;
             }
+            if (blockEntity instanceof net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity) {
+                selectSource(stack, pos, world.dimension(), modeData);
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.arena_controller_selected", pos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
             player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
             return InteractionResult.SUCCESS;
         }
@@ -124,6 +129,18 @@ public class LinkerItem extends Item {
                 return InteractionResult.SUCCESS;
             }
             boolean added = raidController.addInstance(pos, world.dimension());
+            player.sendSystemMessage(Component.translatable(
+                    added ? "message.arenas_ld.linker.controller_instance.added"
+                            : "message.arenas_ld.linker.controller_instance.duplicate"
+            ));
+            return InteractionResult.SUCCESS;
+        }
+        if (sourceBe instanceof net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity arenaController) {
+            if (!(blockEntity instanceof net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity)) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
+                return InteractionResult.SUCCESS;
+            }
+            boolean added = arenaController.addInstance(pos, world.dimension());
             player.sendSystemMessage(Component.translatable(
                     added ? "message.arenas_ld.linker.controller_instance.added"
                             : "message.arenas_ld.linker.controller_instance.duplicate"

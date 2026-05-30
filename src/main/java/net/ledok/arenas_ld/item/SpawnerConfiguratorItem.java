@@ -71,7 +71,8 @@ public class SpawnerConfiguratorItem extends Item {
                 || clickedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity
                 || clickedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity
                 || clickedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity
-                || clickedBlockEntity instanceof MobArenaSpawnerBlockEntity) {
+                || clickedBlockEntity instanceof MobArenaSpawnerBlockEntity
+                || clickedBlockEntity instanceof net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity) {
                 stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(data.mode(), Optional.of(clickedPos), Optional.of(world.dimension())));
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawner_selected", clickedPos.toShortString()));
                 return InteractionResult.SUCCESS;
@@ -101,7 +102,8 @@ public class SpawnerConfiguratorItem extends Item {
             && !(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity)
             && !(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity)
             && !(selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity)
-            && !(selectedBlockEntity instanceof MobArenaSpawnerBlockEntity)) {
+            && !(selectedBlockEntity instanceof MobArenaSpawnerBlockEntity)
+            && !(selectedBlockEntity instanceof net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity)) {
             player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.invalid_spawner"));
             stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, SpawnerSelectionDataComponent.DEFAULT);
             return InteractionResult.FAIL;
@@ -119,6 +121,8 @@ public class SpawnerConfiguratorItem extends Item {
                     newDbs.setEntrancePosition(clickedPos, clickedDimension);
                 } else if (selectedBlockEntity instanceof RaidBossSpawnerBlockEntity bossSpawner) {
                     bossSpawner.setEntrancePosition(clickedPos, clickedDimension);
+                } else if (selectedBlockEntity instanceof net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity arenaSpawner) {
+                    arenaSpawner.setEntrancePosition(clickedPos, clickedDimension);
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.entrance_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
@@ -184,6 +188,15 @@ public class SpawnerConfiguratorItem extends Item {
                     } else {
                         raidBossSpawner.addRespawnPointOffset(respawnOffset);
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.respawn_pos_added", clickedPos.toShortString(), raidBossSpawner.getRespawnPointOffsets().size()));
+                    }
+                } else if (selectedBlockEntity instanceof net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity arenaSpawner) {
+                    // Arena spawner holds multiple respawn points: clicking toggles add/remove.
+                    BlockPos respawnOffset = respawnAbsolute.subtract(selectedSpawnerPos);
+                    if (arenaSpawner.removeRespawnPointOffset(respawnOffset)) {
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.respawn_pos_removed", clickedPos.toShortString()));
+                    } else {
+                        arenaSpawner.addRespawnPointOffset(respawnOffset);
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.respawn_pos_added", clickedPos.toShortString(), arenaSpawner.getRespawnPointOffsets().size()));
                     }
                 } else if (selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity room) {
                     // Room holds a single respawn point: placing replaces it, clicking the same one clears it.

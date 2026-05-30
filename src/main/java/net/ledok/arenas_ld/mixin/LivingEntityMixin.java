@@ -3,6 +3,10 @@ package net.ledok.arenas_ld.mixin;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.run.DungeonRun;
+import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
+import net.ledok.arenas_ld.arena.run.ArenaRun;
+import net.ledok.arenas_ld.arena.run.ArenaRunLifecycle;
+import net.ledok.arenas_ld.dungeon.run.RunParticipant;
 import net.ledok.arenas_ld.util.EntityEquipmentHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -104,6 +108,11 @@ public abstract class LivingEntityMixin {
                     return;
                 }
             }
+            if (health <= 0.0F && player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR
+                && arenasLd$handleArenaDeath(player)) {
+                ci.cancel();
+                return;
+            }
             if (health <= 0.0F && ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) {
                 if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
                     var arenaInfo = ArenasLdMod.MOB_ARENA_MANAGER.getArenaInfo(player);
@@ -147,6 +156,11 @@ public abstract class LivingEntityMixin {
                     return;
                 }
             }
+            if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR
+                && arenasLd$handleArenaDeath(player)) {
+                ci.cancel();
+                return;
+            }
             if (ArenasLdMod.MOB_ARENA_MANAGER.isInArena(player)) {
                 if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR) {
                     var arenaInfo = ArenasLdMod.MOB_ARENA_MANAGER.getArenaInfo(player);
@@ -178,6 +192,34 @@ public abstract class LivingEntityMixin {
         if (((LivingEntity) (Object) this).getTags().contains(EntityEquipmentHelper.NO_NATURAL_LOOT_TAG)) {
             ci.cancel();
         }
+    }
+
+    /**
+     * Route a lethal hit on a reworked-arena participant to the arena lifecycle (down, or hardcore
+     * removal). Returns true if the player was in an active arena run and was handled.
+     */
+    @Unique
+    private boolean arenasLd$handleArenaDeath(ServerPlayer player) {
+        if (!(player.level() instanceof net.minecraft.server.level.ServerLevel sl)) return false;
+        var server = sl.getServer();
+        for (ArenaControllerBlockEntity.ControllerKey key : ArenaControllerBlockEntity.getControllers()) {
+            net.minecraft.server.level.ServerLevel controllerLevel = server.getLevel(key.dimension());
+            if (controllerLevel == null) continue;
+            if (!(controllerLevel.getBlockEntity(key.pos()) instanceof ArenaControllerBlockEntity controller)) continue;
+            for (ArenaRun run : controller.getActiveRuns().values()) {
+                RunParticipant p = run.participants().get(player.getUUID());
+                if (p == null || p.status() == RunParticipant.ParticipantStatus.REMOVED) continue;
+                net.minecraft.server.level.ServerLevel runLevel = server.getLevel(run.spawnerDimension());
+                if (runLevel == null) runLevel = sl;
+                if (run.hardcoreEnabled()) {
+                    ArenaRunLifecycle.handlePlayerHardcoreDeath(runLevel, run, player);
+                } else {
+                    ArenaRunLifecycle.handlePlayerDown(runLevel, controller, run, player);
+                }
+                return true;
+            }
+        }
+        return false;
     }
 
     @Unique

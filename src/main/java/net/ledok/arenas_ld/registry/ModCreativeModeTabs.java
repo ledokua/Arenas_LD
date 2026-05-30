@@ -24,6 +24,8 @@ public class ModCreativeModeTabs {
                     entries.accept(BlockRegistry.DUNGEON_BOSS_SPAWNER_BLOCK);
                     entries.accept(BlockRegistry.MOB_ARENA_SPAWNER_BLOCK);
                     entries.accept(BlockRegistry.MOB_ARENA_CONTROLLER_BLOCK);
+                    entries.accept(BlockRegistry.ARENA_SPAWNER_BLOCK);
+                    entries.accept(BlockRegistry.ARENA_CONTROLLER_BLOCK);
                     entries.accept(BlockRegistry.RAID_CONTROLLER_BLOCK);
                     entries.accept(BlockRegistry.DUNGEON_CONTROLLER_BLOCK);
                     entries.accept(BlockRegistry.ROOM_CONTROLLER_BLOCK);
