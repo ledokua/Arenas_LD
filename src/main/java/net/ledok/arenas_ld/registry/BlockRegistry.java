@@ -24,6 +24,9 @@ public class BlockRegistry {
     public static final Block ARENA_SPAWNER_BLOCK = registerBlock("arena_spawner",
             new net.ledok.arenas_ld.arena.block.ArenaSpawnerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SPAWNER).strength(-1.0f, 3600000.0f)));
 
+    public static final Block ARENA_CONTROLLER_BLOCK = registerBlock("arena_controller",
+            new net.ledok.arenas_ld.arena.block.ArenaControllerBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f)));
+
     public static final Block PHASE_BLOCK = registerBlock("phase_block",
             new PhaseBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.GLASS).noOcclusion().strength(-1.0f, 3600000.0f)));
 
