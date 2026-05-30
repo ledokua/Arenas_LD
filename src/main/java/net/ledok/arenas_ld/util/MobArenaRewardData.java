@@ -1,5 +1,7 @@
 package net.ledok.arenas_ld.util;
 
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.nbt.CompoundTag;
 
 public class MobArenaRewardData {
@@ -10,6 +12,16 @@ public class MobArenaRewardData {
     public int minWave = 1;
     public int maxWave = 100;
     public int waveFrequency = 1;
+
+    public static final Codec<MobArenaRewardData> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+        Codec.BOOL.optionalFieldOf("perPlayer", false).forGetter(d -> d.perPlayer),
+        Codec.STRING.optionalFieldOf("lootTableId", "").forGetter(d -> d.lootTableId),
+        Codec.INT.optionalFieldOf("weight", 10).forGetter(d -> d.weight),
+        Codec.INT.optionalFieldOf("rolls", 1).forGetter(d -> d.rolls),
+        Codec.INT.optionalFieldOf("minWave", 1).forGetter(d -> d.minWave),
+        Codec.INT.optionalFieldOf("maxWave", 100).forGetter(d -> d.maxWave),
+        Codec.INT.optionalFieldOf("waveFrequency", 1).forGetter(d -> d.waveFrequency)
+    ).apply(instance, MobArenaRewardData::new));
 
     public MobArenaRewardData() {}
 

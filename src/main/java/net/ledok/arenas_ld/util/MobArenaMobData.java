@@ -1,5 +1,7 @@
 package net.ledok.arenas_ld.util;
 
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -16,11 +18,21 @@ public class MobArenaMobData {
     public int maxWave = 100;
     public boolean isBoss = false;
 
+    public static final Codec<MobArenaMobData> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+        Codec.STRING.optionalFieldOf("mobId", "minecraft:zombie").forGetter(d -> d.mobId),
+        AttributeData.CODEC.listOf().optionalFieldOf("attributes", List.of()).forGetter(d -> d.attributes),
+        EquipmentData.CODEC.optionalFieldOf("equipment", new EquipmentData()).forGetter(d -> d.equipment),
+        Codec.INT.optionalFieldOf("weight", 10).forGetter(d -> d.weight),
+        Codec.INT.optionalFieldOf("minWave", 1).forGetter(d -> d.minWave),
+        Codec.INT.optionalFieldOf("maxWave", 100).forGetter(d -> d.maxWave),
+        Codec.BOOL.optionalFieldOf("isBoss", false).forGetter(d -> d.isBoss)
+    ).apply(instance, MobArenaMobData::new));
+
     public MobArenaMobData() {}
 
     public MobArenaMobData(String mobId, List<AttributeData> attributes, EquipmentData equipment, int weight, int minWave, int maxWave, boolean isBoss) {
         this.mobId = mobId;
-        this.attributes = attributes;
+        this.attributes = new ArrayList<>(attributes);
         this.equipment = equipment;
         this.weight = weight;
         this.minWave = minWave;

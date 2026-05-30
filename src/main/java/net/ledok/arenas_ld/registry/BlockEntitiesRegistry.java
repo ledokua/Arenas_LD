@@ -23,6 +23,11 @@ public class BlockEntitiesRegistry {
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_arena_spawner_be"),
                     BlockEntityType.Builder.of(MobArenaSpawnerBlockEntity::new, BlockRegistry.MOB_ARENA_SPAWNER_BLOCK).build(null));
 
+    public static final BlockEntityType<net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity> ARENA_SPAWNER_BLOCK_ENTITY =
+            Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
+                    ResourceLocation.parse(ArenasLdMod.MOD_ID + ":arena_spawner_be"),
+                    BlockEntityType.Builder.of(net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity::new, BlockRegistry.ARENA_SPAWNER_BLOCK).build(null));
+
     public static final BlockEntityType<PhaseBlockEntity> PHASE_BLOCK_ENTITY =
             Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
                     ResourceLocation.parse(ArenasLdMod.MOD_ID + ":phase_block_be"),
