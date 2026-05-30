@@ -57,7 +57,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * tiers — difficulty comes from per-wave scaling. Adds a {@code maxWave} ceiling and a configurable
  * non-linear reward curve used by the end-of-run summary.
  */
-public class ArenaControllerBlockEntity extends BlockEntity {
+public class ArenaControllerBlockEntity extends BlockEntity
+    implements net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory<net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData> {
 
     public record ControllerKey(BlockPos pos, ResourceKey<Level> dimension) {}
 
@@ -900,5 +901,23 @@ public class ArenaControllerBlockEntity extends BlockEntity {
         } catch (Exception e) {
             return Level.OVERWORLD;
         }
+    }
+
+    // ── Screen factory (player lobby view) ──────────────────────────────────────
+    @Override
+    public Component getDisplayName() {
+        return Component.translatable("container.arenas_ld.arena_controller");
+    }
+
+    @Nullable
+    @Override
+    public net.minecraft.world.inventory.AbstractContainerMenu createMenu(
+            int syncId, net.minecraft.world.entity.player.Inventory inventory, net.minecraft.world.entity.player.Player player) {
+        return new net.ledok.arenas_ld.arena.screen.ArenaControllerScreenHandler(syncId, inventory, this);
+    }
+
+    @Override
+    public net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData getScreenOpeningData(ServerPlayer player) {
+        return new net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData(worldPosition);
     }
 }

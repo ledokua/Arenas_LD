@@ -35,6 +35,7 @@ public class ArenasLdClient implements ClientModInitializer {
         MenuScreens.register(ModScreenHandlers.DUNGEON_CONTROLLER_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen::new);
         MenuScreens.register(ModScreenHandlers.DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreen::new);
         MenuScreens.register(ModScreenHandlers.RAID_CONTROLLER_ADMIN_SCREEN_HANDLER, RaidControllerAdminScreen::new);
+        MenuScreens.register(ModScreenHandlers.ARENA_CONTROLLER_SCREEN_HANDLER, net.ledok.arenas_ld.arena.screen.ArenaControllerScreen::new);
 
         BlockRenderLayerMap.INSTANCE.putBlock(BlockRegistry.PHASE_BLOCK, RenderType.translucent());
 
