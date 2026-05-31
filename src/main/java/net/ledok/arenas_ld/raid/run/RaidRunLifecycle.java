@@ -16,6 +16,8 @@ import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.util.EntityEquipmentHelper;
 import net.ledok.arenas_ld.util.LootBundleDataComponent;
+import net.ledok.arenas_ld.util.PartyTeamStore;
+import net.ledok.arenas_ld.util.PendingRestoreStore;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -259,6 +261,7 @@ public final class RaidRunLifecycle {
                     absoluteEntrance.getX() + 0.5, absoluteEntrance.getY(), absoluteEntrance.getZ() + 0.5,
                     player.getYRot(), player.getXRot());
             }
+            addToPartyTeam(world, run, player);
         }
 
         run.setBossRef(boss.getUUID(), world.dimension());
@@ -468,6 +471,7 @@ public final class RaidRunLifecycle {
             // Players return to where they were when the run started (captured on entry).
             restoreToReturnPoint(world, run, uuid);
         }
+        teardownPartyTeam(world, run);
 
         clearRaidTimerBossBar(run);
         clearCloseTimerBossBar(run);
@@ -494,8 +498,8 @@ public final class RaidRunLifecycle {
         GameType restoreMode = rp.previousGameMode();
         ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
         if (player == null) {
-            ArenasLdMod.RAID_BOSS_MANAGER.addPendingRestore(
-                    uuid, BlockPos.containing(rp.pos()), rp.dimension(), restoreMode);
+            // Offline at run end / forfeit — persist the eject so they're sent home on next login.
+            PendingRestoreStore.get(world.getServer()).put(uuid, rp);
             return;
         }
         player.setGameMode(restoreMode);
@@ -552,6 +556,10 @@ public final class RaidRunLifecycle {
             }
             run.setDowned(new DownedPlayer(player.getUUID(), resolveRespawnTimeTicks(controller)));
         }
+        int graceSeconds = Math.max(0, controller.getDisconnectGraceTicks() / 20);
+        broadcastToParty(world, run, Component.translatable(
+            "message.arenas_ld.raid.party_disconnected", participant.playerName(), graceSeconds)
+            .withStyle(ChatFormatting.YELLOW), player.getUUID());
     }
 
     public static void handlePlayerReconnect(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, ServerPlayer player) {
@@ -582,6 +590,9 @@ public final class RaidRunLifecycle {
             respawnAtEntrance(world, run, player);
             run.clearDowned(player.getUUID());
         }
+        broadcastToParty(world, run, Component.translatable(
+            "message.arenas_ld.raid.party_reconnected", participant.playerName())
+            .withStyle(ChatFormatting.GREEN), player.getUUID());
     }
 
     public static void handlePlayerHardcoreDeath(ServerLevel world, RaidRun run, ServerPlayer player) {
@@ -595,6 +606,7 @@ public final class RaidRunLifecycle {
         run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, world.getGameTime()));
         run.clearDowned(player.getUUID());
         run.clearDisconnected(player.getUUID());
+        removeFromPartyTeam(world, run, player.getScoreboardName());
         restoreToReturnPoint(world, run, player.getUUID());
         run.removeReturnPoint(player.getUUID());
         BusyStateCompat.clearBusy(player.getUUID(), BUSY_REASON);
@@ -638,12 +650,22 @@ public final class RaidRunLifecycle {
             if (now - entry.getValue() <= grace) continue;
             UUID uuid = entry.getKey();
             RunParticipant participant = run.participants().get(uuid);
+            String name = participant != null ? participant.playerName() : uuid.toString().substring(0, 8);
             if (participant != null) {
                 run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, now));
             }
+            // Persist the eject so the forfeited player is sent home on next login.
+            PlayerReturnPoint rp = run.returnPoints().get(uuid);
+            if (rp != null) {
+                PendingRestoreStore.get(world.getServer()).put(uuid, rp);
+                run.removeReturnPoint(uuid);
+            }
+            removeFromPartyTeam(world, run, name);
             run.clearDisconnected(uuid);
             run.clearDowned(uuid);
             BusyStateCompat.clearBusy(uuid, BUSY_REASON);
+            broadcastToParty(world, run, Component.translatable("message.arenas_ld.raid.party_removed", name)
+                .withStyle(ChatFormatting.RED), uuid);
         }
     }
 
@@ -675,6 +697,70 @@ public final class RaidRunLifecycle {
         RunParticipant participant = run.participants().get(player.getUUID());
         if (participant != null) {
             run.updateParticipant(participant.withStatus(ParticipantStatus.ACTIVE, world.getGameTime()));
+        }
+    }
+
+    // ── Party team (temporary no-PvP team for the duration of the raid) ─────────
+
+    private static String partyTeamNameFor(RaidRun run) {
+        return "ald_r_" + Integer.toHexString(run.spawnerPos().hashCode());
+    }
+
+    /** Adds the player to the run's no-PvP party team, remembering their prior team. */
+    private static void addToPartyTeam(ServerLevel world, RaidRun run, ServerPlayer player) {
+        Scoreboard scoreboard = world.getScoreboard();
+        String teamName = partyTeamNameFor(run);
+        PlayerTeam team = scoreboard.getPlayerTeam(teamName);
+        if (team == null) {
+            team = scoreboard.addPlayerTeam(teamName);
+            team.setAllowFriendlyFire(false);
+            team.setSeeFriendlyInvisibles(true);
+        }
+        String name = player.getScoreboardName();
+        PlayerTeam prior = scoreboard.getPlayersTeam(name);
+        PartyTeamStore.get(world.getServer()).put(name, prior != null ? prior.getName() : "");
+        scoreboard.addPlayerToTeam(name, team);
+    }
+
+    /** Removes one member from the run team and restores their prior team (works offline). */
+    private static void removeFromPartyTeam(ServerLevel world, RaidRun run, String playerName) {
+        Scoreboard scoreboard = world.getScoreboard();
+        String priorName = PartyTeamStore.get(world.getServer()).take(playerName);
+        if (priorName == null) {
+            return;
+        }
+        PlayerTeam current = scoreboard.getPlayersTeam(playerName);
+        if (current != null && current.getName().equals(partyTeamNameFor(run))) {
+            scoreboard.removePlayerFromTeam(playerName, current);
+        }
+        if (!priorName.isEmpty()) {
+            PlayerTeam prior = scoreboard.getPlayerTeam(priorName);
+            if (prior != null) {
+                scoreboard.addPlayerToTeam(playerName, prior);
+            }
+        }
+    }
+
+    /** Restores every member's prior team and deletes the temporary party team. */
+    private static void teardownPartyTeam(ServerLevel world, RaidRun run) {
+        for (RunParticipant participant : run.participants().values()) {
+            removeFromPartyTeam(world, run, participant.playerName());
+        }
+        PlayerTeam team = world.getScoreboard().getPlayerTeam(partyTeamNameFor(run));
+        if (team != null) {
+            world.getScoreboard().removePlayerTeam(team);
+        }
+    }
+
+    /** Sends a message to every online, non-removed participant except {@code except} (nullable). */
+    private static void broadcastToParty(ServerLevel world, RaidRun run, Component message, @Nullable UUID except) {
+        for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
+            if (entry.getValue().status() == ParticipantStatus.REMOVED) continue;
+            if (except != null && entry.getKey().equals(except)) continue;
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
+            if (player != null) {
+                player.sendSystemMessage(message);
+            }
         }
     }
 

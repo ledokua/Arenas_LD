@@ -1,25 +1,21 @@
 package net.ledok.arenas_ld.raid.manager;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.ledok.arenas_ld.dungeon.run.PlayerReturnPoint;
 import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
-import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceKey;
+import net.ledok.arenas_ld.util.PendingRestoreStore;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.Level;
 
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 import java.util.Set;
+import java.util.UUID;
 import java.util.WeakHashMap;
 
 public class RaidBossManager {
-    public record PendingRestore(BlockPos exitPos, ResourceKey<Level> exitDim, GameType gameMode) {}
-
     private final Set<RaidBossSpawnerBlockEntity> activeSpawners = Collections.newSetFromMap(new WeakHashMap<>());
-    private final Map<UUID, PendingRestore> pendingRestores = new HashMap<>();
 
     public void initialize() {
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
@@ -59,12 +55,7 @@ public class RaidBossManager {
         if (player == null) {
             return null;
         }
-        for (RaidBossSpawnerBlockEntity spawner : activeSpawners) {
-            if (spawner.isTracked(player.getUUID()) && spawner.isRaidRunning()) {
-                return spawner;
-            }
-        }
-        return null;
+        return getSpawnerForOfflinePlayer(player.getUUID());
     }
 
     public RaidBossSpawnerBlockEntity getSpawnerForOfflinePlayer(UUID uuid) {
@@ -79,34 +70,25 @@ public class RaidBossManager {
         return null;
     }
 
-    public void addPendingRestore(UUID uuid, BlockPos exitPos, ResourceKey<Level> exitDim, GameType gameMode) {
-        if (uuid == null || exitPos == null || exitDim == null || gameMode == null) {
-            return;
-        }
-        pendingRestores.put(uuid, new PendingRestore(exitPos.immutable(), exitDim, gameMode));
-    }
-
+    /**
+     * Ejects a player who was removed from a raid (forfeited past grace, or offline when the run
+     * ended) on their next login, using the persisted {@link PendingRestoreStore}.
+     */
     public void handlePostBattleReconnect(ServerPlayer player) {
         if (player == null) {
             return;
         }
-        PendingRestore restore = pendingRestores.remove(player.getUUID());
-        if (restore == null) {
+        PlayerReturnPoint rp = PendingRestoreStore.get(player.server).take(player.getUUID());
+        if (rp == null) {
             return;
         }
-        var exitLevel = player.server.getLevel(restore.exitDim());
-        player.setGameMode(restore.gameMode());
+        player.setGameMode(rp.previousGameMode());
         player.setHealth(player.getMaxHealth());
-        if (exitLevel != null) {
-            BlockPos exitPos = restore.exitPos();
-            player.teleportTo(
-                    exitLevel,
-                    exitPos.getX() + 0.5,
-                    exitPos.getY(),
-                    exitPos.getZ() + 0.5,
-                    player.getYRot(),
-                    player.getXRot()
-            );
+        ServerLevel target = player.server.getLevel(rp.dimension());
+        if (target != null) {
+            player.teleportTo(target, rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
         }
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.raid.run_ended_while_away")
+            .withStyle(ChatFormatting.YELLOW));
     }
 }

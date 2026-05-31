@@ -41,6 +41,20 @@ public class ArenasLdClient implements ClientModInitializer {
 
         SelectionOverlayRenderer.register();
 
+        ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload.TYPE, (payload, context) ->
+                context.client().execute(() -> {
+                    if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen screen
+                            && screen.matchesController(payload.controllerPos())) {
+                        screen.onClose();
+                    }
+                }));
+        ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload.TYPE, (payload, context) ->
+                context.client().execute(() -> {
+                    if (Minecraft.getInstance().screen instanceof RaidControllerScreen screen
+                            && screen.matchesController(payload.controllerPos())) {
+                        screen.onClose();
+                    }
+                }));
         ClientPlayNetworking.registerGlobalReceiver(DungeonControllerSnapshotPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> {
                     if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen screen

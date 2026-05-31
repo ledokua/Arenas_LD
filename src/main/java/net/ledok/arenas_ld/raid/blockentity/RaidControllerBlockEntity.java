@@ -139,6 +139,8 @@ public class RaidControllerBlockEntity extends BlockEntity
     private static final int DEFAULT_MAX_PARTY_SIZE = 10;
     private static final int DEFAULT_INVITE_EXPIRY_TICKS = 30 * 20;
     private static final int DEFAULT_COOLDOWN_TICKS = 5 * 60 * 20;
+    /** How long the front queued lobby keeps priority on a free instance before it rotates to the next. */
+    private static final int QUEUE_PRIORITY_TIMEOUT_TICKS = 20 * 20;
     private static final int DEFAULT_CLOSE_TIMER_SECONDS = 30;
     private static final int DEFAULT_DEATH_TIME_PENALTY_TICKS = 10 * 20;
     private static final int DEFAULT_DISCONNECT_GRACE_TICKS = 5 * 60 * 20;
@@ -162,6 +164,9 @@ public class RaidControllerBlockEntity extends BlockEntity
     private final List<Lobby> lobbies = new ArrayList<>();
     /** Ordered queue of lobby IDs waiting for a free instance. */
     private final List<UUID> queuedLobbyIds = new ArrayList<>();
+    /** While an instance is free: which queued lobby currently holds priority, and since when (tick). Transient. */
+    private UUID priorityFrontLobby = null;
+    private long priorityFrontSinceTick = -1L;
     /** All pending invites across all lobbies. */
     private final List<PendingInvite> pendingInvites = new ArrayList<>();
     /** All pending join requests across all lobbies. */
@@ -187,6 +192,7 @@ public class RaidControllerBlockEntity extends BlockEntity
     private int lobbyOfflineTimeoutTicks = DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS;
     /** When true, per-player loot bundles are delivered to the Economy_LD inbox instead of dropped in the world. */
     private boolean lootViaInbox = false;
+    private String raidName = "";
     /** Per-tier raid configs (health/damage multipliers, time limit, enabled, reward currency). */
     private final Map<DifficultyTier, RaidTierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
     /** Instances queued for removal once their current run ends. */
@@ -326,6 +332,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
         be.ensureChunkForceLoaded(serverLevel);
         be.tickCooldowns(serverLevel);
+        be.tickQueuePriority(serverLevel);
         be.tickLobbies(serverLevel);
         be.tickActiveRuns(serverLevel);
     }
@@ -462,6 +469,22 @@ public class RaidControllerBlockEntity extends BlockEntity
             return;
         }
         this.lootViaInbox = lootViaInbox;
+        markDirtyAndSync();
+    }
+
+    public String getRaidName() {
+        return raidName;
+    }
+
+    public void setRaidName(String name) {
+        String trimmed = name == null ? "" : name.trim();
+        if (trimmed.length() > 48) {
+            trimmed = trimmed.substring(0, 48);
+        }
+        if (this.raidName.equals(trimmed)) {
+            return;
+        }
+        this.raidName = trimmed;
         markDirtyAndSync();
     }
 
@@ -950,17 +973,31 @@ public class RaidControllerBlockEntity extends BlockEntity
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
         if (!(level instanceof ServerLevel serverLevel)) return false;
 
-        RaidInstanceState freeInst = reserveFreeInstance();
-        if (freeInst == null) {
-            // Queue it
+        boolean isFront = queuedLobbyIds.isEmpty() || queuedLobbyIds.get(0).equals(lobby.lobbyId());
+        boolean free = hasAnyFreeInstance();
+
+        // No free instance, or other lobbies are ahead in line → queue this lobby and report.
+        if (!free || !isFront) {
             if (!queuedLobbyIds.contains(lobby.lobbyId())) {
                 queuedLobbyIds.add(lobby.lobbyId());
-                notifyLobbyMembers(lobby, Component.translatable("message.arenas_ld.lobby_queued"));
+            }
+            int position = queuedLobbyIds.indexOf(lobby.lobbyId()) + 1;
+            if (!free) {
+                notifyLobbyMembers(lobby, Component.translatable("message.arenas_ld.lobby.queued",
+                    position, formatDuration(getEstimatedWaitSeconds())));
+            } else {
+                notifyLobbyMembers(lobby, Component.translatable("message.arenas_ld.lobby.queue_position", position));
             }
             markDirtyAndSync();
             return false;
         }
 
+        RaidInstanceState freeInst = reserveFreeInstance();
+        if (freeInst == null) {
+            markDirtyAndSync();
+            return false;
+        }
+        queuedLobbyIds.remove(lobby.lobbyId());
         return launchRaidOnInstance(serverLevel, lobby, freeInst);
     }
 
@@ -1025,8 +1062,8 @@ public class RaidControllerBlockEntity extends BlockEntity
         // Tear down the run-side mirror entry.
         activeRuns.remove(spawnerPos);
 
-        // Promote next queued lobby
-        promoteNextQueuedLobby();
+        // The freed instance is now on cooldown; tickQueuePriority offers it to the queue front
+        // once the cooldown expires (notify-only, never auto-start).
         markDirtyAndSync();
     }
 
@@ -1045,7 +1082,6 @@ public class RaidControllerBlockEntity extends BlockEntity
             changed = true;
         }
         if (changed) {
-            promoteNextQueuedLobby();
             markDirtyAndSync();
         }
     }
@@ -1109,24 +1145,105 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
     }
 
-    private void promoteNextQueuedLobby() {
-        if (!hasAnyFreeInstance()) return;
-        if (queuedLobbyIds.isEmpty()) return;
-        if (!(level instanceof ServerLevel serverLevel)) return;
+    /** Estimated ticks until the soonest instance frees (run remaining + cooldown, or current cooldown). */
+    public int estimateWaitTicks() {
+        int min = Integer.MAX_VALUE;
+        for (RaidInstanceState inst : instances) {
+            int untilFree;
+            if (inst.status() == InstanceStatus.RUNNING) {
+                RaidRun run = activeRuns.get(inst.spawnerPos());
+                int remaining = run != null ? Math.max(0, run.timerTicks()) : 0;
+                untilFree = remaining + cooldownTicks;
+            } else if (inst.status() == InstanceStatus.COOLDOWN) {
+                untilFree = inst.cooldownTicksRemaining();
+            } else {
+                untilFree = 0;
+            }
+            min = Math.min(min, untilFree);
+        }
+        return min == Integer.MAX_VALUE ? 0 : min;
+    }
 
-        UUID nextLobbyId = queuedLobbyIds.get(0);
-        Lobby lobby = getLobbyById(nextLobbyId);
-        if (lobby == null) {
+    public int getEstimatedWaitSeconds() {
+        return estimateWaitTicks() / 20;
+    }
+
+    /** Notifies the front queued lobby that an instance is free (clickable [Start]; does not auto-start). */
+    private void notifyFrontOfQueue() {
+        if (queuedLobbyIds.isEmpty() || !hasAnyFreeInstance() || !(level instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        while (!queuedLobbyIds.isEmpty() && getLobbyById(queuedLobbyIds.get(0)) == null) {
             queuedLobbyIds.remove(0);
-            promoteNextQueuedLobby();
+        }
+        if (queuedLobbyIds.isEmpty()) {
+            return;
+        }
+        Lobby front = getLobbyById(queuedLobbyIds.get(0));
+        if (front == null) {
+            return;
+        }
+        Component start = net.ledok.arenas_ld.util.LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.lobby.button.start"), 0x86D36C,
+            net.ledok.arenas_ld.util.LobbyChatActions.startCommand(serverLevel, worldPosition),
+            Component.translatable("message.arenas_ld.lobby.button.start.hover"));
+        notifyLobbyMembers(front, Component.translatable("message.arenas_ld.lobby.instance_free").append(" ").append(start));
+    }
+
+    /**
+     * Per-tick queue priority. While an instance is free, the front lobby has
+     * {@link #QUEUE_PRIORITY_TIMEOUT_TICKS} to start; if it doesn't, priority rotates to the next
+     * lobby (the laggard goes to the back). Notify-only — never auto-starts.
+     */
+    private void tickQueuePriority(ServerLevel serverLevel) {
+        while (!queuedLobbyIds.isEmpty() && getLobbyById(queuedLobbyIds.get(0)) == null) {
+            queuedLobbyIds.remove(0);
+            markDirtyAndSync();
+        }
+        if (queuedLobbyIds.isEmpty() || !hasAnyFreeInstance()) {
+            priorityFrontLobby = null;
+            priorityFrontSinceTick = -1L;
             return;
         }
 
-        RaidInstanceState freeInst = reserveFreeInstance();
-        if (freeInst == null) return;
+        long now = serverLevel.getGameTime();
+        UUID front = queuedLobbyIds.get(0);
+        if (!front.equals(priorityFrontLobby)) {
+            priorityFrontLobby = front;
+            priorityFrontSinceTick = now;
+            notifyFrontOfQueue();
+            return;
+        }
+        if (now - priorityFrontSinceTick < QUEUE_PRIORITY_TIMEOUT_TICKS) {
+            return;
+        }
+        if (queuedLobbyIds.size() > 1) {
+            UUID demoted = queuedLobbyIds.remove(0);
+            queuedLobbyIds.add(demoted);
+            Lobby demotedLobby = getLobbyById(demoted);
+            if (demotedLobby != null) {
+                notifyLobbyMembers(demotedLobby, Component.translatable("message.arenas_ld.lobby.priority_lost")
+                    .withStyle(net.minecraft.ChatFormatting.YELLOW));
+            }
+            priorityFrontLobby = null;
+            priorityFrontSinceTick = -1L;
+            markDirtyAndSync();
+            broadcastPlayerSnapshots();
+        } else {
+            priorityFrontSinceTick = now;
+            notifyFrontOfQueue();
+        }
+    }
 
-        queuedLobbyIds.remove(0);
-        launchRaidOnInstance(serverLevel, lobby, freeInst);
+    /** Pushes the player-facing controller snapshot to all online players (live queue/lobby UI). */
+    private void broadcastPlayerSnapshots() {
+        if (!(level instanceof ServerLevel serverLevel) || serverLevel.getServer() == null) {
+            return;
+        }
+        for (ServerPlayer target : serverLevel.getServer().getPlayerList().getPlayers()) {
+            net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(target,
+                new net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload(getScreenOpeningData(target)));
+        }
     }
 
     private boolean launchRaidOnInstance(ServerLevel serverLevel, Lobby lobby, RaidInstanceState instance) {
@@ -1198,6 +1315,13 @@ public class RaidControllerBlockEntity extends BlockEntity
         Lobby running = lobby.withStatus(net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN);
         replaceLobby(running);
 
+        // Close the controller screen for everyone who was in the lobby.
+        net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload closePayload =
+            new net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload(worldPosition);
+        for (ServerPlayer p : players) {
+            net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(p, closePayload);
+        }
+
         markDirtyAndSync();
         return true;
     }
@@ -1231,6 +1355,15 @@ public class RaidControllerBlockEntity extends BlockEntity
         return null;
     }
 
+    private static String formatDuration(int totalSeconds) {
+        if (totalSeconds <= 0) {
+            return "soon";
+        }
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return minutes > 0 ? (minutes + "m " + seconds + "s") : (seconds + "s");
+    }
+
     private List<ServerPlayer> resolveOnlinePlayers(Lobby lobby, net.minecraft.server.MinecraftServer server) {
         List<ServerPlayer> players = new ArrayList<>();
         for (UUID memberUuid : lobby.members()) {
@@ -1240,7 +1373,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         return players;
     }
 
-    private void notifyLobbyMembers(Lobby lobby, Component message) {
+    public void notifyLobbyMembers(Lobby lobby, Component message) {
         if (!(level instanceof ServerLevel sl)) return;
         for (UUID memberUuid : lobby.members()) {
             ServerPlayer p = sl.getServer().getPlayerList().getPlayer(memberUuid);
@@ -1299,6 +1432,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save RaidController at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
+        nbt.putString("RaidName", raidName);
     }
 
     @Override
@@ -1366,6 +1500,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             // Legacy NBT fallback — migrate old-format data
             loadLegacyNbt(nbt);
         }
+        raidName = nbt.getString("RaidName");
     }
 
     /** Attempts to read the legacy (pre-rework) NBT format so existing worlds don't lose data. */
@@ -1501,6 +1636,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             myJoinRequests,
             instanceData,
             queuePosition,
+            getEstimatedWaitSeconds(),
             getMaxPartySize(),
             getRespawnTimeTicks(),
             serverTick,
@@ -1558,6 +1694,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             inviteExpiryTicks,
             deathTimePenaltyTicks,
             lootViaInbox,
+            raidName,
             new EnumMap<>(tierConfigs),
             running,
             knownLootTableIds

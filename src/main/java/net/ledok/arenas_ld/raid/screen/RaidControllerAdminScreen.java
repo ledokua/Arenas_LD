@@ -102,6 +102,7 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
     private TextBoxComponent currentLootField;
     private Consumer<String> currentLootOnChange;
 
+    private String nameInput;
     private String cooldownInput;
     private String closeTimerInput;
     private String maxPartyInput;
@@ -505,6 +506,8 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
     private void buildGeneralTab() {
         contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.general.section"), null));
         contentArea.child(spacer(2));
+        contentArea.child(nameFieldRow());
+        contentArea.child(spacer(8));
         contentArea.child(twoColumnRow(
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.cooldown"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.cooldown_hint"), "S", 5, 0, 86400, cooldownInput, v -> cooldownInput = v),
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.close_timer"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.close_timer_hint"), "S", 5, 0, 86400, closeTimerInput, v -> closeTimerInput = v)
@@ -555,6 +558,35 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         row.child(c0);
         row.child(c1);
         return row;
+    }
+
+    private FlowLayout nameFieldRow() {
+        FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        col.gap(4);
+
+        FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        head.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        head.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.name"), INK_DIM));
+        head.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+        LabelComponent hintLabel = Components.label(
+            Component.literal(tr("gui.arenas_ld.raid_controller_admin.ui.general.name_hint")).withStyle(net.minecraft.ChatFormatting.ITALIC));
+        hintLabel.color(Color.ofArgb(INK_DIM));
+        head.child(hintLabel);
+        col.child(head);
+
+        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
+        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
+        accent.surface(Surface.flat(ACCENT));
+        fieldWrap.child(accent);
+        TextBoxComponent field = Components.textBox(Sizing.expand(), nameInput == null ? "" : nameInput);
+        field.verticalSizing(Sizing.fixed(18));
+        field.setMaxLength(48);
+        field.onChanged().subscribe(v -> nameInput = v);
+        fieldWrap.child(field);
+        col.child(fieldWrap);
+        return col;
     }
 
     private FlowLayout stepperField(String caption, String hint, String unit, int step, int min, int max,
@@ -1148,6 +1180,7 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         }
 
         footerError = null;
+        ClientPlayNetworking.send(new net.ledok.arenas_ld.raid.packet.RaidSetNamePayload(menu.getBlockPos(), nameInput == null ? "" : nameInput));
         ClientPlayNetworking.send(new RaidSetCooldownTicksPayload(menu.getBlockPos(), cooldown * 20));
         ClientPlayNetworking.send(new RaidSetCloseTimerSecondsPayload(menu.getBlockPos(), close));
         ClientPlayNetworking.send(new RaidSetMaxPartySizePayload(menu.getBlockPos(), maxParty));
@@ -1227,6 +1260,7 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         tierConfigs.clear();
         tierConfigs.putAll(menu.getTierConfigs());
 
+        nameInput = menu.getRaidName();
         cooldownInput = Integer.toString(menu.getCooldownTicks() / 20);
         closeTimerInput = Integer.toString(menu.getCloseTimerSeconds());
         maxPartyInput = Integer.toString(menu.getMaxPartySize());

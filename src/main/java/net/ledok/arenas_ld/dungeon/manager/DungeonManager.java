@@ -78,6 +78,26 @@ public final class DungeonManager {
         return controllersByDimension.getOrDefault(dim, Set.of());
     }
 
+    /**
+     * Finds the loaded controller that currently owns the given run (i.e. has it in its active
+     * runs), scanning all registered controllers. Returns null if none is loaded.
+     */
+    public DungeonControllerBlockEntity findControllerForRun(MinecraftServer server, DungeonRun run) {
+        for (Map.Entry<ResourceKey<Level>, Set<BlockPos>> entry : controllersByDimension.entrySet()) {
+            ServerLevel level = server.getLevel(entry.getKey());
+            if (level == null) {
+                continue;
+            }
+            for (BlockPos pos : entry.getValue()) {
+                if (level.getBlockEntity(pos) instanceof DungeonControllerBlockEntity controller
+                    && controller.getActiveRuns().containsKey(run.dbsPos())) {
+                    return controller;
+                }
+            }
+        }
+        return null;
+    }
+
     public void registerParticipant(UUID uuid, DungeonRun run) {
         runByPlayer.put(uuid, run);
     }

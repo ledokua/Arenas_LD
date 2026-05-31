@@ -31,7 +31,9 @@ public record DungeonControllerData(
     Map<DifficultyTier, TierConfig> tiers,
     long serverGameTick,
     Set<UUID> busyPlayers,
-    Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards
+    Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards,
+    int queuePosition,
+    int estimatedWaitSeconds
 ) {
     public static final StreamCodec<RegistryFriendlyByteBuf, DungeonControllerData> STREAM_CODEC = StreamCodec.of(
         DungeonControllerData::encode,
@@ -81,6 +83,9 @@ public record DungeonControllerData(
                 writeTag(buf, (CompoundTag) LeaderboardEntry.CODEC.encodeStart(NbtOps.INSTANCE, leaderboardEntry).getOrThrow());
             }
         }
+
+        buf.writeVarInt(data.queuePosition());
+        buf.writeVarInt(data.estimatedWaitSeconds());
     }
 
     private static DungeonControllerData decode(RegistryFriendlyByteBuf buf) {
@@ -136,7 +141,10 @@ public record DungeonControllerData(
             topLeaderboards.put(tier, entries);
         }
 
-        return new DungeonControllerData(blockPos, visible, own, invites, joinReqs, maxPartySize, tiers, serverGameTick, busyPlayers, topLeaderboards);
+        int queuePosition = buf.readVarInt();
+        int estimatedWaitSeconds = buf.readVarInt();
+
+        return new DungeonControllerData(blockPos, visible, own, invites, joinReqs, maxPartySize, tiers, serverGameTick, busyPlayers, topLeaderboards, queuePosition, estimatedWaitSeconds);
     }
 
     private static void writeTag(RegistryFriendlyByteBuf buf, CompoundTag tag) {

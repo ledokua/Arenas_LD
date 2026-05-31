@@ -40,6 +40,7 @@ public class DungeonControllerAdminMenuProvider implements ExtendedScreenHandler
             controller.getRespawnTimeTicks(),
             controller.getDeathTimePenaltyTicks(),
             controller.isLootViaInbox(),
+            controller.getDungeonName(),
             controller.getTierConfigs(),
             runningInstances,
             enumerateLootTables(controller.getLevel())

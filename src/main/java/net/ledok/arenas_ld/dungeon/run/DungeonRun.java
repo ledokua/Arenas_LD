@@ -203,6 +203,12 @@ public final class DungeonRun {
 
     // ---- Convenience predicates ----
 
+    /** True if the player is currently within their disconnect grace window. */
+    public boolean isDisconnected(UUID uuid) { return disconnectedAt.containsKey(uuid); }
+
+    /** True if the player has an active downed (awaiting-respawn) entry. */
+    public boolean isDowned(UUID uuid) { return downedPlayers.containsKey(uuid); }
+
     /** UUIDs of participants whose status is exactly ACTIVE. */
     public Set<UUID> activeParticipantUuids() {
         return participants.values().stream()

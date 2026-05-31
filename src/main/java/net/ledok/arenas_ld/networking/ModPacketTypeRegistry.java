@@ -111,6 +111,7 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(SetCooldownTicksPayload.TYPE, SetCooldownTicksPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetCloseTimerSecondsPayload.TYPE, SetCloseTimerSecondsPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetMaxPartySizePayload.TYPE, SetMaxPartySizePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload.TYPE, net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetRespawnTimeTicksPayload.TYPE, SetRespawnTimeTicksPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetDeathTimePenaltyPayload.TYPE, SetDeathTimePenaltyPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetInviteExpiryTicksPayload.TYPE, SetInviteExpiryTicksPayload.STREAM_CODEC);
@@ -134,6 +135,7 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(RaidDeclineJoinRequestPayload.TYPE, RaidDeclineJoinRequestPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidSetRespawnTimeTicksPayload.TYPE, RaidSetRespawnTimeTicksPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidSetMaxPartySizePayload.TYPE, RaidSetMaxPartySizePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.raid.packet.RaidSetNamePayload.TYPE, net.ledok.arenas_ld.raid.packet.RaidSetNamePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidRemoveInstancePayload.TYPE, RaidRemoveInstancePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidMoveInstancePayload.TYPE, RaidMoveInstancePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidSetCooldownTicksPayload.TYPE, RaidSetCooldownTicksPayload.STREAM_CODEC);
@@ -162,6 +164,8 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playS2C().register(RaidControllerInfoPayload.TYPE, RaidControllerInfoPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RaidControllerSnapshotPayload.TYPE, RaidControllerSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(DungeonControllerSnapshotPayload.TYPE, DungeonControllerSnapshotPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload.TYPE, net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload.TYPE, net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RoomControllerSnapshotPayload.TYPE, RoomControllerSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(MobSpawnerSnapshotPayload.TYPE, MobSpawnerSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(DungeonBossSpawnerSnapshotPayload.TYPE, DungeonBossSpawnerSnapshotPayload.STREAM_CODEC);

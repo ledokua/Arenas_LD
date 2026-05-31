@@ -31,13 +31,15 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
     private long serverGameTick;
     private Set<UUID> busyPlayers;
     private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
+    private int queuePosition;
+    private int estimatedWaitSeconds;
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerData data) {
-        this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.myJoinRequests(), data.maxPartySize(), data.tiers(), data.serverGameTick(), data.busyPlayers(), data.topLeaderboards());
+        this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.myJoinRequests(), data.maxPartySize(), data.tiers(), data.serverGameTick(), data.busyPlayers(), data.topLeaderboards(), data.queuePosition(), data.estimatedWaitSeconds());
     }
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerBlockEntity blockEntity) {
-        this(syncId, inventory, blockEntity.getBlockPos(), blockEntity.getLobbies(), Optional.empty(), blockEntity.getPendingInvites(), blockEntity.getPendingJoinRequests(), blockEntity.getMaxPartySize(), blockEntity.getTierConfigs(), 0L, Set.of(), Map.of());
+        this(syncId, inventory, blockEntity.getBlockPos(), blockEntity.getLobbies(), Optional.empty(), blockEntity.getPendingInvites(), blockEntity.getPendingJoinRequests(), blockEntity.getMaxPartySize(), blockEntity.getTierConfigs(), 0L, Set.of(), Map.of(), 0, 0);
     }
 
     private DungeonControllerScreenHandler(
@@ -52,9 +54,13 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         Map<DifficultyTier, TierConfig> tiers,
         long serverGameTick,
         Set<UUID> busyPlayers,
-        Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards
+        Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards,
+        int queuePosition,
+        int estimatedWaitSeconds
     ) {
         super(ModScreenHandlers.DUNGEON_CONTROLLER_SCREEN_HANDLER, syncId);
+        this.queuePosition = queuePosition;
+        this.estimatedWaitSeconds = estimatedWaitSeconds;
         this.blockPos = blockPos;
         this.visibleLobbies = List.copyOf(visibleLobbies);
         this.ownLobby = ownLobby;
@@ -107,6 +113,14 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         return Map.copyOf(topLeaderboards);
     }
 
+    public int getQueuePosition() {
+        return queuePosition;
+    }
+
+    public int getEstimatedWaitSeconds() {
+        return estimatedWaitSeconds;
+    }
+
     public void applyData(DungeonControllerData data) {
         this.visibleLobbies = List.copyOf(data.visibleLobbies());
         this.ownLobby = data.ownLobby();
@@ -117,6 +131,8 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         this.serverGameTick = data.serverGameTick();
         this.busyPlayers = Set.copyOf(data.busyPlayers());
         this.topLeaderboards = Map.copyOf(data.topLeaderboards());
+        this.queuePosition = data.queuePosition();
+        this.estimatedWaitSeconds = data.estimatedWaitSeconds();
     }
 
     @Override

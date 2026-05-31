@@ -28,6 +28,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     private int respawnTimeTicks;
     private int deathTimePenaltyTicks;
     private boolean lootViaInbox;
+    private String dungeonName;
     private Map<DifficultyTier, TierConfig> tierConfigs;
     private Map<BlockPos, DungeonControllerAdminData.InstanceRun> runningInstances;
     private List<String> knownLootTableIds;
@@ -46,6 +47,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.respawnTimeTicks = data.respawnTimeTicks();
         this.deathTimePenaltyTicks = data.deathTimePenaltyTicks();
         this.lootViaInbox = data.lootViaInbox();
+        this.dungeonName = data.dungeonName();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
@@ -65,6 +67,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
             controller.getRespawnTimeTicks(),
             controller.getDeathTimePenaltyTicks(),
             controller.isLootViaInbox(),
+            controller.getDungeonName(),
             controller.getTierConfigs(),
             Map.of(),
             enumerateLootTables(controller.getLevel())
@@ -101,6 +104,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     public int getRespawnTimeTicks() { return respawnTimeTicks; }
     public int getDeathTimePenaltyTicks() { return deathTimePenaltyTicks; }
     public boolean isLootViaInbox() { return lootViaInbox; }
+    public String getDungeonName() { return dungeonName; }
     public Map<DifficultyTier, TierConfig> getTierConfigs() { return tierConfigs; }
     public Map<BlockPos, DungeonControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
     public List<String> getKnownLootTableIds() { return knownLootTableIds; }
@@ -117,6 +121,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.respawnTimeTicks = data.respawnTimeTicks();
         this.deathTimePenaltyTicks = data.deathTimePenaltyTicks();
         this.lootViaInbox = data.lootViaInbox();
+        this.dungeonName = data.dungeonName();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());

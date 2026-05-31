@@ -27,6 +27,7 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
     private List<PendingJoinRequest> myJoinRequests;
     private List<RaidControllerData.RaidInstanceState> instances;
     private int queuePosition;
+    private int estimatedWaitSeconds;
     private int maxPartySize;
     private int respawnTimeTicks;
     private long serverGameTick;
@@ -50,6 +51,7 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         this.myJoinRequests = List.of();
         this.instances = List.of();
         this.queuePosition = -1;
+        this.estimatedWaitSeconds = 0;
         this.maxPartySize = blockEntity.getMaxPartySize();
         this.respawnTimeTicks = blockEntity.getRespawnTimeTicks();
         this.serverGameTick = 0L;
@@ -90,6 +92,10 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         return queuePosition;
     }
 
+    public int getEstimatedWaitSeconds() {
+        return estimatedWaitSeconds;
+    }
+
     public int getMaxPartySize() {
         return maxPartySize;
     }
@@ -117,6 +123,7 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         this.myJoinRequests = List.copyOf(data.myJoinRequests());
         this.instances = List.copyOf(data.instances());
         this.queuePosition = data.queuePosition();
+        this.estimatedWaitSeconds = data.estimatedWaitSeconds();
         this.maxPartySize = data.maxPartySize();
         this.respawnTimeTicks = data.respawnTimeTicks();
         this.serverGameTick = data.serverGameTick();

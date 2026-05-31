@@ -118,6 +118,7 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
     private DifficultyTier leaderboardTier = DifficultyTier.NORMAL;
 
     private Tab currentTab = Tab.LOBBIES;
+    private int lastQueuePosition = 0;
     private String footerError;
     private long snapshotServerTick;
     private long snapshotEpochMs;
@@ -762,6 +763,25 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
         Lobby lobby = ownLobby.get();
         UUID self = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : UUID.randomUUID();
         boolean isOwner = lobby.ownerUuid().equals(self);
+
+        int queuePosition = menu.getQueuePosition();
+        if (queuePosition >= 1) {
+            FlowLayout queueBanner = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(28));
+            queueBanner.surface(Surface.flat((WARN & 0x00FFFFFF) | 0x1A000000).and(Surface.outline((WARN & 0x00FFFFFF) | 0x55000000)));
+            queueBanner.padding(Insets.of(4, 4, 8, 8));
+            queueBanner.gap(8);
+            queueBanner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+            FlowLayout queueAccent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
+            queueAccent.surface(Surface.flat(WARN));
+            queueBanner.child(queueAccent);
+            queueBanner.child(badge(Component.translatable("gui.arenas_ld.dungeon_controller.ui.queue.in_line", queuePosition), WARN));
+            int etaSeconds = menu.getEstimatedWaitSeconds();
+            if (etaSeconds > 0) {
+                queueBanner.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.queue.eta", formatClock(etaSeconds)), INK_MID));
+            }
+            contentArea.child(queueBanner);
+            contentArea.child(spacer(4));
+        }
 
         summaryOwnerLabel = text(Component.literal(lobby.ownerName()), ACCENT);
         summaryMembersLabel = text(Component.literal(lobby.members().size() + " / " + menu.getMaxPartySize()), INK);
@@ -1531,8 +1551,17 @@ public class DungeonControllerScreen extends BaseOwoHandledScreen<FlowLayout, Du
 
     public void applyData(DungeonControllerData data) {
         Optional<Lobby> previousOwnLobby = this.ownLobby;
+        int previousQueuePosition = this.lastQueuePosition;
         menu.applyData(data);
         syncFromMenu(true);
+        this.lastQueuePosition = menu.getQueuePosition();
+
+        // Queue position changed → the banner appears/disappears, so do a full rebuild
+        // rather than the in-place member refresh (which wouldn't add/remove the banner).
+        if (this.lastQueuePosition != previousQueuePosition) {
+            rebuildUi();
+            return;
+        }
 
         if (currentTab == Tab.MY_LOBBY && this.ownLobby.isEmpty()) {
             currentTab = Tab.LOBBIES;

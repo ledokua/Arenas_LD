@@ -30,6 +30,7 @@ public record DungeonControllerAdminData(
     int respawnTimeTicks,
     int deathTimePenaltyTicks,
     boolean lootViaInbox,
+    String dungeonName,
     Map<DifficultyTier, TierConfig> tierConfigs,
     Map<BlockPos, InstanceRun> runningInstances,
     List<String> knownLootTableIds
@@ -73,6 +74,7 @@ public record DungeonControllerAdminData(
         buf.writeVarInt(data.respawnTimeTicks());
         buf.writeVarInt(data.deathTimePenaltyTicks());
         buf.writeBoolean(data.lootViaInbox());
+        buf.writeUtf(data.dungeonName());
 
         buf.writeVarInt(data.tierConfigs().size());
         for (Map.Entry<DifficultyTier, TierConfig> entry : data.tierConfigs().entrySet()) {
@@ -129,6 +131,7 @@ public record DungeonControllerAdminData(
         int respawnTimeTicks = buf.readVarInt();
         int deathTimePenaltyTicks = buf.readVarInt();
         boolean lootViaInbox = buf.readBoolean();
+        String dungeonName = buf.readUtf();
 
         int tierConfigSize = buf.readVarInt();
         Map<DifficultyTier, TierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
@@ -168,6 +171,7 @@ public record DungeonControllerAdminData(
             respawnTimeTicks,
             deathTimePenaltyTicks,
             lootViaInbox,
+            dungeonName,
             tierConfigs,
             runningInstances,
             knownLootTableIds

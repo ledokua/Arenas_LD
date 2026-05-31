@@ -25,6 +25,7 @@ public class RaidControllerAdminScreenHandler extends AbstractContainerMenu {
     private int inviteExpiryTicks;
     private int deathTimePenaltyTicks;
     private boolean lootViaInbox;
+    private String raidName;
     private Map<DifficultyTier, RaidTierConfig> tierConfigs;
     private Map<BlockPos, RaidControllerAdminData.InstanceRun> runningInstances;
     private List<String> knownLootTableIds;
@@ -49,6 +50,7 @@ public class RaidControllerAdminScreenHandler extends AbstractContainerMenu {
     public int getInviteExpiryTicks() { return inviteExpiryTicks; }
     public int getDeathTimePenaltyTicks() { return deathTimePenaltyTicks; }
     public boolean isLootViaInbox() { return lootViaInbox; }
+    public String getRaidName() { return raidName == null ? "" : raidName; }
     public Map<DifficultyTier, RaidTierConfig> getTierConfigs() { return tierConfigs; }
     public Map<BlockPos, RaidControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
     public List<String> getKnownLootTableIds() { return knownLootTableIds != null ? knownLootTableIds : List.of(); }
@@ -63,6 +65,7 @@ public class RaidControllerAdminScreenHandler extends AbstractContainerMenu {
         this.inviteExpiryTicks = data.inviteExpiryTicks();
         this.deathTimePenaltyTicks = data.deathTimePenaltyTicks();
         this.lootViaInbox = data.lootViaInbox();
+        this.raidName = data.raidName();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());

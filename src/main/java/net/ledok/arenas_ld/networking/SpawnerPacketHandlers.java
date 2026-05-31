@@ -70,7 +70,7 @@ import java.util.UUID;
 
 import static net.ledok.arenas_ld.networking.ModPackets.*;
 
-final class SpawnerPacketHandlers {
+public final class SpawnerPacketHandlers {
     private SpawnerPacketHandlers() {
     }
 
@@ -326,9 +326,17 @@ final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
-                    controller.invitePlayer(player, payload.inviteeUuid());
+                    boolean invited = controller.invitePlayer(player, payload.inviteeUuid());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
+                    if (invited) {
+                        Lobby lobby = controller.getLobbies().stream()
+                            .filter(l -> l.isOwner(player.getUUID())).findFirst().orElse(null);
+                        ServerPlayer invitee = player.server.getPlayerList().getPlayer(payload.inviteeUuid());
+                        if (lobby != null && invitee != null) {
+                            notifyInvite(controller, player, invitee, lobby);
+                        }
+                    }
                 }
             });
         });
@@ -469,9 +477,7 @@ final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
-                    controller.toggleReady(player);
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerSnapshot(player, controller);
+                    performToggleReady(player, controller);
                 }
             });
         });
@@ -481,31 +487,8 @@ final class SpawnerPacketHandlers {
                 ServerPlayer player = context.player();
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller
-                    && world instanceof ServerLevel serverLevel) {
-                    Lobby lobby = controller.getLobbies().stream()
-                        .filter(l -> l.isOwner(player.getUUID()))
-                        .findFirst()
-                        .orElse(null);
-                    if (lobby == null) {
-                        return;
-                    }
-                    controller.startRun(player).ifPresent(instancePos -> {
-                        List<UUID> party = new ArrayList<>(lobby.members());
-                        DungeonRun run = DungeonRunLifecycle.startRun(
-                            serverLevel,
-                            controller,
-                            instancePos,
-                            party,
-                            lobby.selectedTier(),
-                            lobby.hardcoreEnabled(),
-                            lobby.ownerName()
-                        );
-                        if (run == null) {
-                            ArenasLdMod.LOGGER.warn("startRun failed for lobby {}", lobby.lobbyId());
-                        }
-                    });
-                    markDirtyAndSync(world, controller);
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    performStartRun(player, controller);
                 }
             });
         });
@@ -623,6 +606,22 @@ final class SpawnerPacketHandlers {
             });
         });
 
+        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.controllerPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                    controller.setDungeonName(payload.name());
+                    markDirtyAndSync(world, controller);
+                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                }
+            });
+        });
+
         ServerPlayNetworking.registerGlobalReceiver(SetRespawnTimeTicksPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
@@ -721,13 +720,108 @@ final class SpawnerPacketHandlers {
         world.sendBlockUpdated(blockEntity.getBlockPos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
     }
 
-    private static void broadcastDungeonControllerSnapshot(ServerPlayer actor, net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+    public static void broadcastDungeonControllerSnapshot(ServerPlayer actor, net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
         if (actor.server == null) {
             return;
         }
         for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
             ServerPlayNetworking.send(target, new DungeonControllerSnapshotPayload(controller.getScreenOpeningData(target)));
         }
+    }
+
+    private static final int CHAT_ACCENT = 0xA98BE8;
+    private static final int CHAT_GOOD = 0x86D36C;
+    private static final int CHAT_DANGER = 0xE8624A;
+
+    /** Toggles ready, syncs, and chats the "(ready/total)" result with a clickable toggle to the party. */
+    public static void performToggleReady(ServerPlayer player, net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+        if (!controller.toggleReady(player)) {
+            return;
+        }
+        markDirtyAndSync(controller.getLevel(), controller);
+        broadcastDungeonControllerSnapshot(player, controller);
+        if (!(controller.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        net.ledok.arenas_ld.dungeon.lobby.Lobby lobby = controller.getLobbies().stream()
+            .filter(l -> l.isMember(player.getUUID())).findFirst().orElse(null);
+        if (lobby == null) {
+            return;
+        }
+        boolean nowReady = lobby.readyMembers().contains(player.getUUID());
+        String name = player.getGameProfile().getName();
+        Component toggle = net.ledok.arenas_ld.util.LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.lobby.button.toggle_ready"), CHAT_ACCENT,
+            net.ledok.arenas_ld.util.LobbyChatActions.readyCommand(level, controller.getBlockPos()),
+            Component.translatable("message.arenas_ld.lobby.button.toggle_ready.hover"));
+        Component msg = Component.translatable(
+            nowReady ? "message.arenas_ld.lobby.party_ready" : "message.arenas_ld.lobby.party_unready",
+            name, lobby.readyMembers().size(), lobby.members().size()).append(" ").append(toggle);
+        controller.notifyLobbyMembers(lobby, msg);
+    }
+
+    /** Owner starts the run (or queues); on launch, closes the controller screen for all members. */
+    public static void performStartRun(ServerPlayer player, net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+        if (!(controller.getLevel() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        Lobby lobby = controller.getLobbies().stream()
+            .filter(l -> l.isOwner(player.getUUID())).findFirst().orElse(null);
+        if (lobby == null) {
+            return;
+        }
+        controller.startRun(player).ifPresent(instancePos -> {
+            List<UUID> party = new ArrayList<>(lobby.members());
+            DungeonRun run = DungeonRunLifecycle.startRun(
+                serverLevel, controller, instancePos, party,
+                lobby.selectedTier(), lobby.hardcoreEnabled(), lobby.ownerName());
+            if (run == null) {
+                ArenasLdMod.LOGGER.warn("startRun failed for lobby {}", lobby.lobbyId());
+                return;
+            }
+            net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload closePayload =
+                new net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload(controller.getBlockPos());
+            for (UUID memberUuid : party) {
+                ServerPlayer member = serverLevel.getServer().getPlayerList().getPlayer(memberUuid);
+                if (member != null) {
+                    ServerPlayNetworking.send(member, closePayload);
+                }
+            }
+        });
+        markDirtyAndSync(controller.getLevel(), controller);
+        broadcastDungeonControllerSnapshot(player, controller);
+    }
+
+    /** Chats a clickable invite to the invitee so they see it even without the controller screen open. */
+    public static void notifyInvite(net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller,
+                                    ServerPlayer inviter, ServerPlayer invitee, Lobby lobby) {
+        if (!(controller.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        net.minecraft.core.BlockPos pos = controller.getBlockPos();
+        Component accept = net.ledok.arenas_ld.util.LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.lobby.button.accept"), CHAT_GOOD,
+            net.ledok.arenas_ld.util.LobbyChatActions.acceptCommand(level, pos, lobby.lobbyId()),
+            Component.translatable("message.arenas_ld.lobby.button.accept.hover"));
+        Component decline = net.ledok.arenas_ld.util.LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.lobby.button.decline"), CHAT_DANGER,
+            net.ledok.arenas_ld.util.LobbyChatActions.declineCommand(level, pos, lobby.lobbyId()),
+            Component.translatable("message.arenas_ld.lobby.button.decline.hover"));
+        Component open = net.ledok.arenas_ld.util.LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.lobby.button.open"), CHAT_ACCENT,
+            net.ledok.arenas_ld.util.LobbyChatActions.openCommand(level, pos),
+            Component.translatable("message.arenas_ld.lobby.button.open.hover"));
+        String dungeonName = controller.getDungeonName();
+        Component dungeonDisplay = dungeonName.isBlank()
+            ? Component.translatable("message.arenas_ld.lobby.unnamed_dungeon")
+            : Component.literal(dungeonName);
+        net.minecraft.network.chat.MutableComponent invited = Component.translatable("message.arenas_ld.lobby.invited",
+            inviter.getGameProfile().getName(), dungeonDisplay, lobby.selectedTier().name());
+        if (lobby.hardcoreEnabled()) {
+            invited.append(" ").append(Component.translatable("message.arenas_ld.lobby.invited.hardcore").withStyle(ChatFormatting.RED));
+        }
+        invitee.sendSystemMessage(invited);
+        invitee.sendSystemMessage(Component.empty().append(accept).append(" ").append(decline).append(" ").append(open));
     }
 
     private static void broadcastRoomControllerSnapshot(ServerPlayer actor, RoomControllerBlockEntity room) {

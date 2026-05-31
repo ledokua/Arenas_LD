@@ -10,6 +10,7 @@ import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
+import net.ledok.arenas_ld.dungeon.run.DungeonPhase;
 import net.ledok.arenas_ld.dungeon.run.DungeonRun;
 import net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
@@ -50,6 +51,8 @@ import java.util.Optional;
 
 public class DungeonControllerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<DungeonControllerData> {
     private static final int DEFAULT_COOLDOWN_TICKS = 5 * 60 * 20;
+    /** How long the front queued lobby keeps priority on a free instance before it rotates to the next. */
+    private static final int QUEUE_PRIORITY_TIMEOUT_TICKS = 20 * 20;
     private static final int DEFAULT_CLOSE_TIMER_SECONDS = 30;
     private static final int DEFAULT_RESPAWN_TIME_TICKS = 40;
     private static final int DEFAULT_DEATH_TIME_PENALTY_TICKS = 10 * 20;
@@ -69,10 +72,16 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private int disconnectGraceTicks = DEFAULT_DISCONNECT_GRACE_TICKS;
     private int lobbyOfflineTimeoutTicks = DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS;
     private boolean lootViaInbox = false;
+    private String dungeonName = "";
     private final Map<BlockPos, Integer> instanceCooldownTimers = new HashMap<>();
     private final Set<BlockPos> pendingInstanceRemovals = new HashSet<>();
     private final Map<DifficultyTier, List<LeaderboardEntry>> leaderboards = new EnumMap<>(DifficultyTier.class);
     private final List<Lobby> lobbies = new ArrayList<>();
+    /** Ordered queue of lobby IDs waiting for a free instance. */
+    private final List<UUID> queuedLobbyIds = new ArrayList<>();
+    /** While an instance is free: which queued lobby currently holds priority, and since when (server tick). Transient. */
+    private UUID priorityFrontLobby = null;
+    private long priorityFrontSinceTick = -1L;
     private final List<PendingInvite> pendingInvites = new ArrayList<>();
     private final List<PendingJoinRequest> pendingJoinRequests = new ArrayList<>();
     private final Map<UUID, Long> lobbyOfflineSinceTicks = new HashMap<>();
@@ -142,6 +151,22 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             return;
         }
         this.lootViaInbox = lootViaInbox;
+        setChanged();
+    }
+
+    public String getDungeonName() {
+        return dungeonName;
+    }
+
+    public void setDungeonName(String name) {
+        String trimmed = name == null ? "" : name.trim();
+        if (trimmed.length() > 48) {
+            trimmed = trimmed.substring(0, 48);
+        }
+        if (this.dungeonName.equals(trimmed)) {
+            return;
+        }
+        this.dungeonName = trimmed;
         setChanged();
     }
 
@@ -304,6 +329,17 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         setChanged();
     }
 
+    /** Sends a system message to every online member of the lobby. */
+    public void notifyLobbyMembers(Lobby lobby, net.minecraft.network.chat.Component message) {
+        if (!(level instanceof ServerLevel serverLevel)) return;
+        for (UUID memberUuid : lobby.members()) {
+            ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(memberUuid);
+            if (player != null) {
+                player.sendSystemMessage(message);
+            }
+        }
+    }
+
     public void addLeaderboardEntry(DifficultyTier tier, LeaderboardEntry entry) {
         leaderboards.computeIfAbsent(tier, unused -> new ArrayList<>()).add(entry);
         setChanged();
@@ -340,6 +376,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     void removeLobby(UUID lobbyId) {
         lobbyOfflineSinceTicks.remove(lobbyId);
         boolean removed = lobbies.removeIf(lobby -> lobby.lobbyId().equals(lobbyId));
+        queuedLobbyIds.remove(lobbyId);
         removeJoinRequestsForLobby(lobbyId);
         if (removed) {
             setChanged();
@@ -594,10 +631,160 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (!allMembersOnline(player, lobby)) return Optional.empty();
 
         Optional<BlockPos> available = firstAvailableInstance();
-        if (available.isEmpty()) return Optional.empty();
+        boolean isFront = queuedLobbyIds.isEmpty() || queuedLobbyIds.get(0).equals(lobby.lobbyId());
 
+        // No free instance, or other lobbies are ahead in line → queue this lobby and report.
+        if (available.isEmpty() || !isFront) {
+            if (!queuedLobbyIds.contains(lobby.lobbyId())) {
+                queuedLobbyIds.add(lobby.lobbyId());
+            }
+            int position = queuedLobbyIds.indexOf(lobby.lobbyId()) + 1;
+            if (available.isEmpty()) {
+                notifyLobbyMembers(lobby, Component.translatable("message.arenas_ld.lobby.queued",
+                    position, formatDuration(getEstimatedWaitSeconds())));
+            } else {
+                notifyLobbyMembers(lobby, Component.translatable("message.arenas_ld.lobby.queue_position", position));
+            }
+            setChanged();
+            return Optional.empty();
+        }
+
+        queuedLobbyIds.remove(lobby.lobbyId());
         removeLobby(lobby.lobbyId());
         return available;
+    }
+
+    public List<UUID> getQueuedLobbyIds() {
+        return Collections.unmodifiableList(queuedLobbyIds);
+    }
+
+    private boolean hasFreeInstance() {
+        return firstAvailableInstance().isPresent();
+    }
+
+    /** Estimated ticks until the soonest instance becomes free (run remaining + cooldown, or current cooldown). */
+    public int estimateWaitTicks() {
+        int min = Integer.MAX_VALUE;
+        for (BlockPos pos : instances) {
+            if (pendingInstanceRemovals.contains(pos)) continue;
+            int untilFree;
+            DungeonRun run = activeRuns.get(pos);
+            Integer cooldown = instanceCooldownTimers.get(pos);
+            if (run != null) {
+                int remaining = run.phase() == DungeonPhase.CLOSING ? run.closeTimerTicks() : run.dungeonTimerTicks();
+                untilFree = Math.max(0, remaining) + cooldownTicks;
+            } else if (cooldown != null && cooldown > 0) {
+                untilFree = cooldown;
+            } else {
+                untilFree = 0;
+            }
+            min = Math.min(min, untilFree);
+        }
+        return min == Integer.MAX_VALUE ? 0 : min;
+    }
+
+    public int getEstimatedWaitSeconds() {
+        return estimateWaitTicks() / 20;
+    }
+
+    /** 1-based queue position for the given player's lobby, or 0 if not queued. */
+    public int getQueuePosition(UUID playerUuid) {
+        Optional<Lobby> lobby = findLobbyByMember(playerUuid);
+        if (lobby.isEmpty()) return 0;
+        int idx = queuedLobbyIds.indexOf(lobby.get().lobbyId());
+        return idx < 0 ? 0 : idx + 1;
+    }
+
+    /** Notifies the front queued lobby when an instance frees up (does not auto-start). */
+    private void notifyFrontOfQueue() {
+        if (queuedLobbyIds.isEmpty() || !hasFreeInstance() || !(level instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        // Drop stale heads (lobby disbanded/removed) before notifying.
+        while (!queuedLobbyIds.isEmpty() && findLobbyById(queuedLobbyIds.get(0)).isEmpty()) {
+            queuedLobbyIds.remove(0);
+        }
+        if (queuedLobbyIds.isEmpty()) {
+            return;
+        }
+        Lobby front = findLobbyById(queuedLobbyIds.get(0)).orElse(null);
+        if (front == null) {
+            return;
+        }
+        Component start = net.ledok.arenas_ld.util.LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.lobby.button.start"), 0x86D36C,
+            net.ledok.arenas_ld.util.LobbyChatActions.startCommand(serverLevel, worldPosition),
+            Component.translatable("message.arenas_ld.lobby.button.start.hover"));
+        notifyLobbyMembers(front, Component.translatable("message.arenas_ld.lobby.instance_free").append(" ").append(start));
+    }
+
+    /**
+     * Per-tick queue priority management. While an instance is free, the front lobby has
+     * {@link #QUEUE_PRIORITY_TIMEOUT_TICKS} to start; if it doesn't, priority rotates to the next
+     * lobby (the laggard goes to the back). Notifications fire on each hand-off.
+     */
+    private void tickQueuePriority(ServerLevel serverLevel) {
+        // Drop stale heads (disbanded/removed lobbies).
+        while (!queuedLobbyIds.isEmpty() && findLobbyById(queuedLobbyIds.get(0)).isEmpty()) {
+            queuedLobbyIds.remove(0);
+            setChanged();
+        }
+        if (queuedLobbyIds.isEmpty() || !hasFreeInstance()) {
+            priorityFrontLobby = null;
+            priorityFrontSinceTick = -1L;
+            return;
+        }
+
+        long now = serverLevel.getGameTime();
+        UUID front = queuedLobbyIds.get(0);
+
+        // A new lobby just gained priority (instance freed, or the previous front rotated/launched).
+        if (!front.equals(priorityFrontLobby)) {
+            priorityFrontLobby = front;
+            priorityFrontSinceTick = now;
+            notifyFrontOfQueue();
+            return;
+        }
+
+        if (now - priorityFrontSinceTick < QUEUE_PRIORITY_TIMEOUT_TICKS) {
+            return;
+        }
+
+        // Timed out without starting.
+        if (queuedLobbyIds.size() > 1) {
+            UUID demoted = queuedLobbyIds.remove(0);
+            queuedLobbyIds.add(demoted);
+            findLobbyById(demoted).ifPresent(lobby ->
+                notifyLobbyMembers(lobby, Component.translatable("message.arenas_ld.lobby.priority_lost").withStyle(net.minecraft.ChatFormatting.YELLOW)));
+            priorityFrontLobby = null; // next tick promotes + notifies the new front
+            priorityFrontSinceTick = -1L;
+            setChanged();
+            broadcastPlayerSnapshots();
+        } else {
+            // Only one lobby waiting — just remind it again.
+            priorityFrontSinceTick = now;
+            notifyFrontOfQueue();
+        }
+    }
+
+    /** Pushes the player-facing controller snapshot to all online players (live queue/lobby UI). */
+    private void broadcastPlayerSnapshots() {
+        if (!(level instanceof ServerLevel serverLevel) || serverLevel.getServer() == null) {
+            return;
+        }
+        for (ServerPlayer target : serverLevel.getServer().getPlayerList().getPlayers()) {
+            net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(target,
+                new net.ledok.arenas_ld.dungeon.packet.DungeonControllerSnapshotPayload(getScreenOpeningData(target)));
+        }
+    }
+
+    private static String formatDuration(int totalSeconds) {
+        if (totalSeconds <= 0) {
+            return "soon";
+        }
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return minutes > 0 ? (minutes + "m " + seconds + "s") : (seconds + "s");
     }
 
     public boolean joinLobby(ServerPlayer player, UUID lobbyId) {
@@ -776,7 +963,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                 .toList();
             topLeaderboards.put(tier, top);
         }
-        return new DungeonControllerData(worldPosition, visible, own, myInvites, myJoinRequests, maxPartySize, tierConfigs, player.serverLevel().getGameTime(), busyPlayers, topLeaderboards);
+        return new DungeonControllerData(worldPosition, visible, own, myInvites, myJoinRequests, maxPartySize, tierConfigs, player.serverLevel().getGameTime(), busyPlayers, topLeaderboards, getQueuePosition(playerUuid), getEstimatedWaitSeconds());
     }
 
     @Override
@@ -811,6 +998,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                 be.setChanged();
             }
         }
+        be.tickQueuePriority(serverLevel);
 
         long currentTick = serverLevel.getGameTime();
         if (be.pendingInvites.removeIf(invite -> invite.expiresAtTick() <= currentTick)) {
@@ -918,7 +1106,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         List<Lobby> lobbies,
         List<PendingInvite> pendingInvites,
         Map<UUID, Long> lobbyOfflineSinceTicks,
-        List<PendingJoinRequest> pendingJoinRequests
+        List<PendingJoinRequest> pendingJoinRequests,
+        List<UUID> queuedLobbyIds
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("instances").forGetter(State::instances),
@@ -936,7 +1125,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             PendingInvite.CODEC.listOf().fieldOf("pendingInvites").forGetter(State::pendingInvites),
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, Codec.LONG)
                 .optionalFieldOf("lobbyOfflineSinceTicks", Map.of()).forGetter(State::lobbyOfflineSinceTicks),
-            PendingJoinRequest.CODEC.listOf().optionalFieldOf("pendingJoinRequests", List.of()).forGetter(State::pendingJoinRequests)
+            PendingJoinRequest.CODEC.listOf().optionalFieldOf("pendingJoinRequests", List.of()).forGetter(State::pendingJoinRequests),
+            UUIDUtil.CODEC.listOf().optionalFieldOf("queuedLobbyIds", List.of()).forGetter(State::queuedLobbyIds)
         ).apply(i, State::new));
     }
 
@@ -964,12 +1154,14 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             lobbies,
             pendingInvites,
             lobbyOfflineSinceTicks,
-            pendingJoinRequests
+            pendingJoinRequests,
+            new ArrayList<>(queuedLobbyIds)
         );
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save DungeonController at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
         nbt.putBoolean("LootViaInbox", lootViaInbox);
+        nbt.putString("DungeonName", dungeonName);
     }
 
     @Override
@@ -1013,12 +1205,15 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                     pendingJoinRequests.addAll(state.pendingJoinRequests());
                     lobbyOfflineSinceTicks.clear();
                     lobbyOfflineSinceTicks.putAll(state.lobbyOfflineSinceTicks());
+                    queuedLobbyIds.clear();
+                    queuedLobbyIds.addAll(state.queuedLobbyIds());
                     initializeDefaults();
                 });
         } else {
             initializeDefaults();
         }
         lootViaInbox = nbt.getBoolean("LootViaInbox");
+        dungeonName = nbt.getString("DungeonName");
     }
 
     @Override

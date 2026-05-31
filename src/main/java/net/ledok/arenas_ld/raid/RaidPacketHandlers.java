@@ -96,8 +96,7 @@ public final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
                 if (!(player.level() instanceof ServerLevel sl)) return;
-                controller.startRaid(player);
-                broadcastRaidControllerSnapshot(player, controller);
+                performStartRaid(player, controller);
             })
         );
 
@@ -107,8 +106,15 @@ public final class RaidPacketHandlers {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
-                controller.invitePlayer(player, payload.inviteeUuid());
+                boolean invited = controller.invitePlayer(player, payload.inviteeUuid());
                 broadcastRaidControllerSnapshot(player, controller);
+                if (invited) {
+                    Lobby lobby = controller.getLobbyByMember(player.getUUID());
+                    ServerPlayer invitee = player.server.getPlayerList().getPlayer(payload.inviteeUuid());
+                    if (lobby != null && invitee != null) {
+                        notifyInviteRaid(controller, player, invitee, lobby);
+                    }
+                }
             })
         );
 
@@ -189,7 +195,18 @@ public final class RaidPacketHandlers {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
-                controller.toggleReady(player);
+                performToggleReadyRaid(player, controller);
+            })
+        );
+
+        // ── Admin: Set Raid Name ──────────────────────────────────────────────
+        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.raid.packet.RaidSetNamePayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) return;
+                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                if (controller == null) return;
+                controller.setRaidName(payload.name());
                 broadcastRaidControllerSnapshot(player, controller);
             })
         );
@@ -380,6 +397,73 @@ public final class RaidPacketHandlers {
 
     private static RaidControllerBlockEntity findControllerByLobbyId(net.minecraft.server.MinecraftServer server, UUID lobbyId) {
         return ModPackets.findRaidControllerByLobbyId(server, lobbyId);
+    }
+
+    private static final int CHAT_ACCENT = 0xA98BE8;
+    private static final int CHAT_GOOD = 0x86D36C;
+    private static final int CHAT_DANGER = 0xE8624A;
+
+    /** Owner starts the raid (or queues); snapshot re-broadcast afterwards. */
+    public static void performStartRaid(ServerPlayer player, RaidControllerBlockEntity controller) {
+        controller.startRaid(player);
+        broadcastRaidControllerSnapshot(player, controller);
+    }
+
+    /** Toggles ready, syncs, and chats the "(ready/total)" result with a clickable toggle to the party. */
+    public static void performToggleReadyRaid(ServerPlayer player, RaidControllerBlockEntity controller) {
+        if (!controller.toggleReady(player)) {
+            return;
+        }
+        broadcastRaidControllerSnapshot(player, controller);
+        if (!(controller.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        Lobby lobby = controller.getLobbyByMember(player.getUUID());
+        if (lobby == null) {
+            return;
+        }
+        boolean nowReady = lobby.readyMembers().contains(player.getUUID());
+        Component toggle = net.ledok.arenas_ld.util.LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.lobby.button.toggle_ready"), CHAT_ACCENT,
+            net.ledok.arenas_ld.util.LobbyChatActions.readyCommand(level, controller.getBlockPos()),
+            Component.translatable("message.arenas_ld.lobby.button.toggle_ready.hover"));
+        Component msg = Component.translatable(
+            nowReady ? "message.arenas_ld.lobby.party_ready" : "message.arenas_ld.lobby.party_unready",
+            player.getGameProfile().getName(), lobby.readyMembers().size(), lobby.members().size())
+            .copy().append(" ").append(toggle);
+        controller.notifyLobbyMembers(lobby, msg);
+    }
+
+    /** Chats a clickable invite to the invitee so they see it even without the controller screen open. */
+    public static void notifyInviteRaid(RaidControllerBlockEntity controller, ServerPlayer inviter, ServerPlayer invitee, Lobby lobby) {
+        if (!(controller.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        net.minecraft.core.BlockPos pos = controller.getBlockPos();
+        Component accept = net.ledok.arenas_ld.util.LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.lobby.button.accept"), CHAT_GOOD,
+            net.ledok.arenas_ld.util.LobbyChatActions.acceptCommand(level, pos, lobby.lobbyId()),
+            Component.translatable("message.arenas_ld.lobby.button.accept.hover"));
+        Component decline = net.ledok.arenas_ld.util.LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.lobby.button.decline"), CHAT_DANGER,
+            net.ledok.arenas_ld.util.LobbyChatActions.declineCommand(level, pos, lobby.lobbyId()),
+            Component.translatable("message.arenas_ld.lobby.button.decline.hover"));
+        Component open = net.ledok.arenas_ld.util.LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.lobby.button.open"), CHAT_ACCENT,
+            net.ledok.arenas_ld.util.LobbyChatActions.openCommand(level, pos),
+            Component.translatable("message.arenas_ld.lobby.button.open.hover"));
+
+        String raidName = controller.getRaidName();
+        Component nameDisplay = raidName.isBlank()
+            ? Component.translatable("message.arenas_ld.lobby.unnamed_raid")
+            : Component.literal(raidName);
+        net.minecraft.network.chat.MutableComponent invited = Component.translatable("message.arenas_ld.lobby.invited",
+            inviter.getGameProfile().getName(), nameDisplay, lobby.selectedTier().name());
+        if (lobby.hardcoreEnabled()) {
+            invited.append(" ").append(Component.translatable("message.arenas_ld.lobby.invited.hardcore").withStyle(ChatFormatting.RED));
+        }
+        invitee.sendSystemMessage(invited);
+        invitee.sendSystemMessage(Component.empty().append(accept).append(" ").append(decline).append(" ").append(open));
     }
 
     public static void broadcastRaidControllerSnapshot(ServerPlayer actor, RaidControllerBlockEntity controller) {

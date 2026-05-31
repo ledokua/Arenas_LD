@@ -123,6 +123,7 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
 
     // Admin draft state
     private Tab currentTab = Tab.LOBBIES;
+    private int lastQueuePosition = 0;
     private String footerError;
     private long snapshotServerTick;
     private long snapshotEpochMs;
@@ -842,6 +843,11 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
 
             String inLineText = Component.translatable("gui.arenas_ld.raid_controller.ui.queue.in_line", queuePos).getString();
             queueBanner.child(badge(Component.literal(inLineText), WARN));
+
+            int etaSeconds = menu.getEstimatedWaitSeconds();
+            if (etaSeconds > 0) {
+                queueBanner.child(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.queue.eta", formatClock(etaSeconds)), INK_MID));
+            }
 
             queueBanner.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
 
@@ -1678,8 +1684,17 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
      */
     public void applyData(RaidControllerData data) {
         Optional<Lobby> previousOwnLobby = this.ownLobby;
+        int previousQueuePosition = this.lastQueuePosition;
         menu.applyData(data);
         syncFromMenu(true);
+        this.lastQueuePosition = menu.getQueuePosition();
+
+        // Queue position changed → the banner appears/disappears, so do a full rebuild rather than
+        // the in-place member refresh (which wouldn't add/remove the banner).
+        if (this.lastQueuePosition != previousQueuePosition) {
+            rebuildUi();
+            return;
+        }
 
         if (currentTab == Tab.MY_LOBBY && this.ownLobby.isEmpty()) {
             currentTab = Tab.LOBBIES;

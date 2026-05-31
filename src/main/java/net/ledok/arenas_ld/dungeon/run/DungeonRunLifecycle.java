@@ -9,8 +9,13 @@ import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.util.LootBundleDataComponent;
+import net.ledok.arenas_ld.util.PartyTeamStore;
+import net.ledok.arenas_ld.util.PendingRestoreStore;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerPlayer;
@@ -87,6 +92,7 @@ public final class DungeonRunLifecycle {
             run.setReturnPoint(uuid, PlayerReturnPoint.capture(player));
             ArenasLdMod.DUNGEON_MANAGER.registerParticipant(uuid, run);
             BusyStateCompat.setBusy(uuid, BUSY_REASON);
+            addToPartyTeam(world, run, player);
 
             BlockPos entrance = dbs.getAbsoluteEntrancePos();
             player.setGameMode(GameType.ADVENTURE);
@@ -302,16 +308,14 @@ public final class DungeonRunLifecycle {
         for (Map.Entry<UUID, PlayerReturnPoint> entry : run.returnPoints().entrySet()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
             if (player == null) {
+                // Offline at run end — persist the eject so they're sent home on next login.
+                PendingRestoreStore.get(world.getServer()).put(entry.getKey(), entry.getValue());
                 continue;
             }
-            PlayerReturnPoint rp = entry.getValue();
-            ServerLevel target = world.getServer().getLevel(rp.dimension());
-            if (target != null) {
-                player.teleportTo(target, rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
-            }
-            player.setGameMode(rp.previousGameMode());
+            applyReturnPoint(world.getServer(), player, entry.getValue());
         }
 
+        teardownPartyTeam(world, run);
         hideBossBars(run);
         run.setPhase(DungeonPhase.DONE);
         controller.removeRun(run.dbsPos());
@@ -336,6 +340,10 @@ public final class DungeonRunLifecycle {
     private static void tickDownedPlayers(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
         Map<UUID, DownedPlayer> downedCopy = new HashMap<>(run.downedPlayers());
         for (Map.Entry<UUID, DownedPlayer> entry : downedCopy.entrySet()) {
+            // Pause the respawn countdown while the player is offline; it resumes on reconnect.
+            if (run.isDisconnected(entry.getKey())) {
+                continue;
+            }
             DownedPlayer ticked = entry.getValue().tick();
             if (ticked.isReadyToRespawn()) {
                 respawnDownedPlayer(world, controller, run, entry.getKey());
@@ -353,12 +361,23 @@ public final class DungeonRunLifecycle {
             if (now - entry.getValue() > grace) {
                 UUID uuid = entry.getKey();
                 RunParticipant participant = run.participants().get(uuid);
+                String name = participant != null ? participant.playerName() : shortUuid(uuid);
                 if (participant != null) {
                     run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, now));
                 }
+                // Persist the eject so the forfeited player is sent home on next login.
+                PlayerReturnPoint rp = run.returnPoints().get(uuid);
+                if (rp != null) {
+                    PendingRestoreStore.get(world.getServer()).put(uuid, rp);
+                    run.removeReturnPoint(uuid);
+                }
+                run.clearDowned(uuid);
                 run.clearDisconnected(uuid);
+                removeFromPartyTeam(world, run, name);
                 ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
                 BusyStateCompat.clearBusy(uuid, BUSY_REASON);
+                broadcastToParty(world, run,
+                    Component.translatable("message.arenas_ld.dungeon.party_removed", name).withStyle(ChatFormatting.RED), uuid);
             }
         }
     }
@@ -474,6 +493,7 @@ public final class DungeonRunLifecycle {
                 );
             }
             run.removeReturnPoint(player.getUUID());
+            removeFromPartyTeam(world, run, player.getScoreboardName());
             ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(player.getUUID());
             BusyStateCompat.clearBusy(player.getUUID(), BUSY_REASON);
             player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.hardcore_death").withStyle(ChatFormatting.RED));
@@ -501,22 +521,7 @@ public final class DungeonRunLifecycle {
         if (dbsBe instanceof DungeonBossSpawnerBlockEntity dbs) {
             player.setGameMode(GameType.ADVENTURE);
             player.setHealth(player.getMaxHealth());
-
-            // Respawn at the currently-active room's respawn point if it has one; the active room
-            // is read now (not when the player went down), so clearing rooms while a teammate is
-            // downed pushes their respawn forward. Falls back to the entrance otherwise.
-            BlockPos roomRespawn = activeRoomRespawnPos(world, dbs, run);
-            if (roomRespawn != null) {
-                player.teleportTo(world,
-                    roomRespawn.getX() + 0.5, roomRespawn.getY(), roomRespawn.getZ() + 0.5, 0.0F, 0.0F);
-            } else {
-                ServerLevel target = world.getServer().getLevel(dbs.getEntranceDimension());
-                if (target == null) {
-                    target = world;
-                }
-                BlockPos entrance = dbs.getAbsoluteEntrancePos();
-                player.teleportTo(target, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0F, 0.0F);
-            }
+            teleportToRoomRespawnOrEntrance(world, dbs, run, player);
         }
 
         RunParticipant participant = run.participants().get(uuid);
@@ -536,6 +541,202 @@ public final class DungeonRunLifecycle {
         return world.getBlockEntity(rooms.get(index)) instanceof RoomControllerBlockEntity room
             ? room.getRespawnPos()
             : null;
+    }
+
+    /**
+     * Teleports the player to the run's active room respawn point, falling back to the dungeon
+     * entrance when the active room has none. The active room is read now (not when the player
+     * went down), so clearing rooms while a teammate is away pushes their respawn forward.
+     */
+    private static void teleportToRoomRespawnOrEntrance(ServerLevel world, DungeonBossSpawnerBlockEntity dbs, DungeonRun run, ServerPlayer player) {
+        BlockPos roomRespawn = activeRoomRespawnPos(world, dbs, run);
+        if (roomRespawn != null) {
+            player.teleportTo(world, roomRespawn.getX() + 0.5, roomRespawn.getY(), roomRespawn.getZ() + 0.5, 0.0F, 0.0F);
+            return;
+        }
+        ServerLevel target = world.getServer().getLevel(dbs.getEntranceDimension());
+        if (target == null) {
+            target = world;
+        }
+        BlockPos entrance = dbs.getAbsoluteEntrancePos();
+        player.teleportTo(target, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0F, 0.0F);
+    }
+
+    /** Teleports a player to a captured return point and restores their pre-run game mode + health. */
+    private static void applyReturnPoint(MinecraftServer server, ServerPlayer player, PlayerReturnPoint rp) {
+        ServerLevel target = server.getLevel(rp.dimension());
+        if (target != null) {
+            player.teleportTo(target, rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
+        }
+        player.setGameMode(rp.previousGameMode());
+        player.setHealth(player.getMaxHealth());
+    }
+
+    /** Sends a message to every online, non-removed participant except {@code except} (nullable). */
+    private static void broadcastToParty(ServerLevel world, DungeonRun run, Component message, @Nullable UUID except) {
+        for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
+            if (entry.getValue().status() == ParticipantStatus.REMOVED) {
+                continue;
+            }
+            if (except != null && entry.getKey().equals(except)) {
+                continue;
+            }
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
+            if (player != null) {
+                player.sendSystemMessage(message);
+            }
+        }
+    }
+
+    private static String shortUuid(UUID uuid) {
+        return uuid.toString().substring(0, 8);
+    }
+
+    // ── Party team (temporary no-PvP team for the duration of the run) ──────────
+
+    private static String teamNameFor(DungeonRun run) {
+        return "ald_d_" + Integer.toHexString(run.dbsPos().hashCode());
+    }
+
+    /** Creates the run's no-PvP team and adds the player, remembering their prior team. */
+    private static void addToPartyTeam(ServerLevel world, DungeonRun run, ServerPlayer player) {
+        Scoreboard scoreboard = world.getScoreboard();
+        String teamName = teamNameFor(run);
+        PlayerTeam team = scoreboard.getPlayerTeam(teamName);
+        if (team == null) {
+            team = scoreboard.addPlayerTeam(teamName);
+            team.setAllowFriendlyFire(false);
+            team.setSeeFriendlyInvisibles(true);
+        }
+        String name = player.getScoreboardName();
+        PlayerTeam prior = scoreboard.getPlayersTeam(name);
+        PartyTeamStore.get(world.getServer()).put(name, prior != null ? prior.getName() : "");
+        scoreboard.addPlayerToTeam(name, team);
+    }
+
+    /** Removes one member from the run team and restores their prior team (works for offline players). */
+    private static void removeFromPartyTeam(ServerLevel world, DungeonRun run, String playerName) {
+        Scoreboard scoreboard = world.getScoreboard();
+        String priorName = PartyTeamStore.get(world.getServer()).take(playerName);
+        if (priorName == null) {
+            return; // not in this run's team
+        }
+        PlayerTeam current = scoreboard.getPlayersTeam(playerName);
+        if (current != null && current.getName().equals(teamNameFor(run))) {
+            scoreboard.removePlayerFromTeam(playerName, current);
+        }
+        if (!priorName.isEmpty()) {
+            PlayerTeam prior = scoreboard.getPlayerTeam(priorName);
+            if (prior != null) {
+                scoreboard.addPlayerToTeam(playerName, prior);
+            }
+        }
+    }
+
+    /** Restores every member's prior team and deletes the temporary run team. */
+    private static void teardownPartyTeam(ServerLevel world, DungeonRun run) {
+        for (RunParticipant participant : run.participants().values()) {
+            removeFromPartyTeam(world, run, participant.playerName());
+        }
+        PlayerTeam team = world.getScoreboard().getPlayerTeam(teamNameFor(run));
+        if (team != null) {
+            world.getScoreboard().removePlayerTeam(team);
+        }
+    }
+
+    /**
+     * Marks a participant DISCONNECTED and starts their grace countdown. Any DOWNED state is left
+     * intact (its respawn timer is paused while offline) and the party is notified. Called from
+     * the connection listener on logout.
+     */
+    public static void handlePlayerDisconnect(MinecraftServer server, ServerPlayer player) {
+        UUID uuid = player.getUUID();
+        DungeonRun run = ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(uuid);
+        if (run == null) {
+            return;
+        }
+        ServerLevel world = server.getLevel(run.dbsDimension());
+        if (world == null) {
+            return;
+        }
+        RunParticipant participant = run.participants().get(uuid);
+        if (participant == null || participant.status() == ParticipantStatus.REMOVED) {
+            return;
+        }
+        long now = world.getGameTime();
+        run.updateParticipant(participant.withStatus(ParticipantStatus.DISCONNECTED, now));
+        run.markDisconnected(uuid, now);
+
+        DungeonControllerBlockEntity controller = ArenasLdMod.DUNGEON_MANAGER.findControllerForRun(server, run);
+        int graceSeconds = controller != null ? Math.max(0, controller.getDisconnectGraceTicks() / 20) : 0;
+        broadcastToParty(world, run, Component.translatable(
+            "message.arenas_ld.dungeon.party_disconnected", participant.playerName(), graceSeconds)
+            .withStyle(ChatFormatting.YELLOW), uuid);
+    }
+
+    /**
+     * Restores a player on login. Resolution order: a persisted eject (forfeited or run ended
+     * while offline) wins; otherwise, if they're still within their grace window in an active run,
+     * they're put back into the run (kept downed if they went down before quitting). Called from
+     * the connection listener on join.
+     */
+    public static void handlePlayerReconnect(MinecraftServer server, ServerPlayer player) {
+        UUID uuid = player.getUUID();
+
+        PlayerReturnPoint pending = PendingRestoreStore.get(server).take(uuid);
+        if (pending != null) {
+            applyReturnPoint(server, player, pending);
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.run_ended_while_away")
+                .withStyle(ChatFormatting.YELLOW));
+            return;
+        }
+
+        DungeonRun run = ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(uuid);
+        if (run == null) {
+            return;
+        }
+        RunParticipant participant = run.participants().get(uuid);
+        if (participant == null || participant.status() == ParticipantStatus.REMOVED) {
+            PlayerReturnPoint rp = run.returnPoints().get(uuid);
+            if (rp != null) {
+                applyReturnPoint(server, player, rp);
+            }
+            return;
+        }
+
+        ServerLevel world = server.getLevel(run.dbsDimension());
+        long now = world != null ? world.getGameTime() : participant.lastSeenTick();
+        run.clearDisconnected(uuid);
+        ArenasLdMod.DUNGEON_MANAGER.registerParticipant(uuid, run);
+        BusyStateCompat.setBusy(uuid, BUSY_REASON);
+
+        DungeonBossSpawnerBlockEntity dbs = world != null
+            && world.getBlockEntity(run.dbsPos()) instanceof DungeonBossSpawnerBlockEntity d ? d : null;
+
+        if (run.isDowned(uuid)) {
+            run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, now));
+            player.setGameMode(GameType.SPECTATOR);
+            player.setHealth(1.0F);
+            if (dbs != null) {
+                teleportToRoomRespawnOrEntrance(world, dbs, run, player);
+            }
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.reconnected_downed")
+                .withStyle(ChatFormatting.YELLOW));
+        } else {
+            run.updateParticipant(participant.withStatus(ParticipantStatus.ACTIVE, now));
+            player.setGameMode(GameType.ADVENTURE);
+            player.setHealth(player.getMaxHealth());
+            if (dbs != null) {
+                teleportToRoomRespawnOrEntrance(world, dbs, run, player);
+            }
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.reconnected"));
+        }
+
+        if (world != null) {
+            broadcastToParty(world, run, Component.translatable(
+                "message.arenas_ld.dungeon.party_reconnected", participant.playerName())
+                .withStyle(ChatFormatting.GREEN), uuid);
+        }
     }
 
     public static void forceLoadChunksForRun(ServerLevel world, BlockPos dbsPos) {

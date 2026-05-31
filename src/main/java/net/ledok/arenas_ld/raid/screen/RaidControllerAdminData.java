@@ -28,6 +28,7 @@ public record RaidControllerAdminData(
     int inviteExpiryTicks,
     int deathTimePenaltyTicks,
     boolean lootViaInbox,
+    String raidName,
     Map<DifficultyTier, RaidTierConfig> tierConfigs,
     Map<BlockPos, InstanceRun> runningInstances,
     List<String> knownLootTableIds
@@ -67,6 +68,7 @@ public record RaidControllerAdminData(
         buf.writeVarInt(data.inviteExpiryTicks());
         buf.writeVarInt(data.deathTimePenaltyTicks());
         buf.writeBoolean(data.lootViaInbox());
+        buf.writeUtf(data.raidName());
 
         buf.writeVarInt(data.tierConfigs().size());
         for (Map.Entry<DifficultyTier, RaidTierConfig> entry : data.tierConfigs().entrySet()) {
@@ -115,6 +117,7 @@ public record RaidControllerAdminData(
         int inviteExpiryTicks = buf.readVarInt();
         int deathTimePenaltyTicks = buf.readVarInt();
         boolean lootViaInbox = buf.readBoolean();
+        String raidName = buf.readUtf();
 
         int tierConfigSize = buf.readVarInt();
         Map<DifficultyTier, RaidTierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
@@ -152,6 +155,7 @@ public record RaidControllerAdminData(
             inviteExpiryTicks,
             deathTimePenaltyTicks,
             lootViaInbox,
+            raidName,
             tierConfigs,
             runningInstances,
             knownLootTableIds
