@@ -26,6 +26,7 @@ public class ArenasLdClient implements ClientModInitializer {
     public void onInitializeClient() {
         MenuScreens.register(ModScreenHandlers.RAID_BOSS_SPAWNER_SCREEN_HANDLER, RaidBossSpawnerScreen::new);
         MenuScreens.register(ModScreenHandlers.MOB_ATTRIBUTES_SCREEN_HANDLER, MobAttributesScreen::new);
+        MenuScreens.register(ModScreenHandlers.EQUIPMENT_SCREEN_HANDLER, net.ledok.arenas_ld.screen.EquipmentScreen::new);
         MenuScreens.register(ModScreenHandlers.RAID_CONTROLLER_SCREEN_HANDLER, RaidControllerScreen::new);
         MenuScreens.register(ModScreenHandlers.ROOM_CONTROLLER_SCREEN_HANDLER, RoomControllerScreen::new);
         MenuScreens.register(ModScreenHandlers.MOB_SPAWNER_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.MobSpawnerScreen::new);

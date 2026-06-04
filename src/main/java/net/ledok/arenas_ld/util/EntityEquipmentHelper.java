@@ -31,42 +31,35 @@ public final class EntityEquipmentHelper {
     }
 
     /**
-     * Equip {@code itemId} in {@code slot}. Configured equipment is never dropped on death — its
-     * drop chance is forced to 0. Whether the mob drops its natural loot is controlled separately
-     * via {@link #setNaturalLootEnabled}.
+     * Equip a copy of {@code template} in {@code slot} if {@code chance}% rolls succeed. Configured
+     * equipment is never dropped on death — its drop chance is forced to 0. Whether the mob drops
+     * its natural loot is controlled separately via {@link #setNaturalLootEnabled}.
      */
-    public static void applyEquipment(LivingEntity entity, EquipmentSlot slot, String itemId) {
-        if (itemId == null || itemId.isEmpty()) {
+    public static void applyEquipment(LivingEntity entity, EquipmentSlot slot, ItemStack template, int chance) {
+        if (template == null || template.isEmpty()) {
             return;
         }
-        ResourceLocation id = ResourceLocation.tryParse(itemId);
-        if (id == null) {
+        if (chance < 100 && entity.getRandom().nextInt(100) >= chance) {
             return;
         }
-        Item item = BuiltInRegistries.ITEM.get(id);
-        if (item == null) {
-            return;
-        }
-        entity.setItemSlot(slot, new ItemStack(item));
+        entity.setItemSlot(slot, template.copy());
         if (entity instanceof Mob mob) {
             mob.setDropChance(slot, 0.0F);
         }
     }
 
     /**
-     * Apply every equipment slot from {@code equip} to {@code entity}. Equipment never drops; the
-     * {@code dropChance} flag instead toggles the mob's natural loot-table drops.
+     * Apply every equipment slot from {@code equip} to {@code entity}, rolling each slot's spawn
+     * chance. Equipment never drops; the {@code dropChance} flag instead toggles the mob's natural
+     * loot-table drops.
      */
     public static void applyAllEquipment(LivingEntity entity, EquipmentData equip) {
         if (equip == null) {
             return;
         }
-        applyEquipment(entity, EquipmentSlot.HEAD, equip.head);
-        applyEquipment(entity, EquipmentSlot.CHEST, equip.chest);
-        applyEquipment(entity, EquipmentSlot.LEGS, equip.legs);
-        applyEquipment(entity, EquipmentSlot.FEET, equip.feet);
-        applyEquipment(entity, EquipmentSlot.MAINHAND, equip.mainHand);
-        applyEquipment(entity, EquipmentSlot.OFFHAND, equip.offHand);
+        for (int i = 0; i < EquipmentData.SLOT_COUNT; i++) {
+            applyEquipment(entity, EquipmentData.SLOTS[i], equip.items[i], equip.chances[i]);
+        }
         setNaturalLootEnabled(entity, equip.dropChance);
     }
 

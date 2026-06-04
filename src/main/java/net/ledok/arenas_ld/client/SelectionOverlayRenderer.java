@@ -228,9 +228,7 @@ public final class SelectionOverlayRenderer {
                 if (!(be instanceof RoomControllerBlockEntity room)) {
                     return;
                 }
-                if (room.getDoorPos() != null) {
-                    targets.add(room.getDoorPos());
-                }
+                targets.addAll(room.getDoorPositions());
             }
         }
 

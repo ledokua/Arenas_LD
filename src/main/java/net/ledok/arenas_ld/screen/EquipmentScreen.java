@@ -7,7 +7,6 @@ import io.wispforest.owo.ui.component.LabelComponent;
 import io.wispforest.owo.ui.component.TextBoxComponent;
 import io.wispforest.owo.ui.container.Containers;
 import io.wispforest.owo.ui.container.FlowLayout;
-import io.wispforest.owo.ui.container.ScrollContainer;
 import io.wispforest.owo.ui.core.Color;
 import io.wispforest.owo.ui.core.HorizontalAlignment;
 import io.wispforest.owo.ui.core.Insets;
@@ -20,15 +19,15 @@ import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.util.EquipmentData;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.function.Consumer;
 
 /**
- * owo-lib editor for a mob's equipment (six item-id fields + a drop toggle).
- * Opened from the boss / mob spawner screens. Mirrors the dark spawner-screen
- * styling and, like the parent screens, ignores the inventory ("E") key so it
- * can't be closed mid-edit.
+ * owo-lib editor for a mob's equipment: six <em>ghost</em> item slots (drag/click an item to stamp a
+ * template — your item isn't consumed) each with a 0–100% spawn chance, plus the natural-loot toggle.
+ * Ignores the inventory ("E") key so it can't be closed mid-edit.
  */
 public class EquipmentScreen extends BaseOwoHandledScreen<FlowLayout, EquipmentScreenHandler> {
     private static final int BG          = 0xFF070E14;
@@ -41,17 +40,16 @@ public class EquipmentScreen extends BaseOwoHandledScreen<FlowLayout, EquipmentS
     private static final int GOOD        = 0xFF86D36C;
     private static final int ACCENT      = 0xFFA98BE8;
     private static final int ACCENT_DARK = 0xFF6C4FB5;
+    private static final int SLOT_BG     = 0xFF1D2530;
 
-    // Working model.
-    private String head = "";
-    private String chest = "";
-    private String legs = "";
-    private String feet = "";
-    private String mainHand = "";
-    private String offHand = "";
+    private static final String[] SLOT_KEYS = {
+        "gui.arenas_ld.equipment.slot.head", "gui.arenas_ld.equipment.slot.chest",
+        "gui.arenas_ld.equipment.slot.legs", "gui.arenas_ld.equipment.slot.feet",
+        "gui.arenas_ld.equipment.slot.main_hand", "gui.arenas_ld.equipment.slot.off_hand"
+    };
+
+    private final int[] chances = new int[EquipmentData.SLOT_COUNT];
     private boolean dropChance = false;
-
-    private FlowLayout contentArea;
 
     public EquipmentScreen(EquipmentScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title);
@@ -59,11 +57,6 @@ public class EquipmentScreen extends BaseOwoHandledScreen<FlowLayout, EquipmentS
         this.inventoryLabelY = 9999;
     }
 
-    /**
-     * Swallow the inventory key so tapping E mid-edit doesn't close the editor.
-     * Character input still reaches focused fields via charTyped; closing happens
-     * via × or Escape.
-     */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
@@ -84,41 +77,102 @@ public class EquipmentScreen extends BaseOwoHandledScreen<FlowLayout, EquipmentS
         rootComponent.surface(Surface.flat(BG));
         rootComponent.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
 
-        int shellWidth  = Math.max(440, Math.min(560, this.width - 24));
-        int shellHeight = Math.max(280, this.height - 24);
-        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
+        int shellWidth = Math.max(300, Math.min(360, this.width - 24));
+        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.content());
         shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
 
         shell.child(buildHeader());
 
-        contentArea = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        contentArea.surface(Surface.flat(PANEL));
-        contentArea.padding(Insets.of(10));
-        contentArea.gap(6);
-        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.expand(), contentArea);
-        scroll.surface(Surface.flat(PANEL));
-        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        scroll.scrollbarThiccness(8);
-        scroll.fixedScrollbarLength(28);
-        scroll.scrollStep(18);
-        shell.child(scroll);
+        FlowLayout content = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        content.surface(Surface.flat(PANEL));
+        content.padding(Insets.of(10));
+        content.gap(4);
+        for (int i = 0; i < EquipmentData.SLOT_COUNT; i++) {
+            content.child(slotRow(i));
+        }
+        content.child(spacer(4));
+        content.child(dropToggle());
+        content.child(spacer(6));
+        content.child(inventoryGrid());
+        shell.child(content);
 
         shell.child(buildFooter());
         rootComponent.child(shell);
-
-        buildContent();
     }
 
     private void loadFromHandler() {
         if (menu.equipmentProvider == null) return;
         EquipmentData data = menu.equipmentProvider.getEquipment();
-        head = data.head;
-        chest = data.chest;
-        legs = data.legs;
-        feet = data.feet;
-        mainHand = data.mainHand;
-        offHand = data.offHand;
+        for (int i = 0; i < EquipmentData.SLOT_COUNT; i++) {
+            chances[i] = data.chances[i];
+        }
         dropChance = data.dropChance;
+    }
+
+    private FlowLayout slotRow(int index) {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
+        row.gap(8);
+        row.verticalAlignment(VerticalAlignment.CENTER);
+
+        row.child(framedSlot(index));
+
+        LabelComponent label = text(Component.translatable(SLOT_KEYS[index]), INK);
+        label.horizontalSizing(Sizing.fixed(74));
+        row.child(label);
+
+        row.child(text(Component.translatable("gui.arenas_ld.equipment.chance"), INK_DIM));
+
+        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.fixed(46), Sizing.fixed(18));
+        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldWrap.verticalAlignment(VerticalAlignment.CENTER);
+        TextBoxComponent field = Components.textBox(Sizing.fill(100), Integer.toString(chances[index]));
+        field.verticalSizing(Sizing.fixed(16));
+        field.onChanged().subscribe(v -> {
+            int parsed;
+            try {
+                parsed = Integer.parseInt(v.trim());
+            } catch (NumberFormatException e) {
+                return;
+            }
+            chances[index] = Math.max(0, Math.min(100, parsed));
+        });
+        fieldWrap.child(field);
+        row.child(fieldWrap);
+        row.child(text(Component.literal("%"), INK_DIM));
+        return row;
+    }
+
+    /** A bordered 18×18 frame around a menu slot so empty slots are visible drop targets. */
+    private FlowLayout framedSlot(int index) {
+        FlowLayout frame = Containers.horizontalFlow(Sizing.fixed(18), Sizing.fixed(18));
+        frame.surface(Surface.flat(SLOT_BG).and(Surface.outline(HAIRLINE)));
+        frame.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        frame.child(this.slotAsComponent(index));
+        return frame;
+    }
+
+    private FlowLayout inventoryGrid() {
+        FlowLayout grid = Containers.verticalFlow(Sizing.content(), Sizing.content());
+        grid.gap(1);
+        grid.horizontalAlignment(HorizontalAlignment.CENTER);
+        // Main inventory: handler slots 6..32 (3 rows of 9).
+        for (int r = 0; r < 3; r++) {
+            FlowLayout rowFlow = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+            rowFlow.gap(1);
+            for (int c = 0; c < 9; c++) {
+                rowFlow.child(framedSlot(EquipmentData.SLOT_COUNT + r * 9 + c));
+            }
+            grid.child(rowFlow);
+        }
+        grid.child(spacer(3));
+        // Hotbar: handler slots 33..41.
+        FlowLayout hotbar = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        hotbar.gap(1);
+        for (int c = 0; c < 9; c++) {
+            hotbar.child(framedSlot(EquipmentData.SLOT_COUNT + 27 + c));
+        }
+        grid.child(hotbar);
+        return grid;
     }
 
     private FlowLayout buildHeader() {
@@ -158,49 +212,11 @@ public class EquipmentScreen extends BaseOwoHandledScreen<FlowLayout, EquipmentS
         return footer;
     }
 
-    private void buildContent() {
-        if (contentArea == null) return;
-        contentArea.clearChildren();
-
-        contentArea.child(textField(Component.translatable("gui.arenas_ld.head_item_id"), head, v -> head = v));
-        contentArea.child(textField(Component.translatable("gui.arenas_ld.chest_item_id"), chest, v -> chest = v));
-        contentArea.child(textField(Component.translatable("gui.arenas_ld.legs_item_id"), legs, v -> legs = v));
-        contentArea.child(textField(Component.translatable("gui.arenas_ld.feet_item_id"), feet, v -> feet = v));
-        contentArea.child(textField(Component.translatable("gui.arenas_ld.main_hand_item_id"), mainHand, v -> mainHand = v));
-        contentArea.child(textField(Component.translatable("gui.arenas_ld.off_hand_item_id"), offHand, v -> offHand = v));
-        contentArea.child(spacer(4));
-        contentArea.child(dropToggle());
-    }
-
     private void onSave() {
-        EquipmentData data = new EquipmentData(head, chest, legs, feet, mainHand, offHand, dropChance);
-        ClientPlayNetworking.send(new ModPackets.UpdateEquipmentPayload(
-            menu.blockEntity.getBlockPos(), data));
+        ItemStack[] items = menu.currentItems();
+        EquipmentData data = new EquipmentData(items, chances, dropChance);
+        ClientPlayNetworking.send(new ModPackets.UpdateEquipmentPayload(menu.blockEntity.getBlockPos(), data));
         this.onClose();
-    }
-
-    // ── UI helpers (shared styling with the spawner screens) ──────────────────
-
-    private FlowLayout textField(Component caption, String initial, Consumer<String> onChange) {
-        FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        col.gap(4);
-
-        col.child(text(caption, INK_DIM));
-
-        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldWrap.child(accent);
-
-        TextBoxComponent field = Components.textBox(Sizing.expand(), initial == null ? "" : initial);
-        field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(onChange::accept);
-        fieldWrap.child(field);
-
-        col.child(fieldWrap);
-        return col;
     }
 
     private FlowLayout dropToggle() {

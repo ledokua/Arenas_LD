@@ -236,6 +236,10 @@ public final class RaidRunLifecycle {
             EntityEquipmentHelper.applyAllEquipment(livingBoss, entityDefinition.equipment());
 
             livingBoss.heal(livingBoss.getMaxHealth());
+            // Owned by the run: never let vanilla despawn the boss.
+            if (livingBoss instanceof net.minecraft.world.entity.Mob mob) {
+                mob.setPersistenceRequired();
+            }
             String groupId = spawner.getGroupId();
             String teamName = groupId == null || groupId.isBlank() ? "arenas_ld" : groupId;
             Scoreboard scoreboard = world.getScoreboard();
@@ -303,6 +307,16 @@ public final class RaidRunLifecycle {
             return;
         }
 
+        // Everyone has left the run for good (hardcore deaths / forfeits past grace). End it now
+        // instead of running the raid timer down with nobody inside.
+        boolean anyRemaining = run.participants().values().stream()
+            .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
+        if (!anyRemaining) {
+            bossEntity.discard();
+            handleLoss(world, controller, run, "All players eliminated.");
+            return;
+        }
+
         RaidTierConfig runTier = run.resolvedTierConfig();
         int raidTimeTicks = Math.max(0, runTier.raidTimeSeconds() * 20);
         if (raidTimeTicks > 0) {
@@ -325,7 +339,11 @@ public final class RaidRunLifecycle {
         tickDisconnectedPlayers(world, controller, run);
 
         if (hardcore) {
+            // Only participants still in the run count — a hardcore-dead player is REMOVED but may
+            // still be online (and alive, back in survival), so they must not keep the run alive.
             boolean anyFighting = participantIds.stream().anyMatch(id -> {
+                RunParticipant participant = run.participants().get(id);
+                if (participant == null || participant.status() == ParticipantStatus.REMOVED) return false;
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(id);
                 return player != null && player.isAlive() && !player.isSpectator();
             });
@@ -417,8 +435,11 @@ public final class RaidRunLifecycle {
         int closeTicks = Math.max(0, controller.getCloseTimerSeconds() * 20);
         run.setInitialCloseTimerTicks(closeTicks);
         run.setCloseTimerTicks(closeTicks);
-        if (closeTicks <= 0) {
-            // No grace configured — finalize immediately.
+        // No grace configured, or nobody left to wait for (e.g. a hardcore wipe) — finalize now
+        // instead of ticking through an empty close timer.
+        boolean anyRemaining = run.participants().values().stream()
+            .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
+        if (closeTicks <= 0 || !anyRemaining) {
             finalizeRun(world, controller, run);
         }
     }

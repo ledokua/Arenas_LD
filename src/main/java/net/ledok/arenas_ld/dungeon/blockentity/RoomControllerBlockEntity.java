@@ -44,7 +44,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     // ---- Fields ----
 
     private final List<BlockPos> spawnerOffsets = new ArrayList<>();
-    @Nullable private BlockPos doorOffset = null;
+    private final List<BlockPos> doorOffsets = new ArrayList<>();
     /** Single respawn point for this room, relative to the controller. Players downed while this room is active respawn here. */
     @Nullable private BlockPos respawnOffset = null;
     private final Set<UUID> aliveMobs = new HashSet<>();
@@ -71,14 +71,16 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         return Collections.unmodifiableList(spawnerOffsets);
     }
 
-    @Nullable
-    public BlockPos getDoorPos() {
-        return doorOffset == null ? null : worldPosition.offset(doorOffset);
+    public List<BlockPos> getDoorPositions() {
+        List<BlockPos> absolute = new ArrayList<>(doorOffsets.size());
+        for (BlockPos doorOffset : doorOffsets) {
+            absolute.add(worldPosition.offset(doorOffset));
+        }
+        return Collections.unmodifiableList(absolute);
     }
 
-    @Nullable
-    public BlockPos getDoorOffset() {
-        return doorOffset;
+    public List<BlockPos> getDoorOffsets() {
+        return Collections.unmodifiableList(doorOffsets);
     }
 
     /** Absolute respawn position for this room, or {@code null} if none is configured. */
@@ -134,10 +136,30 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
     }
 
-    public void setDoorPos(@Nullable BlockPos absolutePos) {
-        BlockPos newDoorOffset = absolutePos == null ? null : absolutePos.subtract(worldPosition);
-        if (!Objects.equals(doorOffset, newDoorOffset)) {
-            this.doorOffset = newDoorOffset;
+    /** Returns true if the door was added (false if already present). */
+    public boolean addDoor(BlockPos absolutePos) {
+        BlockPos doorOffset = absolutePos.subtract(worldPosition);
+        if (doorOffsets.contains(doorOffset)) {
+            return false;
+        }
+        doorOffsets.add(doorOffset);
+        setChanged();
+        return true;
+    }
+
+    /** Returns true if the door was removed (false if not present). */
+    public boolean removeDoor(BlockPos absolutePos) {
+        BlockPos doorOffset = absolutePos.subtract(worldPosition);
+        boolean removed = doorOffsets.remove(doorOffset);
+        if (removed) {
+            setChanged();
+        }
+        return removed;
+    }
+
+    public void clearDoors() {
+        if (!doorOffsets.isEmpty()) {
+            doorOffsets.clear();
             setChanged();
         }
     }
@@ -262,20 +284,22 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
      * isn't a PhaseBlock.
      */
     public void openDoor(ServerLevel world) {
-        setDoorSolid(world, false);
+        for (BlockPos doorOffset : doorOffsets) {
+            setDoorSolid(world, worldPosition.offset(doorOffset), false);
+        }
     }
 
     /**
-     * Close the room's door by setting the phase block's SOLID property to true.
-     * Same no-op conditions as {@link #openDoor(ServerLevel)}.
+     * Close all of the room's doors by setting their phase blocks' SOLID property to true.
+     * Same no-op conditions as {@link #openDoor(ServerLevel)}, per door.
      */
     public void closeDoor(ServerLevel world) {
-        setDoorSolid(world, true);
+        for (BlockPos doorOffset : doorOffsets) {
+            setDoorSolid(world, worldPosition.offset(doorOffset), true);
+        }
     }
 
-    private void setDoorSolid(ServerLevel world, boolean solid) {
-        if (doorOffset == null) return;
-        BlockPos doorAbsolute = worldPosition.offset(doorOffset);
+    private void setDoorSolid(ServerLevel world, BlockPos doorAbsolute, boolean solid) {
         if (!world.isLoaded(doorAbsolute)) return;
         BlockState state = world.getBlockState(doorAbsolute);
         if (!(state.getBlock() instanceof PhaseBlock)) {
@@ -323,7 +347,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     // Internal serialization record; never exposed outside the class.
     private record State(
         List<BlockPos> spawnerOffsets,
-        Optional<BlockPos> doorOffset,
+        List<BlockPos> doorOffsets,
+        Optional<BlockPos> legacyDoorOffset,
         Optional<BlockPos> respawnOffset,
         Set<UUID> aliveMobs,
         boolean activated,
@@ -331,7 +356,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("spawnerOffsets").forGetter(State::spawnerOffsets),
-            BlockPos.CODEC.optionalFieldOf("doorOffset").forGetter(State::doorOffset),
+            BlockPos.CODEC.listOf().optionalFieldOf("doorOffsets", List.of()).forGetter(State::doorOffsets),
+            BlockPos.CODEC.optionalFieldOf("doorOffset").forGetter(State::legacyDoorOffset),
             BlockPos.CODEC.optionalFieldOf("respawnOffset").forGetter(State::respawnOffset),
             UUIDUtil.CODEC.listOf()
                 .xmap((List<UUID> list) -> (Set<UUID>) new HashSet<>(list),
@@ -345,7 +371,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
-        State state = new State(spawnerOffsets, Optional.ofNullable(doorOffset),
+        State state = new State(spawnerOffsets, doorOffsets, Optional.empty(),
             Optional.ofNullable(respawnOffset), aliveMobs, activated, cleared);
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
@@ -363,7 +389,14 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 .ifPresent(state -> {
                     spawnerOffsets.clear();
                     spawnerOffsets.addAll(state.spawnerOffsets());
-                    doorOffset = state.doorOffset().orElse(null);
+                    doorOffsets.clear();
+                    doorOffsets.addAll(state.doorOffsets());
+                    // Legacy migration: a single pre-list door offset folds into the list.
+                    state.legacyDoorOffset().ifPresent(legacy -> {
+                        if (!doorOffsets.contains(legacy)) {
+                            doorOffsets.add(legacy);
+                        }
+                    });
                     respawnOffset = state.respawnOffset().orElse(null);
                     aliveMobs.clear();
                     aliveMobs.addAll(state.aliveMobs());
@@ -396,6 +429,6 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
 
     @Override
     public RoomControllerData getScreenOpeningData(ServerPlayer player) {
-        return new RoomControllerData(worldPosition, getSpawnerPositions(), Optional.ofNullable(getDoorPos()));
+        return new RoomControllerData(worldPosition, getSpawnerPositions(), getDoorPositions());
     }
 }

@@ -193,28 +193,41 @@ public class ModPackets {
     ) implements CustomPacketPayload {
         public static final Type<UpdateEquipmentPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_equipment"));
 
-        public static final StreamCodec<FriendlyByteBuf, UpdateEquipmentPayload> STREAM_CODEC = StreamCodec.of(
-                (buf, payload) -> payload.write(buf), UpdateEquipmentPayload::new);
+        public static final StreamCodec<net.minecraft.network.RegistryFriendlyByteBuf, UpdateEquipmentPayload> STREAM_CODEC = StreamCodec.of(
+                UpdateEquipmentPayload::write, UpdateEquipmentPayload::read);
 
-        public UpdateEquipmentPayload(FriendlyByteBuf buf) {
-            this(
-                    buf.readBlockPos(),
-                    new EquipmentData(
-                            buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readBoolean()
-                    )
-            );
+        private static UpdateEquipmentPayload read(net.minecraft.network.RegistryFriendlyByteBuf buf) {
+            BlockPos pos = buf.readBlockPos();
+            net.minecraft.world.item.ItemStack[] items = new net.minecraft.world.item.ItemStack[EquipmentData.SLOT_COUNT];
+            int[] chances = new int[EquipmentData.SLOT_COUNT];
+            for (int i = 0; i < EquipmentData.SLOT_COUNT; i++) {
+                items[i] = net.minecraft.world.item.ItemStack.OPTIONAL_STREAM_CODEC.decode(buf);
+                chances[i] = buf.readVarInt();
+            }
+            boolean drop = buf.readBoolean();
+            return new UpdateEquipmentPayload(pos, new EquipmentData(items, chances, drop));
         }
 
-        public void write(FriendlyByteBuf buf) {
-            buf.writeBlockPos(pos);
-            buf.writeUtf(equipment.head);
-            buf.writeUtf(equipment.chest);
-            buf.writeUtf(equipment.legs);
-            buf.writeUtf(equipment.feet);
-            buf.writeUtf(equipment.mainHand);
-            buf.writeUtf(equipment.offHand);
-            buf.writeBoolean(equipment.dropChance);
+        private static void write(net.minecraft.network.RegistryFriendlyByteBuf buf, UpdateEquipmentPayload payload) {
+            buf.writeBlockPos(payload.pos);
+            for (int i = 0; i < EquipmentData.SLOT_COUNT; i++) {
+                net.minecraft.world.item.ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, payload.equipment.items[i]);
+                buf.writeVarInt(payload.equipment.chances[i]);
+            }
+            buf.writeBoolean(payload.equipment.dropChance);
         }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record OpenEquipmentEditorPayload(BlockPos pos) implements CustomPacketPayload {
+        public static final Type<OpenEquipmentEditorPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "open_equipment_editor"));
+        public static final StreamCodec<FriendlyByteBuf, OpenEquipmentEditorPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> buf.writeBlockPos(payload.pos()),
+                buf -> new OpenEquipmentEditorPayload(buf.readBlockPos()));
 
         @Override
         public Type<? extends CustomPacketPayload> type() {

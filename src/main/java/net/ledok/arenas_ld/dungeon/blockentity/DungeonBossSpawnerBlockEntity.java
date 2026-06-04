@@ -163,6 +163,10 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         EntityEquipmentHelper.applyAllEquipment(living, entityDefinition.equipment());
 
         living.heal(living.getMaxHealth());
+        // Owned by the run: never let vanilla despawn the boss.
+        if (living instanceof net.minecraft.world.entity.Mob persistentMob) {
+            persistentMob.setPersistenceRequired();
+        }
 
         Vec3 spawnPos = EntityEquipmentHelper.resolveBossSpawnPos(worldPosition, entityDefinition.spawnOffsets());
         living.moveTo(spawnPos.x, spawnPos.y, spawnPos.z, world.random.nextFloat() * 360.0F, 0.0F);
@@ -196,7 +200,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
-        State.CODEC.encodeStart(NbtOps.INSTANCE, new State(entityDefinition, entranceOffset, entranceDimension, roomOffsets))
+        State.CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), new State(entityDefinition, entranceOffset, entranceDimension, roomOffsets))
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save DungeonBossSpawner at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
@@ -206,7 +210,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.loadAdditional(nbt, registries);
         if (nbt.contains("State")) {
-            State.CODEC.parse(NbtOps.INSTANCE, nbt.get("State"))
+            State.CODEC.parse(registries.createSerializationContext(NbtOps.INSTANCE), nbt.get("State"))
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                     "Failed to load DungeonBossSpawner at {}: {}", worldPosition, err))
                 .ifPresent(state -> {

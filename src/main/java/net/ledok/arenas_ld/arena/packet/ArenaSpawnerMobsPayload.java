@@ -21,7 +21,7 @@ public record ArenaSpawnerMobsPayload(BlockPos spawnerPos, List<MobArenaMobData>
         (buf, p) -> {
             buf.writeBlockPos(p.spawnerPos());
             buf.writeVarInt(p.mobs().size());
-            for (MobArenaMobData m : p.mobs()) buf.writeNbt(m.toNbt());
+            for (MobArenaMobData m : p.mobs()) buf.writeNbt(m.toNbt(buf.registryAccess()));
         },
         buf -> {
             BlockPos pos = buf.readBlockPos();
@@ -29,7 +29,7 @@ public record ArenaSpawnerMobsPayload(BlockPos spawnerPos, List<MobArenaMobData>
             List<MobArenaMobData> mobs = new ArrayList<>(n);
             for (int i = 0; i < n; i++) {
                 CompoundTag tag = buf.readNbt();
-                if (tag != null) mobs.add(MobArenaMobData.fromNbt(tag));
+                if (tag != null) mobs.add(MobArenaMobData.fromNbt(buf.registryAccess(), tag));
             }
             return new ArenaSpawnerMobsPayload(pos, mobs);
         });

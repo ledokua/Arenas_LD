@@ -9,19 +9,18 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
-import java.util.Optional;
 
 public class RoomControllerScreenHandler extends AbstractContainerMenu {
     private final BlockPos blockPos;
     private List<BlockPos> spawnerPositions;
-    private Optional<BlockPos> doorPos;
+    private List<BlockPos> doorPositions;
 
     public RoomControllerScreenHandler(int syncId, Inventory playerInventory, RoomControllerData data) {
-        this(syncId, playerInventory, data.blockPos(), data.spawnerPositions(), data.doorPos());
+        this(syncId, playerInventory, data.blockPos(), data.spawnerPositions(), data.doorPositions());
     }
 
     public RoomControllerScreenHandler(int syncId, Inventory playerInventory, RoomControllerBlockEntity blockEntity) {
-        this(syncId, playerInventory, blockEntity.getBlockPos(), blockEntity.getSpawnerPositions(), Optional.ofNullable(blockEntity.getDoorPos()));
+        this(syncId, playerInventory, blockEntity.getBlockPos(), blockEntity.getSpawnerPositions(), blockEntity.getDoorPositions());
     }
 
     private RoomControllerScreenHandler(
@@ -29,12 +28,12 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
         Inventory playerInventory,
         BlockPos blockPos,
         List<BlockPos> spawnerPositions,
-        Optional<BlockPos> doorPos
+        List<BlockPos> doorPositions
     ) {
         super(ModScreenHandlers.ROOM_CONTROLLER_SCREEN_HANDLER, syncId);
         this.blockPos = blockPos;
         this.spawnerPositions = List.copyOf(spawnerPositions);
-        this.doorPos = doorPos;
+        this.doorPositions = List.copyOf(doorPositions);
     }
 
     public BlockPos getBlockPos() {
@@ -45,13 +44,13 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
         return List.copyOf(spawnerPositions);
     }
 
-    public Optional<BlockPos> getDoorPos() {
-        return doorPos;
+    public List<BlockPos> getDoorPositions() {
+        return List.copyOf(doorPositions);
     }
 
     public void applyData(RoomControllerData data) {
         this.spawnerPositions = List.copyOf(data.spawnerPositions());
-        this.doorPos = data.doorPos();
+        this.doorPositions = List.copyOf(data.doorPositions());
     }
 
     @Override

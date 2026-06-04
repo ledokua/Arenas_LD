@@ -2,8 +2,11 @@ package net.ledok.arenas_ld.dungeon.blockentity;
 
 import net.ledok.arenas_ld.util.AttributeData;
 import net.ledok.arenas_ld.util.EquipmentData;
+import net.minecraft.SharedConstants;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import net.minecraft.server.Bootstrap;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -12,6 +15,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 
 class EntityDefinitionTest {
+
+    @BeforeAll
+    static void bootstrap() {
+        // EquipmentData.CODEC references ItemStack codecs, which require the registries to be loaded.
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
 
     @Test
     void defaultHasExpectedValues() {

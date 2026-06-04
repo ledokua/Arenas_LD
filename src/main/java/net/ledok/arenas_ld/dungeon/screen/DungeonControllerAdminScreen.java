@@ -1129,7 +1129,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         if (Math.abs(value - Math.rint(value)) < 0.0001D) {
             return Integer.toString((int) Math.rint(value));
         }
-        return String.format("%.2f", value);
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
     }
 
     private LabelComponent smallMeta(String text, int color) {
@@ -1211,7 +1211,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
 
     private Double parseDouble(String value) {
         try {
-            return Double.parseDouble(value);
+            return Double.parseDouble(value.trim().replace(',', '.'));
         } catch (Exception ignored) {
             return null;
         }

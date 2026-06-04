@@ -460,13 +460,8 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
     }
 
     private void openEquipmentScreen() {
-        if (minecraft != null && minecraft.player != null) {
-            minecraft.setScreen(new EquipmentScreen(
-                new EquipmentScreenHandler(menu.containerId, minecraft.player.getInventory(), new EquipmentScreenData(menu.getBlockPos())),
-                minecraft.player.getInventory(),
-                Component.translatable("gui.arenas_ld.mob_equipment")
-            ));
-        }
+        net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+            new net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload(menu.getBlockPos()));
     }
 
     public boolean matchesSpawner(BlockPos blockPos) {

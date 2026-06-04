@@ -79,6 +79,7 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(UpdateBossSpawnerPayload.TYPE, UpdateBossSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateAttributesPayload.TYPE, UpdateAttributesPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateEquipmentPayload.TYPE, UpdateEquipmentPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload.TYPE, net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(CycleConfiguratorModePayload.TYPE, CycleConfiguratorModePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(RoomRemoveSpawnerPayload.TYPE, RoomRemoveSpawnerPayload.STREAM_CODEC);

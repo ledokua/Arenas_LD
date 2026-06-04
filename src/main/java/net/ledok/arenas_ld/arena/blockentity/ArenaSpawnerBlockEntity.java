@@ -215,7 +215,7 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
             new WaveTiming(waveTimer, additionalTime, timeBetweenWaves, prepareTime, bossWaveAdditionalTime),
             new Cadence(bossEveryNWaves, eliteEveryNWaves, objectiveEveryNWaves, new ArrayList<>(enabledObjectives)),
             new ArrayList<>(mobs), new ArrayList<>(rewards));
-        State.CODEC.encodeStart(NbtOps.INSTANCE, state)
+        State.CODEC.encodeStart(registryLookup.createSerializationContext(NbtOps.INSTANCE), state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save ArenaSpawner at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
     }
@@ -224,11 +224,11 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.loadAdditional(nbt, registryLookup);
         if (nbt.contains("State")) {
-            State.CODEC.parse(NbtOps.INSTANCE, nbt.get("State"))
+            State.CODEC.parse(registryLookup.createSerializationContext(NbtOps.INSTANCE), nbt.get("State"))
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load ArenaSpawner at {}: {}", worldPosition, err))
                 .ifPresent(this::applyState);
         } else {
-            applyLegacy(nbt);
+            applyLegacy(nbt, registryLookup);
         }
     }
 
@@ -257,7 +257,7 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
     }
 
     /** Migrate from the pre-rework {@code MobArenaSpawnerBlockEntity} NBT layout. */
-    private void applyLegacy(CompoundTag nbt) {
+    private void applyLegacy(CompoundTag nbt, HolderLookup.Provider registries) {
         groupId = nbt.getString("GroupId");
         battleRadius = nbt.contains("BattleRadius") ? nbt.getInt("BattleRadius") : 64;
         spawnDistance = nbt.contains("SpawnDistance") ? nbt.getInt("SpawnDistance") : 8;
@@ -276,7 +276,7 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
         mobs = new ArrayList<>();
         if (nbt.contains("Mobs")) {
             for (Tag t : nbt.getList("Mobs", Tag.TAG_COMPOUND)) {
-                mobs.add(MobArenaMobData.fromNbt((CompoundTag) t));
+                mobs.add(MobArenaMobData.fromNbt(registries, (CompoundTag) t));
             }
         }
         rewards = new ArrayList<>();

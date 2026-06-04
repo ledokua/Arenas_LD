@@ -112,6 +112,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
             EntityEquipmentHelper.applyAllEquipment(living, entityDefinition.equipment());
 
             living.heal(living.getMaxHealth());
+            // Owned by the run: never let vanilla despawn these (e.g. when the solo player goes
+            // SPECTATOR on down, mobs would otherwise hard-despawn and the room would falsely clear).
+            if (living instanceof net.minecraft.world.entity.Mob persistentMob) {
+                persistentMob.setPersistenceRequired();
+            }
 
             double spawnX, spawnY, spawnZ;
             if (offsets.isEmpty()) {
@@ -147,7 +152,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
-        STATE_CODEC.encodeStart(NbtOps.INSTANCE, new State(entityDefinition))
+        STATE_CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), new State(entityDefinition))
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save MobSpawner at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
@@ -157,7 +162,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.loadAdditional(nbt, registries);
         if (nbt.contains("State")) {
-            STATE_CODEC.parse(NbtOps.INSTANCE, nbt.get("State"))
+            STATE_CODEC.parse(registries.createSerializationContext(NbtOps.INSTANCE), nbt.get("State"))
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                     "Failed to load MobSpawner at {}: {}", worldPosition, err))
                 .ifPresent(state -> this.entityDefinition = state.entity());

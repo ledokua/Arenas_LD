@@ -108,6 +108,16 @@ public final class SpawnerPacketHandlers {
             });
         });
 
+        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                BlockEntity be = player.level().getBlockEntity(payload.pos());
+                if (be instanceof EquipmentProvider) {
+                    player.openMenu(new net.ledok.arenas_ld.screen.EquipmentMenuProvider(be));
+                }
+            });
+        });
+
         ServerPlayNetworking.registerGlobalReceiver(CycleLinkerModePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ItemStack stack = context.player().getMainHandItem();
@@ -182,7 +192,7 @@ public final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof RoomControllerBlockEntity room) {
-                    room.setDoorPos(null);
+                    room.clearDoors();
                     markDirtyAndSync(world, room);
                     broadcastRoomControllerSnapshot(player, room);
                 }

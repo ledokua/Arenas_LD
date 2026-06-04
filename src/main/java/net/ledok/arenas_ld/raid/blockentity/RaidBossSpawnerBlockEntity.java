@@ -258,7 +258,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.saveAdditional(nbt, registryLookup);
-        State.CODEC.encodeStart(NbtOps.INSTANCE, new State(
+        State.CODEC.encodeStart(registryLookup.createSerializationContext(NbtOps.INSTANCE), new State(
                 entityDefinition, entranceOffset, entranceDimension,
                 new ArrayList<>(respawnPointOffsets), groupId))
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save RaidBossSpawner at {}: {}", worldPosition, err))
@@ -269,7 +269,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.loadAdditional(nbt, registryLookup);
         if (nbt.contains("State")) {
-            State.CODEC.parse(NbtOps.INSTANCE, nbt.get("State"))
+            State.CODEC.parse(registryLookup.createSerializationContext(NbtOps.INSTANCE), nbt.get("State"))
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load RaidBossSpawner at {}: {}", worldPosition, err))
                 .ifPresent(state -> {
                     this.entityDefinition = state.entity();
@@ -297,7 +297,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
                 }
             }
             if (nbt.contains("EntityDefinition", Tag.TAG_COMPOUND)) {
-                EntityDefinition.CODEC.parse(NbtOps.INSTANCE, nbt.getCompound("EntityDefinition"))
+                EntityDefinition.CODEC.parse(registryLookup.createSerializationContext(NbtOps.INSTANCE), nbt.getCompound("EntityDefinition"))
                     .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load EntityDefinition at {}: {}", worldPosition, err))
                     .ifPresent(def -> this.entityDefinition = def);
             } else {
@@ -312,7 +312,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
                     legacyAttrs.add(new AttributeData("minecraft:generic.attack_damage", 15.0));
                 }
                 EquipmentData legacyEquip = nbt.contains("Equipment")
-                    ? EquipmentData.fromNbt(nbt.getCompound("Equipment"))
+                    ? EquipmentData.fromNbt(registryLookup, nbt.getCompound("Equipment"))
                     : new EquipmentData();
                 this.entityDefinition = new EntityDefinition(legacyMobId, legacyAttrs, legacyEquip);
             }

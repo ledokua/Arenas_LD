@@ -111,16 +111,20 @@ public class SpawnerConfiguratorItem extends Item {
         ResourceKey<Level> clickedDimension = world.dimension();
 
         switch (currentMode) {
-            case ENTRANCE_POSITION:
+            case ENTRANCE_POSITION: {
+                // Players enter standing ON the clicked block (one block above it), matching how
+                // mob-spawn and respawn positions are placed.
+                BlockPos entranceAbsolute = clickedPos.above();
                 if (selectedBlockEntity instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity newDbs) {
-                    newDbs.setEntrancePosition(clickedPos, clickedDimension);
+                    newDbs.setEntrancePosition(entranceAbsolute, clickedDimension);
                 } else if (selectedBlockEntity instanceof RaidBossSpawnerBlockEntity bossSpawner) {
-                    bossSpawner.setEntrancePosition(clickedPos, clickedDimension);
+                    bossSpawner.setEntrancePosition(entranceAbsolute, clickedDimension);
                 } else if (selectedBlockEntity instanceof net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity arenaSpawner) {
-                    arenaSpawner.setEntrancePosition(clickedPos, clickedDimension);
+                    arenaSpawner.setEntrancePosition(entranceAbsolute, clickedDimension);
                 }
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.entrance_pos_set", clickedPos.toShortString(), clickedDimension.location().toString()));
                 break;
+            }
             case MOB_SPAWN_POSITION:
                 if (!selectedSpawnerDim.equals(clickedDimension)) {
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_wrong_dimension"));

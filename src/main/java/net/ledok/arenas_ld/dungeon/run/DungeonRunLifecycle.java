@@ -137,13 +137,26 @@ public final class DungeonRunLifecycle {
             }
         }
 
+        // Everyone has left the run for good (hardcore deaths / forfeits past grace). End it now
+        // instead of letting the dungeon timer count down to zero with nobody inside.
+        boolean anyRemaining = run.participants().values().stream()
+            .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
+        if (!anyRemaining) {
+            handleLoss(world, controller, run, DungeonOutcome.LOSS_ABANDONED);
+            return;
+        }
+
         run.setDungeonTimerTicks(run.dungeonTimerTicks() - 1);
         if (run.dungeonTimerTicks() <= 0) {
             handleLoss(world, controller, run, DungeonOutcome.LOSS_TIMEOUT);
             return;
         }
 
-        boolean anyOnline = run.participants().keySet().stream().anyMatch(uuid -> world.getPlayerByUUID(uuid) != null);
+        // Only non-removed participants count: a hardcore-dead player is still online but no longer
+        // in the run, so they must not keep an empty run alive.
+        boolean anyOnline = run.participants().entrySet().stream()
+            .anyMatch(e -> e.getValue().status() != ParticipantStatus.REMOVED
+                && world.getPlayerByUUID(e.getKey()) != null);
         if (!anyOnline) {
             handleLoss(world, controller, run, DungeonOutcome.LOSS_ABANDONED);
             return;
@@ -282,6 +295,16 @@ public final class DungeonRunLifecycle {
         }
 
         run.setOutcome(reason);
+
+        // If nobody is left in the run, there's no one to wait for — close out immediately
+        // rather than ticking through the (pointless) close timer.
+        boolean anyRemaining = run.participants().values().stream()
+            .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
+        if (!anyRemaining) {
+            finalize(world, controller, run);
+            return;
+        }
+
         run.setPhase(DungeonPhase.CLOSING);
         int closeTicks = controller.getCloseTimerSeconds() * 20;
         run.setInitialCloseTimerTicks(closeTicks);
@@ -769,8 +792,7 @@ public final class DungeonRunLifecycle {
                 for (BlockPos spawnerPos : roomController.getSpawnerPositions()) {
                     chunks.add(new ChunkPos(spawnerPos));
                 }
-                BlockPos doorPos = roomController.getDoorPos();
-                if (doorPos != null) {
+                for (BlockPos doorPos : roomController.getDoorPositions()) {
                     chunks.add(new ChunkPos(doorPos));
                 }
             }

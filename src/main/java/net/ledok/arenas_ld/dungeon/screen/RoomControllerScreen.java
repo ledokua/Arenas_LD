@@ -23,7 +23,7 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
     private static final int MAX_ROWS = 5;
 
     private final List<net.minecraft.core.BlockPos> spawnerPositions;
-    private Optional<net.minecraft.core.BlockPos> doorPos;
+    private List<net.minecraft.core.BlockPos> doorPositions;
     private int scrollOffset;
 
     public RoomControllerScreen(RoomControllerScreenHandler handler, Inventory inventory, Component title) {
@@ -31,7 +31,7 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
         this.imageWidth = WIDTH;
         this.imageHeight = HEIGHT;
         this.spawnerPositions = new ArrayList<>(handler.getSpawnerPositions());
-        this.doorPos = handler.getDoorPos();
+        this.doorPositions = handler.getDoorPositions();
         this.inventoryLabelY = this.imageHeight + 1000;
     }
 
@@ -138,9 +138,11 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
             guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.room_controller.spawners_empty"), x + 10, y + 35, 0x808AA6, false);
         }
 
-        Component doorValue = doorPos
-            .<Component>map(p -> Component.literal(p.getX() + ", " + p.getY() + ", " + p.getZ()))
-            .orElse(Component.translatable("gui.arenas_ld.room_controller.door_none"));
+        Component doorValue = doorPositions.isEmpty()
+            ? Component.translatable("gui.arenas_ld.room_controller.door_none")
+            : (doorPositions.size() == 1
+                ? Component.literal(doorPositions.get(0).toShortString())
+                : Component.translatable("gui.arenas_ld.room_controller.door_count", doorPositions.size()));
         guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.room_controller.door_label", doorValue), x + 8, y + 144, 0xC0C8E0, false);
         guiGraphics.drawString(font, Component.translatable("gui.arenas_ld.room_controller.door_hint"), x + 8, y + 154, 0x808AA6, false);
 
@@ -166,7 +168,7 @@ public class RoomControllerScreen extends AbstractContainerScreen<RoomController
     private void syncFromMenu() {
         spawnerPositions.clear();
         spawnerPositions.addAll(menu.getSpawnerPositions());
-        doorPos = menu.getDoorPos();
+        doorPositions = menu.getDoorPositions();
         scrollOffset = Math.min(scrollOffset, Math.max(0, spawnerPositions.size() - MAX_ROWS));
     }
 

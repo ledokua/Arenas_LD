@@ -252,14 +252,8 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
     }
 
     private void openEquipmentScreen() {
-        if (this.minecraft == null || this.minecraft.player == null) return;
-        this.minecraft.setScreen(new net.ledok.arenas_ld.screen.EquipmentScreen(
-            new net.ledok.arenas_ld.screen.EquipmentScreenHandler(
-                menu.containerId,
-                minecraft.player.getInventory(),
-                new net.ledok.arenas_ld.screen.EquipmentScreenData(menu.blockEntity.getBlockPos())),
-            minecraft.player.getInventory(),
-            Component.translatable("gui.arenas_ld.boss_equipment")));
+        net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+            new net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload(menu.blockEntity.getBlockPos()));
     }
 
     // ── UI Helpers ──────────────────────────────────────────────────────────────

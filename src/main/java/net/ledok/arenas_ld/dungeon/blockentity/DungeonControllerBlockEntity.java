@@ -33,6 +33,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -82,6 +83,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     /** While an instance is free: which queued lobby currently holds priority, and since when (server tick). Transient. */
     private UUID priorityFrontLobby = null;
     private long priorityFrontSinceTick = -1L;
+    /** Whether this controller's own chunk is force-loaded so it keeps ticking unattended. Transient. */
+    private transient boolean chunkForceLoaded = false;
     private final List<PendingInvite> pendingInvites = new ArrayList<>();
     private final List<PendingJoinRequest> pendingJoinRequests = new ArrayList<>();
     private final Map<UUID, Long> lobbyOfflineSinceTicks = new HashMap<>();
@@ -986,6 +989,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             return;
         }
 
+        be.ensureChunkForceLoaded(serverLevel);
+
         Iterator<Map.Entry<BlockPos, Integer>> cdIter = be.instanceCooldownTimers.entrySet().iterator();
         while (cdIter.hasNext()) {
             Map.Entry<BlockPos, Integer> entry = cdIter.next();
@@ -1013,6 +1018,19 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         for (DungeonRun run : new ArrayList<>(be.activeRuns.values())) {
             DungeonRunLifecycle.tick(serverLevel, be, run);
         }
+    }
+
+    /**
+     * Force-load this controller's own chunk (once per session) so its block-entity ticker keeps
+     * driving active runs even when the whole party has teleported into a far-away instance and the
+     * controller chunk would otherwise unload — which previously froze the run (no spawning, no timer,
+     * no death routing) until a server restart.
+     */
+    private void ensureChunkForceLoaded(ServerLevel serverLevel) {
+        if (chunkForceLoaded) return;
+        ChunkPos chunkPos = new ChunkPos(worldPosition);
+        serverLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
+        chunkForceLoaded = true;
     }
 
     private void tickLobbyTimeouts(ServerLevel serverLevel, long currentTick) {
@@ -1234,6 +1252,11 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     @Override
     public void setRemoved() {
+        if (chunkForceLoaded && level instanceof ServerLevel serverLevel) {
+            ChunkPos chunkPos = new ChunkPos(worldPosition);
+            serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
+            chunkForceLoaded = false;
+        }
         super.setRemoved();
         ArenasLdMod.DUNGEON_MANAGER.unregisterController(this);
     }

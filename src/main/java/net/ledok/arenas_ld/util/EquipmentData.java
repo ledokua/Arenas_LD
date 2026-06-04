@@ -2,80 +2,104 @@ package net.ledok.arenas_ld.util;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
+import net.minecraft.resources.RegistryOps;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
 
-import java.util.Objects;
-
+/**
+ * A mob's configured equipment: a template {@link ItemStack} per slot (full components preserved)
+ * plus a 0–100 spawn chance per slot, and a flag governing the mob's natural loot-table drops.
+ *
+ * <p>Slot order is fixed ({@link #SLOTS}) so the items/chances arrays line up with the editor and
+ * the network/persistence codecs.
+ */
 public class EquipmentData {
-    public static final Codec<EquipmentData> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-        Codec.STRING.optionalFieldOf("head", "").forGetter(data -> data.head),
-        Codec.STRING.optionalFieldOf("chest", "").forGetter(data -> data.chest),
-        Codec.STRING.optionalFieldOf("legs", "").forGetter(data -> data.legs),
-        Codec.STRING.optionalFieldOf("feet", "").forGetter(data -> data.feet),
-        Codec.STRING.optionalFieldOf("mainHand", "").forGetter(data -> data.mainHand),
-        Codec.STRING.optionalFieldOf("offHand", "").forGetter(data -> data.offHand),
-        Codec.BOOL.optionalFieldOf("dropChance", false).forGetter(data -> data.dropChance)
-    ).apply(instance, EquipmentData::new));
+    /** Fixed slot order shared by the editor, codecs and {@link EntityEquipmentHelper}. */
+    public static final EquipmentSlot[] SLOTS = {
+        EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS,
+        EquipmentSlot.FEET, EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND
+    };
+    public static final int SLOT_COUNT = SLOTS.length;
 
-    public String head = "";
-    public String chest = "";
-    public String legs = "";
-    public String feet = "";
-    public String mainHand = "";
-    public String offHand = "";
+    public static final Codec<EquipmentData> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+        ItemStack.OPTIONAL_CODEC.listOf().optionalFieldOf("items", java.util.Collections.emptyList())
+            .forGetter(d -> java.util.List.of(d.items)),
+        Codec.INT.listOf().optionalFieldOf("chances", java.util.Collections.emptyList())
+            .forGetter(d -> {
+                java.util.List<Integer> list = new java.util.ArrayList<>(SLOT_COUNT);
+                for (int c : d.chances) list.add(c);
+                return list;
+            }),
+        Codec.BOOL.optionalFieldOf("dropChance", false).forGetter(d -> d.dropChance)
+    ).apply(instance, EquipmentData::fromLists));
+
+    public final ItemStack[] items = new ItemStack[SLOT_COUNT];
+    public final int[] chances = new int[SLOT_COUNT];
     public boolean dropChance = false;
 
-    public EquipmentData() {}
+    public EquipmentData() {
+        for (int i = 0; i < SLOT_COUNT; i++) {
+            items[i] = ItemStack.EMPTY;
+            chances[i] = 100;
+        }
+    }
 
-    public EquipmentData(String head, String chest, String legs, String feet, String mainHand, String offHand, boolean dropChance) {
-        this.head = head;
-        this.chest = chest;
-        this.legs = legs;
-        this.feet = feet;
-        this.mainHand = mainHand;
-        this.offHand = offHand;
+    public EquipmentData(ItemStack[] items, int[] chances, boolean dropChance) {
+        for (int i = 0; i < SLOT_COUNT; i++) {
+            this.items[i] = i < items.length && items[i] != null ? items[i] : ItemStack.EMPTY;
+            this.chances[i] = clampChance(i < chances.length ? chances[i] : 100);
+        }
         this.dropChance = dropChance;
     }
 
-    public CompoundTag toNbt() {
-        CompoundTag tag = new CompoundTag();
-        tag.putString("Head", head);
-        tag.putString("Chest", chest);
-        tag.putString("Legs", legs);
-        tag.putString("Feet", feet);
-        tag.putString("MainHand", mainHand);
-        tag.putString("OffHand", offHand);
-        tag.putBoolean("DropChance", dropChance);
-        return tag;
+    private static EquipmentData fromLists(java.util.List<ItemStack> items, java.util.List<Integer> chances, boolean dropChance) {
+        EquipmentData data = new EquipmentData();
+        for (int i = 0; i < SLOT_COUNT; i++) {
+            if (i < items.size() && items.get(i) != null) data.items[i] = items.get(i);
+            if (i < chances.size() && chances.get(i) != null) data.chances[i] = clampChance(chances.get(i));
+        }
+        data.dropChance = dropChance;
+        return data;
     }
 
-    public static EquipmentData fromNbt(CompoundTag tag) {
-        EquipmentData data = new EquipmentData();
-        if (tag.contains("Head")) data.head = tag.getString("Head");
-        if (tag.contains("Chest")) data.chest = tag.getString("Chest");
-        if (tag.contains("Legs")) data.legs = tag.getString("Legs");
-        if (tag.contains("Feet")) data.feet = tag.getString("Feet");
-        if (tag.contains("MainHand")) data.mainHand = tag.getString("MainHand");
-        if (tag.contains("OffHand")) data.offHand = tag.getString("OffHand");
-        if (tag.contains("DropChance")) data.dropChance = tag.getBoolean("DropChance");
-        return data;
+    private static int clampChance(int c) {
+        return Math.max(0, Math.min(100, c));
+    }
+
+    public CompoundTag toNbt(HolderLookup.Provider registries) {
+        RegistryOps<Tag> ops = registries.createSerializationContext(NbtOps.INSTANCE);
+        return (CompoundTag) CODEC.encodeStart(ops, this).result().orElseGet(CompoundTag::new);
+    }
+
+    public static EquipmentData fromNbt(HolderLookup.Provider registries, CompoundTag tag) {
+        if (tag == null) return new EquipmentData();
+        RegistryOps<Tag> ops = registries.createSerializationContext(NbtOps.INSTANCE);
+        return CODEC.parse(ops, tag).result().orElseGet(EquipmentData::new);
     }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof EquipmentData that)) return false;
-        return dropChance == that.dropChance
-            && Objects.equals(head, that.head)
-            && Objects.equals(chest, that.chest)
-            && Objects.equals(legs, that.legs)
-            && Objects.equals(feet, that.feet)
-            && Objects.equals(mainHand, that.mainHand)
-            && Objects.equals(offHand, that.offHand);
+        if (dropChance != that.dropChance) return false;
+        for (int i = 0; i < SLOT_COUNT; i++) {
+            if (chances[i] != that.chances[i]) return false;
+            if (!ItemStack.matches(items[i], that.items[i])) return false;
+        }
+        return true;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(head, chest, legs, feet, mainHand, offHand, dropChance);
+        int result = Boolean.hashCode(dropChance);
+        for (int i = 0; i < SLOT_COUNT; i++) {
+            result = 31 * result + chances[i];
+            result = 31 * result + (items[i].isEmpty() ? 0 : items[i].getItem().hashCode());
+        }
+        return result;
     }
 }

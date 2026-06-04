@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.util;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -40,17 +41,17 @@ public class MobArenaMobData {
         this.isBoss = isBoss;
     }
 
-    public CompoundTag toNbt() {
+    public CompoundTag toNbt(HolderLookup.Provider registries) {
         CompoundTag tag = new CompoundTag();
         tag.putString("MobId", mobId);
-        
+
         ListTag attributeList = new ListTag();
         for (AttributeData attr : attributes) {
             attributeList.add(attr.toNbt());
         }
         tag.put("Attributes", attributeList);
-        
-        tag.put("Equipment", equipment.toNbt());
+
+        tag.put("Equipment", equipment.toNbt(registries));
         tag.putInt("Weight", weight);
         tag.putInt("MinWave", minWave);
         tag.putInt("MaxWave", maxWave);
@@ -58,19 +59,19 @@ public class MobArenaMobData {
         return tag;
     }
 
-    public static MobArenaMobData fromNbt(CompoundTag tag) {
+    public static MobArenaMobData fromNbt(HolderLookup.Provider registries, CompoundTag tag) {
         MobArenaMobData data = new MobArenaMobData();
         data.mobId = tag.getString("MobId");
-        
+
         ListTag attributeList = tag.getList("Attributes", CompoundTag.TAG_COMPOUND);
         for (Tag t : attributeList) {
             data.attributes.add(AttributeData.fromNbt((CompoundTag) t));
         }
-        
+
         if (tag.contains("Equipment")) {
-            data.equipment = EquipmentData.fromNbt(tag.getCompound("Equipment"));
+            data.equipment = EquipmentData.fromNbt(registries, tag.getCompound("Equipment"));
         }
-        
+
         data.weight = tag.getInt("Weight");
         data.minWave = tag.getInt("MinWave");
         data.maxWave = tag.getInt("MaxWave");

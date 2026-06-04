@@ -292,6 +292,10 @@ public final class ArenaRunLifecycle {
         applyScaledAttributes(world, living, mobData, scaleFactor);
         EntityEquipmentHelper.applyAllEquipment(living, mobData.equipment);
         living.heal(living.getMaxHealth());
+        // Owned by the run: never let vanilla despawn arena mobs.
+        if (living instanceof net.minecraft.world.entity.Mob mob) {
+            mob.setPersistenceRequired();
+        }
         assignTeam(world, spawner, living);
 
         BlockPos origin = run.spawnerPos();

@@ -258,12 +258,10 @@ public class LinkerItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        boolean replaced = room.getDoorPos() != null && !room.getDoorPos().equals(pos);
-        room.setDoorPos(pos);
-        if (replaced) {
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_door.cleared_first"));
-        }
-        player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_door.set"));
+        boolean added = room.addDoor(pos);
+        player.sendSystemMessage(Component.translatable(
+            added ? "message.arenas_ld.linker.room_door.set"
+                : "message.arenas_ld.linker.room_door.duplicate"));
         return InteractionResult.SUCCESS;
     }
 
