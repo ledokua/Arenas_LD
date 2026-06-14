@@ -24,6 +24,9 @@ public class ArenasLdConfig {
         "minecraft:ender_pearl",
         "minecraft:chorus_fruit"
     ));
+    // Potion/mob effects stripped from players during a run (e.g. "minecraft:speed",
+    // "galosphere:astral"). Removed every tick, so they can't be applied mid-run either.
+    public java.util.List<String> run_effect_blacklist = new java.util.ArrayList<>();
 
     public static ArenasLdConfig getInstance() {
         if (instance == null) {

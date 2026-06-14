@@ -39,5 +39,6 @@ public class ArenasLdMod implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> DUNGEON_MANAGER.clearForServerStop());
         DungeonConnectionListener.register();
         net.ledok.arenas_ld.util.RunItemRestrictions.register();
+        net.ledok.arenas_ld.util.RunEffectRestrictions.register();
     }
 }
