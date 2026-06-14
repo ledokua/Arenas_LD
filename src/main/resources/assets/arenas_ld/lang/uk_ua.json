@@ -5,6 +5,7 @@
   "gui.arenas_ld.arena_controller_admin.title": "Адмін арени",
   "boss_bar.arenas_ld.closing": "Повернення...",
   "message.arenas_ld.lobby_queued": "Ваше лобі в черзі на вільну арену.",
+  "message.arenas_ld.run.item_blocked": "Цей предмет не можна використовувати під час забігу.",
   "gui.arenas_ld.arena.lobbies": "Лобі",
   "gui.arenas_ld.arena.no_lobbies": "Немає відкритих лобі. Створіть своє!",
   "gui.arenas_ld.arena.create_lobby": "Створити лобі",

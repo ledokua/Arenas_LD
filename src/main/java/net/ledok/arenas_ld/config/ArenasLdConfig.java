@@ -18,6 +18,12 @@ public class ArenasLdConfig {
     // Config fields with default values
     public String puffish_skills_tree_id = "puffish_skills:combat";
     public String dungeon_damage_source_filter = "ALL";
+    // Items that may not be used while a player is in a raid/dungeon/arena run. Entries are item ids
+    // (e.g. "minecraft:ender_pearl") or item tags prefixed with '#' (e.g. "#minecraft:beds").
+    public java.util.List<String> run_item_blacklist = new java.util.ArrayList<>(java.util.List.of(
+        "minecraft:ender_pearl",
+        "minecraft:chorus_fruit"
+    ));
 
     public static ArenasLdConfig getInstance() {
         if (instance == null) {

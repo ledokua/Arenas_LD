@@ -5,6 +5,7 @@
   "gui.arenas_ld.arena_controller_admin.title": "Arena Admin",
   "boss_bar.arenas_ld.closing": "Returning...",
   "message.arenas_ld.lobby_queued": "Your lobby is queued for a free arena.",
+  "message.arenas_ld.run.item_blocked": "That item can't be used during a run.",
   "gui.arenas_ld.arena.lobbies": "Lobbies",
   "gui.arenas_ld.arena.no_lobbies": "No open lobbies. Create one!",
   "gui.arenas_ld.arena.create_lobby": "Create Lobby",
