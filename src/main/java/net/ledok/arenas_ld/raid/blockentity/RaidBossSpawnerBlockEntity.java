@@ -279,43 +279,6 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
                     this.respawnPointOffsets.addAll(state.respawnPointOffsets());
                     this.groupId = state.groupId();
                 });
-        } else {
-            // Legacy migration from the pre-State per-field format.
-            groupId = nbt.getString("GroupId");
-            entranceOffset = nbt.contains("EntrancePosition", Tag.TAG_LONG)
-                ? BlockPos.of(nbt.getLong("EntrancePosition")) : BlockPos.ZERO;
-            if (nbt.contains("EntranceDimension")) {
-                entranceDimension = ResourceKey.create(Registries.DIMENSION,
-                    ResourceLocation.parse(nbt.getString("EntranceDimension")));
-            } else {
-                entranceDimension = Level.OVERWORLD;
-            }
-            respawnPointOffsets.clear();
-            if (nbt.contains("RespawnPointOffsets", Tag.TAG_LONG_ARRAY)) {
-                for (long posLong : nbt.getLongArray("RespawnPointOffsets")) {
-                    respawnPointOffsets.add(BlockPos.of(posLong));
-                }
-            }
-            if (nbt.contains("EntityDefinition", Tag.TAG_COMPOUND)) {
-                EntityDefinition.CODEC.parse(registryLookup.createSerializationContext(NbtOps.INSTANCE), nbt.getCompound("EntityDefinition"))
-                    .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load EntityDefinition at {}: {}", worldPosition, err))
-                    .ifPresent(def -> this.entityDefinition = def);
-            } else {
-                String legacyMobId = nbt.contains("MobId") ? nbt.getString("MobId") : "minecraft:zombie";
-                List<AttributeData> legacyAttrs = new ArrayList<>();
-                ListTag attributeList = nbt.getList("Attributes", Tag.TAG_COMPOUND);
-                for (Tag tag : attributeList) {
-                    legacyAttrs.add(AttributeData.fromNbt((CompoundTag) tag));
-                }
-                if (legacyAttrs.isEmpty()) {
-                    legacyAttrs.add(new AttributeData("minecraft:generic.max_health", 300.0));
-                    legacyAttrs.add(new AttributeData("minecraft:generic.attack_damage", 15.0));
-                }
-                EquipmentData legacyEquip = nbt.contains("Equipment")
-                    ? EquipmentData.fromNbt(registryLookup, nbt.getCompound("Equipment"))
-                    : new EquipmentData();
-                this.entityDefinition = new EntityDefinition(legacyMobId, legacyAttrs, legacyEquip);
-            }
         }
         // Active-run registration happens lazily on first tick via findRun();
         // we can't reliably consult the controller's activeRuns during loadAdditional

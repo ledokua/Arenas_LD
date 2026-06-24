@@ -348,7 +348,6 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     private record State(
         List<BlockPos> spawnerOffsets,
         List<BlockPos> doorOffsets,
-        Optional<BlockPos> legacyDoorOffset,
         Optional<BlockPos> respawnOffset,
         Set<UUID> aliveMobs,
         boolean activated,
@@ -357,7 +356,6 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("spawnerOffsets").forGetter(State::spawnerOffsets),
             BlockPos.CODEC.listOf().optionalFieldOf("doorOffsets", List.of()).forGetter(State::doorOffsets),
-            BlockPos.CODEC.optionalFieldOf("doorOffset").forGetter(State::legacyDoorOffset),
             BlockPos.CODEC.optionalFieldOf("respawnOffset").forGetter(State::respawnOffset),
             UUIDUtil.CODEC.listOf()
                 .xmap((List<UUID> list) -> (Set<UUID>) new HashSet<>(list),
@@ -371,7 +369,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
-        State state = new State(spawnerOffsets, doorOffsets, Optional.empty(),
+        State state = new State(spawnerOffsets, doorOffsets,
             Optional.ofNullable(respawnOffset), aliveMobs, activated, cleared);
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
@@ -391,12 +389,6 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     spawnerOffsets.addAll(state.spawnerOffsets());
                     doorOffsets.clear();
                     doorOffsets.addAll(state.doorOffsets());
-                    // Legacy migration: a single pre-list door offset folds into the list.
-                    state.legacyDoorOffset().ifPresent(legacy -> {
-                        if (!doorOffsets.contains(legacy)) {
-                            doorOffsets.add(legacy);
-                        }
-                    });
                     respawnOffset = state.respawnOffset().orElse(null);
                     aliveMobs.clear();
                     aliveMobs.addAll(state.aliveMobs());

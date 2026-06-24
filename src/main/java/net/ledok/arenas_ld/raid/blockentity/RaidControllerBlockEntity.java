@@ -1496,34 +1496,8 @@ public class RaidControllerBlockEntity extends BlockEntity
                         activeRuns.put(ire.spawnerPos(), ire.run());
                     }
                 });
-        } else {
-            // Legacy NBT fallback — migrate old-format data
-            loadLegacyNbt(nbt);
         }
         raidName = nbt.getString("RaidName");
-    }
-
-    /** Attempts to read the legacy (pre-rework) NBT format so existing worlds don't lose data. */
-    private void loadLegacyNbt(CompoundTag nbt) {
-        respawnTimeTicks = nbt.contains("RespawnTimeTicks") ? nbt.getInt("RespawnTimeTicks") : DEFAULT_RESPAWN_TIME_TICKS;
-        maxPartySize = nbt.contains("MaxPartySize") ? nbt.getInt("MaxPartySize") : DEFAULT_MAX_PARTY_SIZE;
-        for (DifficultyTier tier : DifficultyTier.values()) {
-            leaderboards.putIfAbsent(tier, new ArrayList<>());
-        }
-        // Instance data
-        instances.clear();
-        if (nbt.contains("Instances", Tag.TAG_LIST)) {
-            var instancesList = nbt.getList("Instances", Tag.TAG_COMPOUND);
-            for (Tag t : instancesList) {
-                var tag = (CompoundTag) t;
-                BlockPos spawnerPos = BlockPos.of(tag.getLong("SpawnerPos"));
-                ResourceKey<Level> dim = parseDimension(tag.getString("Dimension"));
-                InstanceStatus status;
-                try { status = InstanceStatus.valueOf(tag.getString("Status")); } catch (Exception e) { status = InstanceStatus.FREE; }
-                int cooldown = tag.getInt("CooldownTicksRemaining");
-                instances.add(new RaidInstanceState(spawnerPos, dim, status, cooldown));
-            }
-        }
     }
 
     @Override

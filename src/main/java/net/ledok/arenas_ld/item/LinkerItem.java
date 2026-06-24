@@ -98,11 +98,8 @@ public class LinkerItem extends Item {
             player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
             return InteractionResult.SUCCESS;
         }
-        if (!sourceDimOpt.get().equals(world.dimension())) {
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
-            return InteractionResult.SUCCESS;
-        }
-
+        // The controller (source) and its instances (target) may live in different dimensions; the
+        // controller stores each instance's dimension, so no same-dimension requirement here.
         ServerLevel sourceWorld = world.getServer().getLevel(sourceDimOpt.get());
         if (sourceWorld == null) {
             clearSelection(stack, modeData);
@@ -116,7 +113,7 @@ public class LinkerItem extends Item {
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.controller_instance.wrong_blocks"));
                 return InteractionResult.SUCCESS;
             }
-            boolean added = dungeonController.addInstance(pos);
+            boolean added = dungeonController.addInstance(pos, world.dimension());
             player.sendSystemMessage(Component.translatable(
                     added ? "message.arenas_ld.linker.controller_instance.added"
                             : "message.arenas_ld.linker.controller_instance.duplicate"

@@ -512,7 +512,9 @@ public final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.controllerPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
-                    controller.addInstance(payload.instancePos());
+                    // Manual admin add has no dimension field; the typed position is in the
+                    // controller's own dimension. (Cross-dimension instances go through the linker.)
+                    controller.addInstance(payload.instancePos(), world.dimension());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerAdminSnapshot(player, controller);
                 }
@@ -782,8 +784,13 @@ public final class SpawnerPacketHandlers {
         }
         controller.startRun(player).ifPresent(instancePos -> {
             List<UUID> party = new ArrayList<>(lobby.members());
+            // The DBS may live in a different dimension than the controller.
+            ServerLevel dbsLevel = serverLevel.getServer().getLevel(controller.getInstanceDimension(instancePos));
+            if (dbsLevel == null) {
+                dbsLevel = serverLevel;
+            }
             DungeonRun run = DungeonRunLifecycle.startRun(
-                serverLevel, controller, instancePos, party,
+                dbsLevel, controller, instancePos, party,
                 lobby.selectedTier(), lobby.hardcoreEnabled(), lobby.ownerName());
             if (run == null) {
                 ArenasLdMod.LOGGER.warn("startRun failed for lobby {}", lobby.lobbyId());

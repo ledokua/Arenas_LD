@@ -284,6 +284,7 @@ public class ArenaSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, ArenaSp
         wrap.verticalAlignment(VerticalAlignment.CENTER);
         TextBoxComponent field = Components.textBox(Sizing.expand(), initial == null ? "" : initial);
         field.verticalSizing(Sizing.fixed(15));
+        field.setMaxLength(256);
         field.onChanged().subscribe(onChange::accept);
         wrap.child(field);
         return wrap;

@@ -227,8 +227,6 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
             State.CODEC.parse(registryLookup.createSerializationContext(NbtOps.INSTANCE), nbt.get("State"))
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load ArenaSpawner at {}: {}", worldPosition, err))
                 .ifPresent(this::applyState);
-        } else {
-            applyLegacy(nbt, registryLookup);
         }
     }
 
@@ -254,43 +252,6 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
         enabledObjectives.addAll(state.cadence().objectives());
         mobs = new ArrayList<>(state.mobs());
         rewards = new ArrayList<>(state.rewards());
-    }
-
-    /** Migrate from the pre-rework {@code MobArenaSpawnerBlockEntity} NBT layout. */
-    private void applyLegacy(CompoundTag nbt, HolderLookup.Provider registries) {
-        groupId = nbt.getString("GroupId");
-        battleRadius = nbt.contains("BattleRadius") ? nbt.getInt("BattleRadius") : 64;
-        spawnDistance = nbt.contains("SpawnDistance") ? nbt.getInt("SpawnDistance") : 8;
-        waveTimer = nbt.contains("WaveTimer") ? nbt.getInt("WaveTimer") : 120;
-        additionalTime = nbt.contains("AdditionalTime") ? nbt.getInt("AdditionalTime") : 5;
-        timeBetweenWaves = nbt.contains("TimeBetweenWaves") ? nbt.getInt("TimeBetweenWaves") : 10;
-        attributeScale = nbt.contains("AttributeScale") ? nbt.getDouble("AttributeScale") : 0.1;
-        prepareTime = nbt.contains("PrepareTime") ? nbt.getInt("PrepareTime") : 10;
-        bossWaveAdditionalTime = nbt.contains("BossWaveAdditionalTime") ? nbt.getInt("BossWaveAdditionalTime") : 60;
-        entityHighlightTime = nbt.contains("EntityHighlightTime") ? nbt.getInt("EntityHighlightTime") : 0;
-        // Legacy arena entrance was stored relative to the spawner already.
-        entranceOffset = nbt.contains("ArenaEntrancePosition") ? BlockPos.of(nbt.getLong("ArenaEntrancePosition")) : BlockPos.ZERO;
-        if (nbt.contains("ArenaEntranceDimension")) {
-            entranceDimension = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(nbt.getString("ArenaEntranceDimension")));
-        }
-        mobs = new ArrayList<>();
-        if (nbt.contains("Mobs")) {
-            for (Tag t : nbt.getList("Mobs", Tag.TAG_COMPOUND)) {
-                mobs.add(MobArenaMobData.fromNbt(registries, (CompoundTag) t));
-            }
-        }
-        rewards = new ArrayList<>();
-        if (nbt.contains("Rewards")) {
-            for (Tag t : nbt.getList("Rewards", Tag.TAG_COMPOUND)) {
-                rewards.add(MobArenaRewardData.fromNbt((CompoundTag) t));
-            }
-        }
-        // Exit position, run state, leaderboard and the controller back-pointer are intentionally
-        // dropped — return points, the controller and ArenaRun own those now.
-        ListTag ignored = nbt.getList("AliveMobs", Tag.TAG_COMPOUND);
-        if (!ignored.isEmpty()) {
-            ArenasLdMod.LOGGER.info("Migrated legacy MobArenaSpawner at {} (dropped {} stale alive-mob refs)", worldPosition, ignored.size());
-        }
     }
 
     @Nullable

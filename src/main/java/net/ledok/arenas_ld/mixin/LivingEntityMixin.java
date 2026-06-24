@@ -190,15 +190,9 @@ public abstract class LivingEntityMixin {
         if (!(player.level() instanceof net.minecraft.server.level.ServerLevel sl)) {
             return;
         }
-        net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller = null;
-        for (net.minecraft.core.BlockPos pos : ArenasLdMod.DUNGEON_MANAGER.getControllersIn(sl.dimension())) {
-            if (sl.getBlockEntity(pos) instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity c) {
-                if (c.getActiveRuns().containsValue(run)) {
-                    controller = c;
-                    break;
-                }
-            }
-        }
+        // The controller may live in a different dimension than the player's run; scan all controllers.
+        net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller =
+            ArenasLdMod.DUNGEON_MANAGER.findControllerForRun(sl.getServer(), run);
         if (controller == null) {
             return;
         }

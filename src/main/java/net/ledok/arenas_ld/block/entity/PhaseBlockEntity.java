@@ -18,10 +18,7 @@ import java.util.Collections;
 import java.util.List;
 
 public class PhaseBlockEntity extends BlockEntity {
-    private static final String LEGACY_GROUP_ID_TAG = "GroupId";
-    private static final String LEGACY_GROUP_WARNING_SHOWN_TAG = "LegacyGroupWarningShown";
     private boolean isMain = false;
-    private boolean legacyGroupWarningShown = false;
     private final List<BlockPos> watchedSpawnerOffsets = new ArrayList<>();
     private int checkTick = 0;
 
@@ -103,29 +100,11 @@ public class PhaseBlockEntity extends BlockEntity {
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         this.isMain = tag.getBoolean("IsMain");
-        this.legacyGroupWarningShown = tag.getBoolean(LEGACY_GROUP_WARNING_SHOWN_TAG);
         this.watchedSpawnerOffsets.clear();
         if (tag.contains("WatchedSpawnerOffsets", Tag.TAG_LONG_ARRAY)) {
             long[] offsetsArray = tag.getLongArray("WatchedSpawnerOffsets");
             for (long posLong : offsetsArray) {
                 watchedSpawnerOffsets.add(BlockPos.of(posLong));
-            }
-        } else if (tag.contains("LinkedSpawners", Tag.TAG_LONG_ARRAY)) {
-            // Migration from previous field name.
-            long[] linkedSpawnersArray = tag.getLongArray("LinkedSpawners");
-            for (long posLong : linkedSpawnersArray) {
-                watchedSpawnerOffsets.add(BlockPos.of(posLong));
-            }
-        }
-        if (!legacyGroupWarningShown && tag.contains(LEGACY_GROUP_ID_TAG, Tag.TAG_STRING)) {
-            String legacyGroupId = tag.getString(LEGACY_GROUP_ID_TAG);
-            if (legacyGroupId != null && !legacyGroupId.isBlank()) {
-                ArenasLdMod.LOGGER.warn(
-                        "Phase block at {} still has legacy GroupId='{}'. Re-link watched spawners via linker (Phase Block Linking mode).",
-                        getBlockPos(), legacyGroupId
-                );
-                legacyGroupWarningShown = true;
-                markDirtyAndSync();
             }
         }
     }
@@ -134,7 +113,6 @@ public class PhaseBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putBoolean("IsMain", this.isMain);
-        tag.putBoolean(LEGACY_GROUP_WARNING_SHOWN_TAG, this.legacyGroupWarningShown);
         tag.putLongArray("WatchedSpawnerOffsets", watchedSpawnerOffsets.stream().mapToLong(BlockPos::asLong).toArray());
     }
 

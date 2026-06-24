@@ -858,6 +858,7 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
 
         TextBoxComponent field = Components.textBox(Sizing.expand(), initial);
         field.verticalSizing(Sizing.fixed(18));
+        field.setMaxLength(256);
         field.onChanged().subscribe(v -> {
             onChange.accept(v);
             if (lootDropdownOpen) refreshLootDropdown();

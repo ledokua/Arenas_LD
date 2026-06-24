@@ -34,6 +34,8 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -63,6 +65,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private static final int DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS = 5 * 60 * 20;
 
     private final List<BlockPos> instances = new ArrayList<>();
+    /** Dimension each instance's DBS lives in. May differ from this controller's own dimension. */
+    private final Map<BlockPos, ResourceKey<Level>> instanceDimensions = new HashMap<>();
     private final Map<DifficultyTier, TierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
     private int cooldownTicks = DEFAULT_COOLDOWN_TICKS;
     private int closeTimerSeconds = DEFAULT_CLOSE_TIMER_SECONDS;
@@ -274,11 +278,19 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         }
     }
 
-    public boolean addInstance(BlockPos pos) {
+    public boolean addInstance(BlockPos pos, ResourceKey<Level> dimension) {
         if (instances.contains(pos)) return false;
         instances.add(pos);
+        instanceDimensions.put(pos, dimension);
         markDirtyAndSync();
         return true;
+    }
+
+    /** The dimension the given instance's DBS lives in; falls back to this controller's own dimension. */
+    public ResourceKey<Level> getInstanceDimension(BlockPos pos) {
+        ResourceKey<Level> dim = instanceDimensions.get(pos);
+        if (dim != null) return dim;
+        return level instanceof ServerLevel serverLevel ? serverLevel.dimension() : Level.OVERWORLD;
     }
 
     public boolean removeInstance(BlockPos pos) {
@@ -294,7 +306,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             return true;
         }
         boolean removed = instances.remove(pos);
-        if (removed) markDirtyAndSync();
+        if (removed) {
+            instanceDimensions.remove(pos);
+            markDirtyAndSync();
+        }
         return removed;
     }
 
@@ -356,6 +371,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     public void executePendingRemoval(BlockPos pos) {
         pendingInstanceRemovals.remove(pos);
         instances.remove(pos);
+        instanceDimensions.remove(pos);
         setChanged();
     }
 
@@ -1016,7 +1032,9 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         be.tickLobbyTimeouts(serverLevel, currentTick);
 
         for (DungeonRun run : new ArrayList<>(be.activeRuns.values())) {
-            DungeonRunLifecycle.tick(serverLevel, be, run);
+            // The run's DBS may live in a different dimension than this controller; tick it there.
+            ServerLevel runLevel = serverLevel.getServer().getLevel(run.dbsDimension());
+            DungeonRunLifecycle.tick(runLevel != null ? runLevel : serverLevel, be, run);
         }
     }
 
@@ -1082,6 +1100,17 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         ).apply(i, InstanceCooldown::new));
     }
 
+    /**
+     * One registered instance: its DBS position and the dimension that DBS lives in (which may differ
+     * from the controller's).
+     */
+    private record InstanceEntry(BlockPos pos, ResourceKey<Level> dimension) {
+        static final Codec<InstanceEntry> CODEC = RecordCodecBuilder.create(i -> i.group(
+            BlockPos.CODEC.fieldOf("pos").forGetter(InstanceEntry::pos),
+            ResourceKey.codec(Registries.DIMENSION).fieldOf("dimension").forGetter(InstanceEntry::dimension)
+        ).apply(i, InstanceEntry::new));
+    }
+
     private record InstanceRunEntry(BlockPos pos, DungeonRun run) {
         static final Codec<InstanceRunEntry> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.fieldOf("pos").forGetter(InstanceRunEntry::pos),
@@ -1110,7 +1139,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     }
 
     private record State(
-        List<BlockPos> instances,
+        List<InstanceEntry> instances,
         Map<DifficultyTier, TierConfig> tierConfigs,
         int cooldownTicks,
         int closeTimerSeconds,
@@ -1128,7 +1157,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         List<UUID> queuedLobbyIds
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
-            BlockPos.CODEC.listOf().fieldOf("instances").forGetter(State::instances),
+            InstanceEntry.CODEC.listOf().fieldOf("instances").forGetter(State::instances),
             Codec.unboundedMap(DifficultyTier.CODEC, TierConfig.CODEC).fieldOf("tierConfigs").forGetter(State::tierConfigs),
             Codec.INT.fieldOf("cooldownTicks").forGetter(State::cooldownTicks),
             Codec.INT.fieldOf("closeTimerSeconds").forGetter(State::closeTimerSeconds),
@@ -1157,8 +1186,11 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         List<InstanceRunEntry> runs = activeRuns.entrySet().stream()
             .map(e -> new InstanceRunEntry(e.getKey(), e.getValue()))
             .toList();
+        List<InstanceEntry> instanceEntries = instances.stream()
+            .map(pos -> new InstanceEntry(pos, getInstanceDimension(pos)))
+            .toList();
         State state = new State(
-            instances,
+            instanceEntries,
             tierConfigs,
             cooldownTicks,
             closeTimerSeconds,
@@ -1190,7 +1222,11 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load DungeonController at {}: {}", worldPosition, err))
                 .ifPresent(state -> {
                     instances.clear();
-                    instances.addAll(state.instances());
+                    instanceDimensions.clear();
+                    for (InstanceEntry entry : state.instances()) {
+                        instances.add(entry.pos());
+                        instanceDimensions.put(entry.pos(), entry.dimension());
+                    }
                     tierConfigs.clear();
                     tierConfigs.putAll(state.tierConfigs());
                     cooldownTicks = state.cooldownTicks();
