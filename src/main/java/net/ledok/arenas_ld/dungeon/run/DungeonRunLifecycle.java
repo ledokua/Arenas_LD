@@ -9,8 +9,10 @@ import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.util.LootBundleDataComponent;
+import net.ledok.arenas_ld.util.LobbyChatActions;
 import net.ledok.arenas_ld.util.PartyTeamStore;
 import net.ledok.arenas_ld.util.PendingRestoreStore;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.core.BlockPos;
@@ -264,6 +266,7 @@ public final class DungeonRunLifecycle {
         int closeTicks = controller.getCloseTimerSeconds() * 20;
         run.setInitialCloseTimerTicks(closeTicks);
         run.setCloseTimerTicks(closeTicks);
+        sendExitPrompt(world, run);
     }
 
     static void handleLoss(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, DungeonOutcome reason) {
@@ -309,6 +312,7 @@ public final class DungeonRunLifecycle {
         int closeTicks = controller.getCloseTimerSeconds() * 20;
         run.setInitialCloseTimerTicks(closeTicks);
         run.setCloseTimerTicks(closeTicks);
+        sendExitPrompt(world, run);
     }
 
     static void finalize(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
@@ -358,6 +362,75 @@ public final class DungeonRunLifecycle {
             }
         }
         unforceChunksForRun(world, run.dbsPos());
+    }
+
+    /**
+     * Sends every still-present participant a clickable "[Exit Now]" chat button so they can leave
+     * the moment the run ends instead of waiting out the close timer. Click routes to
+     * {@code /arenasld exit} → {@link #exitEarly}.
+     */
+    private static void sendExitPrompt(ServerLevel world, DungeonRun run) {
+        MutableComponent button = LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.dungeon.exit_button"),
+            0x55FF55,
+            "/exit",
+            Component.translatable("message.arenas_ld.dungeon.exit_hover"));
+        Component line = Component.translatable("message.arenas_ld.dungeon.exit_prompt").append(button);
+        for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
+            if (entry.getValue().status() == ParticipantStatus.REMOVED) {
+                continue;
+            }
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
+            if (player != null) {
+                player.sendSystemMessage(line);
+            }
+        }
+    }
+
+    /**
+     * Pulls a single player out of a run that has already ended (CLOSING phase) before the shared
+     * close timer elapses. Teleports them home, removes them from the run, and — if nobody is left
+     * to wait on — finalizes the run immediately. Triggered by the "[Exit Now]" chat button.
+     *
+     * @return true if the player was eligible and removed; false if they had no finished run.
+     */
+    public static boolean exitEarly(MinecraftServer server, ServerPlayer player) {
+        UUID uuid = player.getUUID();
+        DungeonRun run = ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(uuid);
+        if (run == null || run.phase() != DungeonPhase.CLOSING) {
+            return false;
+        }
+        RunParticipant participant = run.participants().get(uuid);
+        if (participant == null || participant.status() == ParticipantStatus.REMOVED) {
+            return false;
+        }
+        ServerLevel world = server.getLevel(run.dbsDimension());
+        long now = world != null ? world.getGameTime() : participant.lastSeenTick();
+
+        PlayerReturnPoint rp = run.returnPoints().get(uuid);
+        if (rp != null) {
+            applyReturnPoint(server, player, rp);
+            run.removeReturnPoint(uuid);
+        }
+        run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, now));
+        run.clearDowned(uuid);
+        run.clearDisconnected(uuid);
+        ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
+        BusyStateCompat.clearBusy(uuid, BUSY_REASON);
+        if (world != null) {
+            removeFromPartyTeam(world, run, participant.playerName());
+        }
+
+        // If nobody is left to wait on, close the run out now instead of ticking the timer down.
+        boolean anyRemaining = run.participants().values().stream()
+            .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
+        if (!anyRemaining && world != null) {
+            DungeonControllerBlockEntity controller = ArenasLdMod.DUNGEON_MANAGER.findControllerForRun(server, run);
+            if (controller != null) {
+                finalize(world, controller, run);
+            }
+        }
+        return true;
     }
 
     private static void tickDownedPlayers(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
@@ -438,6 +511,8 @@ public final class DungeonRunLifecycle {
             ? Math.max(0.0F, Math.min(1.0F, (float) run.closeTimerTicks() / (float) totalTicks))
             : 0.0F;
         bar.setProgress(progress);
+        int secondsLeft = (run.closeTimerTicks() + 19) / 20; // ceil to whole seconds
+        bar.setName(Component.translatable("boss_bar.arenas_ld.close_timer", secondsLeft));
         syncBarViewers(world, run, bar);
 
         ServerBossEvent dungeonBar = run.getDungeonTimeBossBar();

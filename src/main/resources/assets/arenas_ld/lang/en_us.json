@@ -96,6 +96,10 @@
   "message.arenas_ld.dungeon.reconnected": "Reconnected — welcome back to the run!",
   "message.arenas_ld.dungeon.reconnected_downed": "Reconnected — you're still downed, hold on.",
   "message.arenas_ld.dungeon.run_ended_while_away": "Your dungeon run ended while you were away.",
+  "message.arenas_ld.dungeon.exit_prompt": "Run over — you'll be returned automatically, or leave now: ",
+  "message.arenas_ld.dungeon.exit_button": "Exit Now",
+  "message.arenas_ld.dungeon.exit_hover": "Leave the dungeon immediately",
+  "message.arenas_ld.dungeon.exit_unavailable": "There's no finished run for you to exit right now.",
   "message.arenas_ld.dungeon.party_disconnected": "%s disconnected — %ss to rejoin.",
   "message.arenas_ld.dungeon.party_reconnected": "%s reconnected.",
   "message.arenas_ld.dungeon.party_removed": "%s was removed from the run.",
@@ -122,7 +126,7 @@
   "message.arenas_ld.lobby.button.start.hover": "Start the run now",
   "message.arenas_ld.lobby_action.no_controller": "No dungeon controller at that location.",
   "boss_bar.arenas_ld.dungeon_time": "Dungeon Time",
-  "boss_bar.arenas_ld.close_timer": "Closing",
+  "boss_bar.arenas_ld.close_timer": "Returning in %ss — type /exit to leave now",
   "message.arenas_ld.dungeon_controller_admin.pending_removal": "Instance is running. Removal queued until run finalizes.",
   "message.arenas_ld.dungeon_controller_admin.invalid_value": "Invalid value — change not applied.",
 
@@ -548,7 +552,6 @@
   "message.arenas_ld.linker.unlinked_spawner_phase": "Unlinked spawner %s from phase block %s",
   "message.arenas_ld.linker.spawner_not_linked_phase": "Spawner was not linked to selected phase block.",
   "message.arenas_ld.linker.arena_spawner_selected": "Selected arena spawner: %s",
-  "message.arenas_ld.linker.arena_controller_selected": "Selected arena controller: %s",
   "message.arenas_ld.linker.arena_controller_invalid": "Selected arena controller is invalid. Select controller again.",
   "message.arenas_ld.linker.no_arena_controller_selected": "No arena controller selected. Click a controller first.",
   "message.arenas_ld.linker.no_arena_spawner_linked": "No arena spawner is linked to this controller.",
@@ -648,6 +651,5 @@
   "gui.arenas_ld.respawn_points_linked_readonly": "Respawn points: %s (set via Linker)",
   "gui.arenas_ld.raid_timer": "Raid Timer",
   "gui.arenas_ld.raid_timer_remaining": "Raid Timer: %s",
-  "gui.arenas_ld.apply": "Apply",
   "creativetab.arenas_ld_tab": "Arenas LD"
 }

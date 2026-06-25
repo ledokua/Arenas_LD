@@ -14,6 +14,7 @@ import net.ledok.arenas_ld.dungeon.run.DungeonPhase;
 import net.ledok.arenas_ld.dungeon.run.DungeonRun;
 import net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
+import net.ledok.arenas_ld.dungeon.run.RunParticipant;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.dungeon.screen.DungeonControllerData;
 import net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreenHandler;
@@ -1244,6 +1245,16 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                     activeRuns.clear();
                     for (InstanceRunEntry runEntry : state.activeRuns()) {
                         activeRuns.put(runEntry.pos(), runEntry.run());
+                        // The manager's player->run map is in-memory only and is rebuilt from
+                        // scratch each boot. Without this, after a server restart getRunForPlayer()
+                        // returns null for everyone still in a run, so reconnect can't restore or
+                        // eject them and they end up stranded inside the dungeon.
+                        for (RunParticipant participant : runEntry.run().participants().values()) {
+                            if (participant.isEligibleForLoot()) {
+                                ArenasLdMod.DUNGEON_MANAGER.registerParticipant(
+                                    participant.playerUuid(), runEntry.run());
+                            }
+                        }
                     }
                     pendingInstanceRemovals.clear();
                     pendingInstanceRemovals.addAll(state.pendingInstanceRemovals());

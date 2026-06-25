@@ -61,9 +61,23 @@ public class CommandRegistry {
                     context.getSource().sendFailure(Component.translatable("gui.arenas_ld.admin.failure.no_controller"));
                     return 0;
                 }))
+            .then(literal("exit").executes(CommandRegistry::exitDungeon))
             .then(buildLobbyNode());
 
         dispatcher.register(arenasLdNode);
+        // Convenience top-level alias so players can simply type /exit.
+        dispatcher.register(literal("exit").executes(CommandRegistry::exitDungeon));
+    }
+
+    /** Pulls the player out of a finished dungeon run early (also the click target of the chat button). */
+    private static int exitDungeon(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        boolean exited = net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle.exitEarly(player.server, player);
+        if (!exited) {
+            context.getSource().sendFailure(Component.translatable("message.arenas_ld.dungeon.exit_unavailable"));
+            return 0;
+        }
+        return 1;
     }
 
     /**
