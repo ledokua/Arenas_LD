@@ -48,8 +48,12 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     /** Single respawn point for this room, relative to the controller. Players downed while this room is active respawn here. */
     @Nullable private BlockPos respawnOffset = null;
     private final Set<UUID> aliveMobs = new HashSet<>();
+    /** Subset of {@link #aliveMobs} spawned by a linked boss spawner. When this room has any and
+     *  they've all died, any remaining adds are discarded instead of requiring them to be killed too. */
+    private final Set<UUID> bossMobs = new HashSet<>();
     private boolean activated = false;
     private boolean cleared = false;
+    private String roomName = "";
 
     // ---- Construction ----
 
@@ -106,7 +110,23 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         return cleared;
     }
 
+    /** Designer-facing name for this room, used for the ARMED hint and the DBS rooms list. May be blank. */
+    public String getRoomName() {
+        return roomName;
+    }
+
     // ---- Admin / Linker operations ----
+
+    public void setRoomName(String name) {
+        String trimmed = name == null ? "" : name.trim();
+        if (trimmed.length() > 48) {
+            trimmed = trimmed.substring(0, 48);
+        }
+        if (!this.roomName.equals(trimmed)) {
+            this.roomName = trimmed;
+            setChanged();
+        }
+    }
 
     /** Returns true if the spawner was added (false if already present). */
     public boolean addSpawner(BlockPos absolutePos) {
@@ -189,6 +209,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         activated = false;
         cleared = false;
         aliveMobs.clear();
+        bossMobs.clear();
         setChanged();
     }
 
@@ -197,8 +218,16 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         setChanged();
     }
 
+    /** Like {@link #trackSpawnedMob(UUID)}, but also marks the mob as a boss for {@link #refreshAliveMobs}. */
+    void trackBossMob(UUID uuid) {
+        aliveMobs.add(uuid);
+        bossMobs.add(uuid);
+        setChanged();
+    }
+
     void untrackSpawnedMob(UUID uuid) {
         aliveMobs.remove(uuid);
+        bossMobs.remove(uuid);
         setChanged();
     }
 
@@ -241,7 +270,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             } else if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity newBossSpawner) {
                 LivingEntity entity = newBossSpawner.spawnSingleScaled(world, tier.healthMultiplier());
                 if (entity != null) {
-                    trackSpawnedMob(entity.getUUID());
+                    trackBossMob(entity.getUUID());
                     spawned++;
                 }
             } else {
@@ -320,6 +349,10 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
      * Drop any aliveMobs UUIDs whose entities are dead, removed, in another dimension, or unloaded.
      * Updates {@link #cleared} to true if this leaves {@code aliveMobs} empty (and the room was activated).
      *
+     * <p>If this room has a linked boss spawner and every boss mob it tracked is now gone, any
+     * remaining adds are discarded on the spot — a boss fight ends the instant the boss dies, the
+     * adds don't need to be hunted down individually.
+     *
      * <p>This is intended to be called once per tick by the controller (Phase E) during a run.
      * It does NOT open the door — that's the controller's job after observing {@code isCleared()}.
      */
@@ -331,10 +364,25 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             Entity entity = world.getEntity(uuid);
             if (entity == null || !entity.isAlive() || entity.isRemoved() || entity.level() != world) {
                 it.remove();
+                bossMobs.remove(uuid);
                 ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);
                 changed = true;
             }
         }
+
+        if (!bossMobs.isEmpty() && bossMobs.stream().noneMatch(aliveMobs::contains)) {
+            for (UUID uuid : new ArrayList<>(aliveMobs)) {
+                Entity entity = world.getEntity(uuid);
+                if (entity != null && entity.isAlive()) {
+                    entity.discard();
+                }
+                ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);
+            }
+            aliveMobs.clear();
+            bossMobs.clear();
+            changed = true;
+        }
+
         if (activated && !cleared && aliveMobs.isEmpty()) {
             markCleared();
             return;
@@ -350,8 +398,10 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         List<BlockPos> doorOffsets,
         Optional<BlockPos> respawnOffset,
         Set<UUID> aliveMobs,
+        Set<UUID> bossMobs,
         boolean activated,
-        boolean cleared
+        boolean cleared,
+        String roomName
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("spawnerOffsets").forGetter(State::spawnerOffsets),
@@ -361,8 +411,13 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 .xmap((List<UUID> list) -> (Set<UUID>) new HashSet<>(list),
                       (Set<UUID> set) -> new ArrayList<>(set))
                 .fieldOf("aliveMobs").forGetter(State::aliveMobs),
+            UUIDUtil.CODEC.listOf()
+                .xmap((List<UUID> list) -> (Set<UUID>) new HashSet<>(list),
+                      (Set<UUID> set) -> new ArrayList<>(set))
+                .optionalFieldOf("bossMobs", Set.of()).forGetter(State::bossMobs),
             Codec.BOOL.fieldOf("activated").forGetter(State::activated),
-            Codec.BOOL.fieldOf("cleared").forGetter(State::cleared)
+            Codec.BOOL.fieldOf("cleared").forGetter(State::cleared),
+            Codec.STRING.optionalFieldOf("roomName", "").forGetter(State::roomName)
         ).apply(i, State::new));
     }
 
@@ -370,7 +425,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
         State state = new State(spawnerOffsets, doorOffsets,
-            Optional.ofNullable(respawnOffset), aliveMobs, activated, cleared);
+            Optional.ofNullable(respawnOffset), aliveMobs, bossMobs, activated, cleared, roomName);
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save RoomController at {}: {}", worldPosition, err))
@@ -392,8 +447,11 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     respawnOffset = state.respawnOffset().orElse(null);
                     aliveMobs.clear();
                     aliveMobs.addAll(state.aliveMobs());
+                    bossMobs.clear();
+                    bossMobs.addAll(state.bossMobs());
                     activated = state.activated();
                     cleared = state.cleared();
+                    roomName = state.roomName();
                 });
         }
     }
@@ -421,6 +479,6 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
 
     @Override
     public RoomControllerData getScreenOpeningData(ServerPlayer player) {
-        return new RoomControllerData(worldPosition, getSpawnerPositions(), getDoorPositions());
+        return new RoomControllerData(worldPosition, getSpawnerPositions(), getDoorPositions(), roomName);
     }
 }

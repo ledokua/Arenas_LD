@@ -61,6 +61,7 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
     private FlowLayout mobIdDropdownPanel;
     private TextBoxComponent mobIdTextField;
     private final List<BlockPos> rooms = new ArrayList<>();
+    private final List<String> roomNames = new ArrayList<>();
 
     private FlowLayout contentArea;
     private FlowLayout footerActions;
@@ -359,7 +360,11 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
         num.horizontalSizing(Sizing.fixed(26));
         row.child(num);
 
-        LabelComponent coord = Components.label(Component.literal(room.toShortString()));
+        String name = index < roomNames.size() ? roomNames.get(index) : "";
+        String label = name == null || name.isBlank()
+            ? room.toShortString()
+            : name + " (" + room.toShortString() + ")";
+        LabelComponent coord = Components.label(Component.literal(label));
         coord.color(Color.ofArgb(INK));
         coord.horizontalSizing(Sizing.expand());
         row.child(coord);
@@ -415,6 +420,8 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
         mobIdValue = menu.getMobId();
         rooms.clear();
         rooms.addAll(menu.getRooms());
+        roomNames.clear();
+        roomNames.addAll(menu.getRoomNames());
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

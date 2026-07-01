@@ -28,6 +28,7 @@ import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
+import net.ledok.arenas_ld.screen.ForcedGuiScale;
 import net.ledok.arenas_ld.util.InstanceStatus;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -78,6 +79,11 @@ public class ArenaControllerScreen extends BaseOwoHandledScreen<FlowLayout, Aren
     private static final int ACCENT = 0xFFA98BE8;
     private static final int ACCENT_DARK = 0xFF6C4FB5;
     private static final int INVITE_DROPDOWN_MAX_HEIGHT = 154;
+    // Design (forced-integer-GUI-scale) shell size; keeps the shell a fixed size and the font crisp
+    // regardless of window size, matching the shop/AH screens in Economy_LD.
+    private static final int DESIGN_W = 560;
+    private static final int DESIGN_H = 480;
+    private final ForcedGuiScale guiScale = new ForcedGuiScale(DESIGN_W, DESIGN_H);
 
     private enum Tab { LOBBIES, MY_LOBBY, LEADERBOARD, INVITES }
 
@@ -154,9 +160,7 @@ public class ArenaControllerScreen extends BaseOwoHandledScreen<FlowLayout, Aren
         root.surface(Surface.flat(BG));
         root.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
 
-        int shellWidth = Math.max(440, Math.min(560, this.width - 24));
-        int shellHeight = Math.max(300, this.height - 24);
-        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
+        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(DESIGN_W), Sizing.fixed(DESIGN_H));
         shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
 
         shell.child(buildHeader());
@@ -1692,5 +1696,23 @@ public class ArenaControllerScreen extends BaseOwoHandledScreen<FlowLayout, Aren
         long mins = seconds / 60L;
         long sec = seconds % 60L;
         return mins + ":" + String.format("%02d", sec);
+    }
+
+    @Override
+    protected void init() {
+        if (this.minecraft != null) {
+            this.guiScale.apply(this.minecraft);
+            this.width = this.minecraft.getWindow().getGuiScaledWidth();
+            this.height = this.minecraft.getWindow().getGuiScaledHeight();
+        }
+        super.init();
+    }
+
+    @Override
+    public void removed() {
+        super.removed();
+        if (this.minecraft != null) {
+            this.guiScale.restore(this.minecraft);
+        }
     }
 }

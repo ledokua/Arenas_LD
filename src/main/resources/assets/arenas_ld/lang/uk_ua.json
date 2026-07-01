@@ -263,6 +263,8 @@
   "gui.arenas_ld.tier.hard": "Складно",
   "gui.arenas_ld.tier.nightmare": "Кошмар",
   "gui.arenas_ld.room_controller.title": "Контролер кімнати",
+  "gui.arenas_ld.room_controller.name_label": "Назва кімнати",
+  "gui.arenas_ld.room_controller.button.set_name": "Встановити",
   "gui.arenas_ld.room_controller.spawners_label": "Спавнери (використовуйте Лінкер для додавання):",
   "gui.arenas_ld.room_controller.spawners_empty": "(пусто)",
   "gui.arenas_ld.room_controller.door_label": "Двері: %s",

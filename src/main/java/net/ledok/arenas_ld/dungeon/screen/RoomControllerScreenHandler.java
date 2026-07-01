@@ -14,13 +14,15 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
     private final BlockPos blockPos;
     private List<BlockPos> spawnerPositions;
     private List<BlockPos> doorPositions;
+    private String roomName;
 
     public RoomControllerScreenHandler(int syncId, Inventory playerInventory, RoomControllerData data) {
-        this(syncId, playerInventory, data.blockPos(), data.spawnerPositions(), data.doorPositions());
+        this(syncId, playerInventory, data.blockPos(), data.spawnerPositions(), data.doorPositions(), data.roomName());
     }
 
     public RoomControllerScreenHandler(int syncId, Inventory playerInventory, RoomControllerBlockEntity blockEntity) {
-        this(syncId, playerInventory, blockEntity.getBlockPos(), blockEntity.getSpawnerPositions(), blockEntity.getDoorPositions());
+        this(syncId, playerInventory, blockEntity.getBlockPos(), blockEntity.getSpawnerPositions(),
+            blockEntity.getDoorPositions(), blockEntity.getRoomName());
     }
 
     private RoomControllerScreenHandler(
@@ -28,12 +30,14 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
         Inventory playerInventory,
         BlockPos blockPos,
         List<BlockPos> spawnerPositions,
-        List<BlockPos> doorPositions
+        List<BlockPos> doorPositions,
+        String roomName
     ) {
         super(ModScreenHandlers.ROOM_CONTROLLER_SCREEN_HANDLER, syncId);
         this.blockPos = blockPos;
         this.spawnerPositions = List.copyOf(spawnerPositions);
         this.doorPositions = List.copyOf(doorPositions);
+        this.roomName = roomName;
     }
 
     public BlockPos getBlockPos() {
@@ -48,9 +52,14 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
         return List.copyOf(doorPositions);
     }
 
+    public String getRoomName() {
+        return roomName;
+    }
+
     public void applyData(RoomControllerData data) {
         this.spawnerPositions = List.copyOf(data.spawnerPositions());
         this.doorPositions = List.copyOf(data.doorPositions());
+        this.roomName = data.roomName();
     }
 
     @Override

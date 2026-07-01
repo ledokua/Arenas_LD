@@ -26,6 +26,7 @@ import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomControllerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomRemoveSpawnerPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomResetPayload;
+import net.ledok.arenas_ld.dungeon.packet.RoomSetNamePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetLobbyTierPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetLobbyHardcorePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetLobbyVisibilityPayload;
@@ -86,6 +87,7 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(RoomClearSpawnersPayload.TYPE, RoomClearSpawnersPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomClearDoorPayload.TYPE, RoomClearDoorPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomResetPayload.TYPE, RoomResetPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RoomSetNamePayload.TYPE, RoomSetNamePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerEntityDefPayload.TYPE, UpdateMobSpawnerEntityDefPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateDbsEntityDefPayload.TYPE, UpdateDbsEntityDefPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(DbsRemoveRoomPayload.TYPE, DbsRemoveRoomPayload.STREAM_CODEC);

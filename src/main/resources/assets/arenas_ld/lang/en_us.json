@@ -265,6 +265,8 @@
   "gui.arenas_ld.tier.hard": "Hard",
   "gui.arenas_ld.tier.nightmare": "Nightmare",
   "gui.arenas_ld.room_controller.title": "Room Controller",
+  "gui.arenas_ld.room_controller.name_label": "Room name",
+  "gui.arenas_ld.room_controller.button.set_name": "Set",
   "gui.arenas_ld.room_controller.spawners_label": "Spawners (use Linker to add):",
   "gui.arenas_ld.room_controller.spawners_empty": "(empty)",
   "gui.arenas_ld.room_controller.door_label": "Door: %s",

@@ -113,6 +113,19 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         return Collections.unmodifiableList(roomOffsets);
     }
 
+    /** Room name per position in {@link #getRooms()} (blank if unset or the controller isn't loaded). */
+    public List<String> getRoomNames() {
+        List<String> names = new ArrayList<>(roomOffsets.size());
+        for (BlockPos absolutePos : getRooms()) {
+            String name = "";
+            if (getLevel() != null && getLevel().getBlockEntity(absolutePos) instanceof RoomControllerBlockEntity room) {
+                name = room.getRoomName();
+            }
+            names.add(name);
+        }
+        return names;
+    }
+
     public boolean addRoom(BlockPos absolutePos) {
         BlockPos roomOffset = absolutePos.subtract(worldPosition);
         if (roomOffsets.contains(roomOffset)) return false;
@@ -246,6 +259,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
 
     @Override
     public DungeonBossSpawnerData getScreenOpeningData(ServerPlayer player) {
-        return new DungeonBossSpawnerData(worldPosition, entityDefinition.mobId(), getRooms());
+        return new DungeonBossSpawnerData(worldPosition, entityDefinition.mobId(), getRooms(), getRoomNames());
     }
 }
