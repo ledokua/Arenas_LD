@@ -15,7 +15,7 @@ public class ModCreativeModeTabs {
     public static final ResourceKey<CreativeModeTab> ARENAS_LD_TAB = ResourceKey.create(Registries.CREATIVE_MODE_TAB, ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "arenas_ld_tab"));
 
     public static void initialize() {
-        Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, ARENAS_LD_TAB, FabricItemGroup.builder()
+        RegistryBridge.register(BuiltInRegistries.CREATIVE_MODE_TAB, ARENAS_LD_TAB.location(), FabricItemGroup.builder()
                 .title(Component.translatable("creativetab.arenas_ld_tab"))
                 .icon(() -> ItemRegistry.LINKER.getDefaultInstance())
                 .displayItems((displayContext, entries) -> {

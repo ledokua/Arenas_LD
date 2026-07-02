@@ -25,7 +25,8 @@
   },
 
   "mixins": [
-    "arenas_ld.mixins.json"
+    "arenas_ld.mixins.json",
+    "arenas_ld_fabric.mixins.json"
   ],
 
   "depends": {

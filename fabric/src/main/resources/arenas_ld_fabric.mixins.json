@@ -4,15 +4,9 @@
   "package": "net.ledok.arenas_ld.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "ProjectileMixin"
-  ],
-  "client": [
-    "client.MouseHandlerMixin"
+    "LivingEntityMixin"
   ],
   "injectors": {
     "defaultRequire": 1
-  },
-  "overwrites": {
-    "requireAnnotations": true
   }
 }

@@ -122,3 +122,8 @@ gradle-app.setting
 
 # Claude Code worktrees and local state
 .claude/
+
+# Dev run directories (per-module)
+/neoforge/run/
+/fabric/run/
+/common/run/

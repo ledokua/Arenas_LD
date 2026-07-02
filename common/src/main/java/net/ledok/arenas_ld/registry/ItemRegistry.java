@@ -21,7 +21,7 @@ public class ItemRegistry {
             ResourceLocation itemID = ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, id);
 
             // Register the item to the built-in registry for items.
-            Item registeredItem = Registry.register(BuiltInRegistries.ITEM, itemID, item);
+            Item registeredItem = RegistryBridge.register(BuiltInRegistries.ITEM, itemID, item);
 
             // Return the registered item.
             return registeredItem;

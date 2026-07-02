@@ -18,24 +18,42 @@ import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.screen.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.MenuScreens;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.MenuAccess;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.MenuType;
 
 public class ArenasLdClient {
-    public static void init() {
-        MenuScreens.register(ModScreenHandlers.RAID_BOSS_SPAWNER_SCREEN_HANDLER, RaidBossSpawnerScreen::new);
-        MenuScreens.register(ModScreenHandlers.MOB_ATTRIBUTES_SCREEN_HANDLER, MobAttributesScreen::new);
-        MenuScreens.register(ModScreenHandlers.EQUIPMENT_SCREEN_HANDLER, net.ledok.arenas_ld.screen.EquipmentScreen::new);
-        MenuScreens.register(ModScreenHandlers.RAID_CONTROLLER_SCREEN_HANDLER, RaidControllerScreen::new);
-        MenuScreens.register(ModScreenHandlers.ROOM_CONTROLLER_SCREEN_HANDLER, RoomControllerScreen::new);
-        MenuScreens.register(ModScreenHandlers.MOB_SPAWNER_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.MobSpawnerScreen::new);
-        MenuScreens.register(ModScreenHandlers.DUNGEON_BOSS_SPAWNER_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerScreen::new);
-        MenuScreens.register(ModScreenHandlers.DUNGEON_CONTROLLER_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen::new);
-        MenuScreens.register(ModScreenHandlers.DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreen::new);
-        MenuScreens.register(ModScreenHandlers.RAID_CONTROLLER_ADMIN_SCREEN_HANDLER, RaidControllerAdminScreen::new);
-        MenuScreens.register(ModScreenHandlers.ARENA_CONTROLLER_SCREEN_HANDLER, net.ledok.arenas_ld.arena.screen.ArenaControllerScreen::new);
-        MenuScreens.register(ModScreenHandlers.ARENA_CONTROLLER_ADMIN_SCREEN_HANDLER, net.ledok.arenas_ld.arena.screen.ArenaControllerAdminScreen::new);
-        MenuScreens.register(ModScreenHandlers.ARENA_SPAWNER_SCREEN_HANDLER, net.ledok.arenas_ld.arena.screen.ArenaSpawnerScreen::new);
+    /**
+     * Abstraction over menu-screen registration: Fabric passes
+     * {@code MenuScreens::register}, NeoForge passes its
+     * {@code RegisterMenuScreensEvent::register} (direct MenuScreens
+     * registration is disallowed there).
+     */
+    @FunctionalInterface
+    public interface ScreenRegistrar {
+        <M extends AbstractContainerMenu, S extends Screen & MenuAccess<M>> void register(
+                MenuType<? extends M> type, MenuScreens.ScreenConstructor<M, S> constructor);
+    }
 
+    public static void registerScreens(ScreenRegistrar registrar) {
+        registrar.register(ModScreenHandlers.RAID_BOSS_SPAWNER_SCREEN_HANDLER, RaidBossSpawnerScreen::new);
+        registrar.register(ModScreenHandlers.MOB_ATTRIBUTES_SCREEN_HANDLER, MobAttributesScreen::new);
+        registrar.register(ModScreenHandlers.EQUIPMENT_SCREEN_HANDLER, net.ledok.arenas_ld.screen.EquipmentScreen::new);
+        registrar.register(ModScreenHandlers.RAID_CONTROLLER_SCREEN_HANDLER, RaidControllerScreen::new);
+        registrar.register(ModScreenHandlers.ROOM_CONTROLLER_SCREEN_HANDLER, RoomControllerScreen::new);
+        registrar.register(ModScreenHandlers.MOB_SPAWNER_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.MobSpawnerScreen::new);
+        registrar.register(ModScreenHandlers.DUNGEON_BOSS_SPAWNER_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerScreen::new);
+        registrar.register(ModScreenHandlers.DUNGEON_CONTROLLER_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen::new);
+        registrar.register(ModScreenHandlers.DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER, net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreen::new);
+        registrar.register(ModScreenHandlers.RAID_CONTROLLER_ADMIN_SCREEN_HANDLER, RaidControllerAdminScreen::new);
+        registrar.register(ModScreenHandlers.ARENA_CONTROLLER_SCREEN_HANDLER, net.ledok.arenas_ld.arena.screen.ArenaControllerScreen::new);
+        registrar.register(ModScreenHandlers.ARENA_CONTROLLER_ADMIN_SCREEN_HANDLER, net.ledok.arenas_ld.arena.screen.ArenaControllerAdminScreen::new);
+        registrar.register(ModScreenHandlers.ARENA_SPAWNER_SCREEN_HANDLER, net.ledok.arenas_ld.arena.screen.ArenaSpawnerScreen::new);
+    }
+
+    public static void init() {
         BlockRenderLayerMap.INSTANCE.putBlock(BlockRegistry.PHASE_BLOCK, RenderType.translucent());
 
         SelectionOverlayRenderer.register();

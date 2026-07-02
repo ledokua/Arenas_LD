@@ -20,7 +20,7 @@ public class DataComponentRegistry {
     public static final DataComponentType<LootBundleDataComponent> LOOT_BUNDLE_DATA = register("loot_bundle_data", builder -> builder.persistent(LootBundleDataComponent.CODEC).networkSynchronized(LootBundleDataComponent.STREAM_CODEC));
 
     private static <T> DataComponentType<T> register(String id, UnaryOperator<DataComponentType.Builder<T>> operator) {
-        return Registry.register(BuiltInRegistries.DATA_COMPONENT_TYPE, ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, id), operator.apply(DataComponentType.builder()).build());
+        return RegistryBridge.register(BuiltInRegistries.DATA_COMPONENT_TYPE, ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, id), operator.apply(DataComponentType.builder()).build());
     }
 
     public static void initialize() {

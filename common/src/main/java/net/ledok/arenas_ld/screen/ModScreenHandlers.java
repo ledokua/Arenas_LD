@@ -8,6 +8,7 @@ import net.ledok.arenas_ld.raid.screen.RaidBossSpawnerData;
 import net.ledok.arenas_ld.raid.screen.RaidBossSpawnerScreenHandler;
 import net.ledok.arenas_ld.raid.screen.RaidControllerData;
 import net.ledok.arenas_ld.raid.screen.RaidControllerScreenHandler;
+import net.ledok.arenas_ld.registry.RegistryBridge;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -15,55 +16,55 @@ import net.minecraft.world.inventory.MenuType;
 
 public class ModScreenHandlers {
     public static final MenuType<RaidBossSpawnerScreenHandler> RAID_BOSS_SPAWNER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_boss_spawner"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_boss_spawner"),
                     new ExtendedScreenHandlerType<>(RaidBossSpawnerScreenHandler::new, RaidBossSpawnerData.CODEC));
 
     public static final MenuType<MobAttributesScreenHandler> MOB_ATTRIBUTES_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_attributes"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_attributes"),
                     new ExtendedScreenHandlerType<>(MobAttributesScreenHandler::new, MobAttributesData.STREAM_CODEC));
 
     public static final MenuType<EquipmentScreenHandler> EQUIPMENT_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":equipment"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":equipment"),
                     new ExtendedScreenHandlerType<>(EquipmentScreenHandler::new, EquipmentScreenData.STREAM_CODEC));
 
     public static final MenuType<RaidControllerScreenHandler> RAID_CONTROLLER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_controller"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_controller"),
                     new ExtendedScreenHandlerType<>(RaidControllerScreenHandler::new, RaidControllerData.STREAM_CODEC));
 
     public static final MenuType<RoomControllerScreenHandler> ROOM_CONTROLLER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":room_controller"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":room_controller"),
                     new ExtendedScreenHandlerType<>(RoomControllerScreenHandler::new, RoomControllerData.STREAM_CODEC));
 
     public static final MenuType<net.ledok.arenas_ld.dungeon.screen.MobSpawnerScreenHandler> MOB_SPAWNER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_spawner"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":mob_spawner"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.dungeon.screen.MobSpawnerScreenHandler::new, net.ledok.arenas_ld.dungeon.screen.MobSpawnerData.STREAM_CODEC));
 
     public static final MenuType<net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerScreenHandler> DUNGEON_BOSS_SPAWNER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_boss_spawner"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_boss_spawner"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerScreenHandler::new, net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerData.STREAM_CODEC));
 
     public static final MenuType<net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreenHandler> DUNGEON_CONTROLLER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreenHandler::new, net.ledok.arenas_ld.dungeon.screen.DungeonControllerData.STREAM_CODEC));
 
     public static final MenuType<net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreenHandler> DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller_admin"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":dungeon_controller_admin"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreenHandler::new, net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminData.STREAM_CODEC));
 
     public static final MenuType<net.ledok.arenas_ld.raid.screen.RaidControllerAdminScreenHandler> RAID_CONTROLLER_ADMIN_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_controller_admin"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":raid_controller_admin"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.raid.screen.RaidControllerAdminScreenHandler::new, net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.STREAM_CODEC));
 
     public static final MenuType<net.ledok.arenas_ld.arena.screen.ArenaControllerScreenHandler> ARENA_CONTROLLER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":arena_controller"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":arena_controller"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.arena.screen.ArenaControllerScreenHandler::new, net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData.CODEC));
 
     public static final MenuType<net.ledok.arenas_ld.arena.screen.ArenaControllerAdminScreenHandler> ARENA_CONTROLLER_ADMIN_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":arena_controller_admin"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":arena_controller_admin"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.arena.screen.ArenaControllerAdminScreenHandler::new, net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData.CODEC));
 
     public static final MenuType<net.ledok.arenas_ld.arena.screen.ArenaSpawnerScreenHandler> ARENA_SPAWNER_SCREEN_HANDLER =
-            Registry.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":arena_spawner"),
+            RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":arena_spawner"),
                     new ExtendedScreenHandlerType<>(net.ledok.arenas_ld.arena.screen.ArenaSpawnerScreenHandler::new, net.ledok.arenas_ld.arena.screen.ArenaSpawnerMenuData.CODEC));
 
     public static void initialize() {

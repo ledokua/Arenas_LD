@@ -1282,8 +1282,18 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                         instanceCooldownTimers.put(c.pos(), c.ticks());
                     }
                     activeRuns.clear();
+                    // On the integrated server the CLIENT-side copy of this BE also runs
+                    // loadAdditional (sync packets), and both sides share the JVM-wide
+                    // DUNGEON_MANAGER singleton. Registering from the client would overwrite
+                    // the server's live run objects with dead deserialized copies (downed
+                    // state never ticked, /exit failing). level is null during world-boot
+                    // load, which is exactly the server-restart restore case we want.
+                    boolean serverSide = level == null || !level.isClientSide;
                     for (InstanceRunEntry runEntry : state.activeRuns()) {
                         activeRuns.put(runEntry.pos(), runEntry.run());
+                        if (!serverSide) {
+                            continue;
+                        }
                         // The manager's player->run map is in-memory only and is rebuilt from
                         // scratch each boot. Without this, after a server restart getRunForPlayer()
                         // returns null for everyone still in a run, so reconnect can't restore or
