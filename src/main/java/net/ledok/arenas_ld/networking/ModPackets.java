@@ -11,7 +11,6 @@ import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.dungeon.run.DungeonLeaderboardEntry;
 import net.ledok.arenas_ld.util.EquipmentData;
 import net.ledok.arenas_ld.util.InstanceStatus;
-import net.ledok.arenas_ld.util.LeaderboardEntry;
 import net.ledok.arenas_ld.util.MobArenaMobData;
 import net.ledok.arenas_ld.util.MobArenaRewardData;
 import net.minecraft.core.BlockPos;

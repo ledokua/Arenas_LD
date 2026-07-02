@@ -29,6 +29,7 @@ public record DungeonControllerAdminData(
     int inviteExpiryTicks,
     int respawnTimeTicks,
     int deathTimePenaltyTicks,
+    double hpScalePerPlayer,
     boolean lootViaInbox,
     String dungeonName,
     Map<DifficultyTier, TierConfig> tierConfigs,
@@ -73,6 +74,7 @@ public record DungeonControllerAdminData(
         buf.writeVarInt(data.inviteExpiryTicks());
         buf.writeVarInt(data.respawnTimeTicks());
         buf.writeVarInt(data.deathTimePenaltyTicks());
+        buf.writeDouble(data.hpScalePerPlayer());
         buf.writeBoolean(data.lootViaInbox());
         buf.writeUtf(data.dungeonName());
 
@@ -130,6 +132,7 @@ public record DungeonControllerAdminData(
         int inviteExpiryTicks = buf.readVarInt();
         int respawnTimeTicks = buf.readVarInt();
         int deathTimePenaltyTicks = buf.readVarInt();
+        double hpScalePerPlayer = buf.readDouble();
         boolean lootViaInbox = buf.readBoolean();
         String dungeonName = buf.readUtf();
 
@@ -170,6 +173,7 @@ public record DungeonControllerAdminData(
             inviteExpiryTicks,
             respawnTimeTicks,
             deathTimePenaltyTicks,
+            hpScalePerPlayer,
             lootViaInbox,
             dungeonName,
             tierConfigs,

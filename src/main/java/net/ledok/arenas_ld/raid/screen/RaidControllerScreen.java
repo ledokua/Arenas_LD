@@ -642,6 +642,9 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
         row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
         row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.rank"), Sizing.fixed(50)));
         row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.player"), Sizing.expand()));
+        LabelComponent whenHeader = headerCell(tr("gui.arenas_ld.ui.col.when"), Sizing.fixed(44));
+        whenHeader.horizontalTextAlignment(HorizontalAlignment.RIGHT);
+        row.child(whenHeader);
         LabelComponent timeHeader = headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.time"), Sizing.fixed(64));
         timeHeader.horizontalTextAlignment(HorizontalAlignment.RIGHT);
         row.child(timeHeader);
@@ -664,6 +667,12 @@ public class RaidControllerScreen extends BaseOwoHandledScreen<FlowLayout, RaidC
         LabelComponent nameLabel = text(Component.literal(entry.playerName()), INK);
         nameLabel.horizontalSizing(Sizing.expand());
         row.child(nameLabel);
+
+        LabelComponent whenLabel = text(Component.literal(
+            net.ledok.arenas_ld.screen.RelativeTime.ago(entry.recordedAtEpochMillis())), INK_MID);
+        whenLabel.horizontalSizing(Sizing.fixed(44));
+        whenLabel.horizontalTextAlignment(HorizontalAlignment.RIGHT);
+        row.child(whenLabel);
 
         LabelComponent timeLabel = text(Component.literal(formatClock(entry.timeSeconds())), top ? color : INK_MID);
         timeLabel.horizontalSizing(Sizing.fixed(64));

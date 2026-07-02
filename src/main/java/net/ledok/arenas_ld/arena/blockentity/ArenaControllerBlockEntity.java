@@ -84,6 +84,10 @@ public class ArenaControllerBlockEntity extends BlockEntity
     private static final double DEFAULT_XP_BASE = 1.0;
     private static final double DEFAULT_XP_EXP = 1.5;
     private static final int MAX_LEADERBOARD_ENTRIES = 10;
+    /** Fraction of base HP added per player beyond the first (0 = disabled). Was a hardcoded 0.10. */
+    private static final double DEFAULT_HP_SCALE_PER_PLAYER = 0.10;
+    /** Fraction of (party-scaled) base HP added per wave beyond the first (0 = disabled). */
+    private static final double DEFAULT_HP_SCALE_PER_WAVE = 0.0;
 
     private static final Set<ControllerKey> CONTROLLERS = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
@@ -117,6 +121,8 @@ public class ArenaControllerBlockEntity extends BlockEntity
     private double rewardCurrencyExp = DEFAULT_CURRENCY_EXP;
     private double rewardXpBase = DEFAULT_XP_BASE;
     private double rewardXpExp = DEFAULT_XP_EXP;
+    private double hpScalePerPlayer = DEFAULT_HP_SCALE_PER_PLAYER;
+    private double hpScalePerWave = DEFAULT_HP_SCALE_PER_WAVE;
 
     private transient boolean chunkForceLoaded = false;
 
@@ -197,6 +203,20 @@ public class ArenaControllerBlockEntity extends BlockEntity
     public boolean setDisconnectGraceTicks(int t) { if (t < 0) return false; disconnectGraceTicks = t; markDirtyAndSync(); return true; }
     public int getLobbyOfflineTimeoutTicks() { return lobbyOfflineTimeoutTicks; }
     public boolean setLobbyOfflineTimeoutTicks(int t) { if (t < 0) return false; lobbyOfflineTimeoutTicks = t; markDirtyAndSync(); return true; }
+    public double getHpScalePerPlayer() { return hpScalePerPlayer; }
+    /** Fraction of base HP added per player beyond the first (0 disables the scaling). */
+    public boolean setHpScalePerPlayer(double scale) { if (scale < 0.0 || scale > 100.0) return false; hpScalePerPlayer = scale; markDirtyAndSync(); return true; }
+    /** Mob HP multiplier for a party of the given size: {@code 1 + (players - 1) * scale}. */
+    public double resolvePartyHealthMultiplier(int partySize) {
+        return 1.0 + Math.max(0, partySize - 1) * hpScalePerPlayer;
+    }
+    public double getHpScalePerWave() { return hpScalePerWave; }
+    /** Fraction of (party-scaled) base HP added per wave beyond the first (0 disables). */
+    public boolean setHpScalePerWave(double scale) { if (scale < 0.0 || scale > 100.0) return false; hpScalePerWave = scale; markDirtyAndSync(); return true; }
+    /** Mob HP multiplier for the given wave: {@code 1 + (wave - 1) * scale}. Applied on top of the party multiplier. */
+    public double resolveWaveHealthMultiplier(int wave) {
+        return 1.0 + Math.max(0, wave - 1) * hpScalePerWave;
+    }
     public boolean isLootViaInbox() { return lootViaInbox; }
     public void setLootViaInbox(boolean v) { if (lootViaInbox != v) { lootViaInbox = v; markDirtyAndSync(); } }
 
@@ -744,15 +764,19 @@ public class ArenaControllerBlockEntity extends BlockEntity
 
     // ── Persistence ──────────────────────────────────────────────────────────
     private record LifecycleTimings(int disconnectGraceTicks, int lobbyOfflineTimeoutTicks,
-                                    int respawnTimeTicks, int deathTimePenaltyTicks) {
+                                    int respawnTimeTicks, int deathTimePenaltyTicks,
+                                    double hpScalePerPlayer, double hpScalePerWave) {
         static final LifecycleTimings DEFAULT = new LifecycleTimings(
             DEFAULT_DISCONNECT_GRACE_TICKS, DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS,
-            DEFAULT_RESPAWN_TIME_TICKS, DEFAULT_DEATH_TIME_PENALTY_TICKS);
+            DEFAULT_RESPAWN_TIME_TICKS, DEFAULT_DEATH_TIME_PENALTY_TICKS,
+            DEFAULT_HP_SCALE_PER_PLAYER, DEFAULT_HP_SCALE_PER_WAVE);
         static final Codec<LifecycleTimings> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.optionalFieldOf("disconnectGraceTicks", DEFAULT_DISCONNECT_GRACE_TICKS).forGetter(LifecycleTimings::disconnectGraceTicks),
             Codec.INT.optionalFieldOf("lobbyOfflineTimeoutTicks", DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS).forGetter(LifecycleTimings::lobbyOfflineTimeoutTicks),
             Codec.INT.optionalFieldOf("respawnTimeTicks", DEFAULT_RESPAWN_TIME_TICKS).forGetter(LifecycleTimings::respawnTimeTicks),
-            Codec.INT.optionalFieldOf("deathTimePenaltyTicks", DEFAULT_DEATH_TIME_PENALTY_TICKS).forGetter(LifecycleTimings::deathTimePenaltyTicks)
+            Codec.INT.optionalFieldOf("deathTimePenaltyTicks", DEFAULT_DEATH_TIME_PENALTY_TICKS).forGetter(LifecycleTimings::deathTimePenaltyTicks),
+            Codec.DOUBLE.optionalFieldOf("hpScalePerPlayer", DEFAULT_HP_SCALE_PER_PLAYER).forGetter(LifecycleTimings::hpScalePerPlayer),
+            Codec.DOUBLE.optionalFieldOf("hpScalePerWave", DEFAULT_HP_SCALE_PER_WAVE).forGetter(LifecycleTimings::hpScalePerWave)
         ).apply(i, LifecycleTimings::new));
     }
 
@@ -833,7 +857,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
             runEntries.add(new InstanceRunEntry(entry.getKey(), entry.getValue()));
         }
         State state = new State(
-            new LifecycleTimings(disconnectGraceTicks, lobbyOfflineTimeoutTicks, respawnTimeTicks, deathTimePenaltyTicks),
+            new LifecycleTimings(disconnectGraceTicks, lobbyOfflineTimeoutTicks, respawnTimeTicks, deathTimePenaltyTicks, hpScalePerPlayer, hpScalePerWave),
             maxPartySize, inviteExpiryTicks, cooldownTicks, closeTimerSeconds, lootViaInbox, maxWave,
             new RewardCurve(rewardCurrencyBase, rewardCurrencyExp, rewardXpBase, rewardXpExp),
             instanceEntries, new ArrayList<>(lobbies), new ArrayList<>(queuedLobbyIds),
@@ -855,6 +879,8 @@ public class ArenaControllerBlockEntity extends BlockEntity
                 lobbyOfflineTimeoutTicks = state.lifecycle().lobbyOfflineTimeoutTicks();
                 respawnTimeTicks = state.lifecycle().respawnTimeTicks();
                 deathTimePenaltyTicks = state.lifecycle().deathTimePenaltyTicks();
+                hpScalePerPlayer = state.lifecycle().hpScalePerPlayer();
+                hpScalePerWave = state.lifecycle().hpScalePerWave();
                 maxPartySize = state.maxPartySize();
                 inviteExpiryTicks = state.inviteExpiryTicks();
                 cooldownTicks = state.cooldownTicks();

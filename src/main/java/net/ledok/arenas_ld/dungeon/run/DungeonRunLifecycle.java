@@ -12,6 +12,7 @@ import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.ledok.arenas_ld.util.LobbyChatActions;
 import net.ledok.arenas_ld.util.PartyTeamStore;
 import net.ledok.arenas_ld.util.PendingRestoreStore;
+import net.ledok.arenas_ld.util.PlayerStatsStore;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
@@ -95,11 +96,15 @@ public final class DungeonRunLifecycle {
             ArenasLdMod.DUNGEON_MANAGER.registerParticipant(uuid, run);
             BusyStateCompat.setBusy(uuid, BUSY_REASON);
             addToPartyTeam(world, run, player);
+            PlayerStatsStore.get(world.getServer()).recordRunStart(uuid, PlayerStatsStore.Mode.DUNGEON);
 
             BlockPos entrance = dbs.getAbsoluteEntrancePos();
             player.setGameMode(GameType.ADVENTURE);
             player.teleportTo(targetLevel, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0f, 0.0f);
         }
+
+        // Freeze the per-player HP multiplier at run start — players leaving mid-run don't weaken it.
+        run.setPartyHealthMultiplier(controller.resolvePartyHealthMultiplier(run.participants().size()));
 
         for (BlockPos roomPos : dbs.getRooms()) {
             BlockEntity roomBe = world.getBlockEntity(roomPos);
@@ -183,7 +188,7 @@ public final class DungeonRunLifecycle {
         }
 
         if (!room.isActivated()) {
-            room.activate(world, run.resolvedTierConfig());
+            room.activate(world, run.resolvedTierConfig(), run.partyHealthMultiplier());
             for (UUID uuid : room.getAliveMobs()) {
                 ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
             }
@@ -196,6 +201,8 @@ public final class DungeonRunLifecycle {
                     handleWin(world, controller, run);
                 } else {
                     run.setCurrentRoomIndex(next);
+                    net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+                        null, null, net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, 0.6f, 1.4f);
                 }
             }
         }
@@ -226,6 +233,8 @@ public final class DungeonRunLifecycle {
         boolean puffishLoaded = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("puffish_skills");
 
         for (UUID uuid : run.lootEligibleUuids()) {
+            PlayerStatsStore.get(world.getServer()).recordWin(uuid, PlayerStatsStore.Mode.DUNGEON);
+
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
             if (player == null) {
                 continue;
@@ -260,6 +269,9 @@ public final class DungeonRunLifecycle {
                 participant.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.win", runDurationSeconds));
             }
         }
+        net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+            Component.translatable("title.arenas_ld.victory").withStyle(ChatFormatting.GREEN), null,
+            net.minecraft.sounds.SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, 1.0f, 1.0f);
 
         run.setOutcome(DungeonOutcome.WIN);
         run.setPhase(DungeonPhase.CLOSING);
@@ -296,6 +308,9 @@ public final class DungeonRunLifecycle {
                 participant.sendSystemMessage(Component.translatable(messageKey));
             }
         }
+        net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+            Component.translatable("title.arenas_ld.defeat").withStyle(ChatFormatting.RED), null,
+            net.minecraft.sounds.SoundEvents.ANVIL_LAND, 0.6f, 0.7f);
 
         run.setOutcome(reason);
 

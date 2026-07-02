@@ -65,60 +65,6 @@ public class RaidControllerBlockEntity extends BlockEntity
 
     public record ControllerKey(BlockPos pos, ResourceKey<Level> dimension) {}
 
-    /**
-     * Legacy compatibility alias — maps the old per-controller LobbyStatus names to the new
-     * shared {@link net.ledok.arenas_ld.dungeon.lobby.LobbyStatus} equivalents.
-     * Code that previously imported {@code RaidControllerBlockEntity.LobbyStatus} still compiles.
-     */
-    public enum LobbyStatus {
-        /** Lobby is being formed — not everyone ready yet. */
-        OPEN,
-        /** Lobby is waiting in the launch queue. */
-        QUEUED,
-        /** Lobby is currently in a raid instance. */
-        IN_DUNGEON;
-
-        /** Convert to the canonical {@link net.ledok.arenas_ld.dungeon.lobby.LobbyStatus}. */
-        public net.ledok.arenas_ld.dungeon.lobby.LobbyStatus toCanonical() {
-            return switch (this) {
-                case OPEN -> net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.FORMING;
-                case QUEUED -> net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.FORMING;
-                case IN_DUNGEON -> net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN;
-            };
-        }
-
-        /** Convert from the canonical status. */
-        public static LobbyStatus fromCanonical(net.ledok.arenas_ld.dungeon.lobby.LobbyStatus status) {
-            return switch (status) {
-                case FORMING, READY -> OPEN;
-                case IN_RUN -> IN_DUNGEON;
-                case DISBANDED -> OPEN;
-            };
-        }
-    }
-
-    /**
-     * Legacy compatibility alias for the old per-controller LobbyVisibility enum.
-     */
-    public enum LobbyVisibility {
-        OPEN,
-        INVITE_ONLY;
-
-        public net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility toCanonical() {
-            return switch (this) {
-                case OPEN -> net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility.PUBLIC;
-                case INVITE_ONLY -> net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility.PRIVATE;
-            };
-        }
-
-        public static LobbyVisibility fromCanonical(net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility vis) {
-            return switch (vis) {
-                case PUBLIC, FRIENDS -> OPEN;
-                case PRIVATE -> INVITE_ONLY;
-            };
-        }
-    }
-
     public record RaidInstanceState(
         BlockPos spawnerPos,
         ResourceKey<Level> dimension,

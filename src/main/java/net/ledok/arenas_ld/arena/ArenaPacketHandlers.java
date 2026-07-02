@@ -111,6 +111,8 @@ public final class ArenaPacketHandlers {
                     case "disconnectGrace" -> c.setDisconnectGraceTicks(v);
                     case "lobbyOfflineTimeout" -> c.setLobbyOfflineTimeoutTicks(v);
                     case "maxWave" -> c.setMaxWave(v);
+                    case "hpScalePct" -> c.setHpScalePerPlayer(Math.max(0, v) / 100.0);
+                    case "hpWavePct" -> c.setHpScalePerWave(Math.max(0, v) / 100.0);
                     default -> {}
                 }
             }));

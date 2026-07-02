@@ -64,6 +64,9 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private static final int DEFAULT_INVITE_EXPIRY_TICKS = 30 * 20;
     private static final int DEFAULT_DISCONNECT_GRACE_TICKS = 5 * 60 * 20;
     private static final int DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS = 5 * 60 * 20;
+    private static final int MAX_LEADERBOARD_ENTRIES = 10;
+    /** 0 = per-player HP scaling disabled; otherwise mob HP is multiplied by {@code players * scale}. */
+    private static final double DEFAULT_HP_SCALE_PER_PLAYER = 0.0;
 
     private final List<BlockPos> instances = new ArrayList<>();
     /** Dimension each instance's DBS lives in. May differ from this controller's own dimension. */
@@ -77,6 +80,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private int inviteExpiryTicks = DEFAULT_INVITE_EXPIRY_TICKS;
     private int disconnectGraceTicks = DEFAULT_DISCONNECT_GRACE_TICKS;
     private int lobbyOfflineTimeoutTicks = DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS;
+    private double hpScalePerPlayer = DEFAULT_HP_SCALE_PER_PLAYER;
     private boolean lootViaInbox = false;
     private String dungeonName = "";
     private final Map<BlockPos, Integer> instanceCooldownTimers = new HashMap<>();
@@ -271,6 +275,27 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         return true;
     }
 
+    public double getHpScalePerPlayer() {
+        return hpScalePerPlayer;
+    }
+
+    /** Per-player mob HP scale factor: each player beyond the first adds {@code scale} × base HP. 0 disables. */
+    public boolean setHpScalePerPlayer(double scale) {
+        if (scale < 0.0 || scale > 100.0) return false;
+        this.hpScalePerPlayer = scale;
+        setChanged();
+        return true;
+    }
+
+    /**
+     * The mob HP multiplier for a party of the given size: {@code 1 + (players - 1) * scale}.
+     * A solo party (or a disabled scale) always yields 1.0.
+     */
+    public double resolvePartyHealthMultiplier(int partySize) {
+        if (hpScalePerPlayer <= 0.0) return 1.0;
+        return 1.0 + Math.max(0, partySize - 1) * hpScalePerPlayer;
+    }
+
     /** Mark dirty for saving and push a block update so clients (selection overlay) refresh. */
     private void markDirtyAndSync() {
         setChanged();
@@ -359,8 +384,18 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         }
     }
 
+    /** Records a win time, keeping only each player's best time and the top {@value #MAX_LEADERBOARD_ENTRIES}. */
     public void addLeaderboardEntry(DifficultyTier tier, LeaderboardEntry entry) {
-        leaderboards.computeIfAbsent(tier, unused -> new ArrayList<>()).add(entry);
+        List<LeaderboardEntry> list = leaderboards.computeIfAbsent(tier, unused -> new ArrayList<>());
+        list.removeIf(e -> e.playerName().equals(entry.playerName()) && e.timeSeconds() >= entry.timeSeconds());
+        boolean alreadyBetter = list.stream().anyMatch(e -> e.playerName().equals(entry.playerName()));
+        if (!alreadyBetter) {
+            list.add(entry);
+        }
+        list.sort(java.util.Comparator.comparingInt(LeaderboardEntry::timeSeconds));
+        if (list.size() > MAX_LEADERBOARD_ENTRIES) {
+            list.subList(MAX_LEADERBOARD_ENTRIES, list.size()).clear();
+        }
         setChanged();
     }
 
@@ -1119,23 +1154,26 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         ).apply(i, InstanceRunEntry::new));
     }
 
-    /** Bundle of int timing settings — kept together so the State codec stays under DFU's 16-field group() limit. */
+    /** Bundle of misc settings — kept together so the State codec stays under DFU's 16-field group() limit. */
     private record LifecycleTimings(
         int disconnectGraceTicks,
         int lobbyOfflineTimeoutTicks,
         int respawnTimeTicks,
-        int deathTimePenaltyTicks
+        int deathTimePenaltyTicks,
+        double hpScalePerPlayer
     ) {
         static final Codec<LifecycleTimings> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.optionalFieldOf("disconnectGraceTicks", DEFAULT_DISCONNECT_GRACE_TICKS).forGetter(LifecycleTimings::disconnectGraceTicks),
             Codec.INT.optionalFieldOf("lobbyOfflineTimeoutTicks", DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS).forGetter(LifecycleTimings::lobbyOfflineTimeoutTicks),
             Codec.INT.optionalFieldOf("respawnTimeTicks", DEFAULT_RESPAWN_TIME_TICKS).forGetter(LifecycleTimings::respawnTimeTicks),
-            Codec.INT.optionalFieldOf("deathTimePenaltyTicks", DEFAULT_DEATH_TIME_PENALTY_TICKS).forGetter(LifecycleTimings::deathTimePenaltyTicks)
+            Codec.INT.optionalFieldOf("deathTimePenaltyTicks", DEFAULT_DEATH_TIME_PENALTY_TICKS).forGetter(LifecycleTimings::deathTimePenaltyTicks),
+            Codec.DOUBLE.optionalFieldOf("hpScalePerPlayer", DEFAULT_HP_SCALE_PER_PLAYER).forGetter(LifecycleTimings::hpScalePerPlayer)
         ).apply(i, LifecycleTimings::new));
 
         static final LifecycleTimings DEFAULT = new LifecycleTimings(
             DEFAULT_DISCONNECT_GRACE_TICKS, DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS,
-            DEFAULT_RESPAWN_TIME_TICKS, DEFAULT_DEATH_TIME_PENALTY_TICKS
+            DEFAULT_RESPAWN_TIME_TICKS, DEFAULT_DEATH_TIME_PENALTY_TICKS,
+            DEFAULT_HP_SCALE_PER_PLAYER
         );
     }
 
@@ -1197,7 +1235,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             closeTimerSeconds,
             maxPartySize,
             inviteExpiryTicks,
-            new LifecycleTimings(disconnectGraceTicks, lobbyOfflineTimeoutTicks, respawnTimeTicks, deathTimePenaltyTicks),
+            new LifecycleTimings(disconnectGraceTicks, lobbyOfflineTimeoutTicks, respawnTimeTicks, deathTimePenaltyTicks, hpScalePerPlayer),
             cooldowns,
             runs,
             new ArrayList<>(pendingInstanceRemovals),
@@ -1238,6 +1276,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                     lobbyOfflineTimeoutTicks = state.lifecycle().lobbyOfflineTimeoutTicks();
                     respawnTimeTicks = state.lifecycle().respawnTimeTicks();
                     deathTimePenaltyTicks = state.lifecycle().deathTimePenaltyTicks();
+                    hpScalePerPlayer = state.lifecycle().hpScalePerPlayer();
                     instanceCooldownTimers.clear();
                     for (InstanceCooldown c : state.instanceCooldowns()) {
                         instanceCooldownTimers.put(c.pos(), c.ticks());

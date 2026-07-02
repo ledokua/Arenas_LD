@@ -118,6 +118,8 @@ public class ArenaControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout,
         box.child(intField("respawnTime", Component.translatable("gui.arenas_ld.arena.respawn_ticks"), c.getRespawnTimeTicks()));
         box.child(intField("inviteExpiry", Component.translatable("gui.arenas_ld.arena.invite_expiry_ticks"), c.getInviteExpiryTicks()));
         box.child(intField("deathPenalty", Component.translatable("gui.arenas_ld.arena.death_penalty_ticks"), c.getDeathTimePenaltyTicks()));
+        box.child(intField("hpScalePct", Component.translatable("gui.arenas_ld.arena.hp_scale_pct"), (int) Math.round(c.getHpScalePerPlayer() * 100.0)));
+        box.child(intField("hpWavePct", Component.translatable("gui.arenas_ld.arena.hp_wave_pct"), (int) Math.round(c.getHpScalePerWave() * 100.0)));
 
         box.child(spacer(4));
         box.child(sectionHeader(Component.translatable("gui.arenas_ld.arena.reward_curve")));

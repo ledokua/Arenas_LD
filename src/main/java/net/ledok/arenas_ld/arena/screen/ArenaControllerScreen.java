@@ -1206,6 +1206,9 @@ public class ArenaControllerScreen extends BaseOwoHandledScreen<FlowLayout, Aren
         row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
         row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.rank"), Sizing.fixed(50)));
         row.child(headerCell(tr("gui.arenas_ld.dungeon_controller.ui.col.player"), Sizing.expand()));
+        LabelComponent whenHeader = headerCell(tr("gui.arenas_ld.ui.col.when"), Sizing.fixed(44));
+        whenHeader.horizontalTextAlignment(HorizontalAlignment.RIGHT);
+        row.child(whenHeader);
         LabelComponent waveHeader = headerCell(tr("gui.arenas_ld.arena.col.wave"), Sizing.fixed(64));
         waveHeader.horizontalTextAlignment(HorizontalAlignment.RIGHT);
         row.child(waveHeader);
@@ -1227,6 +1230,12 @@ public class ArenaControllerScreen extends BaseOwoHandledScreen<FlowLayout, Aren
         LabelComponent nameLabel = text(Component.literal(entry.playerName()), INK);
         nameLabel.horizontalSizing(Sizing.expand());
         row.child(nameLabel);
+
+        LabelComponent whenLabel = text(Component.literal(
+            net.ledok.arenas_ld.screen.RelativeTime.ago(entry.recordedAtEpochMillis())), INK_MID);
+        whenLabel.horizontalSizing(Sizing.fixed(44));
+        whenLabel.horizontalTextAlignment(HorizontalAlignment.RIGHT);
+        row.child(whenLabel);
 
         LabelComponent waveLabel = text(Component.translatable("gui.arenas_ld.arena.wave_n", entry.timeSeconds()), top ? ACCENT : INK_MID);
         waveLabel.horizontalSizing(Sizing.fixed(64));

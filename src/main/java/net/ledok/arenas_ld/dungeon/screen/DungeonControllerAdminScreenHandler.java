@@ -27,6 +27,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     private int inviteExpiryTicks;
     private int respawnTimeTicks;
     private int deathTimePenaltyTicks;
+    private double hpScalePerPlayer;
     private boolean lootViaInbox;
     private String dungeonName;
     private Map<DifficultyTier, TierConfig> tierConfigs;
@@ -46,6 +47,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.inviteExpiryTicks = data.inviteExpiryTicks();
         this.respawnTimeTicks = data.respawnTimeTicks();
         this.deathTimePenaltyTicks = data.deathTimePenaltyTicks();
+        this.hpScalePerPlayer = data.hpScalePerPlayer();
         this.lootViaInbox = data.lootViaInbox();
         this.dungeonName = data.dungeonName();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
@@ -66,6 +68,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
             controller.getInviteExpiryTicks(),
             controller.getRespawnTimeTicks(),
             controller.getDeathTimePenaltyTicks(),
+            controller.getHpScalePerPlayer(),
             controller.isLootViaInbox(),
             controller.getDungeonName(),
             controller.getTierConfigs(),
@@ -103,6 +106,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     public int getInviteExpiryTicks() { return inviteExpiryTicks; }
     public int getRespawnTimeTicks() { return respawnTimeTicks; }
     public int getDeathTimePenaltyTicks() { return deathTimePenaltyTicks; }
+    public double getHpScalePerPlayer() { return hpScalePerPlayer; }
     public boolean isLootViaInbox() { return lootViaInbox; }
     public String getDungeonName() { return dungeonName; }
     public Map<DifficultyTier, TierConfig> getTierConfigs() { return tierConfigs; }
@@ -120,6 +124,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.inviteExpiryTicks = data.inviteExpiryTicks();
         this.respawnTimeTicks = data.respawnTimeTicks();
         this.deathTimePenaltyTicks = data.deathTimePenaltyTicks();
+        this.hpScalePerPlayer = data.hpScalePerPlayer();
         this.lootViaInbox = data.lootViaInbox();
         this.dungeonName = data.dungeonName();
         this.tierConfigs = Map.copyOf(data.tierConfigs());

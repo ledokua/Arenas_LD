@@ -250,6 +250,14 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
      * @return the count of mobs that were spawned and tracked
      */
     public int activate(ServerLevel world, TierConfig tier) {
+        return activate(world, tier, 1.0);
+    }
+
+    /**
+     * Like {@link #activate(ServerLevel, TierConfig)}, but the tier's health multiplier is further
+     * multiplied by {@code partyHealthMultiplier} (per-player HP scaling from the controller).
+     */
+    public int activate(ServerLevel world, TierConfig tier, double partyHealthMultiplier) {
         if (activated) return 0;
         if (spawnerOffsets.isEmpty()) {
             ArenasLdMod.LOGGER.warn(
@@ -259,16 +267,17 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             return 0;
         }
 
+        double healthMultiplier = tier.healthMultiplier() * partyHealthMultiplier;
         int spawned = 0;
         for (BlockPos absolutePos : getSpawnerPositions()) {
             BlockEntity be = world.getBlockEntity(absolutePos);
             if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity newMobSpawner) {
-                for (LivingEntity entity : newMobSpawner.spawnScaled(world, tier.healthMultiplier())) {
+                for (LivingEntity entity : newMobSpawner.spawnScaled(world, healthMultiplier)) {
                     trackSpawnedMob(entity.getUUID());
                     spawned++;
                 }
             } else if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity newBossSpawner) {
-                LivingEntity entity = newBossSpawner.spawnSingleScaled(world, tier.healthMultiplier());
+                LivingEntity entity = newBossSpawner.spawnSingleScaled(world, healthMultiplier);
                 if (entity != null) {
                     trackBossMob(entity.getUUID());
                     spawned++;

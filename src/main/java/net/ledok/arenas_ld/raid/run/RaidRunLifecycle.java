@@ -18,6 +18,7 @@ import net.ledok.arenas_ld.util.EntityEquipmentHelper;
 import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.ledok.arenas_ld.util.PartyTeamStore;
 import net.ledok.arenas_ld.util.PendingRestoreStore;
+import net.ledok.arenas_ld.util.PlayerStatsStore;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -217,6 +218,7 @@ public final class RaidRunLifecycle {
                 p.getUUID(), p.getGameProfile().getName(), ParticipantStatus.ACTIVE, now));
             run.setReturnPoint(p.getUUID(), PlayerReturnPoint.capture(p));
             bossBar.addPlayer(p);
+            PlayerStatsStore.get(world.getServer()).recordRunStart(p.getUUID(), PlayerStatsStore.Mode.RAID);
         }
         if (raidTimeTicks > 0) {
             bossBar.setVisible(true);
@@ -229,7 +231,8 @@ public final class RaidRunLifecycle {
         if (boss instanceof LivingEntity livingBoss) {
             double healthMult = runTier.healthMultiplier();
             double damageMult = runTier.damageMultiplier();
-            double perPlayerMult = Math.pow(1.0 + runTier.hpScalePerPlayer(), Math.max(0, players.size() - 1));
+            // Linear per-player HP scaling: each player beyond the first adds hpScalePerPlayer of base HP.
+            double perPlayerMult = 1.0 + Math.max(0, players.size() - 1) * runTier.hpScalePerPlayer();
 
             EntityEquipmentHelper.applyScaledAttributes(
                 livingBoss, entityDefinition.attributes(), world.registryAccess(), healthMult, damageMult, perPlayerMult);
@@ -266,6 +269,17 @@ public final class RaidRunLifecycle {
                     player.getYRot(), player.getXRot());
             }
             addToPartyTeam(world, run, player);
+        }
+
+        // Spawn drama: smoke burst at the boss and a title/sting for the party.
+        world.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
+            bossSpawnPos.x, bossSpawnPos.y + 1.0, bossSpawnPos.z, 40, 0.8, 1.0, 0.8, 0.02);
+        for (ServerPlayer player : players) {
+            net.ledok.arenas_ld.util.RunFeedback.title(player,
+                Component.translatable("title.arenas_ld.raid_start").withStyle(ChatFormatting.GOLD),
+                mobDisplayName.copy());
+            net.ledok.arenas_ld.util.RunFeedback.sound(player,
+                net.minecraft.sounds.SoundEvents.WITHER_SPAWN, 0.7f, 1.0f);
         }
 
         run.setBossRef(boss.getUUID(), world.dimension());
@@ -369,13 +383,20 @@ public final class RaidRunLifecycle {
     static void handleWin(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run) {
         ArenasLdMod.LOGGER.info("Raid battle won at spawner {}", run.spawnerPos());
         run.setOutcome(RaidOutcome.WIN);
+        net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+            Component.translatable("title.arenas_ld.victory").withStyle(ChatFormatting.GREEN), null,
+            net.minecraft.sounds.SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, 1.0f, 1.0f);
 
-        Set<UUID> participantIds = run.participants().keySet();
+        Set<UUID> rewardIds = run.lootEligibleUuids();
         RaidTierConfig tierCfg = run.resolvedTierConfig();
+
+        for (UUID uuid : rewardIds) {
+            PlayerStatsStore.get(world.getServer()).recordWin(uuid, PlayerStatsStore.Mode.RAID);
+        }
 
         int xpReward = tierCfg.skillExperiencePerWin();
         if (xpReward > 0) {
-            for (UUID uuid : participantIds) {
+            for (UUID uuid : rewardIds) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
                 if (player != null && FabricLoader.getInstance().isModLoaded("puffish_skills")) {
                     PuffishSkillsCompat.addExperience(player, xpReward);
@@ -383,10 +404,20 @@ public final class RaidRunLifecycle {
             }
         }
 
+        long rewardPerPlayer = tierCfg.rewardCurrency();
+        if (run.hardcoreEnabled()) {
+            rewardPerPlayer *= 2;
+        }
+        if (rewardPerPlayer > 0L) {
+            for (UUID uuid : rewardIds) {
+                net.ledok.arenas_ld.util.EconomyCompat.deliverCurrency(uuid, rewardPerPlayer, "RAID_REWARD");
+            }
+        }
+
         String perPlayerLoot = tierCfg.perPlayerLootTable();
         if (!perPlayerLoot.isEmpty()) {
             boolean viaInbox = controller.isLootViaInbox();
-            for (UUID uuid : participantIds) {
+            for (UUID uuid : rewardIds) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
                 ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
                 bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(perPlayerLoot));
@@ -407,6 +438,9 @@ public final class RaidRunLifecycle {
     static void handleLoss(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, String reason) {
         ArenasLdMod.LOGGER.info("Raid battle lost at spawner {}: {}", run.spawnerPos(), reason);
         run.setOutcome(RaidOutcome.LOSS_FORCED);
+        net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+            Component.translatable("title.arenas_ld.defeat").withStyle(ChatFormatting.RED), null,
+            net.minecraft.sounds.SoundEvents.ANVIL_LAND, 0.6f, 0.7f);
 
         UUID bossUuid = run.bossUuid();
         ResourceKey<Level> bossDim = run.bossDimension();
@@ -441,7 +475,62 @@ public final class RaidRunLifecycle {
             .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
         if (closeTicks <= 0 || !anyRemaining) {
             finalizeRun(world, controller, run);
+            return;
         }
+        sendExitPrompt(world, run);
+    }
+
+    /** Offers each remaining participant a clickable "[Exit Now]" to skip the close timer. */
+    private static void sendExitPrompt(ServerLevel world, RaidRun run) {
+        net.minecraft.network.chat.MutableComponent button = net.ledok.arenas_ld.util.LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.run.exit_button"),
+            0x55FF55,
+            "/exit",
+            Component.translatable("message.arenas_ld.run.exit_hover"));
+        Component line = Component.translatable("message.arenas_ld.run.exit_prompt").append(button);
+        for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
+            if (entry.getValue().status() == ParticipantStatus.REMOVED) continue;
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
+            if (player != null) {
+                player.sendSystemMessage(line);
+            }
+        }
+    }
+
+    /**
+     * Pulls a single player out of a battle that has already ended (CLOSING phase) before the
+     * shared close timer elapses. Mirrors {@code DungeonRunLifecycle#exitEarly}.
+     *
+     * @return true if the player was in a finished raid and was removed; false otherwise.
+     */
+    public static boolean exitEarly(net.minecraft.server.MinecraftServer server, ServerPlayer player) {
+        UUID uuid = player.getUUID();
+        for (RaidControllerBlockEntity.ControllerKey key : RaidControllerBlockEntity.getControllers()) {
+            ServerLevel world = server.getLevel(key.dimension());
+            if (world == null) continue;
+            if (!(world.getBlockEntity(key.pos()) instanceof RaidControllerBlockEntity controller)) continue;
+            for (RaidRun run : controller.getActiveRuns().values()) {
+                if (run.phase() != RaidPhase.CLOSING) continue;
+                RunParticipant participant = run.participants().get(uuid);
+                if (participant == null || participant.status() == ParticipantStatus.REMOVED) continue;
+
+                restoreToReturnPoint(world, run, uuid);
+                run.removeReturnPoint(uuid);
+                run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, world.getGameTime()));
+                run.clearDowned(uuid);
+                run.clearDisconnected(uuid);
+                BusyStateCompat.clearBusy(uuid, BUSY_REASON);
+                removeFromPartyTeam(world, run, participant.playerName());
+
+                boolean anyRemaining = run.participants().values().stream()
+                    .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
+                if (!anyRemaining) {
+                    finalizeRun(world, controller, run);
+                }
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void tickClosing(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run) {

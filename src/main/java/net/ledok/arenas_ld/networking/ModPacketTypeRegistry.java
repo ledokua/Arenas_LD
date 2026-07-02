@@ -37,6 +37,7 @@ import net.ledok.arenas_ld.dungeon.packet.SetLootViaInboxPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetRespawnTimeTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetDeathTimePenaltyPayload;
+import net.ledok.arenas_ld.dungeon.packet.SetHpScalePerPlayerPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
 import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
@@ -117,6 +118,7 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload.TYPE, net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetRespawnTimeTicksPayload.TYPE, SetRespawnTimeTicksPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetDeathTimePenaltyPayload.TYPE, SetDeathTimePenaltyPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(SetHpScalePerPlayerPayload.TYPE, SetHpScalePerPlayerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetInviteExpiryTicksPayload.TYPE, SetInviteExpiryTicksPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetLootViaInboxPayload.TYPE, SetLootViaInboxPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetTierConfigPayload.TYPE, SetTierConfigPayload.STREAM_CODEC);

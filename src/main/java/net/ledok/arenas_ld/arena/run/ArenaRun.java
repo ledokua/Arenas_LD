@@ -64,6 +64,8 @@ public final class ArenaRun {
     private final Map<UUID, PlayerReturnPoint> returnPoints;
     private final Map<UUID, DownedPlayer> downedPlayers;
     private final Map<UUID, Long> disconnectedAt;
+    /** Mob HP multiplier from the starting party size — frozen at run start. */
+    private double partyHealthMultiplier = 1.0;
 
     @Nullable private transient ServerBossEvent waveBossBar;
     @Nullable private transient ServerBossEvent closeTimerBossBar;
@@ -118,7 +120,8 @@ public final class ArenaRun {
         Map<UUID, RunParticipant> participants,
         Map<UUID, PlayerReturnPoint> returnPoints,
         Map<UUID, DownedPlayer> downedPlayers,
-        Map<UUID, Long> disconnectedAt
+        Map<UUID, Long> disconnectedAt,
+        double partyHealthMultiplier
     ) {
         this.phase = phase;
         this.outcome = outcome;
@@ -144,6 +147,7 @@ public final class ArenaRun {
         this.returnPoints = new HashMap<>(returnPoints);
         this.downedPlayers = new HashMap<>(downedPlayers);
         this.disconnectedAt = new HashMap<>(disconnectedAt);
+        this.partyHealthMultiplier = Math.max(1.0, partyHealthMultiplier);
     }
 
     public ArenaPhase phase() { return phase; }
@@ -165,6 +169,8 @@ public final class ArenaRun {
     public int betweenWaveTicksRemaining() { return betweenWaveTicksRemaining; }
     public int closeTimerTicks() { return closeTimerTicks; }
     public int initialCloseTimerTicks() { return initialCloseTimerTicks; }
+    public double partyHealthMultiplier() { return partyHealthMultiplier; }
+    void setPartyHealthMultiplier(double multiplier) { this.partyHealthMultiplier = Math.max(1.0, multiplier); }
     @Nullable public ServerBossEvent getWaveBossBar() { return waveBossBar; }
     @Nullable public ServerBossEvent getCloseTimerBossBar() { return closeTimerBossBar; }
 
@@ -292,7 +298,8 @@ public final class ArenaRun {
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, DownedPlayer.CODEC)
                 .fieldOf("downedPlayers").forGetter(ArenaRun::downedPlayers),
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, Codec.LONG)
-                .optionalFieldOf("disconnectedAt", Map.of()).forGetter(ArenaRun::disconnectedAt)
+                .optionalFieldOf("disconnectedAt", Map.of()).forGetter(ArenaRun::disconnectedAt),
+            Codec.DOUBLE.optionalFieldOf("partyHealthMultiplier", 1.0).forGetter(ArenaRun::partyHealthMultiplier)
         ).apply(instance, ArenaRun::new)
     );
 }

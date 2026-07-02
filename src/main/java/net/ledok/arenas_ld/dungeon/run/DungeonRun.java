@@ -57,6 +57,8 @@ public final class DungeonRun {
     private final Map<UUID, PlayerReturnPoint> returnPoints;
     private final Map<UUID, DownedPlayer> downedPlayers;
     private final Map<UUID, Long> disconnectedAt;
+    /** Mob HP multiplier from the starting party size — frozen at run start, like the tier config. */
+    private double partyHealthMultiplier = 1.0;
     @Nullable private transient ServerBossEvent dungeonTimeBossBar;
     @Nullable private transient ServerBossEvent closeTimerBossBar;
 
@@ -152,6 +154,8 @@ public final class DungeonRun {
     public DungeonPhase phase() { return phase; }
     public DungeonOutcome outcome() { return outcome; }
     public DifficultyTier tier() { return tier; }
+    public double partyHealthMultiplier() { return partyHealthMultiplier; }
+    public void setPartyHealthMultiplier(double multiplier) { this.partyHealthMultiplier = Math.max(1.0, multiplier); }
     public String ownerName() { return ownerName; }
     public TierConfig resolvedTierConfig() { return resolvedTierConfig; }
     public boolean hardcoreEnabled() { return hardcoreEnabled; }
@@ -232,7 +236,8 @@ public final class DungeonRun {
 
     // ---- Serialization ----
 
-    public static final Codec<DungeonRun> CODEC = RecordCodecBuilder.create(instance ->
+    /** The original 16 fields — kept in their own group because DFU caps group() at 16 entries. */
+    private static final com.mojang.serialization.MapCodec<DungeonRun> BASE_CODEC = RecordCodecBuilder.mapCodec(instance ->
         instance.group(
             DungeonPhase.CODEC.fieldOf("phase").forGetter(DungeonRun::phase),
             DungeonOutcome.CODEC.fieldOf("outcome").forGetter(DungeonRun::outcome),
@@ -255,5 +260,15 @@ public final class DungeonRun {
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, Codec.LONG)
                 .optionalFieldOf("disconnectedAt", Map.of()).forGetter(DungeonRun::disconnectedAt)
         ).apply(instance, DungeonRun::new)
+    );
+
+    public static final Codec<DungeonRun> CODEC = RecordCodecBuilder.create(instance ->
+        instance.group(
+            BASE_CODEC.forGetter(run -> run),
+            Codec.DOUBLE.optionalFieldOf("partyHealthMultiplier", 1.0).forGetter(DungeonRun::partyHealthMultiplier)
+        ).apply(instance, (run, partyHealthMultiplier) -> {
+            run.setPartyHealthMultiplier(partyHealthMultiplier);
+            return run;
+        })
     );
 }

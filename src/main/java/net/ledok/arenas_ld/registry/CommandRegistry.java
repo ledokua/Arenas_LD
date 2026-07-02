@@ -62,6 +62,7 @@ public class CommandRegistry {
                     return 0;
                 }))
             .then(literal("exit").executes(CommandRegistry::exitDungeon))
+            .then(literal("stats").executes(CommandRegistry::showStats))
             .then(buildLobbyNode());
 
         dispatcher.register(arenasLdNode);
@@ -69,10 +70,26 @@ public class CommandRegistry {
         dispatcher.register(literal("exit").executes(CommandRegistry::exitDungeon));
     }
 
-    /** Pulls the player out of a finished dungeon run early (also the click target of the chat button). */
+    /** Prints the player's lifetime run statistics across all three systems. */
+    private static int showStats(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        var stats = net.ledok.arenas_ld.util.PlayerStatsStore.get(player.server).stats(player.getUUID());
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.stats.header"));
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.stats.dungeon",
+            stats.dungeonRuns(), stats.dungeonWins(), stats.dungeonRuns() - stats.dungeonWins()));
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.stats.raid",
+            stats.raidRuns(), stats.raidWins(), stats.raidRuns() - stats.raidWins()));
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.stats.arena",
+            stats.arenaRuns(), stats.arenaWins(), stats.bestArenaWave()));
+        return 1;
+    }
+
+    /** Pulls the player out of a finished dungeon/raid/arena run early (also the chat-button click target). */
     private static int exitDungeon(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = context.getSource().getPlayerOrException();
-        boolean exited = net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle.exitEarly(player.server, player);
+        boolean exited = net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle.exitEarly(player.server, player)
+            || net.ledok.arenas_ld.raid.run.RaidRunLifecycle.exitEarly(player.server, player)
+            || net.ledok.arenas_ld.arena.run.ArenaRunLifecycle.exitEarly(player.server, player);
         if (!exited) {
             context.getSource().sendFailure(Component.translatable("message.arenas_ld.dungeon.exit_unavailable"));
             return 0;
@@ -148,6 +165,17 @@ public class CommandRegistry {
                     raid.declineInvite(player, lobbyId);
                     net.ledok.arenas_ld.raid.RaidPacketHandlers.broadcastRaidControllerSnapshot(player, raid);
                 }
+                default -> { return 0; }
+            }
+            return 1;
+        }
+        if (be instanceof net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity arena) {
+            switch (action) {
+                case "ready" -> arena.toggleReady(player);
+                case "start" -> arena.startRun(player);
+                case "open" -> player.openMenu(arena);
+                case "accept" -> arena.acceptInvite(player, lobbyId);
+                case "decline" -> arena.declineInvite(player, lobbyId);
                 default -> { return 0; }
             }
             return 1;

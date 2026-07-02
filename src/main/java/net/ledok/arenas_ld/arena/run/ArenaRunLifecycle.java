@@ -64,7 +64,6 @@ public final class ArenaRunLifecycle {
     public static final String BUSY_REASON = "arenas_ld:arena";
     private static final int DOWNED_RESPAWN_TICKS_FALLBACK = 60;
     private static final int DEATH_TIME_PENALTY_FALLBACK = 200;
-    private static final double PARTY_HP_PER_PLAYER = 0.10;
     private static final double ELITE_SCALE = 1.6;
 
     private ArenaRunLifecycle() {}
@@ -84,6 +83,8 @@ public final class ArenaRunLifecycle {
                 player.gameMode.getGameModeForPlayer()));
             run.addParticipant(new RunParticipant(player.getUUID(), player.getGameProfile().getName(),
                 ParticipantStatus.ACTIVE, now));
+            net.ledok.arenas_ld.util.PlayerStatsStore.get(world.getServer())
+                .recordRunStart(player.getUUID(), net.ledok.arenas_ld.util.PlayerStatsStore.Mode.ARENA);
             player.setGameMode(GameType.SURVIVAL);
             player.setHealth(player.getMaxHealth());
             if (entranceWorld != null) {
@@ -94,6 +95,8 @@ public final class ArenaRunLifecycle {
 
         run.setCurrentWave(0);
         run.clearAliveMobs();
+        // Freeze the per-player HP multiplier at run start — players leaving mid-run don't weaken it.
+        run.setPartyHealthMultiplier(controller.resolvePartyHealthMultiplier(players.size()));
         run.setPrepareTicksRemaining(spawner != null ? spawner.getPrepareTime() * 20 : 200);
         run.setPhase(ArenaPhase.RUNNING);
         ArenasLdMod.LOGGER.info("Arena run started at {} with {} players", run.spawnerPos(), players.size());
@@ -166,6 +169,32 @@ public final class ArenaRunLifecycle {
             return;
         }
 
+        // Objective: DEFEND_ZONE fails the moment no standing party member is inside the zone.
+        if (run.currentWave() > 0 && run.currentObjective() == ObjectiveType.DEFEND_ZONE
+            && run.objectiveProgress() == 0) {
+            double radius = defendZoneRadius(spawner);
+            Vec3 center = Vec3.atCenterOf(run.spawnerPos());
+            boolean anyInside = false;
+            for (UUID uuid : run.activeParticipantUuids()) {
+                ServerPlayer p = world.getServer().getPlayerList().getPlayer(uuid);
+                if (p != null && p.level() == world && p.position().distanceTo(center) <= radius) {
+                    anyInside = true;
+                    break;
+                }
+            }
+            if (!anyInside) failObjective(world, run);
+
+            // Once a second, mark the zone edge with a particle ring so players can see it.
+            if (world.getGameTime() % 20 == 0) {
+                for (int i = 0; i < 24; i++) {
+                    double angle = (Math.PI * 2 * i) / 24;
+                    world.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD,
+                        center.x + Math.cos(angle) * radius, center.y + 0.3, center.z + Math.sin(angle) * radius,
+                        1, 0.0, 0.05, 0.0, 0.0);
+                }
+            }
+        }
+
         if (run.waveTicksRemaining() > 0) {
             run.setWaveTicksRemaining(run.waveTicksRemaining() - 1);
             if (run.waveTicksRemaining() == 0) {
@@ -191,17 +220,32 @@ public final class ArenaRunLifecycle {
         WaveArchetype archetype = chooseArchetype(wave, spawner);
         run.setCurrentArchetype(archetype);
         run.setCurrentObjective(archetype == WaveArchetype.OBJECTIVE ? pickObjective(world, spawner) : ObjectiveType.NONE);
+        announceObjective(world, run, spawner);
 
         // Clear dropped items from the previous wave.
         for (ItemEntity item : world.getEntitiesOfClass(ItemEntity.class, new AABB(run.spawnerPos()).inflate(spawner.getBattleRadius()))) {
             item.discard();
         }
 
-        boolean bossSpawned = spawnWaveMobs(world, run, spawner, archetype);
+        boolean bossSpawned = spawnWaveMobs(world, controller, run, spawner, archetype);
 
         int waveSeconds = spawner.getWaveTimer() + (wave - 1) * spawner.getAdditionalTime();
         if (bossSpawned) waveSeconds += spawner.getBossWaveAdditionalTime();
         run.setWaveTicksRemaining(waveSeconds * 20);
+
+        Component subtitle = switch (archetype) {
+            case BOSS -> Component.translatable("subtitle.arenas_ld.wave.boss").withStyle(net.minecraft.ChatFormatting.DARK_RED);
+            case ELITE -> Component.translatable("subtitle.arenas_ld.wave.elite").withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE);
+            case OBJECTIVE -> Component.translatable("subtitle.arenas_ld.wave.objective").withStyle(net.minecraft.ChatFormatting.GOLD);
+            case HORDE -> null;
+        };
+        net.minecraft.sounds.SoundEvent waveSound = archetype == WaveArchetype.BOSS
+            ? net.minecraft.sounds.SoundEvents.WITHER_SPAWN
+            : net.minecraft.sounds.SoundEvents.EXPERIENCE_ORB_PICKUP;
+        net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+            Component.translatable("title.arenas_ld.wave", wave), subtitle,
+            waveSound, archetype == WaveArchetype.BOSS ? 0.7f : 0.8f, archetype == WaveArchetype.BOSS ? 1.0f : 0.7f);
+
         controller.markDirtyAndSync();
     }
 
@@ -222,8 +266,37 @@ public final class ArenaRunLifecycle {
         return enabled.get(world.random.nextInt(enabled.size()));
     }
 
+    /** DEFEND_ZONE keep-out radius: half the mob spawn ring, so kiting to the edge fails it. */
+    private static double defendZoneRadius(ArenaSpawnerBlockEntity spawner) {
+        return Math.max(3, spawner.getSpawnDistance() / 2.0);
+    }
+
+    private static void announceObjective(ServerLevel world, ArenaRun run, ArenaSpawnerBlockEntity spawner) {
+        Component message = switch (run.currentObjective()) {
+            case DEFEND_ZONE -> Component.translatable("message.arenas_ld.arena.objective.defend_zone",
+                (int) defendZoneRadius(spawner));
+            case SURVIVE_UNTOUCHED -> Component.translatable("message.arenas_ld.arena.objective.survive_untouched");
+            case KILL_MARKED -> Component.translatable("message.arenas_ld.arena.objective.kill_marked");
+            case NONE -> null;
+        };
+        if (message != null) {
+            broadcast(world, run, message.copy().withStyle(net.minecraft.ChatFormatting.GOLD));
+        }
+    }
+
+    /** Marks the current wave's objective failed (idempotent) and tells the party the bonus is gone. */
+    private static void failObjective(ServerLevel world, ArenaRun run) {
+        if (run.objectiveProgress() != 0) return;
+        run.setObjectiveProgress(1);
+        broadcast(world, run, Component.translatable("message.arenas_ld.arena.objective_failed")
+            .withStyle(net.minecraft.ChatFormatting.RED));
+        net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+            null, null, net.minecraft.sounds.SoundEvents.VILLAGER_NO, 0.8f, 0.8f);
+    }
+
     /** @return true if a boss was spawned this wave. */
-    private static boolean spawnWaveMobs(ServerLevel world, ArenaRun run, ArenaSpawnerBlockEntity spawner, WaveArchetype archetype) {
+    private static boolean spawnWaveMobs(ServerLevel world, ArenaControllerBlockEntity controller,
+                                         ArenaRun run, ArenaSpawnerBlockEntity spawner, WaveArchetype archetype) {
         int wave = run.currentWave();
         List<MobArenaMobData> bosses = new ArrayList<>();
         List<MobArenaMobData> regulars = new ArrayList<>();
@@ -233,7 +306,9 @@ public final class ArenaRunLifecycle {
         }
 
         int partySize = Math.max(1, run.activeParticipantUuids().size());
-        double partyHp = 1.0 + PARTY_HP_PER_PLAYER * (partySize - 1);
+        // Party-scaled base HP, further grown per wave — a bigger party's base compounds into a
+        // much bigger number at high waves than a solo player's.
+        double partyHp = run.partyHealthMultiplier() * controller.resolveWaveHealthMultiplier(wave);
         double waveScale = Math.pow(1.0 + spawner.getAttributeScale(), wave - 1);
 
         boolean bossSpawned = false;
@@ -375,8 +450,13 @@ public final class ArenaRunLifecycle {
         }
 
         broadcast(world, run, Component.translatable("message.arenas_ld.arena.wave_cleared", run.currentWave()));
-        distributeWaveLoot(world, controller, run, spawner);
-        applyWaveCompletionBonus(world, run);
+        net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+            null, null, net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, 0.6f, 1.4f);
+        // A failed objective forfeits the wave bonus (loot + heal/repair); downed players still revive.
+        if (run.objectiveProgress() == 0) {
+            distributeWaveLoot(world, controller, run, spawner);
+            applyWaveCompletionBonus(world, run);
+        }
         reviveDowned(world, run, spawner);
 
         // Win when the configured ceiling is reached.
@@ -501,7 +581,14 @@ public final class ArenaRunLifecycle {
 
     private static void handleWin(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
         run.setOutcome(ArenaOutcome.COMPLETED);
+        for (UUID uuid : run.lootEligibleUuids()) {
+            net.ledok.arenas_ld.util.PlayerStatsStore.get(world.getServer())
+                .recordWin(uuid, net.ledok.arenas_ld.util.PlayerStatsStore.Mode.ARENA);
+        }
         broadcast(world, run, Component.translatable("message.arenas_ld.arena.completed", run.currentWave()));
+        net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+            Component.translatable("title.arenas_ld.victory").withStyle(net.minecraft.ChatFormatting.GREEN), null,
+            net.minecraft.sounds.SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, 1.0f, 1.0f);
         enterClosing(world, controller, run);
     }
 
@@ -510,6 +597,9 @@ public final class ArenaRunLifecycle {
         run.setOutcome(outcome);
         ArenasLdMod.LOGGER.info("Arena run ended at {} ({}): {}", run.spawnerPos(), outcome, reason);
         broadcast(world, run, Component.translatable("message.arenas_ld.arena.run_over", run.currentWave()));
+        net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+            Component.translatable("title.arenas_ld.defeat").withStyle(net.minecraft.ChatFormatting.RED), null,
+            net.minecraft.sounds.SoundEvents.ANVIL_LAND, 0.6f, 0.7f);
         enterClosing(world, controller, run);
     }
 
@@ -525,7 +615,63 @@ public final class ArenaRunLifecycle {
         int closeTicks = Math.max(0, controller.getCloseTimerSeconds() * 20);
         run.setInitialCloseTimerTicks(closeTicks);
         run.setCloseTimerTicks(closeTicks);
-        if (closeTicks <= 0) finalizeRun(world, controller, run);
+        if (closeTicks <= 0) {
+            finalizeRun(world, controller, run);
+            return;
+        }
+        sendExitPrompt(world, run);
+    }
+
+    /** Offers each remaining participant a clickable "[Exit Now]" to skip the close timer. */
+    private static void sendExitPrompt(ServerLevel world, ArenaRun run) {
+        net.minecraft.network.chat.MutableComponent button = net.ledok.arenas_ld.util.LobbyChatActions.button(
+            Component.translatable("message.arenas_ld.run.exit_button"),
+            0x55FF55,
+            "/exit",
+            Component.translatable("message.arenas_ld.run.exit_hover"));
+        Component line = Component.translatable("message.arenas_ld.run.exit_prompt").append(button);
+        for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
+            if (entry.getValue().status() == ParticipantStatus.REMOVED) continue;
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
+            if (player != null) {
+                player.sendSystemMessage(line);
+            }
+        }
+    }
+
+    /**
+     * Pulls a single player out of a run that has already ended (CLOSING phase) before the
+     * shared close timer elapses. Mirrors {@code DungeonRunLifecycle#exitEarly}.
+     *
+     * @return true if the player was in a finished arena run and was removed; false otherwise.
+     */
+    public static boolean exitEarly(net.minecraft.server.MinecraftServer server, ServerPlayer player) {
+        UUID uuid = player.getUUID();
+        for (ArenaControllerBlockEntity.ControllerKey key : ArenaControllerBlockEntity.getControllers()) {
+            ServerLevel world = server.getLevel(key.dimension());
+            if (world == null) continue;
+            if (!(world.getBlockEntity(key.pos()) instanceof ArenaControllerBlockEntity controller)) continue;
+            for (ArenaRun run : controller.getActiveRuns().values()) {
+                if (run.phase() != ArenaPhase.CLOSING) continue;
+                RunParticipant participant = run.participants().get(uuid);
+                if (participant == null || participant.status() == ParticipantStatus.REMOVED) continue;
+
+                restoreToReturnPoint(world, run, uuid);
+                run.removeReturnPoint(uuid);
+                run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, world.getGameTime()));
+                run.clearDowned(uuid);
+                run.clearDisconnected(uuid);
+                net.ledok.arenas_ld.util.BusyStateCompat.clearBusy(uuid, BUSY_REASON);
+
+                boolean anyRemaining = run.participants().values().stream()
+                    .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
+                if (!anyRemaining) {
+                    finalizeRun(world, controller, run);
+                }
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void tickClosing(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
@@ -557,6 +703,10 @@ public final class ArenaRunLifecycle {
     }
 
     private static void finalizeRun(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
+        for (UUID uuid : run.lootEligibleUuids()) {
+            net.ledok.arenas_ld.util.PlayerStatsStore.get(world.getServer())
+                .recordArenaWave(uuid, run.currentWave());
+        }
         List<String> names = new ArrayList<>();
         for (UUID uuid : run.participants().keySet()) {
             RunParticipant p = run.participants().get(uuid);
@@ -579,7 +729,7 @@ public final class ArenaRunLifecycle {
         if (run.downedPlayers().containsKey(player.getUUID())) return;
 
         // SURVIVE_UNTOUCHED objective is failed the moment anyone goes down.
-        if (run.currentObjective() == ObjectiveType.SURVIVE_UNTOUCHED) run.setObjectiveProgress(1);
+        if (run.currentObjective() == ObjectiveType.SURVIVE_UNTOUCHED) failObjective(world, run);
 
         run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
         run.setDowned(new DownedPlayer(player.getUUID(), resolveRespawnTicks(controller)));
@@ -655,7 +805,8 @@ public final class ArenaRunLifecycle {
         GameType restoreMode = rp.previousGameMode();
         ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
         if (player == null) {
-            // TODO(phase 7): queue a pending restore via the arena manager for offline players.
+            // Offline at run end / forfeit — persist the eject so they're sent home on next login.
+            net.ledok.arenas_ld.util.PendingRestoreStore.get(world.getServer()).put(uuid, rp);
             return;
         }
         player.setGameMode(restoreMode);
