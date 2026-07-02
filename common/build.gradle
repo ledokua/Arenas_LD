@@ -1,0 +1,36 @@
+architectury {
+    common(rootProject.enabled_platforms.split(','))
+}
+
+dependencies {
+    // We depend on Fabric Loader here to use the Fabric @Environment annotations,
+    // which get remapped to the correct annotations on each platform.
+    // Do NOT use other classes from Fabric Loader.
+    modImplementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
+
+    // Fabric API is used directly as the common API layer; on NeoForge it is
+    // provided at runtime by the Forgified Fabric API.
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_version}"
+
+    modImplementation "io.wispforest:owo-lib:${rootProject.owo_version}"
+
+    // Puffish Skills compat (reflection-free direct API use, compile only)
+    modCompileOnly("net.puffish:skillsmod:0.16.5+1.21:fabric")
+
+    // BusyLib is accessed via reflection at runtime (BusyStateCompat); the only
+    // compile-time use is the BusyReasons.IN_DUNGEON constant, which javac inlines.
+    modCompileOnly fileTree(
+            dir: "${rootProject.projectDir}/libs",
+            include: ["BusyLib-*.jar"],
+            exclude: ["*sources.jar"]
+    )
+
+    // JUnit 5 for unit tests
+    testImplementation platform("org.junit:junit-bom:5.10.2")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+    useJUnitPlatform()
+}

@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.client;
 
-import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
 import net.ledok.arenas_ld.dungeon.packet.DungeonBossSpawnerSnapshotPayload;
@@ -21,9 +20,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.client.renderer.RenderType;
 
-public class ArenasLdClient implements ClientModInitializer {
-    @Override
-    public void onInitializeClient() {
+public class ArenasLdClient {
+    public static void init() {
         MenuScreens.register(ModScreenHandlers.RAID_BOSS_SPAWNER_SCREEN_HANDLER, RaidBossSpawnerScreen::new);
         MenuScreens.register(ModScreenHandlers.MOB_ATTRIBUTES_SCREEN_HANDLER, MobAttributesScreen::new);
         MenuScreens.register(ModScreenHandlers.EQUIPMENT_SCREEN_HANDLER, net.ledok.arenas_ld.screen.EquipmentScreen::new);

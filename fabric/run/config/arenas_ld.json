@@ -1,0 +1,9 @@
+{
+  "puffish_skills_tree_id": "puffish_skills:combat",
+  "dungeon_damage_source_filter": "ALL",
+  "run_item_blacklist": [
+    "minecraft:ender_pearl",
+    "minecraft:chorus_fruit"
+  ],
+  "run_effect_blacklist": []
+}

@@ -14,10 +14,10 @@
   "environment": "*",
   "entrypoints": {
     "client": [
-      "net.ledok.arenas_ld.client.ArenasLdClient"
+      "net.ledok.arenas_ld.fabric.ArenasLdClientFabric"
     ],
     "main": [
-      "net.ledok.arenas_ld.ArenasLdMod"
+      "net.ledok.arenas_ld.fabric.ArenasLdModFabric"
     ],
     "fabric-gametest": [
       "net.ledok.arenas_ld.gametest.ArenasLdGametests"

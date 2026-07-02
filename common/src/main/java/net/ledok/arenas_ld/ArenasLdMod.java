@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld;
 
-import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.ledok.arenas_ld.config.ArenasLdConfig;
@@ -14,7 +13,7 @@ import net.ledok.arenas_ld.util.BossDataComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ArenasLdMod implements ModInitializer {
+public class ArenasLdMod {
     public static final String MOD_ID = "arenas_ld";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
@@ -22,8 +21,7 @@ public class ArenasLdMod implements ModInitializer {
     public static final DungeonManager DUNGEON_MANAGER = new DungeonManager();
     public static final ArenasLdConfig CONFIG = ArenasLdConfig.load();
 
-    @Override
-    public void onInitialize() {
+    public static void init() {
         LOGGER.info("Arenas_LD has been initialized!");
         ItemRegistry.initialize();
         BlockRegistry.initialize();

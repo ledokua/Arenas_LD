@@ -1,0 +1,81 @@
+plugins {
+    id 'com.gradleup.shadow'
+}
+
+architectury {
+    platformSetupLoomIde()
+    fabric()
+}
+
+loom {
+    runs {
+        gametestServer {
+            server()
+            name "Gametest Server"
+            vmArg "-Dfabric-api.gametest"
+            vmArg "-Dfabric-api.gametest.report-file=${project.buildDir}/gametest-report.xml"
+            runDir "build/gametest"
+        }
+    }
+}
+
+configurations {
+    common {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentFabric.extendsFrom common
+
+    // Files in this configuration will be bundled into your mod using the Shadow plugin.
+    // Don't use the shadow configuration from the plugin itself as it's for excluding files.
+    shadowBundle {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+}
+
+dependencies {
+    modImplementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_version}"
+    modImplementation "io.wispforest:owo-lib:${rootProject.owo_version}"
+
+    // Local jars for dev runtime only (BusyLib is a hard runtime dep, Economy_LD optional)
+    modLocalRuntime fileTree(
+            dir: "${rootProject.projectDir}/libs",
+            include: ["BusyLib-*.jar", "Economy_LD-*.jar"],
+            exclude: ["*sources.jar"]
+    )
+
+    common(project(path: ':common', configuration: 'namedElements')) { transitive false }
+    shadowBundle project(path: ':common', configuration: 'transformProductionFabric')
+}
+
+processResources {
+    inputs.property 'version', project.version
+    inputs.property 'minecraft_version', rootProject.minecraft_version
+    inputs.property 'loader_version', rootProject.loader_version
+    filteringCharset 'UTF-8'
+
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version,
+                'minecraft_version': rootProject.minecraft_version,
+                'loader_version': rootProject.loader_version
+    }
+}
+
+shadowJar {
+    configurations = [project.configurations.shadowBundle]
+    archiveClassifier = 'dev-shadow'
+}
+
+remapJar {
+    inputFile.set shadowJar.archiveFile
+}
+
+jar {
+    from(rootProject.file('LICENSE')) {
+        rename { "${it}_${rootProject.archives_base_name}" }
+    }
+}

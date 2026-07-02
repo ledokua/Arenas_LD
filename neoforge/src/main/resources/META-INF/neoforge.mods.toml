@@ -1,0 +1,41 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "arenas_ld"
+version = "${version}"
+displayName = "Arenas_LD"
+description = "Mod that adds admin utilities for creating dungeons/raids"
+logoFile = "assets/arenas_ld/icon.png"
+
+[[mixins]]
+config = "arenas_ld.mixins.json"
+
+[[dependencies.arenas_ld]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.arenas_ld]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1,1.22)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.arenas_ld]]
+modId = "fabric_api"
+type = "required"
+versionRange = "*"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.arenas_ld]]
+modId = "owo"
+type = "required"
+versionRange = "*"
+ordering = "NONE"
+side = "BOTH"
