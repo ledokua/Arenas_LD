@@ -39,6 +39,13 @@ dependencies {
     forgeRuntimeLibrary "io.wispforest.endec:jankson:0.1.5"
     forgeRuntimeLibrary "blue.endless:jankson:1.2.2"
 
+    // Local jars for dev runtime only (multiloader BusyLib's NeoForge build)
+    modLocalRuntime fileTree(
+            dir: "${rootProject.projectDir}/libs",
+            include: ["BusyLib-neoforge-*.jar"],
+            exclude: ["*sources.jar"]
+    )
+
     common(project(path: ':common', configuration: 'namedElements')) { transitive false }
     shadowBundle project(path: ':common', configuration: 'transformProductionNeoForge')
 }

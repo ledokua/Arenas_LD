@@ -21,7 +21,7 @@ dependencies {
     // compile-time use is the BusyReasons.IN_DUNGEON constant, which javac inlines.
     modCompileOnly fileTree(
             dir: "${rootProject.projectDir}/libs",
-            include: ["BusyLib-*.jar"],
+            include: ["BusyLib-fabric-*.jar"],
             exclude: ["*sources.jar"]
     )
 

@@ -44,7 +44,7 @@ dependencies {
     // Local jars for dev runtime only (BusyLib is a hard runtime dep, Economy_LD optional)
     modLocalRuntime fileTree(
             dir: "${rootProject.projectDir}/libs",
-            include: ["BusyLib-*.jar", "Economy_LD-*.jar"],
+            include: ["BusyLib-fabric-*.jar", "Economy_LD-*.jar"],
             exclude: ["*sources.jar"]
     )
 
