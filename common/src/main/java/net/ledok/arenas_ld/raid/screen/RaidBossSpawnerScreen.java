@@ -17,14 +17,13 @@ import io.wispforest.owo.ui.core.Surface;
 import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.networking.ModPackets;
+import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.List;
-import java.util.Locale;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 /**
  * Minimal admin view for a raid boss spawner. The spawner is now a passive arena:
@@ -39,7 +38,6 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
     private static final int PANEL_2     = 0xFF0C1218;
     private static final int HAIRLINE    = 0xFF283442;
     private static final int HAIRLINE_HI = 0xFF3A4A5C;
-    private static final int ROW_BG      = 0xFF19222D;
     private static final int INK         = 0xFFE8EEF5;
     private static final int INK_MID     = 0xFF9AA8B8;
     private static final int INK_DIM     = 0xFF5F6E80;
@@ -47,13 +45,8 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
     private static final int DANGER      = 0xFFE8624A;
     private static final int ACCENT      = 0xFFA98BE8;
     private static final int ACCENT_DARK = 0xFF6C4FB5;
-    private static final int DROPDOWN_MAX_CANDIDATES = 50;
-    private static final int DROPDOWN_MAX_HEIGHT = 140;
 
     private String mobIdValue = "";
-    private boolean mobIdDropdownOpen = false;
-    private FlowLayout mobIdDropdownPanel;
-    private TextBoxComponent mobIdTextField;
 
     private FlowLayout contentArea;
     private FlowLayout footerActions;
@@ -176,10 +169,6 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
 
     private void rebuildUi() {
         if (contentArea == null) return;
-        mobIdDropdownOpen = false;
-        mobIdDropdownPanel = null;
-        mobIdTextField = null;
-
         contentArea.clearChildren();
         footerActions.clearChildren();
 
@@ -276,93 +265,16 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
 
         TextBoxComponent field = Components.textBox(Sizing.expand(), initial == null ? "" : initial);
         field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(v -> {
-            onChange.accept(v);
-            if (mobIdDropdownOpen) refreshMobIdDropdown();
-        });
-        field.mouseDown().subscribe((mx, my, btn) -> { openMobIdDropdown(); return false; });
-        mobIdTextField = field;
+        field.onChanged().subscribe(onChange::accept);
         fieldRow.child(field);
 
-        ButtonComponent chevron = Components.button(Component.empty(), b -> toggleMobIdDropdown());
-        chevron.sizing(Sizing.fixed(18), Sizing.fixed(20));
-        chevron.renderer((context, rendered, delta) -> {
-            String glyph = mobIdDropdownOpen ? "▲" : "▼";
-            int tx = rendered.getX() + (rendered.getWidth() - this.font.width(glyph)) / 2;
-            int ty = rendered.getY() + (rendered.getHeight() - this.font.lineHeight) / 2 + 1;
-            context.drawString(this.font, glyph, tx, ty, INK_MID, false);
-        });
-        fieldRow.child(chevron);
+        IdSuggestionDropdown dropdown = new IdSuggestionDropdown(
+            this.font, BuiltInRegistries.ENTITY_TYPE, field);
+        fieldRow.child(dropdown.chevron());
         col.child(fieldRow);
-
-        FlowLayout dropdown = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        dropdown.surface(Surface.BLANK);
-        mobIdDropdownPanel = dropdown;
-        col.child(dropdown);
+        col.child(dropdown.panel());
 
         return col;
-    }
-
-    private void openMobIdDropdown() {
-        if (!mobIdDropdownOpen) { mobIdDropdownOpen = true; refreshMobIdDropdown(); }
-    }
-
-    private void closeMobIdDropdown() {
-        mobIdDropdownOpen = false;
-        if (mobIdDropdownPanel != null) { mobIdDropdownPanel.clearChildren(); mobIdDropdownPanel.surface(Surface.BLANK); }
-    }
-
-    private void toggleMobIdDropdown() {
-        if (mobIdDropdownOpen) closeMobIdDropdown(); else openMobIdDropdown();
-    }
-
-    private void refreshMobIdDropdown() {
-        if (mobIdDropdownPanel == null) return;
-        List<String> candidates = mobIdCandidates(mobIdTextField != null ? mobIdTextField.getValue() : "");
-        mobIdDropdownPanel.clearChildren();
-        if (!mobIdDropdownOpen || candidates.isEmpty()) { mobIdDropdownPanel.surface(Surface.BLANK); return; }
-        mobIdDropdownPanel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-
-        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        boolean first = true;
-        for (String id : candidates) {
-            if (!first) list.child(spacer(1));
-            list.child(mobIdRow(id));
-            first = false;
-        }
-
-        int rowsHeight = candidates.size() * 20 + Math.max(0, candidates.size() - 1);
-        int visibleHeight = Math.min(rowsHeight, DROPDOWN_MAX_HEIGHT);
-        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.fixed(visibleHeight), list);
-        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        mobIdDropdownPanel.child(scroll);
-    }
-
-    private List<String> mobIdCandidates(String filter) {
-        String needle = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
-        return net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.keySet().stream()
-            .map(net.minecraft.resources.ResourceLocation::toString)
-            .filter(id -> needle.isEmpty() || id.toLowerCase(Locale.ROOT).contains(needle))
-            .sorted()
-            .limit(DROPDOWN_MAX_CANDIDATES)
-            .collect(Collectors.toList());
-    }
-
-    private ButtonComponent mobIdRow(String id) {
-        ButtonComponent row = Components.button(Component.empty(), b -> {
-            if (mobIdTextField != null) mobIdTextField.text(id);
-            mobIdValue = id;
-            closeMobIdDropdown();
-        });
-        row.sizing(Sizing.fill(100), Sizing.fixed(20));
-        row.renderer((context, rendered, delta) -> {
-            int x1 = rendered.getX(); int y1 = rendered.getY();
-            boolean hover = rendered.isHoveredOrFocused();
-            context.fill(x1, y1, x1 + rendered.getWidth(), y1 + rendered.getHeight(), hover ? ROW_BG : PANEL_2);
-            if (hover) context.fill(x1, y1, x1 + 2, y1 + rendered.getHeight(), ACCENT);
-            context.drawString(this.font, id, x1 + 8, y1 + (rendered.getHeight() - this.font.lineHeight) / 2 + 1, INK, false);
-        });
-        return row;
     }
 
     private FlowLayout textField(String caption, String initial, Consumer<String> onChange) {

@@ -20,20 +20,20 @@ import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
 import net.ledok.arenas_ld.screen.EquipmentScreen;
 import net.ledok.arenas_ld.screen.EquipmentScreenData;
 import net.ledok.arenas_ld.screen.EquipmentScreenHandler;
+import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.arenas_ld.screen.MobAttributesData;
 import net.ledok.arenas_ld.screen.MobAttributesScreen;
 import net.ledok.arenas_ld.screen.MobAttributesScreenHandler;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.Consumer;
 import java.util.function.IntFunction;
-import java.util.stream.Collectors;
 
 public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawnerScreenHandler> {
 
@@ -55,12 +55,8 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
 
     private static final int POS_ROW_HEIGHT = 20;
     private static final int POS_MAX_VISIBLE = 6;
-    private static final int DROPDOWN_MAX_CANDIDATES = 50;
-    private static final int DROPDOWN_MAX_HEIGHT = 140;
 
     private TextBoxComponent mobIdField;
-    private boolean mobIdDropdownOpen = false;
-    private FlowLayout mobIdDropdownPanel;
     private TextBoxComponent spawnCountField;
     private FlowLayout positionsList;
     private ScrollContainer<FlowLayout> positionsScroll;
@@ -352,92 +348,20 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
 
         mobIdField = Components.textBox(Sizing.expand(), menu.getMobId());
         mobIdField.verticalSizing(Sizing.fixed(18));
-        mobIdField.onChanged().subscribe(v -> { if (mobIdDropdownOpen) refreshMobIdDropdown(); });
-        mobIdField.mouseDown().subscribe((mx, my, btn) -> { openMobIdDropdown(); return false; });
         fieldRow.child(mobIdField);
 
-        ButtonComponent chevron = Components.button(Component.empty(), b -> toggleMobIdDropdown());
-        chevron.sizing(Sizing.fixed(18), Sizing.fixed(20));
-        chevron.renderer((context, rendered, delta) -> {
-            String glyph = mobIdDropdownOpen ? "▲" : "▼";
-            int tx = rendered.getX() + (rendered.getWidth() - this.font.width(glyph)) / 2;
-            int ty = rendered.getY() + (rendered.getHeight() - this.font.lineHeight) / 2 + 1;
-            context.drawString(this.font, glyph, tx, ty, INK_MID, false);
-        });
-        fieldRow.child(chevron);
+        IdSuggestionDropdown dropdown = new IdSuggestionDropdown(
+            this.font, BuiltInRegistries.ENTITY_TYPE, mobIdField);
+        fieldRow.child(dropdown.chevron());
 
         ButtonComponent applyBtn = accentButton(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.apply")), b -> sendApply());
         applyBtn.sizing(Sizing.fixed(64), Sizing.fixed(18));
         fieldRow.child(applyBtn);
 
         container.child(fieldRow);
-
-        mobIdDropdownPanel = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        mobIdDropdownPanel.surface(Surface.BLANK);
-        container.child(mobIdDropdownPanel);
+        container.child(dropdown.panel());
 
         return container;
-    }
-
-    private void openMobIdDropdown() {
-        if (!mobIdDropdownOpen) { mobIdDropdownOpen = true; refreshMobIdDropdown(); }
-    }
-
-    private void closeMobIdDropdown() {
-        mobIdDropdownOpen = false;
-        if (mobIdDropdownPanel != null) { mobIdDropdownPanel.clearChildren(); mobIdDropdownPanel.surface(Surface.BLANK); }
-    }
-
-    private void toggleMobIdDropdown() {
-        if (mobIdDropdownOpen) closeMobIdDropdown(); else openMobIdDropdown();
-    }
-
-    private void refreshMobIdDropdown() {
-        if (mobIdDropdownPanel == null) return;
-        List<String> candidates = mobIdCandidates(mobIdField != null ? mobIdField.getValue() : "");
-        mobIdDropdownPanel.clearChildren();
-        if (!mobIdDropdownOpen || candidates.isEmpty()) { mobIdDropdownPanel.surface(Surface.BLANK); return; }
-        mobIdDropdownPanel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-
-        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        boolean first = true;
-        for (String id : candidates) {
-            if (!first) list.child(hairline());
-            list.child(mobIdRow(id));
-            first = false;
-        }
-
-        int rowsHeight = candidates.size() * 20 + Math.max(0, candidates.size() - 1);
-        int visibleHeight = Math.min(rowsHeight, DROPDOWN_MAX_HEIGHT);
-        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.fixed(visibleHeight), list);
-        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        mobIdDropdownPanel.child(scroll);
-    }
-
-    private List<String> mobIdCandidates(String filter) {
-        String needle = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
-        return net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.keySet().stream()
-            .map(net.minecraft.resources.ResourceLocation::toString)
-            .filter(id -> needle.isEmpty() || id.toLowerCase(Locale.ROOT).contains(needle))
-            .sorted()
-            .limit(DROPDOWN_MAX_CANDIDATES)
-            .collect(Collectors.toList());
-    }
-
-    private ButtonComponent mobIdRow(String id) {
-        ButtonComponent row = Components.button(Component.empty(), b -> {
-            if (mobIdField != null) mobIdField.text(id);
-            closeMobIdDropdown();
-        });
-        row.sizing(Sizing.fill(100), Sizing.fixed(20));
-        row.renderer((context, rendered, delta) -> {
-            int x1 = rendered.getX(); int y1 = rendered.getY();
-            boolean hover = rendered.isHoveredOrFocused();
-            context.fill(x1, y1, x1 + rendered.getWidth(), y1 + rendered.getHeight(), hover ? ROW_BG : PANEL_2);
-            if (hover) context.fill(x1, y1, x1 + 2, y1 + rendered.getHeight(), ACCENT);
-            context.drawString(this.font, id, x1 + 8, y1 + (rendered.getHeight() - this.font.lineHeight) / 2 + 1, INK, false);
-        });
-        return row;
     }
 
     private void sendApply() {

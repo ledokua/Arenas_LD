@@ -23,9 +23,11 @@ import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
 import net.ledok.arenas_ld.screen.EquipmentScreen;
 import net.ledok.arenas_ld.screen.EquipmentScreenData;
 import net.ledok.arenas_ld.screen.EquipmentScreenHandler;
+import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.arenas_ld.screen.MobAttributesData;
 import net.ledok.arenas_ld.screen.MobAttributesScreen;
 import net.ledok.arenas_ld.screen.MobAttributesScreenHandler;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -34,8 +36,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.stream.Collectors;
 
 public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, DungeonBossSpawnerScreenHandler> {
 
@@ -53,13 +53,8 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
     private static final int ACCENT      = 0xFFA98BE8;
     private static final int ACCENT_DARK = 0xFF6C4FB5;
     private static final int DANGER      = 0xFFE8624A;
-    private static final int DROPDOWN_MAX_CANDIDATES = 50;
-    private static final int DROPDOWN_MAX_HEIGHT = 140;
 
     private String mobIdValue = "";
-    private boolean mobIdDropdownOpen = false;
-    private FlowLayout mobIdDropdownPanel;
-    private TextBoxComponent mobIdTextField;
     private final List<BlockPos> rooms = new ArrayList<>();
     private final List<String> roomNames = new ArrayList<>();
 
@@ -167,10 +162,6 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
 
     private void rebuildUi() {
         if (contentArea == null) return;
-        mobIdDropdownOpen = false;
-        mobIdDropdownPanel = null;
-        mobIdTextField = null;
-
         contentArea.clearChildren();
         footerActions.clearChildren();
 
@@ -257,94 +248,16 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
 
         TextBoxComponent field = Components.textBox(Sizing.expand(), mobIdValue);
         field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(v -> {
-            mobIdValue = v;
-            if (mobIdDropdownOpen) refreshMobIdDropdown();
-        });
-        field.mouseDown().subscribe((mx, my, btn) -> { openMobIdDropdown(); return false; });
-        mobIdTextField = field;
+        field.onChanged().subscribe(v -> mobIdValue = v);
         fieldRow.child(field);
 
-        ButtonComponent chevron = Components.button(Component.empty(), b -> toggleMobIdDropdown());
-        chevron.sizing(Sizing.fixed(18), Sizing.fixed(20));
-        chevron.renderer((context, rendered, delta) -> {
-            String glyph = mobIdDropdownOpen ? "▲" : "▼";
-            int tx = rendered.getX() + (rendered.getWidth() - this.font.width(glyph)) / 2;
-            int ty = rendered.getY() + (rendered.getHeight() - this.font.lineHeight) / 2 + 1;
-            context.drawString(this.font, glyph, tx, ty, INK_MID, false);
-        });
-        fieldRow.child(chevron);
+        IdSuggestionDropdown dropdown = new IdSuggestionDropdown(
+            this.font, BuiltInRegistries.ENTITY_TYPE, field);
+        fieldRow.child(dropdown.chevron());
         container.child(fieldRow);
-
-        FlowLayout dropdown = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        dropdown.surface(Surface.BLANK);
-        mobIdDropdownPanel = dropdown;
-        container.child(dropdown);
+        container.child(dropdown.panel());
 
         return container;
-    }
-
-    private void openMobIdDropdown() {
-        if (!mobIdDropdownOpen) { mobIdDropdownOpen = true; refreshMobIdDropdown(); }
-    }
-
-    private void closeMobIdDropdown() {
-        mobIdDropdownOpen = false;
-        if (mobIdDropdownPanel != null) { mobIdDropdownPanel.clearChildren(); mobIdDropdownPanel.surface(Surface.BLANK); }
-    }
-
-    private void toggleMobIdDropdown() {
-        if (mobIdDropdownOpen) closeMobIdDropdown(); else openMobIdDropdown();
-    }
-
-    private void refreshMobIdDropdown() {
-        if (mobIdDropdownPanel == null) return;
-        String current = mobIdTextField != null ? mobIdTextField.getValue() : "";
-        List<String> candidates = mobIdCandidates(current);
-        mobIdDropdownPanel.clearChildren();
-        if (!mobIdDropdownOpen || candidates.isEmpty()) { mobIdDropdownPanel.surface(Surface.BLANK); return; }
-        mobIdDropdownPanel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-
-        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        boolean first = true;
-        for (String id : candidates) {
-            if (!first) list.child(rowDivider());
-            list.child(mobIdCandidateRow(id));
-            first = false;
-        }
-
-        int rowsHeight = candidates.size() * 20 + Math.max(0, candidates.size() - 1);
-        int visibleHeight = Math.min(rowsHeight, DROPDOWN_MAX_HEIGHT);
-        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.fixed(visibleHeight), list);
-        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        mobIdDropdownPanel.child(scroll);
-    }
-
-    private List<String> mobIdCandidates(String filter) {
-        String needle = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
-        return net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.keySet().stream()
-            .map(net.minecraft.resources.ResourceLocation::toString)
-            .filter(id -> needle.isEmpty() || id.toLowerCase(Locale.ROOT).contains(needle))
-            .sorted()
-            .limit(DROPDOWN_MAX_CANDIDATES)
-            .collect(Collectors.toList());
-    }
-
-    private ButtonComponent mobIdCandidateRow(String id) {
-        ButtonComponent row = Components.button(Component.empty(), b -> {
-            mobIdValue = id;
-            if (mobIdTextField != null) mobIdTextField.text(id);
-            closeMobIdDropdown();
-        });
-        row.sizing(Sizing.fill(100), Sizing.fixed(20));
-        row.renderer((context, rendered, delta) -> {
-            int x1 = rendered.getX(); int y1 = rendered.getY();
-            boolean hover = rendered.isHoveredOrFocused();
-            context.fill(x1, y1, x1 + rendered.getWidth(), y1 + rendered.getHeight(), hover ? ROW_BG : PANEL_2);
-            if (hover) context.fill(x1, y1, x1 + 2, y1 + rendered.getHeight(), ACCENT);
-            context.drawString(this.font, id, x1 + 8, y1 + (rendered.getHeight() - this.font.lineHeight) / 2 + 1, INK, false);
-        });
-        return row;
     }
 
     private FlowLayout roomRow(int index) {
