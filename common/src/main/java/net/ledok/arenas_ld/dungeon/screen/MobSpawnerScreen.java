@@ -220,9 +220,10 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
 
         spawnCountField = Components.textBox(Sizing.fixed(30), String.valueOf(spawnCount));
         spawnCountField.verticalSizing(Sizing.fixed(16));
+        // 0 is a legal stored value ("unconfigured", spawns a single mob at the spawner).
         spawnCountField.onChanged().subscribe(value -> {
             try {
-                spawnCount = Math.max(1, Math.min(64, Integer.parseInt(value.trim())));
+                spawnCount = Math.max(0, Math.min(64, Integer.parseInt(value.trim())));
             } catch (NumberFormatException ignored) {
             }
         });
@@ -236,7 +237,7 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
     }
 
     private void adjustCount(int delta) {
-        spawnCount = Math.max(1, Math.min(64, spawnCount + delta));
+        spawnCount = Math.max(0, Math.min(64, spawnCount + delta));
         if (spawnCountField != null) {
             spawnCountField.text(String.valueOf(spawnCount));
         }

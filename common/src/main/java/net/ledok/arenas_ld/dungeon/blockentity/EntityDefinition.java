@@ -15,14 +15,17 @@ public record EntityDefinition(
     int spawnCount,
     List<BlockPos> spawnOffsets
 ) {
+    // spawnCount 0 means "unconfigured": spawnScaled still spawns one mob (Math.max(1, count)),
+    // but the configurator's +1-per-placed-position arithmetic starts from zero, so placing
+    // N spawn positions yields exactly N mobs instead of N+1.
     public static final EntityDefinition DEFAULT =
-        new EntityDefinition("minecraft:husk", List.of(), new EquipmentData(), 1, List.of());
+        new EntityDefinition("minecraft:husk", List.of(), new EquipmentData(), 0, List.of());
 
     public static final Codec<EntityDefinition> CODEC = RecordCodecBuilder.create(i -> i.group(
         Codec.STRING.fieldOf("mobId").forGetter(EntityDefinition::mobId),
         AttributeData.CODEC.listOf().fieldOf("attributes").forGetter(EntityDefinition::attributes),
         EquipmentData.CODEC.fieldOf("equipment").forGetter(EntityDefinition::equipment),
-        Codec.INT.optionalFieldOf("spawnCount", 1).forGetter(EntityDefinition::spawnCount),
+        Codec.INT.optionalFieldOf("spawnCount", 0).forGetter(EntityDefinition::spawnCount),
         BlockPos.CODEC.listOf().optionalFieldOf("spawnOffsets", List.of()).forGetter(EntityDefinition::spawnOffsets)
     ).apply(i, EntityDefinition::new));
 

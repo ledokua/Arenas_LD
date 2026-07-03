@@ -137,7 +137,7 @@ public class SpawnerConfiguratorItem extends Item {
                     java.util.List<BlockPos> offsets = new java.util.ArrayList<>(def.spawnOffsets());
                     int spawnCount = def.spawnCount();
                     if (offsets.remove(spawnOffset)) {
-                        spawnCount = Math.max(1, spawnCount - 1);
+                        spawnCount = Math.max(0, spawnCount - 1);
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_removed", clickedPos.toShortString()));
                     } else {
                         offsets.add(spawnOffset);
