@@ -117,6 +117,15 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
 
     // ---- Admin / Linker operations ----
 
+    /** setChanged() only marks the chunk dirty for saving; linker/admin edits also need to reach
+     *  tracking clients immediately so SelectionOverlayRenderer reflects them without a chunk re-track. */
+    private void markDirtyAndSync() {
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
     public void setRoomName(String name) {
         String trimmed = name == null ? "" : name.trim();
         if (trimmed.length() > 48) {
@@ -124,7 +133,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
         if (!this.roomName.equals(trimmed)) {
             this.roomName = trimmed;
-            setChanged();
+            markDirtyAndSync();
         }
     }
 
@@ -135,7 +144,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             return false;
         }
         spawnerOffsets.add(spawnerOffset);
-        setChanged();
+        markDirtyAndSync();
         return true;
     }
 
@@ -144,7 +153,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         BlockPos spawnerOffset = absolutePos.subtract(worldPosition);
         boolean removed = spawnerOffsets.remove(spawnerOffset);
         if (removed) {
-            setChanged();
+            markDirtyAndSync();
         }
         return removed;
     }
@@ -152,7 +161,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     public void clearSpawners() {
         if (!spawnerOffsets.isEmpty()) {
             spawnerOffsets.clear();
-            setChanged();
+            markDirtyAndSync();
         }
     }
 
@@ -163,7 +172,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             return false;
         }
         doorOffsets.add(doorOffset);
-        setChanged();
+        markDirtyAndSync();
         return true;
     }
 
@@ -172,7 +181,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         BlockPos doorOffset = absolutePos.subtract(worldPosition);
         boolean removed = doorOffsets.remove(doorOffset);
         if (removed) {
-            setChanged();
+            markDirtyAndSync();
         }
         return removed;
     }
@@ -180,7 +189,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     public void clearDoors() {
         if (!doorOffsets.isEmpty()) {
             doorOffsets.clear();
-            setChanged();
+            markDirtyAndSync();
         }
     }
 
@@ -188,7 +197,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         BlockPos newRespawnOffset = absolutePos == null ? null : absolutePos.subtract(worldPosition);
         if (!Objects.equals(respawnOffset, newRespawnOffset)) {
             this.respawnOffset = newRespawnOffset;
-            setChanged();
+            markDirtyAndSync();
         }
     }
 
