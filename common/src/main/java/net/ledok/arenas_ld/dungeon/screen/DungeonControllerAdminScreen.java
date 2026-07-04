@@ -26,6 +26,7 @@ import net.ledok.arenas_ld.dungeon.packet.SetDeathTimePenaltyPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetLootViaInboxPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
+import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.minecraft.core.BlockPos;
@@ -848,6 +849,7 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         TextBoxComponent field = Components.textBox(Sizing.expand(), initial);
         field.verticalSizing(Sizing.fixed(18));
         field.setMaxLength(256);
+        IdSuggestionDropdown.attachFullValueTooltip(field);
         field.onChanged().subscribe(v -> {
             onChange.accept(v);
             if (lootDropdownOpen) refreshLootDropdown();

@@ -26,6 +26,7 @@ import net.ledok.arenas_ld.raid.packet.RaidSetCooldownTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetDeathTimePenaltyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetLootViaInboxPayload;
+import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
 import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.ledok.arenas_ld.util.InstanceStatus;
@@ -859,6 +860,7 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         TextBoxComponent field = Components.textBox(Sizing.expand(), initial);
         field.verticalSizing(Sizing.fixed(18));
         field.setMaxLength(256);
+        IdSuggestionDropdown.attachFullValueTooltip(field);
         field.onChanged().subscribe(v -> {
             onChange.accept(v);
             if (lootDropdownOpen) refreshLootDropdown();

@@ -9,6 +9,7 @@ import io.wispforest.owo.ui.container.ScrollContainer;
 import io.wispforest.owo.ui.core.Sizing;
 import io.wispforest.owo.ui.core.Surface;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.core.Registry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -62,6 +63,25 @@ public final class IdSuggestionDropdown {
         this.panel.surface(Surface.BLANK);
         field.onChanged().subscribe(v -> { if (open) refresh(); });
         field.mouseDown().subscribe((mouseX, mouseY, button) -> { open(); return false; });
+        attachFullValueTooltip(field);
+    }
+
+    /**
+     * Mirrors the field's full value into a hover tooltip. ID fields are usually narrower than
+     * a long ResourceLocation and an unfocused text box hard-clips its text at the pixel width,
+     * so without this the stored value looks truncated even though it is intact.
+     */
+    public static void attachFullValueTooltip(TextBoxComponent field) {
+        applyFullValueTooltip(field, field.getValue());
+        field.onChanged().subscribe(v -> applyFullValueTooltip(field, v));
+    }
+
+    private static void applyFullValueTooltip(TextBoxComponent field, String value) {
+        if (value == null || value.isBlank()) {
+            field.tooltip((List<ClientTooltipComponent>) null);
+        } else {
+            field.tooltip(Component.literal(value));
+        }
     }
 
     /** Empty flow to mount directly below the field's row; fills when the dropdown opens. */

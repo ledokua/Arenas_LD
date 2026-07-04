@@ -146,7 +146,7 @@
   "message.arenas_ld.lobby.button.start": "Start",
   "message.arenas_ld.lobby.button.start.hover": "Start the run now",
   "message.arenas_ld.lobby_action.no_controller": "No dungeon controller at that location.",
-  "boss_bar.arenas_ld.dungeon_time": "Dungeon Time",
+  "boss_bar.arenas_ld.dungeon_time": "Time left: %s • Mobs left in room: %s",
   "boss_bar.arenas_ld.close_timer": "Returning in %ss — type /exit to leave now",
   "message.arenas_ld.dungeon_controller_admin.pending_removal": "Instance is running. Removal queued until run finalizes.",
   "message.arenas_ld.dungeon_controller_admin.invalid_value": "Invalid value — change not applied.",
@@ -675,6 +675,6 @@
   "gui.arenas_ld.hardcore_desc": "Hardcore: 1 life, 2x rewards.",
   "gui.arenas_ld.respawn_points_linked_readonly": "Respawn points: %s (set via Linker)",
   "gui.arenas_ld.raid_timer": "Raid Timer",
-  "gui.arenas_ld.raid_timer_remaining": "Raid Timer: %s",
+  "gui.arenas_ld.raid_timer_remaining": "Time left: %s • Boss HP: %s%%",
   "creativetab.arenas_ld_tab": "Arenas LD"
 }

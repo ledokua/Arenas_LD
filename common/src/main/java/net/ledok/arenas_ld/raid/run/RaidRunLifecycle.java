@@ -223,7 +223,7 @@ public final class RaidRunLifecycle {
         if (raidTimeTicks > 0) {
             bossBar.setVisible(true);
             bossBar.setProgress(1.0f);
-            bossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(raidTimeTicks / 20)));
+            bossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(raidTimeTicks / 20), 100));
         } else {
             bossBar.setVisible(false);
         }
@@ -336,7 +336,7 @@ public final class RaidRunLifecycle {
         if (raidTimeTicks > 0) {
             int remaining = run.timerTicks() - 1;
             run.setTimerTicks(Math.max(0, remaining));
-            updateRaidTimerBossBar(world, run);
+            updateRaidTimerBossBar(world, run, bossEntity);
             if (remaining <= 0) {
                 bossEntity.discard();
                 handleLoss(world, controller, run, "Time ran out.");
@@ -874,7 +874,7 @@ public final class RaidRunLifecycle {
         }
     }
 
-    private static void updateRaidTimerBossBar(ServerLevel world, RaidRun run) {
+    private static void updateRaidTimerBossBar(ServerLevel world, RaidRun run, @Nullable Entity boss) {
         ServerBossEvent bossBar = ensureRaidTimerBossBar(run);
         int raidTimeTicks = Math.max(0, run.resolvedTierConfig().raidTimeSeconds() * 20);
         if (raidTimeTicks <= 0) {
@@ -887,7 +887,10 @@ public final class RaidRunLifecycle {
         int remainingTicks = Math.max(0, run.timerTicks());
         float progress = (float) remainingTicks / (float) raidTimeTicks;
         bossBar.setProgress(Mth.clamp(progress, 0.0f, 1.0f));
-        bossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(remainingTicks / 20)));
+        // ServerBossEvent.setName only broadcasts when the component actually changes,
+        // so per-tick updates cost a packet only when the second or HP percent moves.
+        bossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining",
+            formatTime((remainingTicks + 19) / 20), bossHealthPercent(boss)));
 
         for (UUID uuid : run.participants().keySet()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
@@ -904,6 +907,14 @@ public final class RaidRunLifecycle {
 
     private static int resolveRespawnTimeTicks(@Nullable RaidControllerBlockEntity controller) {
         return controller != null ? controller.getRespawnTimeTicks() : DOWNED_RESPAWN_TICKS;
+    }
+
+    /** Whole-percent remaining boss health, ceil'd so the bar never reads 0% while the boss lives. */
+    private static int bossHealthPercent(@Nullable Entity boss) {
+        if (boss instanceof LivingEntity living && living.getMaxHealth() > 0.0f) {
+            return Mth.ceil(living.getHealth() * 100.0f / living.getMaxHealth());
+        }
+        return 100;
     }
 
     private static String formatTime(int totalSeconds) {

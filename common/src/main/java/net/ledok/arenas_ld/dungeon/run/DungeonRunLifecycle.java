@@ -209,7 +209,7 @@ public final class DungeonRunLifecycle {
 
         tickDownedPlayers(world, controller, run);
         tickDisconnectedPlayers(world, controller, run);
-        updateDungeonTimeBossBar(world, run);
+        updateDungeonTimeBossBar(world, run, room.getAliveMobs().size());
     }
 
     private static void tickClosing(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
@@ -493,11 +493,11 @@ public final class DungeonRunLifecycle {
         }
     }
 
-    private static void updateDungeonTimeBossBar(ServerLevel world, DungeonRun run) {
+    private static void updateDungeonTimeBossBar(ServerLevel world, DungeonRun run, int mobsLeftInRoom) {
         ServerBossEvent bar = run.getDungeonTimeBossBar();
         if (bar == null) {
             bar = new ServerBossEvent(
-                Component.translatable("boss_bar.arenas_ld.dungeon_time"),
+                Component.translatable("boss_bar.arenas_ld.dungeon_time", "0:00", 0),
                 BossEvent.BossBarColor.BLUE,
                 BossEvent.BossBarOverlay.PROGRESS
             );
@@ -508,6 +508,11 @@ public final class DungeonRunLifecycle {
             ? Math.max(0.0F, Math.min(1.0F, (float) run.dungeonTimerTicks() / (float) totalTicks))
             : 0.0F;
         bar.setProgress(progress);
+        int secondsLeft = Math.max(0, (run.dungeonTimerTicks() + 19) / 20); // ceil to whole seconds
+        String timeLeft = String.format("%d:%02d", secondsLeft / 60, secondsLeft % 60);
+        // ServerBossEvent.setName only broadcasts when the component actually changes,
+        // so setting this every tick costs a packet at most once per second.
+        bar.setName(Component.translatable("boss_bar.arenas_ld.dungeon_time", timeLeft, mobsLeftInRoom));
         syncBarViewers(world, run, bar);
     }
 
