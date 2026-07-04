@@ -250,7 +250,7 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
         accent.surface(Surface.flat(ACCENT));
         fieldRow.child(accent);
 
-        TextBoxComponent field = Components.textBox(Sizing.expand(), mobIdValue);
+        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.expand(), mobIdValue, 256);
         field.verticalSizing(Sizing.fixed(18));
         field.onChanged().subscribe(v -> mobIdValue = v);
         fieldRow.child(field);

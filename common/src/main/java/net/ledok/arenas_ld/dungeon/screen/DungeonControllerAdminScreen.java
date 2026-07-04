@@ -578,9 +578,8 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
         accent.surface(Surface.flat(ACCENT));
         fieldWrap.child(accent);
-        TextBoxComponent field = Components.textBox(Sizing.expand(), nameInput == null ? "" : nameInput);
+        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.expand(), nameInput, 48);
         field.verticalSizing(Sizing.fixed(18));
-        field.setMaxLength(48);
         field.onChanged().subscribe(v -> nameInput = v);
         fieldWrap.child(field);
         col.child(fieldWrap);
@@ -846,9 +845,8 @@ public class DungeonControllerAdminScreen extends BaseOwoHandledScreen<FlowLayou
         idCell.child(labelLiteral("id:", INK_DIM));
         fieldRow.child(idCell);
 
-        TextBoxComponent field = Components.textBox(Sizing.expand(), initial);
+        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.expand(), initial, 256);
         field.verticalSizing(Sizing.fixed(18));
-        field.setMaxLength(256);
         IdSuggestionDropdown.attachFullValueTooltip(field);
         field.onChanged().subscribe(v -> {
             onChange.accept(v);

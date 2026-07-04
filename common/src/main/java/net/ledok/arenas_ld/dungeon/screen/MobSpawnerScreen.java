@@ -393,7 +393,7 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
         accent.surface(Surface.flat(ACCENT));
         fieldRow.child(accent);
 
-        mobIdField = Components.textBox(Sizing.expand(), menu.getMobId());
+        mobIdField = IdSuggestionDropdown.textBox(Sizing.expand(), menu.getMobId(), 256);
         mobIdField.verticalSizing(Sizing.fixed(18));
         fieldRow.child(mobIdField);
 

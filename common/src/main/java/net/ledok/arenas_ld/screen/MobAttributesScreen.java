@@ -208,7 +208,7 @@ public class MobAttributesScreen extends BaseOwoHandledScreen<FlowLayout, MobAtt
         accent.surface(Surface.flat(ACCENT));
         idWrap.child(accent);
 
-        TextBoxComponent idField = Components.textBox(Sizing.expand(), ids.get(index));
+        TextBoxComponent idField = IdSuggestionDropdown.textBox(Sizing.expand(), ids.get(index), 256);
         idField.verticalSizing(Sizing.fixed(18));
         idField.onChanged().subscribe(v -> ids.set(index, v));
         idWrap.child(idField);
@@ -265,7 +265,7 @@ public class MobAttributesScreen extends BaseOwoHandledScreen<FlowLayout, MobAtt
         accent.surface(Surface.flat(ACCENT));
         wrap.child(accent);
 
-        TextBoxComponent field = Components.textBox(Sizing.expand(), initial == null ? "" : initial);
+        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.expand(), initial, 256);
         field.verticalSizing(Sizing.fixed(18));
         field.onChanged().subscribe(onChange::accept);
         wrap.child(field);

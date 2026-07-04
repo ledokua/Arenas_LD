@@ -5,6 +5,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.PhaseBlock;
+import net.ledok.arenas_ld.dungeon.room.RoomRewardConfig;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.dungeon.screen.RoomControllerData;
 import net.ledok.arenas_ld.dungeon.screen.RoomControllerScreenHandler;
@@ -62,6 +63,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     private boolean activated = false;
     private boolean cleared = false;
     private String roomName = "";
+    /** Reward granted to each eligible player when this room is cleared. EMPTY = nothing. */
+    private RoomRewardConfig roomReward = RoomRewardConfig.EMPTY;
 
     // ---- Construction ----
 
@@ -155,6 +158,18 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
         if (!this.roomName.equals(trimmed)) {
             this.roomName = trimmed;
+            markDirtyAndSync();
+        }
+    }
+
+    public RoomRewardConfig getRoomReward() {
+        return roomReward;
+    }
+
+    public void setRoomReward(RoomRewardConfig reward) {
+        RoomRewardConfig sanitized = reward == null ? RoomRewardConfig.EMPTY : reward;
+        if (!this.roomReward.equals(sanitized)) {
+            this.roomReward = sanitized;
             markDirtyAndSync();
         }
     }
@@ -530,7 +545,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         List<Integer> waveNumbers,
         int currentWaveIndex,
         int nextWaveDelayTicks,
-        boolean bossInCurrentWave
+        boolean bossInCurrentWave,
+        RoomRewardConfig roomReward
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("spawnerOffsets").forGetter(State::spawnerOffsets),
@@ -550,7 +566,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             Codec.INT.listOf().optionalFieldOf("waveNumbers", List.of()).forGetter(State::waveNumbers),
             Codec.INT.optionalFieldOf("currentWaveIndex", 0).forGetter(State::currentWaveIndex),
             Codec.INT.optionalFieldOf("nextWaveDelayTicks", -1).forGetter(State::nextWaveDelayTicks),
-            Codec.BOOL.optionalFieldOf("bossInCurrentWave", false).forGetter(State::bossInCurrentWave)
+            Codec.BOOL.optionalFieldOf("bossInCurrentWave", false).forGetter(State::bossInCurrentWave),
+            RoomRewardConfig.CODEC.optionalFieldOf("roomReward", RoomRewardConfig.EMPTY).forGetter(State::roomReward)
         ).apply(i, State::new));
     }
 
@@ -559,7 +576,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         super.saveAdditional(nbt, registries);
         State state = new State(spawnerOffsets, doorOffsets,
             Optional.ofNullable(respawnOffset), aliveMobs, bossMobs, activated, cleared, roomName,
-            waveNumbers, currentWaveIndex, nextWaveDelayTicks, bossInCurrentWave);
+            waveNumbers, currentWaveIndex, nextWaveDelayTicks, bossInCurrentWave, roomReward);
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save RoomController at {}: {}", worldPosition, err))
@@ -591,6 +608,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     currentWaveIndex = state.currentWaveIndex();
                     nextWaveDelayTicks = state.nextWaveDelayTicks();
                     bossInCurrentWave = state.bossInCurrentWave();
+                    roomReward = state.roomReward();
                 });
         }
     }
@@ -618,6 +636,41 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
 
     @Override
     public RoomControllerData getScreenOpeningData(ServerPlayer player) {
-        return new RoomControllerData(worldPosition, getSpawnerPositions(), getDoorPositions(), roomName);
+        List<RoomControllerData.SpawnerEntry> entries = new ArrayList<>();
+        for (BlockPos absolutePos : getSpawnerPositions()) {
+            BlockEntity be = level != null ? level.getBlockEntity(absolutePos) : null;
+            if (be instanceof MobSpawnerBlockEntity mobSpawner) {
+                entries.add(new RoomControllerData.SpawnerEntry(
+                    absolutePos, Math.max(1, mobSpawner.getEntityDefinition().wave()), false, false));
+            } else if (be instanceof DungeonBossSpawnerBlockEntity bossSpawner) {
+                entries.add(new RoomControllerData.SpawnerEntry(
+                    absolutePos, Math.max(1, bossSpawner.getEntityDefinition().wave()), true, false));
+            } else {
+                // Linked position without a spawner BE (broken link or unloaded chunk).
+                entries.add(new RoomControllerData.SpawnerEntry(absolutePos, 1, false, true));
+            }
+        }
+        return new RoomControllerData(worldPosition, entries, getDoorPositions(), roomName,
+            Optional.ofNullable(getRespawnPos()), roomReward, enumerateLootTables());
+    }
+
+    /** Sorted loot table ids for the reward screen's autocomplete; empty when called client-side. */
+    private List<String> enumerateLootTables() {
+        if (!(level instanceof ServerLevel serverLevel) || serverLevel.getServer() == null) {
+            return List.of();
+        }
+        List<String> ids = new ArrayList<>();
+        try {
+            serverLevel.getServer().reloadableRegistries().lookup()
+                .lookup(net.minecraft.core.registries.Registries.LOOT_TABLE)
+                .ifPresent(getter -> {
+                    if (getter instanceof net.minecraft.core.HolderLookup.RegistryLookup<?> reg) {
+                        reg.listElementIds().forEach(key -> ids.add(key.location().toString()));
+                    }
+                });
+        } catch (Exception ignored) {
+        }
+        ids.sort(null);
+        return ids;
     }
 }

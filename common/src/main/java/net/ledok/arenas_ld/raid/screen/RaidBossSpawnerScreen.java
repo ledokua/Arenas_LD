@@ -263,7 +263,7 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
         accent.surface(Surface.flat(ACCENT));
         fieldRow.child(accent);
 
-        TextBoxComponent field = Components.textBox(Sizing.expand(), initial == null ? "" : initial);
+        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.expand(), initial, 256);
         field.verticalSizing(Sizing.fixed(18));
         field.onChanged().subscribe(onChange::accept);
         fieldRow.child(field);
@@ -293,7 +293,7 @@ public class RaidBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, Raid
         accent.surface(Surface.flat(ACCENT));
         fieldWrap.child(accent);
 
-        TextBoxComponent field = Components.textBox(Sizing.expand(), initial == null ? "" : initial);
+        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.expand(), initial, 256);
         field.verticalSizing(Sizing.fixed(18));
         field.onChanged().subscribe(onChange::accept);
         fieldWrap.child(field);

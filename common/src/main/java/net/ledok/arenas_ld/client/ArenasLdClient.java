@@ -84,6 +84,9 @@ public class ArenasLdClient {
                 if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.RoomControllerScreen screen
                     && screen.matchesController(payload.data().blockPos())) {
                     screen.applyData(payload.data());
+                } else if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.RoomRewardsScreen rewardsScreen
+                    && rewardsScreen.matchesController(payload.data().blockPos())) {
+                    rewardsScreen.applyData(payload.data());
                 }
             }));
         ClientPlayNetworking.registerGlobalReceiver(MobSpawnerSnapshotPayload.TYPE, (payload, context) ->

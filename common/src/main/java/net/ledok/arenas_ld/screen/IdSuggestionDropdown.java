@@ -15,8 +15,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -44,7 +46,7 @@ public final class IdSuggestionDropdown {
     private static final int MAX_HEIGHT = 140;
 
     private final Font font;
-    private final Registry<?> registry;
+    private final Supplier<? extends Collection<String>> candidateSource;
     private final TextBoxComponent field;
     private final FlowLayout panel;
     @Nullable private final Group group;
@@ -55,8 +57,18 @@ public final class IdSuggestionDropdown {
     }
 
     public IdSuggestionDropdown(Font font, Registry<?> registry, TextBoxComponent field, @Nullable Group group) {
+        this(font, () -> registry.keySet().stream().map(ResourceLocation::toString).toList(), field, group);
+    }
+
+    /** Non-registry candidates (e.g. server-provided loot table ids); the supplier is re-read on every refresh. */
+    public IdSuggestionDropdown(Font font, Supplier<? extends Collection<String>> candidateSource, TextBoxComponent field) {
+        this(font, candidateSource, field, null);
+    }
+
+    public IdSuggestionDropdown(Font font, Supplier<? extends Collection<String>> candidateSource,
+                                TextBoxComponent field, @Nullable Group group) {
         this.font = font;
-        this.registry = registry;
+        this.candidateSource = candidateSource;
         this.field = field;
         this.group = group;
         this.panel = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
@@ -64,6 +76,19 @@ public final class IdSuggestionDropdown {
         field.onChanged().subscribe(v -> { if (open) refresh(); });
         field.mouseDown().subscribe((mouseX, mouseY, button) -> { open(); return false; });
         attachFullValueTooltip(field);
+    }
+
+    /**
+     * Creates a text box whose max length is raised BEFORE the initial value goes in.
+     * {@code Components.textBox(sizing, text)} inserts the text while the vanilla 32-char
+     * default still applies, silently clipping long ids/names every time a screen rebuilds —
+     * a later {@code setMaxLength} can't restore what was already cut.
+     */
+    public static TextBoxComponent textBox(Sizing horizontalSizing, @Nullable String initialValue, int maxLength) {
+        TextBoxComponent field = Components.textBox(horizontalSizing);
+        field.setMaxLength(maxLength);
+        field.text(initialValue == null ? "" : initialValue);
+        return field;
     }
 
     /**
@@ -147,8 +172,7 @@ public final class IdSuggestionDropdown {
 
     private List<String> candidates(String filter) {
         String needle = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
-        return registry.keySet().stream()
-            .map(ResourceLocation::toString)
+        return candidateSource.get().stream()
             .filter(id -> needle.isEmpty() || id.toLowerCase(Locale.ROOT).contains(needle))
             .sorted()
             .limit(MAX_CANDIDATES)

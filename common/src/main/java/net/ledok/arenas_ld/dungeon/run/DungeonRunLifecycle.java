@@ -5,6 +5,8 @@ import net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
+import net.ledok.arenas_ld.dungeon.room.RoomEffectData;
+import net.ledok.arenas_ld.dungeon.room.RoomRewardConfig;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.util.BusyStateCompat;
@@ -13,7 +15,9 @@ import net.ledok.arenas_ld.util.LobbyChatActions;
 import net.ledok.arenas_ld.util.PartyTeamStore;
 import net.ledok.arenas_ld.util.PendingRestoreStore;
 import net.ledok.arenas_ld.util.PlayerStatsStore;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.core.BlockPos;
@@ -24,6 +28,12 @@ import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.level.GameType;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.effect.MobEffect;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -198,6 +208,7 @@ public final class DungeonRunLifecycle {
                 ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
             }
             if (room.isCleared()) {
+                grantRoomReward(world, controller, run, room);
                 room.openDoor(world);
                 int next = run.currentRoomIndex() + 1;
                 if (next >= rooms.size()) {
@@ -266,6 +277,8 @@ public final class DungeonRunLifecycle {
             }
         }
 
+        clearRunEffects(world, run);
+
         for (UUID uuid : run.participants().keySet()) {
             ServerPlayer participant = world.getServer().getPlayerList().getPlayer(uuid);
             if (participant != null) {
@@ -298,6 +311,8 @@ public final class DungeonRunLifecycle {
                 }
             }
         }
+
+        clearRunEffects(world, run);
 
         String messageKey = switch (reason) {
             case LOSS_TIMEOUT -> "message.arenas_ld.dungeon.loss_timeout";
@@ -591,6 +606,120 @@ public final class DungeonRunLifecycle {
         return bundle;
     }
 
+    /**
+     * Grants the room's configured clear reward to every loot-eligible player. No-op when the
+     * room has no reward configured (the default). Loot and currency reach offline players via
+     * the economy inbox when available; effects and skill XP require the player to be online.
+     */
+    private static void grantRoomReward(ServerLevel world, DungeonControllerBlockEntity controller,
+                                        DungeonRun run, RoomControllerBlockEntity room) {
+        RoomRewardConfig reward = room.getRoomReward();
+        if (reward.isEmpty()) {
+            return;
+        }
+        boolean lootViaInbox = controller.isLootViaInbox();
+        boolean puffishLoaded = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("puffish_skills");
+        List<MobEffectInstance> effectInstances = resolveRewardEffects(reward.effects());
+
+        for (UUID uuid : run.lootEligibleUuids()) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+
+            if (!reward.lootTableId().isEmpty()) {
+                ItemStack bundle = createLootBundle(reward.lootTableId());
+                if (lootViaInbox || player == null) {
+                    net.ledok.arenas_ld.util.EconomyCompat.deliverItem(uuid, bundle, bundle.getCount(), "DUNGEON_LOOT");
+                } else if (!player.getInventory().add(bundle)) {
+                    player.drop(bundle, false);
+                }
+            }
+
+            if (reward.currency() > 0L) {
+                net.ledok.arenas_ld.util.EconomyCompat.deliverCurrency(uuid, reward.currency(), "DUNGEON_REWARD");
+            }
+
+            if (player == null) {
+                continue;
+            }
+            if (reward.skillXp() > 0 && puffishLoaded) {
+                net.ledok.arenas_ld.compat.PuffishSkillsCompat.addExperience(player, reward.skillXp());
+            }
+            for (MobEffectInstance instance : effectInstances) {
+                player.addEffect(new MobEffectInstance(instance));
+            }
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.room_reward"));
+        }
+
+        executeRewardCommands(world, run, room, reward.commands());
+    }
+
+    /**
+     * Runs reward commands as the server (command-block permission level, output suppressed),
+     * positioned at the room controller. A command containing {@code @dungeonplayer} or {@code @s}
+     * has the placeholder replaced with each eligible online player's name and runs once per
+     * player; a command without a placeholder runs once.
+     */
+    private static void executeRewardCommands(ServerLevel world, DungeonRun run,
+                                              RoomControllerBlockEntity room, List<String> commands) {
+        if (commands.isEmpty()) {
+            return;
+        }
+        MinecraftServer server = world.getServer();
+        CommandSourceStack source = server.createCommandSourceStack()
+            .withLevel(world)
+            .withPosition(Vec3.atCenterOf(room.getBlockPos()))
+            .withPermission(2)
+            .withSuppressedOutput();
+        for (String command : commands) {
+            if (command.isBlank()) {
+                continue;
+            }
+            if (command.contains("@dungeonplayer") || command.contains("@s")) {
+                for (UUID uuid : run.lootEligibleUuids()) {
+                    ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+                    if (player == null) {
+                        continue;
+                    }
+                    String name = player.getGameProfile().getName();
+                    // \b keeps "@s[...]" working while leaving longer selectors like "@a" untouched.
+                    String resolved = command.replace("@dungeonplayer", name).replaceAll("@s\\b", name);
+                    server.getCommands().performPrefixedCommand(source, resolved);
+                }
+            } else {
+                server.getCommands().performPrefixedCommand(source, command);
+            }
+        }
+    }
+
+    /** Resolves configured effect IDs to instances; unknown or malformed IDs are logged and skipped. */
+    private static List<MobEffectInstance> resolveRewardEffects(List<RoomEffectData> effects) {
+        List<MobEffectInstance> resolved = new ArrayList<>();
+        for (RoomEffectData data : effects) {
+            ResourceLocation id = ResourceLocation.tryParse(data.effectId().trim());
+            if (id == null) {
+                ArenasLdMod.LOGGER.warn("Invalid room reward effect id: {}", data.effectId());
+                continue;
+            }
+            ResourceKey<MobEffect> key = ResourceKey.create(Registries.MOB_EFFECT, id);
+            BuiltInRegistries.MOB_EFFECT.getHolder(key).ifPresentOrElse(
+                // ambient=false, visible=false (no particles), showIcon=true so the buff still shows in the HUD
+                holder -> resolved.add(new MobEffectInstance(holder,
+                    Math.max(1, data.durationSeconds()) * 20, Math.max(0, data.amplifier()),
+                    false, false, true)),
+                () -> ArenasLdMod.LOGGER.warn("Unknown room reward effect: {}", id));
+        }
+        return resolved;
+    }
+
+    /** Strips all status effects from every online participant — a run ending wipes buffs and debuffs alike. */
+    private static void clearRunEffects(ServerLevel world, DungeonRun run) {
+        for (UUID uuid : run.participants().keySet()) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            if (player != null) {
+                player.removeAllEffects();
+            }
+        }
+    }
+
     public static void handlePlayerDown(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, ServerPlayer player) {
         RunParticipant participant = run.participants().get(player.getUUID());
         if (participant == null) {
@@ -600,6 +729,8 @@ public final class DungeonRunLifecycle {
             PlayerReturnPoint returnPoint = run.returnPoints().get(player.getUUID());
             run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, world.getGameTime()));
             player.setHealth(player.getMaxHealth());
+            // The run is over for this player — same effect wipe as applyReturnPoint at run end.
+            player.removeAllEffects();
             player.setGameMode(returnPoint != null ? returnPoint.previousGameMode() : GameType.SURVIVAL);
             if (returnPoint != null) {
                 ServerLevel target = world.getServer().getLevel(returnPoint.dimension());
@@ -693,6 +824,9 @@ public final class DungeonRunLifecycle {
         }
         player.setGameMode(rp.previousGameMode());
         player.setHealth(player.getMaxHealth());
+        // Leaving a run wipes all status effects — covers players who were offline when the run
+        // ended (pending-restore on next login) as well as early exits during CLOSING.
+        player.removeAllEffects();
     }
 
     /** Sends a message to every online, non-removed participant except {@code except} (nullable). */

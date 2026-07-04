@@ -282,9 +282,8 @@ public class ArenaSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, ArenaSp
         FlowLayout wrap = Containers.horizontalFlow(width, Sizing.fixed(18));
         wrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
         wrap.verticalAlignment(VerticalAlignment.CENTER);
-        TextBoxComponent field = Components.textBox(Sizing.expand(), initial == null ? "" : initial);
+        TextBoxComponent field = net.ledok.arenas_ld.screen.IdSuggestionDropdown.textBox(Sizing.expand(), initial, 256);
         field.verticalSizing(Sizing.fixed(15));
-        field.setMaxLength(256);
         field.onChanged().subscribe(onChange::accept);
         wrap.child(field);
         return wrap;

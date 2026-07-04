@@ -28,6 +28,7 @@ import net.ledok.arenas_ld.dungeon.packet.MobSpawnerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.RemoveDungeonInstancePayload;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
+import net.ledok.arenas_ld.dungeon.packet.RoomClearRespawnPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomControllerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomRemoveSpawnerPayload;
@@ -228,6 +229,40 @@ public final class SpawnerPacketHandlers {
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof RoomControllerBlockEntity room && world instanceof ServerLevel serverLevel) {
                     room.reset(serverLevel);
+                    markDirtyAndSync(world, room);
+                    broadcastRoomControllerSnapshot(player, room);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(RoomClearRespawnPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof RoomControllerBlockEntity room) {
+                    room.setRespawnPos(null);
+                    markDirtyAndSync(world, room);
+                    broadcastRoomControllerSnapshot(player, room);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.RoomSetRewardPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof RoomControllerBlockEntity room) {
+                    room.setRoomReward(sanitizeRoomReward(payload.reward()));
                     markDirtyAndSync(world, room);
                     broadcastRoomControllerSnapshot(player, room);
                 }
@@ -878,6 +913,34 @@ public final class SpawnerPacketHandlers {
         }
         invitee.sendSystemMessage(invited);
         invitee.sendSystemMessage(Component.empty().append(accept).append(" ").append(decline).append(" ").append(open));
+    }
+
+    /** Clamps a client-sent room reward to sane bounds before it reaches the block entity. */
+    private static net.ledok.arenas_ld.dungeon.room.RoomRewardConfig sanitizeRoomReward(
+        net.ledok.arenas_ld.dungeon.room.RoomRewardConfig reward
+    ) {
+        if (reward == null) {
+            return net.ledok.arenas_ld.dungeon.room.RoomRewardConfig.EMPTY;
+        }
+        String lootTableId = reward.lootTableId() == null ? "" : reward.lootTableId().trim();
+        if (lootTableId.length() > 256) {
+            lootTableId = lootTableId.substring(0, 256);
+        }
+        java.util.List<net.ledok.arenas_ld.dungeon.room.RoomEffectData> effects = reward.effects().stream()
+            .filter(e -> e.effectId() != null && !e.effectId().isBlank())
+            .limit(16)
+            .map(e -> new net.ledok.arenas_ld.dungeon.room.RoomEffectData(
+                e.effectId().trim(),
+                Math.max(1, Math.min(3600, e.durationSeconds())),
+                Math.max(0, Math.min(9, e.amplifier()))))
+            .toList();
+        java.util.List<String> commands = reward.commands().stream()
+            .filter(c -> c != null && !c.isBlank())
+            .limit(8)
+            .map(c -> c.trim().length() > 256 ? c.trim().substring(0, 256) : c.trim())
+            .toList();
+        return new net.ledok.arenas_ld.dungeon.room.RoomRewardConfig(
+            lootTableId, effects, Math.max(0L, reward.currency()), Math.max(0, reward.skillXp()), commands);
     }
 
     private static void broadcastRoomControllerSnapshot(ServerPlayer actor, RoomControllerBlockEntity room) {
