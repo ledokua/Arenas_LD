@@ -58,6 +58,7 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
 
     private TextBoxComponent mobIdField;
     private TextBoxComponent spawnCountField;
+    private TextBoxComponent waveField;
     private FlowLayout positionsList;
     private ScrollContainer<FlowLayout> positionsScroll;
     private TextBoxComponent addXField;
@@ -65,6 +66,7 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
     private TextBoxComponent addZField;
 
     private int spawnCount;
+    private int wave;
     private final List<BlockPos> spawnOffsets = new ArrayList<>();
 
     public MobSpawnerScreen(MobSpawnerScreenHandler handler, Inventory inventory, Component title) {
@@ -84,6 +86,7 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
         rootComponent.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
 
         spawnCount = menu.getSpawnCount();
+        wave = menu.getWave();
         spawnOffsets.clear();
         spawnOffsets.addAll(menu.getSpawnOffsets());
 
@@ -158,6 +161,16 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
         countRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
         countRow.child(buildCountStepper());
         content.child(countRow);
+
+        FlowLayout waveRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        waveRow.gap(8);
+        waveRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        LabelComponent waveCaption = Components.label(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.wave")));
+        waveCaption.color(Color.ofArgb(INK_MID));
+        waveRow.child(waveCaption);
+        waveRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        waveRow.child(buildWaveStepper());
+        content.child(waveRow);
 
         content.child(hairline());
 
@@ -240,6 +253,39 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
         spawnCount = Math.max(0, Math.min(64, spawnCount + delta));
         if (spawnCountField != null) {
             spawnCountField.text(String.valueOf(spawnCount));
+        }
+    }
+
+    private FlowLayout buildWaveStepper() {
+        FlowLayout stepper = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        stepper.gap(2);
+        stepper.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        stepper.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        stepper.padding(Insets.of(2, 4, 2, 4));
+
+        ButtonComponent minus = stepBtn("−", b -> adjustWave(-1));
+
+        waveField = Components.textBox(Sizing.fixed(30), String.valueOf(wave));
+        waveField.verticalSizing(Sizing.fixed(16));
+        waveField.onChanged().subscribe(value -> {
+            try {
+                wave = Math.max(1, Math.min(10, Integer.parseInt(value.trim())));
+            } catch (NumberFormatException ignored) {
+            }
+        });
+
+        ButtonComponent plus = stepBtn("+", b -> adjustWave(1));
+
+        stepper.child(minus);
+        stepper.child(waveField);
+        stepper.child(plus);
+        return stepper;
+    }
+
+    private void adjustWave(int delta) {
+        wave = Math.max(1, Math.min(10, wave + delta));
+        if (waveField != null) {
+            waveField.text(String.valueOf(wave));
         }
     }
 
@@ -370,6 +416,7 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
             menu.getBlockPos(),
             mobIdField.getValue(),
             spawnCount,
+            wave,
             List.copyOf(spawnOffsets)
         ));
     }
@@ -401,6 +448,10 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
         spawnCount = menu.getSpawnCount();
         if (spawnCountField != null) {
             spawnCountField.text(String.valueOf(spawnCount));
+        }
+        wave = menu.getWave();
+        if (waveField != null) {
+            waveField.text(String.valueOf(wave));
         }
         spawnOffsets.clear();
         spawnOffsets.addAll(menu.getSpawnOffsets());

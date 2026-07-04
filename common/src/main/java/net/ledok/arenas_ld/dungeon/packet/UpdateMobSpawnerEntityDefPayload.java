@@ -10,7 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.ArrayList;
 import java.util.List;
 
-public record UpdateMobSpawnerEntityDefPayload(BlockPos blockPos, String mobId, int spawnCount, List<BlockPos> spawnOffsets) implements CustomPacketPayload {
+public record UpdateMobSpawnerEntityDefPayload(BlockPos blockPos, String mobId, int spawnCount, int wave, List<BlockPos> spawnOffsets) implements CustomPacketPayload {
     public static final Type<UpdateMobSpawnerEntityDefPayload> TYPE =
         new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "update_mob_spawner_v2_entity"));
 
@@ -19,6 +19,7 @@ public record UpdateMobSpawnerEntityDefPayload(BlockPos blockPos, String mobId, 
             buf.writeBlockPos(data.blockPos);
             buf.writeUtf(data.mobId);
             buf.writeVarInt(data.spawnCount);
+            buf.writeVarInt(data.wave);
             buf.writeVarInt(data.spawnOffsets.size());
             for (BlockPos pos : data.spawnOffsets) {
                 buf.writeBlockPos(pos);
@@ -28,12 +29,13 @@ public record UpdateMobSpawnerEntityDefPayload(BlockPos blockPos, String mobId, 
             BlockPos blockPos = buf.readBlockPos();
             String mobId = buf.readUtf();
             int spawnCount = buf.readVarInt();
+            int wave = buf.readVarInt();
             int offsetCount = buf.readVarInt();
             List<BlockPos> offsets = new ArrayList<>(offsetCount);
             for (int i = 0; i < offsetCount; i++) {
                 offsets.add(buf.readBlockPos());
             }
-            return new UpdateMobSpawnerEntityDefPayload(blockPos, mobId, spawnCount, offsets);
+            return new UpdateMobSpawnerEntityDefPayload(blockPos, mobId, spawnCount, wave, offsets);
         }
     );
 

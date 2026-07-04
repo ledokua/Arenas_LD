@@ -21,6 +21,7 @@ public class DungeonBossSpawnerScreenHandler extends AbstractContainerMenu {
         this(syncId, playerInventory, new DungeonBossSpawnerData(
             blockEntity.getBlockPos(),
             blockEntity.getEntityDefinition().mobId(),
+            blockEntity.getEntityDefinition().wave(),
             blockEntity.getRooms(),
             blockEntity.getRoomNames()
         ));
@@ -28,6 +29,7 @@ public class DungeonBossSpawnerScreenHandler extends AbstractContainerMenu {
 
     public BlockPos getBlockPos() { return data.blockPos(); }
     public String getMobId() { return data.mobId(); }
+    public int getWave() { return data.wave(); }
     public List<BlockPos> getRooms() { return data.rooms(); }
     public List<String> getRoomNames() { return data.roomNames(); }
 

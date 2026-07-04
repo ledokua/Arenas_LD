@@ -192,6 +192,6 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
 
     @Override
     public MobSpawnerData getScreenOpeningData(ServerPlayer player) {
-        return new MobSpawnerData(worldPosition, entityDefinition.mobId(), entityDefinition.spawnCount(), entityDefinition.spawnOffsets());
+        return new MobSpawnerData(worldPosition, entityDefinition.mobId(), entityDefinition.spawnCount(), entityDefinition.wave(), entityDefinition.spawnOffsets());
     }
 }

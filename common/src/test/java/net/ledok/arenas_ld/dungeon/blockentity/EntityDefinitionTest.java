@@ -49,4 +49,21 @@ class EntityDefinitionTest {
         assertEquals("minecraft:husk", a.mobId());
         assertEquals("minecraft:skeleton", b.mobId());
     }
+
+    @Test
+    void waveDefaultsToOneWhenAbsentFromNbt() {
+        // Pre-wave saves have no "wave" field; they must load as wave 1.
+        Tag encoded = EntityDefinition.CODEC.encodeStart(NbtOps.INSTANCE,
+            new EntityDefinition("minecraft:zombie", List.of(), new EquipmentData())).getOrThrow();
+        ((net.minecraft.nbt.CompoundTag) encoded).remove("wave");
+        EntityDefinition decoded = EntityDefinition.CODEC.parse(NbtOps.INSTANCE, encoded).getOrThrow();
+        assertEquals(1, decoded.wave());
+    }
+
+    @Test
+    void withWaveClampsToOne() {
+        assertEquals(1, EntityDefinition.DEFAULT.withWave(0).wave());
+        assertEquals(1, EntityDefinition.DEFAULT.withWave(-5).wave());
+        assertEquals(3, EntityDefinition.DEFAULT.withWave(3).wave());
+    }
 }

@@ -247,6 +247,7 @@ public final class SpawnerPacketHandlers {
                     spawner.setEntityDefinition(spawner.getEntityDefinition()
                         .withMobId(payload.mobId())
                         .withSpawnCount(payload.spawnCount())
+                        .withWave(payload.wave())
                         .withSpawnOffsets(payload.spawnOffsets()));
                     markDirtyAndSync(world, spawner);
                     broadcastMobSpawnerSnapshot(player, spawner);
@@ -264,7 +265,7 @@ public final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity spawner) {
-                    spawner.setEntityDefinition(spawner.getEntityDefinition().withMobId(payload.mobId()));
+                    spawner.setEntityDefinition(spawner.getEntityDefinition().withMobId(payload.mobId()).withWave(payload.wave()));
                     markDirtyAndSync(world, spawner);
                     broadcastDungeonBossSpawnerSnapshot(player, spawner);
                 }

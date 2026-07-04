@@ -259,6 +259,6 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
 
     @Override
     public DungeonBossSpawnerData getScreenOpeningData(ServerPlayer player) {
-        return new DungeonBossSpawnerData(worldPosition, entityDefinition.mobId(), getRooms(), getRoomNames());
+        return new DungeonBossSpawnerData(worldPosition, entityDefinition.mobId(), entityDefinition.wave(), getRooms(), getRoomNames());
     }
 }

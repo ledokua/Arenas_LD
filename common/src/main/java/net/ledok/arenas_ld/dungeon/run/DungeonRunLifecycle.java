@@ -194,6 +194,9 @@ public final class DungeonRunLifecycle {
             }
         } else {
             room.refreshAliveMobs(world);
+            for (UUID uuid : room.tickWaveProgression(world, run.resolvedTierConfig(), run.partyHealthMultiplier())) {
+                ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
+            }
             if (room.isCleared()) {
                 room.openDoor(world);
                 int next = run.currentRoomIndex() + 1;
@@ -209,7 +212,7 @@ public final class DungeonRunLifecycle {
 
         tickDownedPlayers(world, controller, run);
         tickDisconnectedPlayers(world, controller, run);
-        updateDungeonTimeBossBar(world, run, room.getAliveMobs().size());
+        updateDungeonTimeBossBar(world, run, room.getAliveMobs().size(), room.getWaveDisplay(), room.getTotalWaves());
     }
 
     private static void tickClosing(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
@@ -493,7 +496,7 @@ public final class DungeonRunLifecycle {
         }
     }
 
-    private static void updateDungeonTimeBossBar(ServerLevel world, DungeonRun run, int mobsLeftInRoom) {
+    private static void updateDungeonTimeBossBar(ServerLevel world, DungeonRun run, int mobsLeftInRoom, int waveDisplay, int totalWaves) {
         ServerBossEvent bar = run.getDungeonTimeBossBar();
         if (bar == null) {
             bar = new ServerBossEvent(
@@ -512,7 +515,9 @@ public final class DungeonRunLifecycle {
         String timeLeft = String.format("%d:%02d", secondsLeft / 60, secondsLeft % 60);
         // ServerBossEvent.setName only broadcasts when the component actually changes,
         // so setting this every tick costs a packet at most once per second.
-        bar.setName(Component.translatable("boss_bar.arenas_ld.dungeon_time", timeLeft, mobsLeftInRoom));
+        bar.setName(totalWaves > 1
+            ? Component.translatable("boss_bar.arenas_ld.dungeon_time_waves", timeLeft, waveDisplay, totalWaves, mobsLeftInRoom)
+            : Component.translatable("boss_bar.arenas_ld.dungeon_time", timeLeft, mobsLeftInRoom));
         syncBarViewers(world, run, bar);
     }
 

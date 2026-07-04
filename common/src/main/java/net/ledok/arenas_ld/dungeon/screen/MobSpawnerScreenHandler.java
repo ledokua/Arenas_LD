@@ -13,6 +13,7 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
     private final BlockPos blockPos;
     private String mobId;
     private int spawnCount;
+    private int wave;
     private List<BlockPos> spawnOffsets;
 
     public MobSpawnerScreenHandler(int syncId, Inventory playerInventory, MobSpawnerData data) {
@@ -20,6 +21,7 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
         this.blockPos = data.blockPos();
         this.mobId = data.mobId();
         this.spawnCount = data.spawnCount();
+        this.wave = data.wave();
         this.spawnOffsets = data.spawnOffsets();
     }
 
@@ -28,6 +30,7 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
             blockEntity.getBlockPos(),
             blockEntity.getEntityDefinition().mobId(),
             blockEntity.getEntityDefinition().spawnCount(),
+            blockEntity.getEntityDefinition().wave(),
             blockEntity.getEntityDefinition().spawnOffsets()
         ));
     }
@@ -44,6 +47,10 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
         return spawnCount;
     }
 
+    public int getWave() {
+        return wave;
+    }
+
     public List<BlockPos> getSpawnOffsets() {
         return spawnOffsets;
     }
@@ -51,6 +58,7 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
     public void applyData(MobSpawnerData data) {
         this.mobId = data.mobId();
         this.spawnCount = data.spawnCount();
+        this.wave = data.wave();
         this.spawnOffsets = data.spawnOffsets();
     }
 

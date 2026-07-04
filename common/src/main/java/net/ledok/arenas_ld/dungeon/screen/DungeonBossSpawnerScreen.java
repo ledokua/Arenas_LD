@@ -55,6 +55,8 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
     private static final int DANGER      = 0xFFE8624A;
 
     private String mobIdValue = "";
+    private int waveValue = 1;
+    private TextBoxComponent waveField;
     private final List<BlockPos> rooms = new ArrayList<>();
     private final List<String> roomNames = new ArrayList<>();
 
@@ -169,6 +171,8 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
         contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.tab_general")));
         contentArea.child(spacer(2));
         contentArea.child(buildMobIdSection());
+        contentArea.child(spacer(6));
+        contentArea.child(buildWaveRow());
         contentArea.child(spacer(6));
 
         LabelComponent entranceHint = Components.label(Component.translatable("gui.arenas_ld.dbs.entrance_hint"));
@@ -302,8 +306,53 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
         return row;
     }
 
+    private FlowLayout buildWaveRow() {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        LabelComponent caption = Components.label(Component.translatable("gui.arenas_ld.dungeon_boss_spawner.ui.wave"));
+        caption.color(Color.ofArgb(INK_DIM));
+        row.child(caption);
+        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+
+        FlowLayout stepper = Containers.horizontalFlow(Sizing.content(), Sizing.content());
+        stepper.gap(2);
+        stepper.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        stepper.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        stepper.padding(Insets.of(2, 4, 2, 4));
+
+        ButtonComponent minus = smallButton(Component.literal("−"), b -> adjustWave(-1));
+        minus.sizing(Sizing.fixed(16), Sizing.fixed(16));
+
+        waveField = Components.textBox(Sizing.fixed(30), String.valueOf(waveValue));
+        waveField.verticalSizing(Sizing.fixed(16));
+        waveField.onChanged().subscribe(value -> {
+            try {
+                waveValue = Math.max(1, Math.min(10, Integer.parseInt(value.trim())));
+            } catch (NumberFormatException ignored) {
+            }
+        });
+
+        ButtonComponent plus = smallButton(Component.literal("+"), b -> adjustWave(1));
+        plus.sizing(Sizing.fixed(16), Sizing.fixed(16));
+
+        stepper.child(minus);
+        stepper.child(waveField);
+        stepper.child(plus);
+        row.child(stepper);
+        return row;
+    }
+
+    private void adjustWave(int delta) {
+        waveValue = Math.max(1, Math.min(10, waveValue + delta));
+        if (waveField != null) {
+            waveField.text(String.valueOf(waveValue));
+        }
+    }
+
     private void applyMobId() {
-        ClientPlayNetworking.send(new UpdateDbsEntityDefPayload(menu.getBlockPos(), mobIdValue));
+        ClientPlayNetworking.send(new UpdateDbsEntityDefPayload(menu.getBlockPos(), mobIdValue, waveValue));
     }
 
     private void openAttributesScreen() {
@@ -331,6 +380,7 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
 
     private void syncState() {
         mobIdValue = menu.getMobId();
+        waveValue = menu.getWave();
         rooms.clear();
         rooms.addAll(menu.getRooms());
         roomNames.clear();

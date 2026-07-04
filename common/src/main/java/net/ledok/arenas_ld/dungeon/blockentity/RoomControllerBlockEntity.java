@@ -51,6 +51,14 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     /** Subset of {@link #aliveMobs} spawned by a linked boss spawner. When this room has any and
      *  they've all died, any remaining adds are discarded instead of requiring them to be killed too. */
     private final Set<UUID> bossMobs = new HashSet<>();
+    private static final int NEXT_WAVE_DELAY_TICKS = 60; // 3 s between waves
+    /** Sorted distinct wave numbers of linked spawners, computed at activation. Empty = legacy single-wave. */
+    private final List<Integer> waveNumbers = new ArrayList<>();
+    private int currentWaveIndex = 0;
+    private int nextWaveDelayTicks = -1; // -1 = no countdown running
+    /** True while the current wave has a boss spawn; when all of the wave's bosses die,
+     *  its remaining adds are discarded instead of requiring them to be killed too. */
+    private boolean bossInCurrentWave = false;
     private boolean activated = false;
     private boolean cleared = false;
     private String roomName = "";
@@ -108,6 +116,20 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
 
     public boolean isCleared() {
         return cleared;
+    }
+
+    /** 1-based number of the wave currently in progress, for display. Always 1 for legacy/single-wave rooms. */
+    public int getWaveDisplay() {
+        return waveNumbers.isEmpty() ? 1 : Math.min(currentWaveIndex + 1, waveNumbers.size());
+    }
+
+    /** Total number of waves this room activated with. 1 for legacy/single-wave rooms. */
+    public int getTotalWaves() {
+        return Math.max(1, waveNumbers.size());
+    }
+
+    private boolean isOnFinalWave() {
+        return currentWaveIndex >= waveNumbers.size() - 1;
     }
 
     /** Designer-facing name for this room, used for the ARMED hint and the DBS rooms list. May be blank. */
@@ -219,6 +241,10 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         cleared = false;
         aliveMobs.clear();
         bossMobs.clear();
+        waveNumbers.clear();
+        currentWaveIndex = 0;
+        nextWaveDelayTicks = -1;
+        bossInCurrentWave = false;
         setChanged();
     }
 
@@ -276,37 +302,117 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             return 0;
         }
 
+        List<Integer> waves = collectWaveNumbers(world);
+        if (waves.isEmpty()) {
+            ArenasLdMod.LOGGER.warn(
+                "RoomController at {} has no linked spawners; activation deferred",
+                worldPosition
+            );
+            return 0;
+        }
+
         double healthMultiplier = tier.healthMultiplier() * partyHealthMultiplier;
+        // Walk forward past waves whose spawners are all broken so a bad first wave can't soft-lock activation.
+        for (int index = 0; index < waves.size(); index++) {
+            int spawned = spawnWave(world, healthMultiplier, waves.get(index), true);
+            if (spawned > 0) {
+                waveNumbers.clear();
+                waveNumbers.addAll(waves);
+                currentWaveIndex = index;
+                nextWaveDelayTicks = -1;
+                markActivated();
+                return spawned;
+            }
+        }
+        ArenasLdMod.LOGGER.warn(
+            "RoomController at {} linked {} spawners but spawned 0 mobs; activation deferred",
+            worldPosition,
+            spawnerOffsets.size()
+        );
+        return 0;
+    }
+
+    /** Sorted distinct wave numbers across all linked spawners; empty if no linked position is a spawner. */
+    private List<Integer> collectWaveNumbers(ServerLevel world) {
+        Set<Integer> waves = new java.util.TreeSet<>();
+        for (BlockPos absolutePos : getSpawnerPositions()) {
+            BlockEntity be = world.getBlockEntity(absolutePos);
+            if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity mobSpawner) {
+                waves.add(Math.max(1, mobSpawner.getEntityDefinition().wave()));
+            } else if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity bossSpawner) {
+                waves.add(Math.max(1, bossSpawner.getEntityDefinition().wave()));
+            }
+        }
+        return new ArrayList<>(waves);
+    }
+
+    /**
+     * Spawn all mobs of linked spawners configured for {@code waveNumber} and track them.
+     * {@code logInvalid} limits the "not a spawner" warning to activation so it isn't
+     * re-logged for every later wave.
+     *
+     * @return the count of mobs that were spawned and tracked
+     */
+    private int spawnWave(ServerLevel world, double healthMultiplier, int waveNumber, boolean logInvalid) {
+        bossInCurrentWave = false;
         int spawned = 0;
         for (BlockPos absolutePos : getSpawnerPositions()) {
             BlockEntity be = world.getBlockEntity(absolutePos);
             if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity newMobSpawner) {
+                if (Math.max(1, newMobSpawner.getEntityDefinition().wave()) != waveNumber) continue;
                 for (LivingEntity entity : newMobSpawner.spawnScaled(world, healthMultiplier)) {
                     trackSpawnedMob(entity.getUUID());
                     spawned++;
                 }
             } else if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity newBossSpawner) {
+                if (Math.max(1, newBossSpawner.getEntityDefinition().wave()) != waveNumber) continue;
                 LivingEntity entity = newBossSpawner.spawnSingleScaled(world, healthMultiplier);
                 if (entity != null) {
                     trackBossMob(entity.getUUID());
+                    bossInCurrentWave = true;
                     spawned++;
                 }
-            } else {
+            } else if (logInvalid) {
                 ArenasLdMod.LOGGER.warn(
                     "RoomController at {}: linked position {} is not a spawner (got {})",
                     worldPosition, absolutePos, be == null ? "null" : be.getClass().getSimpleName());
             }
         }
-        if (spawned <= 0) {
-            ArenasLdMod.LOGGER.warn(
-                "RoomController at {} linked {} spawners but spawned 0 mobs; activation deferred",
-                worldPosition,
-                spawnerOffsets.size()
-            );
-            return 0;
-        }
-        markActivated();
         return spawned;
+    }
+
+    /**
+     * Advance the wave state machine: once the current wave is dead (and it isn't the last),
+     * count down {@link #NEXT_WAVE_DELAY_TICKS}, then spawn the next non-empty wave. If every
+     * remaining wave spawns 0 mobs (broken spawners), the room is marked cleared instead of
+     * soft-locking. Called once per tick by the run lifecycle while the room is active.
+     *
+     * @return UUIDs of newly spawned mobs, for run registration; empty when nothing spawned
+     */
+    public List<UUID> tickWaveProgression(ServerLevel world, TierConfig tier, double partyHealthMultiplier) {
+        if (!activated || cleared || !aliveMobs.isEmpty() || isOnFinalWave()) {
+            nextWaveDelayTicks = -1;
+            return List.of();
+        }
+        if (nextWaveDelayTicks < 0) {
+            nextWaveDelayTicks = NEXT_WAVE_DELAY_TICKS;
+            setChanged();
+            return List.of();
+        }
+        if (--nextWaveDelayTicks > 0) {
+            return List.of();
+        }
+        nextWaveDelayTicks = -1;
+        double healthMultiplier = tier.healthMultiplier() * partyHealthMultiplier;
+        while (!isOnFinalWave()) {
+            currentWaveIndex++;
+            if (spawnWave(world, healthMultiplier, waveNumbers.get(currentWaveIndex), false) > 0) {
+                setChanged();
+                return List.copyOf(aliveMobs); // was empty before spawn → exactly the new mobs
+            }
+        }
+        markCleared();
+        return List.of();
     }
 
     /**
@@ -388,7 +494,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             }
         }
 
-        if (!bossMobs.isEmpty() && bossMobs.stream().noneMatch(aliveMobs::contains)) {
+        // All bosses of the current wave died → discard the wave's remaining adds on the spot.
+        if (bossInCurrentWave && bossMobs.isEmpty() && !aliveMobs.isEmpty()) {
             for (UUID uuid : new ArrayList<>(aliveMobs)) {
                 Entity entity = world.getEntity(uuid);
                 if (entity != null && entity.isAlive()) {
@@ -397,11 +504,11 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);
             }
             aliveMobs.clear();
-            bossMobs.clear();
+            bossInCurrentWave = false;
             changed = true;
         }
 
-        if (activated && !cleared && aliveMobs.isEmpty()) {
+        if (activated && !cleared && aliveMobs.isEmpty() && isOnFinalWave()) {
             markCleared();
             return;
         }
@@ -419,7 +526,11 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         Set<UUID> bossMobs,
         boolean activated,
         boolean cleared,
-        String roomName
+        String roomName,
+        List<Integer> waveNumbers,
+        int currentWaveIndex,
+        int nextWaveDelayTicks,
+        boolean bossInCurrentWave
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("spawnerOffsets").forGetter(State::spawnerOffsets),
@@ -435,7 +546,11 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 .optionalFieldOf("bossMobs", Set.of()).forGetter(State::bossMobs),
             Codec.BOOL.fieldOf("activated").forGetter(State::activated),
             Codec.BOOL.fieldOf("cleared").forGetter(State::cleared),
-            Codec.STRING.optionalFieldOf("roomName", "").forGetter(State::roomName)
+            Codec.STRING.optionalFieldOf("roomName", "").forGetter(State::roomName),
+            Codec.INT.listOf().optionalFieldOf("waveNumbers", List.of()).forGetter(State::waveNumbers),
+            Codec.INT.optionalFieldOf("currentWaveIndex", 0).forGetter(State::currentWaveIndex),
+            Codec.INT.optionalFieldOf("nextWaveDelayTicks", -1).forGetter(State::nextWaveDelayTicks),
+            Codec.BOOL.optionalFieldOf("bossInCurrentWave", false).forGetter(State::bossInCurrentWave)
         ).apply(i, State::new));
     }
 
@@ -443,7 +558,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
         State state = new State(spawnerOffsets, doorOffsets,
-            Optional.ofNullable(respawnOffset), aliveMobs, bossMobs, activated, cleared, roomName);
+            Optional.ofNullable(respawnOffset), aliveMobs, bossMobs, activated, cleared, roomName,
+            waveNumbers, currentWaveIndex, nextWaveDelayTicks, bossInCurrentWave);
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save RoomController at {}: {}", worldPosition, err))
@@ -470,6 +586,11 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     activated = state.activated();
                     cleared = state.cleared();
                     roomName = state.roomName();
+                    waveNumbers.clear();
+                    waveNumbers.addAll(state.waveNumbers());
+                    currentWaveIndex = state.currentWaveIndex();
+                    nextWaveDelayTicks = state.nextWaveDelayTicks();
+                    bossInCurrentWave = state.bossInCurrentWave();
                 });
         }
     }
