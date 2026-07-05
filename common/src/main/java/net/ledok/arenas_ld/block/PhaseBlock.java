@@ -25,12 +25,14 @@ import org.jetbrains.annotations.Nullable;
 
 public class PhaseBlock extends BaseEntityBlock {
     public static final BooleanProperty SOLID = BooleanProperty.create("solid");
+    /** Open-but-marked: no collision, but rendered orange because the room beyond isn't cleared yet. */
+    public static final BooleanProperty ARMED = BooleanProperty.create("armed");
 
     public static final MapCodec<PhaseBlock> CODEC = simpleCodec(PhaseBlock::new);
 
     public PhaseBlock(Properties properties) {
         super(properties);
-        this.registerDefaultState(this.stateDefinition.any().setValue(SOLID, true));
+        this.registerDefaultState(this.stateDefinition.any().setValue(SOLID, true).setValue(ARMED, false));
     }
 
     @Override
@@ -40,7 +42,7 @@ public class PhaseBlock extends BaseEntityBlock {
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<net.minecraft.world.level.block.Block, BlockState> builder) {
-        builder.add(SOLID);
+        builder.add(SOLID, ARMED);
     }
 
     @Override
@@ -75,8 +77,9 @@ public class PhaseBlock extends BaseEntityBlock {
 
     @Override
     public RenderShape getRenderShape(BlockState state) {
-        // Fully disappear while phased out (open / cleared); only the active, solid barrier renders.
-        return state.getValue(SOLID) ? RenderShape.MODEL : RenderShape.INVISIBLE;
+        // Solid barrier renders red; an open door renders orange while ARMED (uncleared room
+        // beyond) and fully disappears once the room beyond is cleared.
+        return state.getValue(SOLID) || state.getValue(ARMED) ? RenderShape.MODEL : RenderShape.INVISIBLE;
     }
 
     @Nullable

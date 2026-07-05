@@ -47,6 +47,9 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
     private BlockPos entranceOffset = BlockPos.ZERO;
     private ResourceKey<Level> entranceDimension = Level.OVERWORLD;
     private final List<BlockPos> roomOffsets = new ArrayList<>();
+    /** Branching mode markers: the room players enter first, and the room whose clear wins the run. */
+    @Nullable private BlockPos startRoomOffset = null;
+    @Nullable private BlockPos finalRoomOffset = null;
 
     public DungeonBossSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.DUNGEON_BOSS_SPAWNER_BLOCK_ENTITY, pos, state);
@@ -137,8 +140,34 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
     public boolean removeRoom(BlockPos absolutePos) {
         BlockPos roomOffset = absolutePos.subtract(worldPosition);
         boolean removed = roomOffsets.remove(roomOffset);
-        if (removed) markDirtyAndSync();
+        if (removed) {
+            if (roomOffset.equals(startRoomOffset)) startRoomOffset = null;
+            if (roomOffset.equals(finalRoomOffset)) finalRoomOffset = null;
+            markDirtyAndSync();
+        }
         return removed;
+    }
+
+    @Nullable
+    public BlockPos getAbsoluteStartRoomPos() {
+        return startRoomOffset == null ? null : worldPosition.offset(startRoomOffset);
+    }
+
+    @Nullable
+    public BlockPos getAbsoluteFinalRoomPos() {
+        return finalRoomOffset == null ? null : worldPosition.offset(finalRoomOffset);
+    }
+
+    /** Toggle semantics: marking the already-marked room clears the marker; marking another moves it. */
+    public void setRoomMarker(BlockPos absoluteRoomPos, boolean isFinal) {
+        BlockPos roomOffset = absoluteRoomPos.subtract(worldPosition);
+        if (!roomOffsets.contains(roomOffset)) return;
+        if (isFinal) {
+            finalRoomOffset = roomOffset.equals(finalRoomOffset) ? null : roomOffset;
+        } else {
+            startRoomOffset = roomOffset.equals(startRoomOffset) ? null : roomOffset;
+        }
+        markDirtyAndSync();
     }
 
     public boolean moveRoom(int from, int to) {
@@ -153,6 +182,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
     public void clearRooms() {
         if (!roomOffsets.isEmpty()) {
             roomOffsets.clear();
+            startRoomOffset = null;
+            finalRoomOffset = null;
             markDirtyAndSync();
         }
     }
@@ -200,20 +231,26 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         EntityDefinition entity,
         BlockPos entranceOffset,
         ResourceKey<Level> entranceDim,
-        List<BlockPos> roomOffsets
+        List<BlockPos> roomOffsets,
+        Optional<BlockPos> startRoomOffset,
+        Optional<BlockPos> finalRoomOffset
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             EntityDefinition.CODEC.fieldOf("entity").forGetter(State::entity),
             BlockPos.CODEC.fieldOf("entranceOffset").forGetter(State::entranceOffset),
             ResourceKey.codec(Registries.DIMENSION).fieldOf("entranceDim").forGetter(State::entranceDim),
-            BlockPos.CODEC.listOf().fieldOf("roomOffsets").forGetter(State::roomOffsets)
+            BlockPos.CODEC.listOf().fieldOf("roomOffsets").forGetter(State::roomOffsets),
+            BlockPos.CODEC.optionalFieldOf("startRoomOffset").forGetter(State::startRoomOffset),
+            BlockPos.CODEC.optionalFieldOf("finalRoomOffset").forGetter(State::finalRoomOffset)
         ).apply(i, State::new));
     }
 
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
-        State.CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), new State(entityDefinition, entranceOffset, entranceDimension, roomOffsets))
+        State.CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE),
+                new State(entityDefinition, entranceOffset, entranceDimension, roomOffsets,
+                    Optional.ofNullable(startRoomOffset), Optional.ofNullable(finalRoomOffset)))
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save DungeonBossSpawner at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
@@ -232,6 +269,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
                     this.entranceDimension = state.entranceDim();
                     this.roomOffsets.clear();
                     this.roomOffsets.addAll(state.roomOffsets());
+                    this.startRoomOffset = state.startRoomOffset().orElse(null);
+                    this.finalRoomOffset = state.finalRoomOffset().orElse(null);
                 });
         }
     }
@@ -259,6 +298,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
 
     @Override
     public DungeonBossSpawnerData getScreenOpeningData(ServerPlayer player) {
-        return new DungeonBossSpawnerData(worldPosition, entityDefinition.mobId(), entityDefinition.wave(), getRooms(), getRoomNames());
+        return new DungeonBossSpawnerData(worldPosition, entityDefinition.mobId(), entityDefinition.wave(),
+            getRooms(), getRoomNames(),
+            Optional.ofNullable(getAbsoluteStartRoomPos()), Optional.ofNullable(getAbsoluteFinalRoomPos()));
     }
 }

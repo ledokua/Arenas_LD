@@ -18,13 +18,7 @@ public class DungeonBossSpawnerScreenHandler extends AbstractContainerMenu {
     }
 
     public DungeonBossSpawnerScreenHandler(int syncId, Inventory playerInventory, net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity blockEntity) {
-        this(syncId, playerInventory, new DungeonBossSpawnerData(
-            blockEntity.getBlockPos(),
-            blockEntity.getEntityDefinition().mobId(),
-            blockEntity.getEntityDefinition().wave(),
-            blockEntity.getRooms(),
-            blockEntity.getRoomNames()
-        ));
+        this(syncId, playerInventory, blockEntity.getScreenOpeningData(null));
     }
 
     public BlockPos getBlockPos() { return data.blockPos(); }
@@ -32,6 +26,8 @@ public class DungeonBossSpawnerScreenHandler extends AbstractContainerMenu {
     public int getWave() { return data.wave(); }
     public List<BlockPos> getRooms() { return data.rooms(); }
     public List<String> getRoomNames() { return data.roomNames(); }
+    public java.util.Optional<BlockPos> getStartRoom() { return data.startRoom(); }
+    public java.util.Optional<BlockPos> getFinalRoom() { return data.finalRoom(); }
 
     public void applyData(DungeonBossSpawnerData data) {
         this.data = data;

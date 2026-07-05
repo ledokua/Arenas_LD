@@ -51,8 +51,8 @@ public class PhaseBlockEntity extends BlockEntity {
         boolean shouldBeSolid = !allSpawnersWon;
 
         if (state.getValue(PhaseBlock.SOLID) != shouldBeSolid) {
-            world.setBlock(pos, state.setValue(PhaseBlock.SOLID, shouldBeSolid), 3);
-            be.propagateState(shouldBeSolid, new ArrayList<>());
+            world.setBlock(pos, state.setValue(PhaseBlock.SOLID, shouldBeSolid).setValue(PhaseBlock.ARMED, false), 3);
+            be.propagateState(shouldBeSolid, false, new ArrayList<>());
         }
     }
 
@@ -79,6 +79,10 @@ public class PhaseBlockEntity extends BlockEntity {
     }
 
     public void propagateState(boolean solid, List<BlockPos> visited) {
+        propagateState(solid, false, visited);
+    }
+
+    public void propagateState(boolean solid, boolean armed, List<BlockPos> visited) {
         if (visited.contains(getBlockPos())) {
             return;
         }
@@ -88,9 +92,11 @@ public class PhaseBlockEntity extends BlockEntity {
             BlockPos neighborPos = getBlockPos().relative(direction, 1);
             if (level.isLoaded(neighborPos) && level.getBlockEntity(neighborPos) instanceof PhaseBlockEntity neighbor) {
                 BlockState neighborState = level.getBlockState(neighborPos);
-                if (neighborState.getValue(PhaseBlock.SOLID) != solid) {
-                    level.setBlock(neighborPos, neighborState.setValue(PhaseBlock.SOLID, solid), 3);
-                    neighbor.propagateState(solid, visited);
+                if (neighborState.getValue(PhaseBlock.SOLID) != solid
+                        || neighborState.getValue(PhaseBlock.ARMED) != armed) {
+                    level.setBlock(neighborPos,
+                        neighborState.setValue(PhaseBlock.SOLID, solid).setValue(PhaseBlock.ARMED, armed), 3);
+                    neighbor.propagateState(solid, armed, visited);
                 }
             }
         }

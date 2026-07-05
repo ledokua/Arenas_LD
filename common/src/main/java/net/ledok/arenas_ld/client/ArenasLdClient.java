@@ -57,6 +57,7 @@ public class ArenasLdClient {
         BlockRenderLayerMap.INSTANCE.putBlock(BlockRegistry.PHASE_BLOCK, RenderType.translucent());
 
         SelectionOverlayRenderer.register();
+        SpawnTelegraphRenderer.register();
 
         ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> {
@@ -79,6 +80,12 @@ public class ArenasLdClient {
                         screen.applyData(payload.data());
                     }
                 }));
+        ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.SpawnTelegraphPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> {
+                if (context.client().level != null) {
+                    SpawnTelegraphStore.set(payload.positions(), payload.durationTicks(), context.client().level.getGameTime());
+                }
+            }));
         ClientPlayNetworking.registerGlobalReceiver(RoomControllerSnapshotPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.RoomControllerScreen screen

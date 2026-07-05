@@ -59,6 +59,14 @@ public final class DungeonRun {
     private final Map<UUID, Long> disconnectedAt;
     /** Mob HP multiplier from the starting party size — frozen at run start, like the tier config. */
     private double partyHealthMultiplier = 1.0;
+    // Branching-mode progression (legacy linear runs leave these untouched):
+    /** Room the party is locked into (PENDING/ACTIVE), or null while EXPLORING. */
+    @Nullable private BlockPos currentRoomPos = null;
+    private final Set<BlockPos> clearedRooms = new java.util.LinkedHashSet<>();
+    /** Grace countdown before the current room activates; -1 = not pending. */
+    private int pendingGraceTicks = -1;
+    /** Entrance-door block → room lookup for crossing detection; rebuilt lazily, never persisted. */
+    @Nullable private transient Map<BlockPos, BlockPos> entranceDetectionCache = null;
     @Nullable private transient ServerBossEvent dungeonTimeBossBar;
     @Nullable private transient ServerBossEvent closeTimerBossBar;
 
@@ -161,7 +169,13 @@ public final class DungeonRun {
     public boolean hardcoreEnabled() { return hardcoreEnabled; }
     public BlockPos dbsPos() { return dbsPos; }
     public ResourceKey<Level> dbsDimension() { return dbsDimension; }
+    /** Legacy linear progression cursor; branching runs use {@link #currentRoomPos()} instead. */
     public int currentRoomIndex() { return currentRoomIndex; }
+    @Nullable public BlockPos currentRoomPos() { return currentRoomPos; }
+    public Set<BlockPos> clearedRooms() { return Collections.unmodifiableSet(clearedRooms); }
+    public boolean isRoomCleared(BlockPos roomPos) { return clearedRooms.contains(roomPos); }
+    public int pendingGraceTicks() { return pendingGraceTicks; }
+    @Nullable public Map<BlockPos, BlockPos> entranceDetectionCache() { return entranceDetectionCache; }
     public int dungeonTimerTicks() { return dungeonTimerTicks; }
     public int closeTimerTicks() { return closeTimerTicks; }
     public int initialCloseTimerTicks() { return initialCloseTimerTicks; }
@@ -187,6 +201,11 @@ public final class DungeonRun {
     void setPhase(DungeonPhase phase) { this.phase = phase; }
     void setOutcome(DungeonOutcome outcome) { this.outcome = outcome; }
     void setCurrentRoomIndex(int index) { this.currentRoomIndex = index; }
+    void setCurrentRoomPos(@Nullable BlockPos pos) { this.currentRoomPos = pos; }
+    void addClearedRoom(BlockPos pos) { this.clearedRooms.add(pos); }
+    void setPendingGraceTicks(int ticks) { this.pendingGraceTicks = ticks; }
+    void setEntranceDetectionCache(@Nullable Map<BlockPos, BlockPos> cache) { this.entranceDetectionCache = cache; }
+    void invalidateEntranceDetectionCache() { this.entranceDetectionCache = null; }
     void setDungeonTimerTicks(int ticks) { this.dungeonTimerTicks = ticks; }
     void setCloseTimerTicks(int ticks) { this.closeTimerTicks = ticks; }
     void setInitialCloseTimerTicks(int ticks) { this.initialCloseTimerTicks = ticks; }
@@ -236,6 +255,28 @@ public final class DungeonRun {
 
     // ---- Serialization ----
 
+    /** Branching-mode progression snapshot; EMPTY for legacy runs and pre-upgrade saves. */
+    public record RoomProgress(java.util.Optional<BlockPos> currentRoomPos, java.util.List<BlockPos> clearedRooms, int pendingGraceTicks) {
+        public static final RoomProgress EMPTY = new RoomProgress(java.util.Optional.empty(), java.util.List.of(), -1);
+        public static final Codec<RoomProgress> CODEC = RecordCodecBuilder.create(i -> i.group(
+            BlockPos.CODEC.optionalFieldOf("currentRoomPos").forGetter(RoomProgress::currentRoomPos),
+            BlockPos.CODEC.listOf().optionalFieldOf("clearedRooms", java.util.List.of()).forGetter(RoomProgress::clearedRooms),
+            Codec.INT.optionalFieldOf("pendingGraceTicks", -1).forGetter(RoomProgress::pendingGraceTicks)
+        ).apply(i, RoomProgress::new));
+    }
+
+    private RoomProgress snapshotRoomProgress() {
+        return new RoomProgress(java.util.Optional.ofNullable(currentRoomPos),
+            java.util.List.copyOf(clearedRooms), pendingGraceTicks);
+    }
+
+    private void applyRoomProgress(RoomProgress progress) {
+        this.currentRoomPos = progress.currentRoomPos().orElse(null);
+        this.clearedRooms.clear();
+        this.clearedRooms.addAll(progress.clearedRooms());
+        this.pendingGraceTicks = progress.pendingGraceTicks();
+    }
+
     /** The original 16 fields — kept in their own group because DFU caps group() at 16 entries. */
     private static final com.mojang.serialization.MapCodec<DungeonRun> BASE_CODEC = RecordCodecBuilder.mapCodec(instance ->
         instance.group(
@@ -265,9 +306,11 @@ public final class DungeonRun {
     public static final Codec<DungeonRun> CODEC = RecordCodecBuilder.create(instance ->
         instance.group(
             BASE_CODEC.forGetter(run -> run),
-            Codec.DOUBLE.optionalFieldOf("partyHealthMultiplier", 1.0).forGetter(DungeonRun::partyHealthMultiplier)
-        ).apply(instance, (run, partyHealthMultiplier) -> {
+            Codec.DOUBLE.optionalFieldOf("partyHealthMultiplier", 1.0).forGetter(DungeonRun::partyHealthMultiplier),
+            RoomProgress.CODEC.optionalFieldOf("roomProgress", RoomProgress.EMPTY).forGetter(DungeonRun::snapshotRoomProgress)
+        ).apply(instance, (run, partyHealthMultiplier, roomProgress) -> {
             run.setPartyHealthMultiplier(partyHealthMultiplier);
+            run.applyRoomProgress(roomProgress);
             return run;
         })
     );

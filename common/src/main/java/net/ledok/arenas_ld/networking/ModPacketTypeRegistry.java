@@ -93,6 +93,8 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(RoomSetNamePayload.TYPE, RoomSetNamePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomClearRespawnPayload.TYPE, RoomClearRespawnPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomSetRewardPayload.TYPE, RoomSetRewardPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.dungeon.packet.RoomClearEntrancesPayload.TYPE, net.ledok.arenas_ld.dungeon.packet.RoomClearEntrancesPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload.TYPE, net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerEntityDefPayload.TYPE, UpdateMobSpawnerEntityDefPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateDbsEntityDefPayload.TYPE, UpdateDbsEntityDefPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(DbsRemoveRoomPayload.TYPE, DbsRemoveRoomPayload.STREAM_CODEC);
@@ -176,6 +178,7 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playS2C().register(net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload.TYPE, net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload.TYPE, net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RoomControllerSnapshotPayload.TYPE, RoomControllerSnapshotPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(net.ledok.arenas_ld.dungeon.packet.SpawnTelegraphPayload.TYPE, net.ledok.arenas_ld.dungeon.packet.SpawnTelegraphPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(MobSpawnerSnapshotPayload.TYPE, MobSpawnerSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(DungeonBossSpawnerSnapshotPayload.TYPE, DungeonBossSpawnerSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(DungeonControllerAdminSnapshotPayload.TYPE, DungeonControllerAdminSnapshotPayload.STREAM_CODEC);

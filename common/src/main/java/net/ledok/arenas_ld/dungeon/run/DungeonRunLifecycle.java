@@ -82,6 +82,28 @@ public final class DungeonRunLifecycle {
         BlockEntity dbsBe = world.getBlockEntity(dbsPos);
         if (!(dbsBe instanceof DungeonBossSpawnerBlockEntity dbs)) return null;
 
+        // Branching dungeons need explicit Start/Final markers before a run may begin.
+        if (isBranching(world, dbs)) {
+            BlockPos startRoom = dbs.getAbsoluteStartRoomPos();
+            BlockPos finalRoom = dbs.getAbsoluteFinalRoomPos();
+            String errorKey = null;
+            if (startRoom == null || finalRoom == null) {
+                errorKey = "message.arenas_ld.dungeon.no_start_final_marker";
+            } else if (!(world.getBlockEntity(startRoom) instanceof RoomControllerBlockEntity startController)
+                    || startController.getEntranceOffsets().isEmpty()) {
+                errorKey = "message.arenas_ld.dungeon.start_room_no_entrance";
+            }
+            if (errorKey != null) {
+                for (UUID uuid : partyUuids) {
+                    ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+                    if (player != null) {
+                        player.sendSystemMessage(Component.translatable(errorKey).withStyle(ChatFormatting.RED));
+                    }
+                }
+                return null;
+            }
+        }
+
         forceLoadChunksForRun(world, dbsPos);
 
         TierConfig tierConfig = controller.getTierConfigs().getOrDefault(tier, TierConfig.defaultFor(tier));
@@ -121,6 +143,13 @@ public final class DungeonRunLifecycle {
             if (roomBe instanceof RoomControllerBlockEntity roomController) {
                 roomController.reset(world);
             }
+        }
+
+        // Branching: the start room begins like any other — its entrance opens (armed/orange:
+        // the room beyond isn't cleared), players walk in.
+        if (isBranching(world, dbs)
+                && world.getBlockEntity(dbs.getAbsoluteStartRoomPos()) instanceof RoomControllerBlockEntity startRoom) {
+            startRoom.openEntranceDoorsArmed(world);
         }
 
         controller.startRun(dbsPos, run);
@@ -185,6 +214,13 @@ public final class DungeonRunLifecycle {
             return;
         }
 
+        if (isBranching(world, dbs)) {
+            tickBranching(world, controller, run, dbs);
+            tickDownedPlayers(world, controller, run);
+            tickDisconnectedPlayers(world, controller, run);
+            return;
+        }
+
         List<BlockPos> rooms = dbs.getRooms();
         if (run.currentRoomIndex() >= rooms.size()) {
             handleWin(world, controller, run);
@@ -224,6 +260,182 @@ public final class DungeonRunLifecycle {
         tickDownedPlayers(world, controller, run);
         tickDisconnectedPlayers(world, controller, run);
         updateDungeonTimeBossBar(world, run, room.getAliveMobs().size(), room.getWaveDisplay(), room.getTotalWaves());
+    }
+
+    /** Branching mode iff any room has entrance doors linked; legacy dungeons keep the index walk. */
+    private static boolean isBranching(ServerLevel world, DungeonBossSpawnerBlockEntity dbs) {
+        for (BlockPos roomPos : dbs.getRooms()) {
+            if (world.getBlockEntity(roomPos) instanceof RoomControllerBlockEntity room
+                    && !room.getEntranceOffsets().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final int ROOM_GRACE_TICKS = 60; // 3 s between lock-in and the first wave
+
+    /**
+     * Graph-based progression: EXPLORING (no current room; watch entrance doors) → PENDING
+     * (party locked in, grace countdown, spawn telegraph) → ACTIVE (wave machine) → cleared:
+     * open all doors and either win (final room) or return to EXPLORING.
+     */
+    private static void tickBranching(ServerLevel world, DungeonControllerBlockEntity controller,
+                                      DungeonRun run, DungeonBossSpawnerBlockEntity dbs) {
+        BlockPos current = run.currentRoomPos();
+
+        // ---- EXPLORING ----
+        if (current == null) {
+            Map<BlockPos, BlockPos> detection = run.entranceDetectionCache();
+            if (detection == null) {
+                RoomGraph graph = RoomGraph.build(world, dbs);
+                detection = graph.buildEntranceDetectionMap(roomPos ->
+                    world.getBlockEntity(roomPos) instanceof RoomControllerBlockEntity room
+                        && !room.isActivated() && !room.isCleared());
+                run.setEntranceDetectionCache(detection);
+            }
+            for (UUID uuid : run.activeParticipantUuids()) {
+                ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+                if (player == null || player.level() != world) continue;
+                BlockPos hit = detection.get(player.blockPosition());
+                if (hit == null) {
+                    hit = detection.get(BlockPos.containing(player.getEyePosition()));
+                }
+                if (hit != null) {
+                    beginRoomEntry(world, run, hit, player);
+                    break; // one room per run; next tick we're PENDING
+                }
+            }
+            updateDungeonTimeBossBarNamed(world, run, exploreBossBarName(run, dbs));
+            return;
+        }
+
+        BlockEntity roomBe = world.getBlockEntity(current);
+        if (!(roomBe instanceof RoomControllerBlockEntity room)) {
+            // Controller broken/removed mid-run: treat as cleared so the party isn't caged.
+            ArenasLdMod.LOGGER.warn("Dungeon run at {}: current room {} lost its controller; auto-clearing",
+                run.dbsPos(), current);
+            finishRoom(world, controller, run, dbs, current, null);
+            return;
+        }
+
+        // ---- PENDING (grace countdown) ----
+        if (run.pendingGraceTicks() > 0) {
+            run.setPendingGraceTicks(run.pendingGraceTicks() - 1);
+            if (run.pendingGraceTicks() == 0) {
+                run.setPendingGraceTicks(-1);
+                room.activateOrAutoClear(world, run.resolvedTierConfig(), run.partyHealthMultiplier());
+                if (room.isCleared()) {
+                    finishRoom(world, controller, run, dbs, current, room);
+                    return;
+                }
+                for (UUID uuid : room.getAliveMobs()) {
+                    ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
+                }
+                net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+                    Component.translatable("title.arenas_ld.dungeon.go").withStyle(ChatFormatting.RED), null,
+                    net.minecraft.sounds.SoundEvents.NOTE_BLOCK_PLING.value(), 1.0f, 1.6f);
+            } else {
+                int graceSeconds = (run.pendingGraceTicks() + 19) / 20;
+                updateDungeonTimeBossBarNamed(world, run, Component.translatable(
+                    "boss_bar.arenas_ld.dungeon_time_ready", formatBossBarTime(run), graceSeconds));
+                return;
+            }
+        }
+
+        // ---- ACTIVE (wave machine, mirrors the legacy activated branch) ----
+        room.refreshAliveMobs(world);
+        for (UUID uuid : room.tickWaveProgression(world, run.resolvedTierConfig(), run.partyHealthMultiplier())) {
+            ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
+        }
+        if (room.pollWaveCountdownStarted()) {
+            sendTelegraph(world, run, room.getUpcomingWaveSpawnPositions(world), ROOM_GRACE_TICKS);
+        }
+        if (room.isCleared()) {
+            finishRoom(world, controller, run, dbs, current, room);
+            return;
+        }
+        updateDungeonTimeBossBar(world, run, room.getAliveMobs().size(), room.getWaveDisplay(), room.getTotalWaves());
+    }
+
+    /** Locks the party into the entered room and starts the grace countdown. */
+    private static void beginRoomEntry(ServerLevel world, DungeonRun run, BlockPos roomPos, ServerPlayer enterer) {
+        if (!(world.getBlockEntity(roomPos) instanceof RoomControllerBlockEntity room)) {
+            return;
+        }
+        run.setCurrentRoomPos(roomPos);
+        run.setPendingGraceTicks(ROOM_GRACE_TICKS);
+        run.invalidateEntranceDetectionCache();
+        // Lock-in. Shared entrance blocks also close the previous room's exit — intended.
+        room.closeAllDoors(world);
+
+        BlockPos respawn = room.getRespawnPos();
+        for (UUID uuid : run.activeParticipantUuids()) {
+            boolean isEnterer = uuid.equals(enterer.getUUID());
+            if (isEnterer && respawn == null) {
+                continue; // no respawn point: the enterer stays put, others gather on them
+            }
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            if (player == null) continue;
+            if (respawn != null) {
+                player.teleportTo(world, respawn.getX() + 0.5, respawn.getY(), respawn.getZ() + 0.5,
+                    player.getYRot(), player.getXRot());
+            } else if (!isEnterer) {
+                player.teleportTo(world, enterer.getX(), enterer.getY(), enterer.getZ(),
+                    player.getYRot(), player.getXRot());
+            }
+        }
+
+        net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+            Component.translatable("title.arenas_ld.dungeon.get_ready").withStyle(ChatFormatting.YELLOW), null,
+            net.minecraft.sounds.SoundEvents.NOTE_BLOCK_BELL.value(), 0.8f, 0.9f);
+        sendTelegraph(world, run, room.getFirstWaveSpawnPositions(world), ROOM_GRACE_TICKS);
+    }
+
+    /** Room cleared (or unrecoverable): grant reward, unlock, and advance — win if it was the final room. */
+    private static void finishRoom(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run,
+                                   DungeonBossSpawnerBlockEntity dbs, BlockPos roomPos,
+                                   @Nullable RoomControllerBlockEntity room) {
+        if (room != null) {
+            grantRoomReward(world, controller, run, room);
+            room.openAllDoors(world);
+        }
+        run.addClearedRoom(roomPos);
+        run.setCurrentRoomPos(null);
+        run.setPendingGraceTicks(-1);
+        run.invalidateEntranceDetectionCache();
+        if (roomPos.equals(dbs.getAbsoluteFinalRoomPos())) {
+            handleWin(world, controller, run);
+            return;
+        }
+        net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
+            null, null, net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, 0.6f, 1.4f);
+    }
+
+    private static Component exploreBossBarName(DungeonRun run, DungeonBossSpawnerBlockEntity dbs) {
+        return Component.translatable("boss_bar.arenas_ld.dungeon_time_explore",
+            formatBossBarTime(run), run.clearedRooms().size(), dbs.getRooms().size());
+    }
+
+    private static String formatBossBarTime(DungeonRun run) {
+        int secondsLeft = Math.max(0, (run.dungeonTimerTicks() + 19) / 20);
+        return String.format("%d:%02d", secondsLeft / 60, secondsLeft % 60);
+    }
+
+    /** Sends the spawn-telegraph highlight to every non-removed online participant. */
+    private static void sendTelegraph(ServerLevel world, DungeonRun run, List<BlockPos> positions, int ticks) {
+        if (positions.isEmpty()) {
+            return;
+        }
+        net.ledok.arenas_ld.dungeon.packet.SpawnTelegraphPayload payload =
+            new net.ledok.arenas_ld.dungeon.packet.SpawnTelegraphPayload(positions, ticks);
+        for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
+            if (entry.getValue().status() == ParticipantStatus.REMOVED) continue;
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
+            if (player != null) {
+                net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(player, payload);
+            }
+        }
     }
 
     private static void tickClosing(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
@@ -300,7 +512,10 @@ public final class DungeonRunLifecycle {
     static void handleLoss(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, DungeonOutcome reason) {
         BlockEntity dbsBe = world.getBlockEntity(run.dbsPos());
         if (dbsBe instanceof DungeonBossSpawnerBlockEntity dbs && !dbs.getRooms().isEmpty() && run.currentRoomIndex() < dbs.getRooms().size()) {
-            BlockPos lastRoomPos = dbs.getRooms().get(dbs.getRooms().size() - 1);
+            // Branching dungeons name their boss room explicitly; legacy = last room in the list.
+            BlockPos lastRoomPos = dbs.getAbsoluteFinalRoomPos() != null
+                ? dbs.getAbsoluteFinalRoomPos()
+                : dbs.getRooms().get(dbs.getRooms().size() - 1);
             BlockEntity bossRoomBe = world.getBlockEntity(lastRoomPos);
             if (bossRoomBe instanceof RoomControllerBlockEntity bossRoom) {
                 for (UUID bossUuid : new ArrayList<>(bossRoom.getAliveMobs())) {
@@ -512,6 +727,13 @@ public final class DungeonRunLifecycle {
     }
 
     private static void updateDungeonTimeBossBar(ServerLevel world, DungeonRun run, int mobsLeftInRoom, int waveDisplay, int totalWaves) {
+        String timeLeft = formatBossBarTime(run);
+        updateDungeonTimeBossBarNamed(world, run, totalWaves > 1
+            ? Component.translatable("boss_bar.arenas_ld.dungeon_time_waves", timeLeft, waveDisplay, totalWaves, mobsLeftInRoom)
+            : Component.translatable("boss_bar.arenas_ld.dungeon_time", timeLeft, mobsLeftInRoom));
+    }
+
+    private static void updateDungeonTimeBossBarNamed(ServerLevel world, DungeonRun run, Component name) {
         ServerBossEvent bar = run.getDungeonTimeBossBar();
         if (bar == null) {
             bar = new ServerBossEvent(
@@ -526,13 +748,9 @@ public final class DungeonRunLifecycle {
             ? Math.max(0.0F, Math.min(1.0F, (float) run.dungeonTimerTicks() / (float) totalTicks))
             : 0.0F;
         bar.setProgress(progress);
-        int secondsLeft = Math.max(0, (run.dungeonTimerTicks() + 19) / 20); // ceil to whole seconds
-        String timeLeft = String.format("%d:%02d", secondsLeft / 60, secondsLeft % 60);
         // ServerBossEvent.setName only broadcasts when the component actually changes,
         // so setting this every tick costs a packet at most once per second.
-        bar.setName(totalWaves > 1
-            ? Component.translatable("boss_bar.arenas_ld.dungeon_time_waves", timeLeft, waveDisplay, totalWaves, mobsLeftInRoom)
-            : Component.translatable("boss_bar.arenas_ld.dungeon_time", timeLeft, mobsLeftInRoom));
+        bar.setName(name);
         syncBarViewers(world, run, bar);
     }
 
@@ -787,6 +1005,25 @@ public final class DungeonRunLifecycle {
     /** Absolute respawn position of the run's active room, or {@code null} if the active room has none. */
     @Nullable
     private static BlockPos activeRoomRespawnPos(ServerLevel world, DungeonBossSpawnerBlockEntity dbs, DungeonRun run) {
+        // Branching: the locked/pending room is authoritative; while EXPLORING, fall back to the
+        // most recently cleared room that has a respawn point, so respawns track the party's
+        // progress instead of dumping players back at the dungeon entrance.
+        BlockPos branchingRoom = run.currentRoomPos();
+        if (branchingRoom != null) {
+            return world.getBlockEntity(branchingRoom) instanceof RoomControllerBlockEntity room
+                ? room.getRespawnPos()
+                : null;
+        }
+        if (isBranching(world, dbs)) {
+            List<BlockPos> cleared = new ArrayList<>(run.clearedRooms());
+            for (int i = cleared.size() - 1; i >= 0; i--) {
+                if (world.getBlockEntity(cleared.get(i)) instanceof RoomControllerBlockEntity clearedRoom
+                        && clearedRoom.getRespawnPos() != null) {
+                    return clearedRoom.getRespawnPos();
+                }
+            }
+            return null;
+        }
         List<BlockPos> rooms = dbs.getRooms();
         int index = run.currentRoomIndex();
         if (index < 0 || index >= rooms.size()) {
@@ -1028,6 +1265,9 @@ public final class DungeonRunLifecycle {
                 }
                 for (BlockPos doorPos : roomController.getDoorPositions()) {
                     chunks.add(new ChunkPos(doorPos));
+                }
+                for (BlockPos entrancePos : roomController.getEntrancePositions()) {
+                    chunks.add(new ChunkPos(entrancePos));
                 }
             }
         }

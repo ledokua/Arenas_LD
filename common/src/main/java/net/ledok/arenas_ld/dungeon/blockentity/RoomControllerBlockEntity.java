@@ -46,6 +46,9 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
 
     private final List<BlockPos> spawnerOffsets = new ArrayList<>();
     private final List<BlockPos> doorOffsets = new ArrayList<>();
+    /** Entrance doors: PhaseBlocks players cross to enter this room. A block shared with another
+     *  room's exit door defines a graph edge (that room → this room) for branching dungeons. */
+    private final List<BlockPos> entranceOffsets = new ArrayList<>();
     /** Single respawn point for this room, relative to the controller. Players downed while this room is active respawn here. */
     @Nullable private BlockPos respawnOffset = null;
     private final Set<UUID> aliveMobs = new HashSet<>();
@@ -60,6 +63,9 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     /** True while the current wave has a boss spawn; when all of the wave's bosses die,
      *  its remaining adds are discarded instead of requiring them to be killed too. */
     private boolean bossInCurrentWave = false;
+    /** Set for one poll when a between-wave countdown begins, so the lifecycle can telegraph
+     *  the next wave's spawn positions to clients. Transient — not persisted. */
+    private boolean waveCountdownJustStarted = false;
     private boolean activated = false;
     private boolean cleared = false;
     private String roomName = "";
@@ -96,6 +102,18 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
 
     public List<BlockPos> getDoorOffsets() {
         return Collections.unmodifiableList(doorOffsets);
+    }
+
+    public List<BlockPos> getEntrancePositions() {
+        List<BlockPos> absolute = new ArrayList<>(entranceOffsets.size());
+        for (BlockPos entranceOffset : entranceOffsets) {
+            absolute.add(worldPosition.offset(entranceOffset));
+        }
+        return Collections.unmodifiableList(absolute);
+    }
+
+    public List<BlockPos> getEntranceOffsets() {
+        return Collections.unmodifiableList(entranceOffsets);
     }
 
     /** Absolute respawn position for this room, or {@code null} if none is configured. */
@@ -230,6 +248,34 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
     }
 
+    /** Returns true if the entrance door was added (false if already present). */
+    public boolean addEntranceDoor(BlockPos absolutePos) {
+        BlockPos entranceOffset = absolutePos.subtract(worldPosition);
+        if (entranceOffsets.contains(entranceOffset)) {
+            return false;
+        }
+        entranceOffsets.add(entranceOffset);
+        markDirtyAndSync();
+        return true;
+    }
+
+    /** Returns true if the entrance door was removed (false if not present). */
+    public boolean removeEntranceDoor(BlockPos absolutePos) {
+        BlockPos entranceOffset = absolutePos.subtract(worldPosition);
+        boolean removed = entranceOffsets.remove(entranceOffset);
+        if (removed) {
+            markDirtyAndSync();
+        }
+        return removed;
+    }
+
+    public void clearEntranceDoors() {
+        if (!entranceOffsets.isEmpty()) {
+            entranceOffsets.clear();
+            markDirtyAndSync();
+        }
+    }
+
     public void setRespawnPos(@Nullable BlockPos absolutePos) {
         BlockPos newRespawnOffset = absolutePos == null ? null : absolutePos.subtract(worldPosition);
         if (!Objects.equals(respawnOffset, newRespawnOffset)) {
@@ -347,6 +393,22 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         return 0;
     }
 
+    /**
+     * Like {@link #activate(ServerLevel, TierConfig, double)}, but for lock-in rooms: a room that
+     * yields 0 mobs (no spawners, all broken) is marked activated + cleared instead of deferring,
+     * because under lock-in a deferred room is a cage with no key.
+     */
+    public int activateOrAutoClear(ServerLevel world, TierConfig tier, double partyHealthMultiplier) {
+        int spawned = activate(world, tier, partyHealthMultiplier);
+        if (spawned == 0 && !activated) {
+            markActivated();
+            markCleared();
+            ArenasLdMod.LOGGER.warn(
+                "RoomController at {} auto-cleared under lock-in (0 mobs spawned)", worldPosition);
+        }
+        return spawned;
+    }
+
     /** Sorted distinct wave numbers across all linked spawners; empty if no linked position is a spawner. */
     private List<Integer> collectWaveNumbers(ServerLevel world) {
         Set<Integer> waves = new java.util.TreeSet<>();
@@ -411,6 +473,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
         if (nextWaveDelayTicks < 0) {
             nextWaveDelayTicks = NEXT_WAVE_DELAY_TICKS;
+            waveCountdownJustStarted = true;
             setChanged();
             return List.of();
         }
@@ -430,6 +493,53 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         return List.of();
     }
 
+    /** True exactly once after a between-wave countdown starts; reading it resets the flag. */
+    public boolean pollWaveCountdownStarted() {
+        boolean started = waveCountdownJustStarted;
+        waveCountdownJustStarted = false;
+        return started;
+    }
+
+    /**
+     * Configured spawn positions of the given wave, for client-side telegraphing. Approximation:
+     * every spawn offset of matching mob spawners (or the spawner itself when none are set) plus
+     * the boss spawn position of matching boss spawners.
+     */
+    public List<BlockPos> getWaveSpawnPositions(ServerLevel world, int waveNumber) {
+        List<BlockPos> positions = new ArrayList<>();
+        for (BlockPos absolutePos : getSpawnerPositions()) {
+            BlockEntity be = world.getBlockEntity(absolutePos);
+            if (be instanceof MobSpawnerBlockEntity mobSpawner) {
+                if (Math.max(1, mobSpawner.getEntityDefinition().wave()) != waveNumber) continue;
+                List<BlockPos> offsets = mobSpawner.getEntityDefinition().spawnOffsets();
+                if (offsets.isEmpty()) {
+                    positions.add(absolutePos.above());
+                } else {
+                    for (BlockPos offset : offsets) {
+                        positions.add(absolutePos.offset(offset));
+                    }
+                }
+            } else if (be instanceof DungeonBossSpawnerBlockEntity bossSpawner) {
+                if (Math.max(1, bossSpawner.getEntityDefinition().wave()) != waveNumber) continue;
+                positions.add(BlockPos.containing(net.ledok.arenas_ld.util.EntityEquipmentHelper
+                    .resolveBossSpawnPos(absolutePos, bossSpawner.getEntityDefinition().spawnOffsets())));
+            }
+        }
+        return positions;
+    }
+
+    /** Spawn positions of the first wave that will actually fire on activation. */
+    public List<BlockPos> getFirstWaveSpawnPositions(ServerLevel world) {
+        List<Integer> waves = collectWaveNumbers(world);
+        return waves.isEmpty() ? List.of() : getWaveSpawnPositions(world, waves.get(0));
+    }
+
+    /** Spawn positions of the next configured wave, or empty when on the final wave. */
+    public List<BlockPos> getUpcomingWaveSpawnPositions(ServerLevel world) {
+        if (waveNumbers.isEmpty() || isOnFinalWave()) return List.of();
+        return getWaveSpawnPositions(world, waveNumbers.get(currentWaveIndex + 1));
+    }
+
     /**
      * Despawn any alive mobs this room spawned, clear runtime state, close the door.
      * Idempotent: safe to call on a not-yet-activated or already-reset room.
@@ -443,17 +553,17 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);
         }
         clearRuntimeState();
-        closeDoor(world);
+        closeAllDoors(world);
     }
 
     /**
      * Open the room's door by setting the phase block's SOLID property to false.
      * No-op if no door is set, the door position isn't loaded, or the block at that position
-     * isn't a PhaseBlock.
+     * isn't a PhaseBlock. Legacy (linear) path: opens fully invisible.
      */
     public void openDoor(ServerLevel world) {
         for (BlockPos doorOffset : doorOffsets) {
-            setDoorSolid(world, worldPosition.offset(doorOffset), false);
+            setDoorState(world, worldPosition.offset(doorOffset), false, false);
         }
     }
 
@@ -463,11 +573,39 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
      */
     public void closeDoor(ServerLevel world) {
         for (BlockPos doorOffset : doorOffsets) {
-            setDoorSolid(world, worldPosition.offset(doorOffset), true);
+            setDoorState(world, worldPosition.offset(doorOffset), true, false);
         }
     }
 
-    private void setDoorSolid(ServerLevel world, BlockPos doorAbsolute, boolean solid) {
+    /** Open this room's entrance doors ARMED (orange): passable, but this room isn't cleared yet. */
+    public void openEntranceDoorsArmed(ServerLevel world) {
+        for (BlockPos entranceOffset : entranceOffsets) {
+            setDoorState(world, worldPosition.offset(entranceOffset), false, true);
+        }
+    }
+
+    /**
+     * Open every door of this room when it clears: entrances turn fully invisible (both sides
+     * beaten), exits open ARMED (orange) because the rooms beyond aren't cleared yet.
+     */
+    public void openAllDoors(ServerLevel world) {
+        for (BlockPos doorOffset : doorOffsets) {
+            setDoorState(world, worldPosition.offset(doorOffset), false, true);
+        }
+        for (BlockPos entranceOffset : entranceOffsets) {
+            setDoorState(world, worldPosition.offset(entranceOffset), false, false);
+        }
+    }
+
+    /** Close every door of this room — exits and entrances. Called on lock-in and reset. */
+    public void closeAllDoors(ServerLevel world) {
+        closeDoor(world);
+        for (BlockPos entranceOffset : entranceOffsets) {
+            setDoorState(world, worldPosition.offset(entranceOffset), true, false);
+        }
+    }
+
+    private void setDoorState(ServerLevel world, BlockPos doorAbsolute, boolean solid, boolean armed) {
         if (!world.isLoaded(doorAbsolute)) return;
         BlockState state = world.getBlockState(doorAbsolute);
         if (!(state.getBlock() instanceof PhaseBlock)) {
@@ -476,10 +614,11 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 worldPosition, doorAbsolute, state.getBlock());
             return;
         }
-        if (state.getValue(PhaseBlock.SOLID) != solid) {
-            world.setBlock(doorAbsolute, state.setValue(PhaseBlock.SOLID, solid), 3);
+        if (state.getValue(PhaseBlock.SOLID) != solid || state.getValue(PhaseBlock.ARMED) != armed) {
+            world.setBlock(doorAbsolute,
+                state.setValue(PhaseBlock.SOLID, solid).setValue(PhaseBlock.ARMED, armed), 3);
             if (world.getBlockEntity(doorAbsolute) instanceof net.ledok.arenas_ld.block.entity.PhaseBlockEntity phaseBlock) {
-                phaseBlock.propagateState(solid, new java.util.ArrayList<>());
+                phaseBlock.propagateState(solid, armed, new java.util.ArrayList<>());
             }
         }
     }
@@ -546,7 +685,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         int currentWaveIndex,
         int nextWaveDelayTicks,
         boolean bossInCurrentWave,
-        RoomRewardConfig roomReward
+        RoomRewardConfig roomReward,
+        List<BlockPos> entranceOffsets
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("spawnerOffsets").forGetter(State::spawnerOffsets),
@@ -567,7 +707,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             Codec.INT.optionalFieldOf("currentWaveIndex", 0).forGetter(State::currentWaveIndex),
             Codec.INT.optionalFieldOf("nextWaveDelayTicks", -1).forGetter(State::nextWaveDelayTicks),
             Codec.BOOL.optionalFieldOf("bossInCurrentWave", false).forGetter(State::bossInCurrentWave),
-            RoomRewardConfig.CODEC.optionalFieldOf("roomReward", RoomRewardConfig.EMPTY).forGetter(State::roomReward)
+            RoomRewardConfig.CODEC.optionalFieldOf("roomReward", RoomRewardConfig.EMPTY).forGetter(State::roomReward),
+            BlockPos.CODEC.listOf().optionalFieldOf("entranceOffsets", List.of()).forGetter(State::entranceOffsets)
         ).apply(i, State::new));
     }
 
@@ -576,7 +717,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         super.saveAdditional(nbt, registries);
         State state = new State(spawnerOffsets, doorOffsets,
             Optional.ofNullable(respawnOffset), aliveMobs, bossMobs, activated, cleared, roomName,
-            waveNumbers, currentWaveIndex, nextWaveDelayTicks, bossInCurrentWave, roomReward);
+            waveNumbers, currentWaveIndex, nextWaveDelayTicks, bossInCurrentWave, roomReward, entranceOffsets);
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save RoomController at {}: {}", worldPosition, err))
@@ -609,6 +750,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     nextWaveDelayTicks = state.nextWaveDelayTicks();
                     bossInCurrentWave = state.bossInCurrentWave();
                     roomReward = state.roomReward();
+                    entranceOffsets.clear();
+                    entranceOffsets.addAll(state.entranceOffsets());
                 });
         }
     }
@@ -650,8 +793,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 entries.add(new RoomControllerData.SpawnerEntry(absolutePos, 1, false, true));
             }
         }
-        return new RoomControllerData(worldPosition, entries, getDoorPositions(), roomName,
-            Optional.ofNullable(getRespawnPos()), roomReward, enumerateLootTables());
+        return new RoomControllerData(worldPosition, entries, getDoorPositions(), getEntrancePositions(),
+            roomName, Optional.ofNullable(getRespawnPos()), roomReward, enumerateLootTables());
     }
 
     /** Sorted loot table ids for the reward screen's autocomplete; empty when called client-side. */

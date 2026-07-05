@@ -39,7 +39,10 @@ public class LinkerItem extends Item {
         CONTROLLER_INSTANCE("item.arenas_ld.linker.mode.controller_instance"),
         DBS_ROOM("item.arenas_ld.linker.mode.dbs_room"),
         ROOM_SPAWNER("item.arenas_ld.linker.mode.room_spawner"),
-        ROOM_DOOR("item.arenas_ld.linker.mode.room_door");
+        // "Exit" in UI/code; the block-entity storage keys stay "door*" for save back-compat.
+        ROOM_EXIT("item.arenas_ld.linker.mode.room_exit"),
+        // Appended last: the mode data component stores an ordinal index.
+        ROOM_ENTRANCE("item.arenas_ld.linker.mode.room_entrance");
 
         private final String translationKey;
 
@@ -72,7 +75,8 @@ public class LinkerItem extends Item {
             case CONTROLLER_INSTANCE -> handleControllerInstanceLinking(world, pos, player, stack, blockEntity, modeData);
             case DBS_ROOM -> handleDbsRoomLinking(world, pos, player, stack, blockEntity, modeData);
             case ROOM_SPAWNER -> handleRoomSpawnerLinking(world, pos, player, stack, blockEntity, modeData);
-            case ROOM_DOOR -> handleRoomDoorLinking(world, pos, player, stack, blockEntity, modeData);
+            case ROOM_EXIT -> handleRoomExitLinking(world, pos, player, stack, blockEntity, modeData);
+            case ROOM_ENTRANCE -> handleRoomEntranceLinking(world, pos, player, stack, blockEntity, modeData);
         };
     }
 
@@ -225,7 +229,7 @@ public class LinkerItem extends Item {
         return InteractionResult.SUCCESS;
     }
 
-    private InteractionResult handleRoomDoorLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, LinkerModeDataComponent modeData) {
+    private InteractionResult handleRoomExitLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, LinkerModeDataComponent modeData) {
         Optional<BlockPos> sourcePosOpt = modeData.mainSpawnerPos();
         Optional<ResourceKey<Level>> sourceDimOpt = modeData.mainSpawnerDimension();
         if (sourcePosOpt.isEmpty() || sourceDimOpt.isEmpty()) {
@@ -234,31 +238,68 @@ public class LinkerItem extends Item {
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.set_main_spawner", pos.toShortString()));
                 return InteractionResult.SUCCESS;
             }
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_door.wrong_blocks"));
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_exit.wrong_blocks"));
             return InteractionResult.SUCCESS;
         }
         if (!sourceDimOpt.get().equals(world.dimension())) {
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_door.wrong_blocks"));
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_exit.wrong_blocks"));
             return InteractionResult.SUCCESS;
         }
 
         ServerLevel sourceWorld = world.getServer().getLevel(sourceDimOpt.get());
         if (sourceWorld == null) {
             clearSelection(stack, modeData);
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_door.wrong_blocks"));
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_exit.wrong_blocks"));
             return InteractionResult.SUCCESS;
         }
 
         BlockEntity sourceBe = sourceWorld.getBlockEntity(sourcePosOpt.get());
         if (!(sourceBe instanceof RoomControllerBlockEntity room) || !(world.getBlockState(pos).getBlock() instanceof PhaseBlock)) {
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_door.wrong_blocks"));
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_exit.wrong_blocks"));
             return InteractionResult.SUCCESS;
         }
 
         boolean added = room.addDoor(pos);
         player.sendSystemMessage(Component.translatable(
-            added ? "message.arenas_ld.linker.room_door.set"
-                : "message.arenas_ld.linker.room_door.duplicate"));
+            added ? "message.arenas_ld.linker.room_exit.set"
+                : "message.arenas_ld.linker.room_exit.duplicate"));
+        return InteractionResult.SUCCESS;
+    }
+
+    private InteractionResult handleRoomEntranceLinking(Level world, BlockPos pos, Player player, ItemStack stack, BlockEntity blockEntity, LinkerModeDataComponent modeData) {
+        Optional<BlockPos> sourcePosOpt = modeData.mainSpawnerPos();
+        Optional<ResourceKey<Level>> sourceDimOpt = modeData.mainSpawnerDimension();
+        if (sourcePosOpt.isEmpty() || sourceDimOpt.isEmpty()) {
+            if (blockEntity instanceof RoomControllerBlockEntity) {
+                selectSource(stack, pos, world.dimension(), modeData);
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.set_main_spawner", pos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_entrance.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+        if (!sourceDimOpt.get().equals(world.dimension())) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_entrance.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        ServerLevel sourceWorld = world.getServer().getLevel(sourceDimOpt.get());
+        if (sourceWorld == null) {
+            clearSelection(stack, modeData);
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_entrance.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        BlockEntity sourceBe = sourceWorld.getBlockEntity(sourcePosOpt.get());
+        if (!(sourceBe instanceof RoomControllerBlockEntity room) || !(world.getBlockState(pos).getBlock() instanceof PhaseBlock)) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_entrance.wrong_blocks"));
+            return InteractionResult.SUCCESS;
+        }
+
+        boolean added = room.addEntranceDoor(pos);
+        player.sendSystemMessage(Component.translatable(
+            added ? "message.arenas_ld.linker.room_entrance.set"
+                : "message.arenas_ld.linker.room_entrance.duplicate"));
         return InteractionResult.SUCCESS;
     }
 

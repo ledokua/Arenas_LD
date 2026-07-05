@@ -16,6 +16,7 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
     private final BlockPos blockPos;
     private List<RoomControllerData.SpawnerEntry> spawners;
     private List<BlockPos> doorPositions;
+    private List<BlockPos> entrancePositions;
     private String roomName;
     private Optional<BlockPos> respawnPos;
     private RoomRewardConfig roomReward;
@@ -43,6 +44,10 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
         return List.copyOf(doorPositions);
     }
 
+    public List<BlockPos> getEntrancePositions() {
+        return List.copyOf(entrancePositions);
+    }
+
     public String getRoomName() {
         return roomName;
     }
@@ -62,6 +67,7 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
     public void applyData(RoomControllerData data) {
         this.spawners = List.copyOf(data.spawners());
         this.doorPositions = List.copyOf(data.doorPositions());
+        this.entrancePositions = List.copyOf(data.entrancePositions());
         this.roomName = data.roomName();
         this.respawnPos = data.respawnPos();
         this.roomReward = data.roomReward();

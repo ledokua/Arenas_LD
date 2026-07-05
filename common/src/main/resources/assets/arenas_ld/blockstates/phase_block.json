@@ -1,9 +1,15 @@
 {
   "variants": {
-    "solid=true": {
+    "solid=true,armed=false": {
       "model": "arenas_ld:block/phase_block_solid"
     },
-    "solid=false": {
+    "solid=true,armed=true": {
+      "model": "arenas_ld:block/phase_block_solid"
+    },
+    "solid=false,armed=true": {
+      "model": "arenas_ld:block/phase_block_armed"
+    },
+    "solid=false,armed=false": {
       "model": "arenas_ld:block/phase_block_unsolid"
     }
   }

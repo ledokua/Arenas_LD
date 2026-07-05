@@ -54,11 +54,15 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
     private static final int ACCENT_DARK = 0xFF6C4FB5;
     private static final int DANGER      = 0xFFE8624A;
 
+    private static final int GOOD = 0xFF86D36C;
+
     private String mobIdValue = "";
     private int waveValue = 1;
     private TextBoxComponent waveField;
     private final List<BlockPos> rooms = new ArrayList<>();
     private final List<String> roomNames = new ArrayList<>();
+    private java.util.Optional<BlockPos> startRoom = java.util.Optional.empty();
+    private java.util.Optional<BlockPos> finalRoom = java.util.Optional.empty();
 
     private FlowLayout contentArea;
     private FlowLayout footerActions;
@@ -197,6 +201,9 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
 
         // Rooms section
         contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.dbs.rooms")));
+        LabelComponent orderHint = Components.label(Component.translatable("gui.arenas_ld.dbs.order_hint"));
+        orderHint.color(Color.ofArgb(INK_DIM));
+        contentArea.child(orderHint);
         contentArea.child(spacer(2));
 
         if (rooms.isEmpty()) {
@@ -285,6 +292,29 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
         coord.color(Color.ofArgb(INK));
         coord.horizontalSizing(Sizing.expand());
         row.child(coord);
+
+        if (startRoom.filter(room::equals).isPresent()) {
+            LabelComponent startBadge = Components.label(Component.translatable("gui.arenas_ld.dbs.badge.start"));
+            startBadge.color(Color.ofArgb(GOOD));
+            row.child(startBadge);
+        }
+        if (finalRoom.filter(room::equals).isPresent()) {
+            LabelComponent finalBadge = Components.label(Component.translatable("gui.arenas_ld.dbs.badge.final"));
+            finalBadge.color(Color.ofArgb(DANGER));
+            row.child(finalBadge);
+        }
+
+        ButtonComponent markStart = smallButton(Component.literal("S"), b ->
+            ClientPlayNetworking.send(new net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload(menu.getBlockPos(), room, false)));
+        markStart.sizing(Sizing.fixed(20), Sizing.fixed(18));
+        markStart.tooltip(Component.translatable("gui.arenas_ld.dbs.room_marker.start"));
+        row.child(markStart);
+
+        ButtonComponent markFinal = smallButton(Component.literal("F"), b ->
+            ClientPlayNetworking.send(new net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload(menu.getBlockPos(), room, true)));
+        markFinal.sizing(Sizing.fixed(20), Sizing.fixed(18));
+        markFinal.tooltip(Component.translatable("gui.arenas_ld.dbs.room_marker.final"));
+        row.child(markFinal);
 
         ButtonComponent up = smallButton(Component.literal("↑"), b ->
             ClientPlayNetworking.send(new DbsMoveRoomPayload(menu.getBlockPos(), index, Math.max(0, index - 1))));
@@ -385,6 +415,8 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
         rooms.addAll(menu.getRooms());
         roomNames.clear();
         roomNames.addAll(menu.getRoomNames());
+        startRoom = menu.getStartRoom();
+        finalRoom = menu.getFinalRoom();
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

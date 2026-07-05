@@ -14,6 +14,7 @@ public record RoomControllerData(
     BlockPos blockPos,
     List<SpawnerEntry> spawners,
     List<BlockPos> doorPositions,
+    List<BlockPos> entrancePositions,
     String roomName,
     Optional<BlockPos> respawnPos,
     RoomRewardConfig roomReward,
@@ -40,6 +41,7 @@ public record RoomControllerData(
         buf.writeBlockPos(data.blockPos());
         SpawnerEntry.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buf, data.spawners());
         BlockPos.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buf, data.doorPositions());
+        BlockPos.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buf, data.entrancePositions());
         buf.writeUtf(data.roomName());
         ByteBufCodecs.optional(BlockPos.STREAM_CODEC).encode(buf, data.respawnPos());
         RoomRewardConfig.STREAM_CODEC.encode(buf, data.roomReward());
@@ -53,6 +55,7 @@ public record RoomControllerData(
         BlockPos blockPos = buf.readBlockPos();
         List<SpawnerEntry> spawners = SpawnerEntry.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buf);
         List<BlockPos> doorPositions = BlockPos.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buf);
+        List<BlockPos> entrancePositions = BlockPos.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buf);
         String roomName = buf.readUtf();
         Optional<BlockPos> respawnPos = ByteBufCodecs.optional(BlockPos.STREAM_CODEC).decode(buf);
         RoomRewardConfig roomReward = RoomRewardConfig.STREAM_CODEC.decode(buf);
@@ -61,6 +64,6 @@ public record RoomControllerData(
         for (int i = 0; i < lootIdCount; i++) {
             knownLootTableIds.add(buf.readUtf());
         }
-        return new RoomControllerData(blockPos, spawners, doorPositions, roomName, respawnPos, roomReward, knownLootTableIds);
+        return new RoomControllerData(blockPos, spawners, doorPositions, entrancePositions, roomName, respawnPos, roomReward, knownLootTableIds);
     }
 }

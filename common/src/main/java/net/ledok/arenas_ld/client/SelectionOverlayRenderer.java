@@ -45,6 +45,7 @@ public final class SelectionOverlayRenderer {
     private static final float[] MAIN_COLOR = {0.96f, 0.69f, 0.26f};   // gold
     private static final float[] TARGET_COLOR = {0.53f, 0.83f, 0.42f}; // green
     private static final float[] RESPAWN_COLOR = {0.30f, 0.80f, 0.90f}; // cyan
+    private static final float[] ENTRANCE_COLOR = {0.95f, 0.45f, 0.20f}; // orange
     private static final float ALPHA = 0.95f;
 
     private SelectionOverlayRenderer() {
@@ -84,7 +85,7 @@ public final class SelectionOverlayRenderer {
         BufferBuilder buffer = Tesselator.getInstance()
             .begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
         for (Box box : boxes) {
-            addBoxEdges(buffer, matrix, box.pos(), box.color());
+            addBoxEdges(buffer, matrix, box.pos(), box.color(), ALPHA);
         }
         MeshData mesh = buffer.build();
         if (mesh != null) {
@@ -97,7 +98,8 @@ public final class SelectionOverlayRenderer {
         poseStack.popPose();
     }
 
-    private static void addBoxEdges(BufferBuilder buffer, Matrix4f matrix, BlockPos pos, float[] color) {
+    /** Shared with SpawnTelegraphRenderer, hence package-private and alpha-parameterized. */
+    static void addBoxEdges(BufferBuilder buffer, Matrix4f matrix, BlockPos pos, float[] color, float alpha) {
         float x0 = pos.getX();
         float y0 = pos.getY();
         float z0 = pos.getZ();
@@ -109,27 +111,27 @@ public final class SelectionOverlayRenderer {
         float b = color[2];
 
         // bottom face
-        edge(buffer, matrix, x0, y0, z0, x1, y0, z0, r, g, b);
-        edge(buffer, matrix, x1, y0, z0, x1, y0, z1, r, g, b);
-        edge(buffer, matrix, x1, y0, z1, x0, y0, z1, r, g, b);
-        edge(buffer, matrix, x0, y0, z1, x0, y0, z0, r, g, b);
+        edge(buffer, matrix, x0, y0, z0, x1, y0, z0, r, g, b, alpha);
+        edge(buffer, matrix, x1, y0, z0, x1, y0, z1, r, g, b, alpha);
+        edge(buffer, matrix, x1, y0, z1, x0, y0, z1, r, g, b, alpha);
+        edge(buffer, matrix, x0, y0, z1, x0, y0, z0, r, g, b, alpha);
         // top face
-        edge(buffer, matrix, x0, y1, z0, x1, y1, z0, r, g, b);
-        edge(buffer, matrix, x1, y1, z0, x1, y1, z1, r, g, b);
-        edge(buffer, matrix, x1, y1, z1, x0, y1, z1, r, g, b);
-        edge(buffer, matrix, x0, y1, z1, x0, y1, z0, r, g, b);
+        edge(buffer, matrix, x0, y1, z0, x1, y1, z0, r, g, b, alpha);
+        edge(buffer, matrix, x1, y1, z0, x1, y1, z1, r, g, b, alpha);
+        edge(buffer, matrix, x1, y1, z1, x0, y1, z1, r, g, b, alpha);
+        edge(buffer, matrix, x0, y1, z1, x0, y1, z0, r, g, b, alpha);
         // verticals
-        edge(buffer, matrix, x0, y0, z0, x0, y1, z0, r, g, b);
-        edge(buffer, matrix, x1, y0, z0, x1, y1, z0, r, g, b);
-        edge(buffer, matrix, x1, y0, z1, x1, y1, z1, r, g, b);
-        edge(buffer, matrix, x0, y0, z1, x0, y1, z1, r, g, b);
+        edge(buffer, matrix, x0, y0, z0, x0, y1, z0, r, g, b, alpha);
+        edge(buffer, matrix, x1, y0, z0, x1, y1, z0, r, g, b, alpha);
+        edge(buffer, matrix, x1, y0, z1, x1, y1, z1, r, g, b, alpha);
+        edge(buffer, matrix, x0, y0, z1, x0, y1, z1, r, g, b, alpha);
     }
 
     private static void edge(BufferBuilder buffer, Matrix4f matrix,
                              float ax, float ay, float az, float bx, float by, float bz,
-                             float r, float g, float b) {
-        buffer.addVertex(matrix, ax, ay, az).setColor(r, g, b, ALPHA);
-        buffer.addVertex(matrix, bx, by, bz).setColor(r, g, b, ALPHA);
+                             float r, float g, float b, float alpha) {
+        buffer.addVertex(matrix, ax, ay, az).setColor(r, g, b, alpha);
+        buffer.addVertex(matrix, bx, by, bz).setColor(r, g, b, alpha);
     }
 
     private static List<Box> collectBoxes(Minecraft mc, LocalPlayer player) {
@@ -164,13 +166,25 @@ public final class SelectionOverlayRenderer {
 
         List<BlockPos> spawnOffsets = List.of();
         List<BlockPos> respawnOffsets = List.of();
+        List<BlockPos> entrancePositions = new ArrayList<>(); // absolute, current dimension only
         if (be instanceof MobSpawnerBlockEntity mobSpawner) {
             spawnOffsets = mobSpawner.getEntityDefinition().spawnOffsets();
         } else if (be instanceof DungeonBossSpawnerBlockEntity bossSpawner) {
             spawnOffsets = bossSpawner.getEntityDefinition().spawnOffsets();
+            if (mc.level.dimension().equals(bossSpawner.getEntranceDimension())) {
+                entrancePositions.add(bossSpawner.getAbsoluteEntrancePos());
+            }
         } else if (be instanceof net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity raidBossSpawner) {
             spawnOffsets = raidBossSpawner.getEntityDefinition().spawnOffsets();
             respawnOffsets = raidBossSpawner.getRespawnPointOffsets();
+            if (mc.level.dimension().equals(raidBossSpawner.getEntranceDimension())) {
+                entrancePositions.add(raidBossSpawner.getAbsoluteEntrancePos());
+            }
+        } else if (be instanceof net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity arenaSpawner) {
+            respawnOffsets = arenaSpawner.getRespawnPointOffsets();
+            if (mc.level.dimension().equals(arenaSpawner.getEntranceDimension())) {
+                entrancePositions.add(arenaSpawner.getAbsoluteEntrancePos());
+            }
         } else if (be instanceof RoomControllerBlockEntity room) {
             BlockPos respawnOffset = room.getRespawnOffset();
             if (respawnOffset != null) {
@@ -186,6 +200,9 @@ public final class SelectionOverlayRenderer {
         }
         for (BlockPos offset : respawnOffsets) {
             boxes.add(new Box(spawnerPos.offset(offset), RESPAWN_COLOR));
+        }
+        for (BlockPos entrancePos : entrancePositions) {
+            boxes.add(new Box(entrancePos, ENTRANCE_COLOR));
         }
     }
 
@@ -224,11 +241,26 @@ public final class SelectionOverlayRenderer {
                 }
                 targets.addAll(room.getSpawnerPositions());
             }
-            case ROOM_DOOR -> {
+            case ROOM_EXIT -> {
                 if (!(be instanceof RoomControllerBlockEntity room)) {
                     return;
                 }
                 targets.addAll(room.getDoorPositions());
+                // Entrances shown alongside exits so builders see both sides of the graph edge.
+                for (BlockPos entrance : room.getEntrancePositions()) {
+                    boxes.add(new Box(entrance, ENTRANCE_COLOR));
+                }
+            }
+            case ROOM_ENTRANCE -> {
+                if (!(be instanceof RoomControllerBlockEntity room)) {
+                    return;
+                }
+                for (BlockPos entrance : room.getEntrancePositions()) {
+                    boxes.add(new Box(entrance, ENTRANCE_COLOR));
+                }
+                for (BlockPos door : room.getDoorPositions()) {
+                    boxes.add(new Box(door, TARGET_COLOR));
+                }
             }
         }
 

@@ -17,6 +17,7 @@ import io.wispforest.owo.ui.core.Surface;
 import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
+import net.ledok.arenas_ld.dungeon.packet.RoomClearEntrancesPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearRespawnPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomRemoveSpawnerPayload;
@@ -53,6 +54,7 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
 
     private final List<RoomControllerData.SpawnerEntry> spawners = new ArrayList<>();
     private List<BlockPos> doorPositions = List.of();
+    private List<BlockPos> entrancePositions = List.of();
     private Optional<BlockPos> respawnPos = Optional.empty();
     private String roomNameInput = "";
 
@@ -191,6 +193,12 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
         contentArea.child(buildDoorRow());
         contentArea.child(spacer(8));
 
+        // ── Entrance doors ──────────────────────────────────────────────────
+        contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.entrances")));
+        contentArea.child(spacer(2));
+        contentArea.child(buildEntranceRow());
+        contentArea.child(spacer(8));
+
         // ── Respawn point ───────────────────────────────────────────────────
         contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.respawn")));
         contentArea.child(spacer(2));
@@ -327,6 +335,33 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
         return row;
     }
 
+    private FlowLayout buildEntranceRow() {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.gap(8);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        Component entranceValue = entrancePositions.isEmpty()
+            ? Component.translatable("gui.arenas_ld.room_controller.entrance_none")
+            : (entrancePositions.size() == 1
+                ? Component.literal(entrancePositions.get(0).toShortString())
+                : Component.translatable("gui.arenas_ld.room_controller.entrance_count", entrancePositions.size()));
+        LabelComponent value = Components.label(entranceValue);
+        value.color(Color.ofArgb(entrancePositions.isEmpty() ? INK_DIM : INK));
+        row.child(value);
+
+        LabelComponent hint = Components.label(Component.translatable("gui.arenas_ld.room_controller.entrance_hint"));
+        hint.color(Color.ofArgb(INK_DIM));
+        row.child(hint);
+
+        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+
+        ButtonComponent clear = smallButton(Component.translatable("gui.arenas_ld.room_controller.button.clear_entrances"),
+            b -> ClientPlayNetworking.send(new RoomClearEntrancesPayload(menu.getBlockPos())));
+        clear.active(!entrancePositions.isEmpty());
+        row.child(clear);
+        return row;
+    }
+
     private FlowLayout buildRespawnRow() {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
         row.gap(8);
@@ -371,6 +406,7 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
         spawners.clear();
         spawners.addAll(menu.getSpawners());
         doorPositions = menu.getDoorPositions();
+        entrancePositions = menu.getEntrancePositions();
         respawnPos = menu.getRespawnPos();
         roomNameInput = menu.getRoomName();
     }
