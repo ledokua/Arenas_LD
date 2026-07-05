@@ -76,6 +76,11 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     private RoomObjectiveConfig objective = RoomObjectiveConfig.DEFAULT;
     /** SURVIVE countdown in ticks, set at activation. -1 = no timer running. */
     private int surviveTicksRemaining = -1;
+    /** PROTECT target spawned at activation; null when none is alive/tracked. */
+    @Nullable private UUID protectTargetUuid = null;
+    /** Set for one poll when the protect target is found dead, so the lifecycle can fail the run.
+     *  Transient — not persisted (the persisted UUID re-detects death after a restart). */
+    private boolean protectTargetDied = false;
 
     // ---- Construction ----
 
@@ -219,6 +224,18 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
     }
 
+    /** Absolute PROTECT target spawn position, or {@code null} if none is configured. */
+    @Nullable
+    public BlockPos getProtectPos() {
+        return objective.protectOffset().map(worldPosition::offset).orElse(null);
+    }
+
+    /** Sets (or clears, with {@code null}) the PROTECT target spawn position from an absolute position. */
+    public void setProtectPos(@Nullable BlockPos absolutePos) {
+        setObjective(objective.withProtectOffset(
+            Optional.ofNullable(absolutePos).map(pos -> pos.subtract(worldPosition))));
+    }
+
     /** Returns true if the spawner was added (false if already present). */
     public boolean addSpawner(BlockPos absolutePos) {
         BlockPos spawnerOffset = absolutePos.subtract(worldPosition);
@@ -334,6 +351,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         nextWaveDelayTicks = -1;
         bossInCurrentWave = false;
         surviveTicksRemaining = -1;
+        protectTargetUuid = null;
+        protectTargetDied = false;
         setChanged();
     }
 
@@ -411,6 +430,9 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 nextWaveDelayTicks = -1;
                 if (objective.type() == RoomObjectiveConfig.Type.SURVIVE) {
                     surviveTicksRemaining = Math.max(1, objective.surviveSeconds()) * 20;
+                }
+                if (objective.type() == RoomObjectiveConfig.Type.PROTECT) {
+                    spawnProtectTarget(world);
                 }
                 markActivated();
                 return spawned;
@@ -537,6 +559,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             }
         }
         markCleared();
+        discardProtectTarget(world);
         return List.of();
     }
 
@@ -574,6 +597,89 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             }
         }
         return List.of();
+    }
+
+    /**
+     * Spawns the PROTECT objective's target mob at the configured position. On a missing position
+     * or invalid mob id the room falls back to plain kill-everything behavior (no target tracked),
+     * so a config mistake can never brick a run — it just logs.
+     */
+    private void spawnProtectTarget(ServerLevel world) {
+        BlockPos spawnPos = getProtectPos();
+        if (spawnPos == null) {
+            ArenasLdMod.LOGGER.warn(
+                "RoomController at {}: PROTECT objective has no position set; falling back to kill-all", worldPosition);
+            return;
+        }
+        Optional<net.minecraft.world.entity.EntityType<?>> type =
+            net.minecraft.world.entity.EntityType.byString(objective.protectMobId());
+        if (type.isEmpty()) {
+            ArenasLdMod.LOGGER.warn(
+                "RoomController at {}: invalid PROTECT mob id {}; falling back to kill-all",
+                worldPosition, objective.protectMobId());
+            return;
+        }
+        Entity created = type.get().create(world);
+        if (!(created instanceof LivingEntity living)) {
+            ArenasLdMod.LOGGER.warn(
+                "RoomController at {}: PROTECT mob {} is not a LivingEntity; falling back to kill-all",
+                worldPosition, objective.protectMobId());
+            return;
+        }
+        // Deliberately NOT on the arenas_dungeon mob team (wave mobs must be able to hurt it);
+        // the run lifecycle adds it to the party's no-friendly-fire team so players can't.
+        if (living instanceof net.minecraft.world.entity.Mob mob) {
+            mob.setPersistenceRequired();
+            if (objective.protectStationary()) {
+                mob.setNoAi(true);
+            }
+        }
+        // Configured attributes are absolute — the target isn't scaled by tier or party size.
+        net.ledok.arenas_ld.util.EntityEquipmentHelper.applyScaledAttributes(
+            living, objective.protectAttributes(), world.registryAccess(), 1.0, 1.0, 1.0);
+        living.heal(living.getMaxHealth());
+        living.moveTo(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 0.0F, 0.0F);
+        if (world.addFreshEntity(living)) {
+            protectTargetUuid = living.getUUID();
+            protectTargetDied = false;
+            setChanged();
+        }
+    }
+
+    /** Removes the protect target from the world without failing the objective (room cleared / reset). */
+    private void discardProtectTarget(ServerLevel world) {
+        if (protectTargetUuid == null) {
+            return;
+        }
+        Entity target = world.getEntity(protectTargetUuid);
+        if (target != null && target.isAlive()) {
+            target.discard();
+        }
+        protectTargetUuid = null;
+        setChanged();
+    }
+
+    /** UUID of the alive protect target, or {@code null}. The lifecycle uses it for team assignment. */
+    @Nullable
+    public UUID getProtectTargetUuid() {
+        return protectTargetUuid;
+    }
+
+    /** True exactly once after the protect target is found dead; reading it resets the flag. */
+    public boolean pollProtectTargetDied() {
+        boolean died = protectTargetDied;
+        protectTargetDied = false;
+        return died;
+    }
+
+    /** Protect target health as 0–100, or -1 when no target is alive/tracked. */
+    public int getProtectTargetHealthPercent(ServerLevel world) {
+        if (protectTargetUuid == null) {
+            return -1;
+        }
+        return world.getEntity(protectTargetUuid) instanceof LivingEntity living && living.getMaxHealth() > 0.0F
+            ? Math.clamp(Math.round(living.getHealth() * 100.0F / living.getMaxHealth()), 0, 100)
+            : -1;
     }
 
     /** Discards every tracked mob and unregisters it from the run. */
@@ -653,6 +759,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             }
             ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);
         }
+        discardProtectTarget(world);
         clearRuntimeState();
         closeAllDoors(world);
     }
@@ -736,6 +843,19 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
      * It does NOT open the door — that's the controller's job after observing {@code isCleared()}.
      */
     public void refreshAliveMobs(ServerLevel world) {
+        // PROTECT: notice the target dying before anything else this tick.
+        LivingEntity protectTarget = null;
+        if (protectTargetUuid != null && activated && !cleared) {
+            Entity targetEntity = world.getEntity(protectTargetUuid);
+            if (targetEntity instanceof LivingEntity livingTarget && livingTarget.isAlive() && !livingTarget.isRemoved()) {
+                protectTarget = livingTarget;
+            } else {
+                protectTargetUuid = null;
+                protectTargetDied = true;
+                setChanged();
+            }
+        }
+
         Iterator<UUID> it = aliveMobs.iterator();
         boolean changed = false;
         while (it.hasNext()) {
@@ -746,6 +866,11 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 bossMobs.remove(uuid);
                 ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);
                 changed = true;
+            } else if (protectTarget != null
+                    && entity instanceof net.minecraft.world.entity.Mob mob
+                    && (mob.getTarget() == null || !mob.getTarget().isAlive())) {
+                // Idle wave mobs beeline the protect target; player aggro (revenge) overrides until it drops.
+                mob.setTarget(protectTarget);
             }
         }
 
@@ -766,6 +891,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         // A running SURVIVE timer owns the clear — dead waves loop instead (tickWaveProgression).
         if (activated && !cleared && aliveMobs.isEmpty() && isOnFinalWave() && !isSurviveLooping()) {
             markCleared();
+            discardProtectTarget(world);
             return;
         }
         if (changed) setChanged();
@@ -790,7 +916,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         RoomRewardConfig roomReward,
         List<BlockPos> entranceOffsets,
         RoomObjectiveConfig objective,
-        int surviveTicksRemaining
+        ObjectiveRuntime objectiveRuntime
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("spawnerOffsets").forGetter(State::spawnerOffsets),
@@ -814,8 +940,17 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             RoomRewardConfig.CODEC.optionalFieldOf("roomReward", RoomRewardConfig.EMPTY).forGetter(State::roomReward),
             BlockPos.CODEC.listOf().optionalFieldOf("entranceOffsets", List.of()).forGetter(State::entranceOffsets),
             RoomObjectiveConfig.CODEC.optionalFieldOf("objective", RoomObjectiveConfig.DEFAULT).forGetter(State::objective),
-            Codec.INT.optionalFieldOf("surviveTicksRemaining", -1).forGetter(State::surviveTicksRemaining)
+            ObjectiveRuntime.CODEC.optionalFieldOf("objectiveRuntime", ObjectiveRuntime.EMPTY).forGetter(State::objectiveRuntime)
         ).apply(i, State::new));
+    }
+
+    /** Objective runtime state, nested because the State codec is at the 16-field cap. */
+    private record ObjectiveRuntime(int surviveTicksRemaining, Optional<UUID> protectTargetUuid) {
+        static final ObjectiveRuntime EMPTY = new ObjectiveRuntime(-1, Optional.empty());
+        static final Codec<ObjectiveRuntime> CODEC = RecordCodecBuilder.create(i -> i.group(
+            Codec.INT.optionalFieldOf("surviveTicksRemaining", -1).forGetter(ObjectiveRuntime::surviveTicksRemaining),
+            UUIDUtil.CODEC.optionalFieldOf("protectTargetUuid").forGetter(ObjectiveRuntime::protectTargetUuid)
+        ).apply(i, ObjectiveRuntime::new));
     }
 
     @Override
@@ -824,7 +959,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         State state = new State(spawnerOffsets, doorOffsets,
             Optional.ofNullable(respawnOffset), aliveMobs, bossMobs, activated, cleared, roomName,
             waveNumbers, currentWaveIndex, nextWaveDelayTicks, bossInCurrentWave, roomReward, entranceOffsets,
-            objective, surviveTicksRemaining);
+            objective, new ObjectiveRuntime(surviveTicksRemaining, Optional.ofNullable(protectTargetUuid)));
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save RoomController at {}: {}", worldPosition, err))
@@ -860,7 +995,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     entranceOffsets.clear();
                     entranceOffsets.addAll(state.entranceOffsets());
                     objective = state.objective();
-                    surviveTicksRemaining = state.surviveTicksRemaining();
+                    surviveTicksRemaining = state.objectiveRuntime().surviveTicksRemaining();
+                    protectTargetUuid = state.objectiveRuntime().protectTargetUuid().orElse(null);
                 });
         }
     }

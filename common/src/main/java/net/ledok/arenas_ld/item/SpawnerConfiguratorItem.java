@@ -42,7 +42,8 @@ public class SpawnerConfiguratorItem extends Item {
     public enum Mode {
         MOB_SPAWN_POSITION("item.arenas_ld.configurator.mode.mob_spawn_position"),
         ENTRANCE_POSITION("item.arenas_ld.configurator.mode.entrance_position"),
-        RESPAWN_POSITION("item.arenas_ld.configurator.mode.respawn_position");
+        RESPAWN_POSITION("item.arenas_ld.configurator.mode.respawn_position"),
+        PROTECT_POSITION("item.arenas_ld.configurator.mode.protect_position");
 
         private final String translationKey;
 
@@ -66,6 +67,7 @@ public class SpawnerConfiguratorItem extends Item {
                 case RESPAWN_POSITION -> blockEntity instanceof RaidBossSpawnerBlockEntity
                     || blockEntity instanceof ArenaSpawnerBlockEntity
                     || blockEntity instanceof RoomControllerBlockEntity;
+                case PROTECT_POSITION -> blockEntity instanceof RoomControllerBlockEntity;
             };
         }
 
@@ -74,6 +76,7 @@ public class SpawnerConfiguratorItem extends Item {
                 case MOB_SPAWN_POSITION -> "message.arenas_ld.configurator.select_source.mob_spawn";
                 case ENTRANCE_POSITION -> "message.arenas_ld.configurator.select_source.entrance";
                 case RESPAWN_POSITION -> "message.arenas_ld.configurator.select_source.respawn";
+                case PROTECT_POSITION -> "message.arenas_ld.configurator.select_source.protect";
             };
         }
     }
@@ -229,6 +232,25 @@ public class SpawnerConfiguratorItem extends Item {
                     } else {
                         room.setRespawnPos(respawnAbsolute);
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.respawn_pos_added", clickedPos.toShortString(), 1));
+                    }
+                }
+                break;
+            }
+            case PROTECT_POSITION: {
+                if (!selectedSpawnerDim.equals(clickedDimension)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_wrong_dimension"));
+                    return InteractionResult.FAIL;
+                }
+                // The target spawns ON the clicked block; single position — placing replaces it,
+                // clicking the same one clears it (same semantics as the room respawn point).
+                BlockPos protectAbsolute = clickedPos.above();
+                if (selectedBlockEntity instanceof RoomControllerBlockEntity room) {
+                    if (protectAbsolute.equals(room.getProtectPos())) {
+                        room.setProtectPos(null);
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.protect_pos_removed", clickedPos.toShortString()));
+                    } else {
+                        room.setProtectPos(protectAbsolute);
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.protect_pos_set", clickedPos.toShortString()));
                     }
                 }
                 break;

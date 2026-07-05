@@ -18,6 +18,7 @@ import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearEntrancesPayload;
+import net.ledok.arenas_ld.dungeon.packet.RoomClearProtectPosPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearRespawnPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomRemoveSpawnerPayload;
@@ -62,6 +63,11 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
     private RoomObjectiveConfig.Type objectiveType = RoomObjectiveConfig.Type.KILL_ALL;
     private int surviveSecondsInput = 60;
     private int surviveIntervalInput = 15;
+    private String protectMobIdInput = "minecraft:villager";
+    private boolean protectStationaryInput = true;
+    private final List<net.ledok.arenas_ld.util.AttributeData> protectAttributesInput = new ArrayList<>();
+    private String newAttrIdInput = "";
+    private String newAttrValueInput = "";
 
     private FlowLayout contentArea;
     private FlowLayout footerActions;
@@ -184,6 +190,10 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
             contentArea.child(spacer(2));
             contentArea.child(buildSurviveSecondsRow());
         }
+        if (objectiveType == RoomObjectiveConfig.Type.PROTECT) {
+            contentArea.child(spacer(2));
+            buildProtectRows(contentArea);
+        }
         contentArea.child(spacer(8));
 
         // ── Spawners ────────────────────────────────────────────────────────
@@ -301,8 +311,7 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
         boolean selected = objectiveType == type;
         ButtonComponent button = Components.button(
             Component.translatable("gui.arenas_ld.room_controller.objective." + type.getSerializedName()),
-            b -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(),
-                new RoomObjectiveConfig(type, surviveSecondsInput, surviveIntervalInput))));
+            b -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(type))));
         button.sizing(Sizing.content(), Sizing.fixed(18));
         button.renderer((context, rendered, delta) -> {
             int fill = selected ? (rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK)
@@ -355,11 +364,184 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
         fieldRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
 
         ButtonComponent setBtn = accentButton(Component.translatable("gui.arenas_ld.room_controller.button.set_time"),
-            b -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(),
-                new RoomObjectiveConfig(objectiveType, surviveSecondsInput, surviveIntervalInput))));
+            b -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType))));
         setBtn.sizing(Sizing.fixed(64), Sizing.fixed(18));
         fieldRow.child(setBtn);
         return fieldRow;
+    }
+
+    private void buildProtectRows(FlowLayout container) {
+        // Target mob row: id field with entity-type autocomplete + Apply.
+        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
+        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        fieldRow.gap(6);
+
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
+        accent.surface(Surface.flat(ACCENT));
+        fieldRow.child(accent);
+
+        LabelComponent mobLabel = Components.label(Component.translatable("gui.arenas_ld.room_controller.objective.protect_mob"));
+        mobLabel.color(Color.ofArgb(INK_MID));
+        fieldRow.child(mobLabel);
+
+        TextBoxComponent mobField = IdSuggestionDropdown.textBox(Sizing.expand(), protectMobIdInput, 256);
+        mobField.verticalSizing(Sizing.fixed(18));
+        mobField.onChanged().subscribe(v -> protectMobIdInput = v);
+        IdSuggestionDropdown.attachFullValueTooltip(mobField);
+        fieldRow.child(mobField);
+
+        IdSuggestionDropdown dropdown = new IdSuggestionDropdown(
+            this.font, net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE, mobField);
+        fieldRow.child(dropdown.chevron());
+
+        ButtonComponent applyBtn = accentButton(Component.translatable("gui.arenas_ld.room_controller.button.set_time"),
+            b -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType))));
+        applyBtn.sizing(Sizing.fixed(64), Sizing.fixed(18));
+        fieldRow.child(applyBtn);
+
+        container.child(fieldRow);
+        container.child(dropdown.panel());
+        container.child(spacer(2));
+
+        // Target attributes (absolute values, e.g. generic.max_health = 60).
+        LabelComponent attrCaption = Components.label(Component.translatable("gui.arenas_ld.attributes"));
+        attrCaption.color(Color.ofArgb(INK_DIM));
+        container.child(attrCaption);
+        container.child(spacer(2));
+        for (int i = 0; i < protectAttributesInput.size(); i++) {
+            container.child(protectAttributeRow(i));
+        }
+        container.child(buildAddAttributeRow());
+        container.child(spacer(2));
+
+        // Position + stationary row.
+        FlowLayout posRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        posRow.gap(8);
+        posRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        Optional<BlockPos> protectOffset = menu.getObjective().protectOffset();
+        LabelComponent posValue = Components.label(protectOffset
+            .map(offset -> (Component) Component.literal(menu.getBlockPos().offset(offset).toShortString()))
+            .orElse(Component.translatable("gui.arenas_ld.room_controller.objective.protect_pos_none")));
+        posValue.color(Color.ofArgb(protectOffset.isPresent() ? INK : INK_DIM));
+        posRow.child(posValue);
+
+        LabelComponent posHint = Components.label(Component.translatable("gui.arenas_ld.room_controller.objective.protect_pos_hint"));
+        posHint.color(Color.ofArgb(INK_DIM));
+        posRow.child(posHint);
+
+        posRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+
+        ButtonComponent stationaryBtn = smallButton(
+            Component.translatable(protectStationaryInput
+                ? "gui.arenas_ld.room_controller.objective.stationary_on"
+                : "gui.arenas_ld.room_controller.objective.stationary_off"),
+            b -> {
+                protectStationaryInput = !protectStationaryInput;
+                ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)));
+            });
+        posRow.child(stationaryBtn);
+
+        ButtonComponent clearPos = smallButton(Component.translatable("gui.arenas_ld.room_controller.button.clear_respawn"),
+            b -> ClientPlayNetworking.send(new RoomClearProtectPosPayload(menu.getBlockPos())));
+        clearPos.active(protectOffset.isPresent());
+        posRow.child(clearPos);
+
+        container.child(posRow);
+    }
+
+    private FlowLayout protectAttributeRow(int index) {
+        net.ledok.arenas_ld.util.AttributeData attr = protectAttributesInput.get(index);
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(20));
+        row.surface(Surface.flat(index % 2 == 0 ? ROW_BG : ROW_BG_ALT));
+        row.padding(Insets.of(0, 0, 6, 6));
+        row.gap(6);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+        LabelComponent id = Components.label(Component.literal(attr.id()));
+        id.color(Color.ofArgb(INK));
+        row.child(id);
+
+        LabelComponent value = Components.label(Component.literal("= " + formatAttrValue(attr.value())));
+        value.color(Color.ofArgb(INK_MID));
+        row.child(value);
+
+        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+
+        int capturedIndex = index;
+        ButtonComponent remove = smallButton(Component.literal("×"), b -> {
+            protectAttributesInput.remove(capturedIndex);
+            ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)));
+        });
+        remove.sizing(Sizing.fixed(20), Sizing.fixed(16));
+        row.child(remove);
+        return row;
+    }
+
+    private FlowLayout buildAddAttributeRow() {
+        FlowLayout container = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+
+        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
+        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        fieldRow.gap(6);
+
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
+        accent.surface(Surface.flat(ACCENT));
+        fieldRow.child(accent);
+
+        TextBoxComponent idField = IdSuggestionDropdown.textBox(Sizing.expand(), newAttrIdInput, 256);
+        idField.verticalSizing(Sizing.fixed(18));
+        idField.onChanged().subscribe(v -> newAttrIdInput = v);
+        fieldRow.child(idField);
+
+        IdSuggestionDropdown dropdown = new IdSuggestionDropdown(
+            this.font, net.minecraft.core.registries.BuiltInRegistries.ATTRIBUTE, idField);
+        fieldRow.child(dropdown.chevron());
+
+        LabelComponent valueCaption = Components.label(Component.translatable("gui.arenas_ld.room_controller.objective.attr_value"));
+        valueCaption.color(Color.ofArgb(INK_MID));
+        fieldRow.child(valueCaption);
+
+        TextBoxComponent valueField = IdSuggestionDropdown.textBox(Sizing.fixed(56), newAttrValueInput, 12);
+        valueField.verticalSizing(Sizing.fixed(18));
+        valueField.onChanged().subscribe(v -> newAttrValueInput = v);
+        fieldRow.child(valueField);
+
+        ButtonComponent addBtn = accentButton(Component.translatable("gui.arenas_ld.room_controller.reward.add_effect"),
+            b -> addProtectAttribute());
+        addBtn.sizing(Sizing.content(), Sizing.fixed(18));
+        fieldRow.child(addBtn);
+
+        container.child(fieldRow);
+        container.child(dropdown.panel());
+        return container;
+    }
+
+    private void addProtectAttribute() {
+        String id = newAttrIdInput == null ? "" : newAttrIdInput.trim();
+        double value;
+        try {
+            value = Double.parseDouble(newAttrValueInput.trim());
+        } catch (NumberFormatException | NullPointerException e) {
+            return;
+        }
+        if (id.isEmpty() || !Double.isFinite(value)) {
+            return;
+        }
+        // One entry per attribute id: re-adding replaces the old value.
+        protectAttributesInput.removeIf(attr -> attr.id().equals(id));
+        protectAttributesInput.add(new net.ledok.arenas_ld.util.AttributeData(id, value));
+        newAttrIdInput = "";
+        newAttrValueInput = "";
+        ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)));
+    }
+
+    private static String formatAttrValue(double value) {
+        return value == Math.floor(value) && !Double.isInfinite(value)
+            ? String.valueOf((long) value)
+            : String.valueOf(value);
     }
 
     private FlowLayout spawnerRow(int index) {
@@ -502,6 +684,17 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
         objectiveType = menu.getObjective().type();
         surviveSecondsInput = menu.getObjective().surviveSeconds();
         surviveIntervalInput = menu.getObjective().surviveWaveIntervalSeconds();
+        protectMobIdInput = menu.getObjective().protectMobId();
+        protectStationaryInput = menu.getObjective().protectStationary();
+        protectAttributesInput.clear();
+        protectAttributesInput.addAll(menu.getObjective().protectAttributes());
+    }
+
+    /** The objective as currently edited on this screen. The protect position is server-owned
+     *  (set with the Configurator) and ignored by the handler, so it's sent empty. */
+    private RoomObjectiveConfig editedObjective(RoomObjectiveConfig.Type type) {
+        return new RoomObjectiveConfig(type, surviveSecondsInput, surviveIntervalInput,
+            protectMobIdInput, protectStationaryInput, Optional.empty(), List.copyOf(protectAttributesInput));
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

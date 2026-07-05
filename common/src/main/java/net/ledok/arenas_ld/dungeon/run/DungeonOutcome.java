@@ -19,7 +19,9 @@ public enum DungeonOutcome {
     /** All players left the run (disconnected past grace period, or hardcore-removed). */
     LOSS_ABANDONED,
     /** Admin used /arenasld debug endDungeon (or equivalent) to terminate the run. */
-    LOSS_FORCED;
+    LOSS_FORCED,
+    /** A room objective failed hard — e.g. the PROTECT target died. */
+    LOSS_OBJECTIVE;
 
     public static final Codec<DungeonOutcome> CODEC = Codec.STRING.xmap(
         DungeonOutcome::fromStringOrDefault,
@@ -38,6 +40,7 @@ public enum DungeonOutcome {
     public boolean isLoss() {
         return this == LOSS_TIMEOUT
             || this == LOSS_ABANDONED
-            || this == LOSS_FORCED;
+            || this == LOSS_FORCED
+            || this == LOSS_OBJECTIVE;
     }
 }

@@ -235,11 +235,16 @@ public final class DungeonRunLifecycle {
 
         if (!room.isActivated()) {
             room.activate(world, run.resolvedTierConfig(), run.partyHealthMultiplier());
+            addProtectTargetToPartyTeam(world, run, room);
             for (UUID uuid : room.getAliveMobs()) {
                 ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
             }
         } else {
             room.refreshAliveMobs(world);
+            if (room.pollProtectTargetDied()) {
+                handleLoss(world, controller, run, DungeonOutcome.LOSS_OBJECTIVE);
+                return;
+            }
             for (UUID uuid : room.tickWaveProgression(world, run.resolvedTierConfig(), run.partyHealthMultiplier())) {
                 ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
             }
@@ -325,6 +330,7 @@ public final class DungeonRunLifecycle {
             if (run.pendingGraceTicks() == 0) {
                 run.setPendingGraceTicks(-1);
                 room.activateOrAutoClear(world, run.resolvedTierConfig(), run.partyHealthMultiplier());
+                addProtectTargetToPartyTeam(world, run, room);
                 if (room.isCleared()) {
                     finishRoom(world, controller, run, dbs, current, room);
                     return;
@@ -345,6 +351,10 @@ public final class DungeonRunLifecycle {
 
         // ---- ACTIVE (wave machine, mirrors the legacy activated branch) ----
         room.refreshAliveMobs(world);
+        if (room.pollProtectTargetDied()) {
+            handleLoss(world, controller, run, DungeonOutcome.LOSS_OBJECTIVE);
+            return;
+        }
         for (UUID uuid : room.tickWaveProgression(world, run.resolvedTierConfig(), run.partyHealthMultiplier())) {
             ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
         }
@@ -420,6 +430,47 @@ public final class DungeonRunLifecycle {
     private static String formatBossBarTime(DungeonRun run) {
         int secondsLeft = Math.max(0, (run.dungeonTimerTicks() + 19) / 20);
         return String.format("%d:%02d", secondsLeft / 60, secondsLeft % 60);
+    }
+
+    /**
+     * Puts a freshly spawned PROTECT target on the run's no-friendly-fire party team, so players
+     * can't damage the mob they're defending. No-op when the room has no live target.
+     */
+    private static void addProtectTargetToPartyTeam(ServerLevel world, DungeonRun run, RoomControllerBlockEntity room) {
+        UUID targetUuid = room.getProtectTargetUuid();
+        if (targetUuid == null) {
+            return;
+        }
+        Entity target = world.getEntity(targetUuid);
+        PlayerTeam team = world.getScoreboard().getPlayerTeam(teamNameFor(run));
+        if (target != null && team != null) {
+            world.getScoreboard().addPlayerToTeam(target.getStringUUID(), team);
+        }
+    }
+
+    /** The run's current room controller (branching current room or legacy index), or {@code null}. */
+    @Nullable
+    private static RoomControllerBlockEntity activeRoomController(ServerLevel world, DungeonBossSpawnerBlockEntity dbs, DungeonRun run) {
+        BlockPos roomPos = run.currentRoomPos();
+        if (roomPos == null) {
+            List<BlockPos> rooms = dbs.getRooms();
+            int index = run.currentRoomIndex();
+            if (index < 0 || index >= rooms.size()) {
+                return null;
+            }
+            roomPos = rooms.get(index);
+        }
+        return world.getBlockEntity(roomPos) instanceof RoomControllerBlockEntity room ? room : null;
+    }
+
+    /** Protect target HP% of the run's active room, or -1 when it has no live protect target. */
+    private static int activeProtectTargetPercent(ServerLevel world, DungeonRun run) {
+        BlockEntity dbsBe = world.getBlockEntity(run.dbsPos());
+        if (!(dbsBe instanceof DungeonBossSpawnerBlockEntity dbs)) {
+            return -1;
+        }
+        RoomControllerBlockEntity room = activeRoomController(world, dbs, run);
+        return room != null ? room.getProtectTargetHealthPercent(world) : -1;
     }
 
     /** Sends the spawn-telegraph highlight to every non-removed online participant. */
@@ -533,6 +584,7 @@ public final class DungeonRunLifecycle {
             case LOSS_TIMEOUT -> "message.arenas_ld.dungeon.loss_timeout";
             case LOSS_ABANDONED -> "message.arenas_ld.dungeon.loss_abandoned";
             case LOSS_FORCED -> "message.arenas_ld.dungeon.loss_forced";
+            case LOSS_OBJECTIVE -> "message.arenas_ld.dungeon.loss_objective";
             default -> "message.arenas_ld.dungeon.loss_timeout";
         };
         for (UUID uuid : run.participants().keySet()) {
@@ -728,8 +780,15 @@ public final class DungeonRunLifecycle {
 
     private static void updateDungeonTimeBossBar(ServerLevel world, DungeonRun run, RoomControllerBlockEntity room) {
         String timeLeft = formatBossBarTime(run);
+        int targetPercent = room.getProtectTargetHealthPercent(world);
         Component name;
-        if (room.getObjective().type() == net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig.Type.SURVIVE
+        if (targetPercent >= 0) {
+            name = room.getTotalWaves() > 1
+                ? Component.translatable("boss_bar.arenas_ld.dungeon_time_protect_waves", timeLeft,
+                    room.getWaveDisplay(), room.getTotalWaves(), room.getAliveMobs().size(), targetPercent)
+                : Component.translatable("boss_bar.arenas_ld.dungeon_time_protect", timeLeft,
+                    room.getAliveMobs().size(), targetPercent);
+        } else if (room.getObjective().type() == net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig.Type.SURVIVE
                 && room.getSurviveTicksRemaining() > 0) {
             int surviveSeconds = (room.getSurviveTicksRemaining() + 19) / 20;
             name = Component.translatable("boss_bar.arenas_ld.dungeon_time_survive", timeLeft,
@@ -983,7 +1042,12 @@ public final class DungeonRunLifecycle {
         }
 
         run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
-        run.setDowned(new DownedPlayer(player.getUUID(), controller.getRespawnTimeTicks()));
+        // Defending a target makes downed teammates costlier: the revive takes 50% longer.
+        int respawnTicks = controller.getRespawnTimeTicks();
+        if (activeProtectTargetPercent(world, run) >= 0) {
+            respawnTicks = respawnTicks * 3 / 2;
+        }
+        run.setDowned(new DownedPlayer(player.getUUID(), respawnTicks));
         int penalty = controller.getDeathTimePenaltyTicks();
         if (penalty > 0) {
             run.setDungeonTimerTicks(Math.max(0, run.dungeonTimerTicks() - penalty));
@@ -1002,7 +1066,12 @@ public final class DungeonRunLifecycle {
         BlockEntity dbsBe = world.getBlockEntity(run.dbsPos());
         if (dbsBe instanceof DungeonBossSpawnerBlockEntity dbs) {
             player.setGameMode(GameType.ADVENTURE);
-            player.setHealth(player.getMaxHealth());
+            // In a protect room, revived players come back with the target's HP% — a battered
+            // target means battered reinforcements.
+            int protectPercent = activeProtectTargetPercent(world, run);
+            player.setHealth(protectPercent >= 0
+                ? Math.max(1.0F, player.getMaxHealth() * protectPercent / 100.0F)
+                : player.getMaxHealth());
             teleportToRoomRespawnOrEntrance(world, dbs, run, player);
         }
 
@@ -1278,6 +1347,10 @@ public final class DungeonRunLifecycle {
                 }
                 for (BlockPos entrancePos : roomController.getEntrancePositions()) {
                     chunks.add(new ChunkPos(entrancePos));
+                }
+                BlockPos protectPos = roomController.getProtectPos();
+                if (protectPos != null) {
+                    chunks.add(new ChunkPos(protectPos));
                 }
             }
         }

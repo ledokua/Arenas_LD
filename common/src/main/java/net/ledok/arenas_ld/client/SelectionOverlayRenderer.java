@@ -46,6 +46,7 @@ public final class SelectionOverlayRenderer {
     private static final float[] TARGET_COLOR = {0.53f, 0.83f, 0.42f}; // green
     private static final float[] RESPAWN_COLOR = {0.30f, 0.80f, 0.90f}; // cyan
     private static final float[] ENTRANCE_COLOR = {0.95f, 0.45f, 0.20f}; // orange
+    private static final float[] PROTECT_COLOR = {0.90f, 0.30f, 0.85f}; // magenta
     private static final float ALPHA = 0.95f;
 
     private SelectionOverlayRenderer() {
@@ -190,6 +191,8 @@ public final class SelectionOverlayRenderer {
             if (respawnOffset != null) {
                 respawnOffsets = List.of(respawnOffset);
             }
+            room.getObjective().protectOffset().ifPresent(offset ->
+                boxes.add(new Box(spawnerPos.offset(offset), PROTECT_COLOR)));
         } else {
             return;
         }

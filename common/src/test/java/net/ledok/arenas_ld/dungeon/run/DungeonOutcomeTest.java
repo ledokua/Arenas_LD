@@ -13,14 +13,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DungeonOutcomeTest {
 
     @Test
-    void hasExactlyFiveValuesInExpectedOrder() {
+    void hasExactlySixValuesInExpectedOrder() {
         DungeonOutcome[] values = DungeonOutcome.values();
-        assertEquals(5, values.length);
+        assertEquals(6, values.length);
         assertEquals(DungeonOutcome.IN_PROGRESS, values[0]);
         assertEquals(DungeonOutcome.WIN, values[1]);
         assertEquals(DungeonOutcome.LOSS_TIMEOUT, values[2]);
         assertEquals(DungeonOutcome.LOSS_ABANDONED, values[3]);
         assertEquals(DungeonOutcome.LOSS_FORCED, values[4]);
+        assertEquals(DungeonOutcome.LOSS_OBJECTIVE, values[5]);
     }
 
     @Test
@@ -45,6 +46,7 @@ class DungeonOutcomeTest {
         assertTrue(DungeonOutcome.LOSS_TIMEOUT.isLoss());
         assertTrue(DungeonOutcome.LOSS_ABANDONED.isLoss());
         assertTrue(DungeonOutcome.LOSS_FORCED.isLoss());
+        assertTrue(DungeonOutcome.LOSS_OBJECTIVE.isLoss());
     }
 
     @Test

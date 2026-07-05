@@ -297,9 +297,44 @@ public final class SpawnerPacketHandlers {
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof RoomControllerBlockEntity room) {
                     net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig objective = payload.objective();
+                    String protectMobId = objective.protectMobId() == null ? "" : objective.protectMobId().trim();
+                    if (protectMobId.length() > 256) {
+                        protectMobId = protectMobId.substring(0, 256);
+                    }
+                    java.util.List<net.ledok.arenas_ld.util.AttributeData> protectAttributes = new java.util.ArrayList<>();
+                    for (net.ledok.arenas_ld.util.AttributeData attr : objective.protectAttributes()) {
+                        if (protectAttributes.size() >= 16) break;
+                        if (attr.id() == null || attr.id().isBlank() || !Double.isFinite(attr.value())) continue;
+                        String attrId = attr.id().trim();
+                        if (attrId.length() > 256) {
+                            attrId = attrId.substring(0, 256);
+                        }
+                        protectAttributes.add(new net.ledok.arenas_ld.util.AttributeData(attrId, attr.value()));
+                    }
+                    // The protect position is set in-world with the Configurator; the screen
+                    // payload never carries it, so keep whatever the server already has.
                     room.setObjective(new net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig(
                         objective.type(), Math.clamp(objective.surviveSeconds(), 1, 3600),
-                        Math.clamp(objective.surviveWaveIntervalSeconds(), 5, 600)));
+                        Math.clamp(objective.surviveWaveIntervalSeconds(), 5, 600),
+                        protectMobId, objective.protectStationary(),
+                        room.getObjective().protectOffset(), List.copyOf(protectAttributes)));
+                    markDirtyAndSync(world, room);
+                    broadcastRoomControllerSnapshot(player, room);
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.RoomClearProtectPosPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof RoomControllerBlockEntity room) {
+                    room.setProtectPos(null);
                     markDirtyAndSync(world, room);
                     broadcastRoomControllerSnapshot(player, room);
                 }
