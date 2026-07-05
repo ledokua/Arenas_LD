@@ -1,5 +1,6 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
+import net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig;
 import net.ledok.arenas_ld.dungeon.room.RoomRewardConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -18,6 +19,7 @@ public record RoomControllerData(
     String roomName,
     Optional<BlockPos> respawnPos,
     RoomRewardConfig roomReward,
+    RoomObjectiveConfig objective,
     List<String> knownLootTableIds
 ) {
     /** One linked spawner as shown in the room screen. {@code missing} = no spawner BE at the position. */
@@ -45,6 +47,7 @@ public record RoomControllerData(
         buf.writeUtf(data.roomName());
         ByteBufCodecs.optional(BlockPos.STREAM_CODEC).encode(buf, data.respawnPos());
         RoomRewardConfig.STREAM_CODEC.encode(buf, data.roomReward());
+        RoomObjectiveConfig.STREAM_CODEC.encode(buf, data.objective());
         buf.writeVarInt(data.knownLootTableIds().size());
         for (String id : data.knownLootTableIds()) {
             buf.writeUtf(id);
@@ -59,11 +62,12 @@ public record RoomControllerData(
         String roomName = buf.readUtf();
         Optional<BlockPos> respawnPos = ByteBufCodecs.optional(BlockPos.STREAM_CODEC).decode(buf);
         RoomRewardConfig roomReward = RoomRewardConfig.STREAM_CODEC.decode(buf);
+        RoomObjectiveConfig objective = RoomObjectiveConfig.STREAM_CODEC.decode(buf);
         int lootIdCount = buf.readVarInt();
         List<String> knownLootTableIds = new ArrayList<>(lootIdCount);
         for (int i = 0; i < lootIdCount; i++) {
             knownLootTableIds.add(buf.readUtf());
         }
-        return new RoomControllerData(blockPos, spawners, doorPositions, entrancePositions, roomName, respawnPos, roomReward, knownLootTableIds);
+        return new RoomControllerData(blockPos, spawners, doorPositions, entrancePositions, roomName, respawnPos, roomReward, objective, knownLootTableIds);
     }
 }

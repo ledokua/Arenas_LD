@@ -23,6 +23,8 @@ import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomRemoveSpawnerPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomResetPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomSetNamePayload;
+import net.ledok.arenas_ld.dungeon.packet.RoomSetObjectivePayload;
+import net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.core.BlockPos;
@@ -57,6 +59,9 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
     private List<BlockPos> entrancePositions = List.of();
     private Optional<BlockPos> respawnPos = Optional.empty();
     private String roomNameInput = "";
+    private RoomObjectiveConfig.Type objectiveType = RoomObjectiveConfig.Type.KILL_ALL;
+    private int surviveSecondsInput = 60;
+    private int surviveIntervalInput = 15;
 
     private FlowLayout contentArea;
     private FlowLayout footerActions;
@@ -171,6 +176,16 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
         contentArea.child(buildNameRow());
         contentArea.child(spacer(8));
 
+        // ── Objective ───────────────────────────────────────────────────────
+        contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.objective")));
+        contentArea.child(spacer(2));
+        contentArea.child(buildObjectiveTypeRow());
+        if (objectiveType == RoomObjectiveConfig.Type.SURVIVE) {
+            contentArea.child(spacer(2));
+            contentArea.child(buildSurviveSecondsRow());
+        }
+        contentArea.child(spacer(8));
+
         // ── Spawners ────────────────────────────────────────────────────────
         contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.spawners")
             .copy().append(Component.literal(" · " + spawners.size()))));
@@ -267,6 +282,81 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
 
         ButtonComponent setBtn = accentButton(Component.translatable("gui.arenas_ld.room_controller.button.set_name"),
             b -> ClientPlayNetworking.send(new RoomSetNamePayload(menu.getBlockPos(), roomNameInput == null ? "" : roomNameInput)));
+        setBtn.sizing(Sizing.fixed(64), Sizing.fixed(18));
+        fieldRow.child(setBtn);
+        return fieldRow;
+    }
+
+    private FlowLayout buildObjectiveTypeRow() {
+        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        row.gap(4);
+        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        for (RoomObjectiveConfig.Type type : RoomObjectiveConfig.Type.values()) {
+            row.child(objectiveTypeButton(type));
+        }
+        return row;
+    }
+
+    private ButtonComponent objectiveTypeButton(RoomObjectiveConfig.Type type) {
+        boolean selected = objectiveType == type;
+        ButtonComponent button = Components.button(
+            Component.translatable("gui.arenas_ld.room_controller.objective." + type.getSerializedName()),
+            b -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(),
+                new RoomObjectiveConfig(type, surviveSecondsInput, surviveIntervalInput))));
+        button.sizing(Sizing.content(), Sizing.fixed(18));
+        button.renderer((context, rendered, delta) -> {
+            int fill = selected ? (rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK)
+                                : (rendered.isHoveredOrFocused() ? ROW_BG : PANEL_2);
+            int border = selected ? ACCENT : HAIRLINE;
+            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
+            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), border);
+        });
+        return button;
+    }
+
+    private FlowLayout buildSurviveSecondsRow() {
+        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
+        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        fieldRow.gap(6);
+
+        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
+        accent.surface(Surface.flat(ACCENT));
+        fieldRow.child(accent);
+
+        LabelComponent label = Components.label(Component.translatable("gui.arenas_ld.room_controller.objective.survive_seconds"));
+        label.color(Color.ofArgb(INK_MID));
+        fieldRow.child(label);
+
+        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.fixed(48), String.valueOf(surviveSecondsInput), 4);
+        field.verticalSizing(Sizing.fixed(18));
+        field.onChanged().subscribe(v -> {
+            try {
+                surviveSecondsInput = Math.clamp(Integer.parseInt(v.trim()), 1, 3600);
+            } catch (NumberFormatException ignored) {
+            }
+        });
+        fieldRow.child(field);
+
+        LabelComponent intervalLabel = Components.label(Component.translatable("gui.arenas_ld.room_controller.objective.wave_interval"));
+        intervalLabel.color(Color.ofArgb(INK_MID));
+        fieldRow.child(intervalLabel);
+
+        TextBoxComponent intervalField = IdSuggestionDropdown.textBox(Sizing.fixed(48), String.valueOf(surviveIntervalInput), 3);
+        intervalField.verticalSizing(Sizing.fixed(18));
+        intervalField.onChanged().subscribe(v -> {
+            try {
+                surviveIntervalInput = Math.clamp(Integer.parseInt(v.trim()), 5, 600);
+            } catch (NumberFormatException ignored) {
+            }
+        });
+        fieldRow.child(intervalField);
+
+        fieldRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+
+        ButtonComponent setBtn = accentButton(Component.translatable("gui.arenas_ld.room_controller.button.set_time"),
+            b -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(),
+                new RoomObjectiveConfig(objectiveType, surviveSecondsInput, surviveIntervalInput))));
         setBtn.sizing(Sizing.fixed(64), Sizing.fixed(18));
         fieldRow.child(setBtn);
         return fieldRow;
@@ -409,6 +499,9 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
         entrancePositions = menu.getEntrancePositions();
         respawnPos = menu.getRespawnPos();
         roomNameInput = menu.getRoomName();
+        objectiveType = menu.getObjective().type();
+        surviveSecondsInput = menu.getObjective().surviveSeconds();
+        surviveIntervalInput = menu.getObjective().surviveWaveIntervalSeconds();
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

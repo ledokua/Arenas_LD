@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
+import net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig;
 import net.ledok.arenas_ld.dungeon.room.RoomRewardConfig;
 import net.ledok.arenas_ld.screen.ModScreenHandlers;
 import net.minecraft.core.BlockPos;
@@ -20,6 +21,7 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
     private String roomName;
     private Optional<BlockPos> respawnPos;
     private RoomRewardConfig roomReward;
+    private RoomObjectiveConfig objective;
     private List<String> knownLootTableIds;
 
     public RoomControllerScreenHandler(int syncId, Inventory playerInventory, RoomControllerData data) {
@@ -60,6 +62,10 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
         return roomReward;
     }
 
+    public RoomObjectiveConfig getObjective() {
+        return objective;
+    }
+
     public List<String> getKnownLootTableIds() {
         return knownLootTableIds;
     }
@@ -71,6 +77,7 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
         this.roomName = data.roomName();
         this.respawnPos = data.respawnPos();
         this.roomReward = data.roomReward();
+        this.objective = data.objective();
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
     }
 

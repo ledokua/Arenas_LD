@@ -93,6 +93,7 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(RoomSetNamePayload.TYPE, RoomSetNamePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomClearRespawnPayload.TYPE, RoomClearRespawnPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomSetRewardPayload.TYPE, RoomSetRewardPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.dungeon.packet.RoomSetObjectivePayload.TYPE, net.ledok.arenas_ld.dungeon.packet.RoomSetObjectivePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.dungeon.packet.RoomClearEntrancesPayload.TYPE, net.ledok.arenas_ld.dungeon.packet.RoomClearEntrancesPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload.TYPE, net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerEntityDefPayload.TYPE, UpdateMobSpawnerEntityDefPayload.STREAM_CODEC);

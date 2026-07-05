@@ -286,6 +286,26 @@ public final class SpawnerPacketHandlers {
             });
         });
 
+        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.RoomSetObjectivePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof RoomControllerBlockEntity room) {
+                    net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig objective = payload.objective();
+                    room.setObjective(new net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig(
+                        objective.type(), Math.clamp(objective.surviveSeconds(), 1, 3600),
+                        Math.clamp(objective.surviveWaveIntervalSeconds(), 5, 600)));
+                    markDirtyAndSync(world, room);
+                    broadcastRoomControllerSnapshot(player, room);
+                }
+            });
+        });
+
         ServerPlayNetworking.registerGlobalReceiver(UpdateMobSpawnerEntityDefPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();

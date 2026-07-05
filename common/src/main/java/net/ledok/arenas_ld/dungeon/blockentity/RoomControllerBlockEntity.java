@@ -5,6 +5,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.PhaseBlock;
+import net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig;
 import net.ledok.arenas_ld.dungeon.room.RoomRewardConfig;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.dungeon.screen.RoomControllerData;
@@ -71,6 +72,10 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     private String roomName = "";
     /** Reward granted to each eligible player when this room is cleared. EMPTY = nothing. */
     private RoomRewardConfig roomReward = RoomRewardConfig.EMPTY;
+    /** How this room clears. DEFAULT (kill everything) matches pre-objective behavior. */
+    private RoomObjectiveConfig objective = RoomObjectiveConfig.DEFAULT;
+    /** SURVIVE countdown in ticks, set at activation. -1 = no timer running. */
+    private int surviveTicksRemaining = -1;
 
     // ---- Construction ----
 
@@ -153,6 +158,16 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         return currentWaveIndex >= waveNumbers.size() - 1;
     }
 
+    /** SURVIVE countdown in ticks, or -1 when no timer is running. */
+    public int getSurviveTicksRemaining() {
+        return surviveTicksRemaining;
+    }
+
+    /** True while a SURVIVE timer runs: waves loop and mob deaths don't clear the room. */
+    private boolean isSurviveLooping() {
+        return objective.type() == RoomObjectiveConfig.Type.SURVIVE && surviveTicksRemaining > 0;
+    }
+
     /** Designer-facing name for this room, used for the ARMED hint and the DBS rooms list. May be blank. */
     public String getRoomName() {
         return roomName;
@@ -188,6 +203,18 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         RoomRewardConfig sanitized = reward == null ? RoomRewardConfig.EMPTY : reward;
         if (!this.roomReward.equals(sanitized)) {
             this.roomReward = sanitized;
+            markDirtyAndSync();
+        }
+    }
+
+    public RoomObjectiveConfig getObjective() {
+        return objective;
+    }
+
+    public void setObjective(RoomObjectiveConfig newObjective) {
+        RoomObjectiveConfig sanitized = newObjective == null ? RoomObjectiveConfig.DEFAULT : newObjective;
+        if (!this.objective.equals(sanitized)) {
+            this.objective = sanitized;
             markDirtyAndSync();
         }
     }
@@ -306,6 +333,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         currentWaveIndex = 0;
         nextWaveDelayTicks = -1;
         bossInCurrentWave = false;
+        surviveTicksRemaining = -1;
         setChanged();
     }
 
@@ -375,12 +403,15 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         double healthMultiplier = tier.healthMultiplier() * partyHealthMultiplier;
         // Walk forward past waves whose spawners are all broken so a bad first wave can't soft-lock activation.
         for (int index = 0; index < waves.size(); index++) {
-            int spawned = spawnWave(world, healthMultiplier, waves.get(index), true);
+            int spawned = spawnWave(world, healthMultiplier, waves.get(index), true).size();
             if (spawned > 0) {
                 waveNumbers.clear();
                 waveNumbers.addAll(waves);
                 currentWaveIndex = index;
                 nextWaveDelayTicks = -1;
+                if (objective.type() == RoomObjectiveConfig.Type.SURVIVE) {
+                    surviveTicksRemaining = Math.max(1, objective.surviveSeconds()) * 20;
+                }
                 markActivated();
                 return spawned;
             }
@@ -428,18 +459,18 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
      * {@code logInvalid} limits the "not a spawner" warning to activation so it isn't
      * re-logged for every later wave.
      *
-     * @return the count of mobs that were spawned and tracked
+     * @return the UUIDs of the mobs that were spawned and tracked
      */
-    private int spawnWave(ServerLevel world, double healthMultiplier, int waveNumber, boolean logInvalid) {
+    private List<UUID> spawnWave(ServerLevel world, double healthMultiplier, int waveNumber, boolean logInvalid) {
         bossInCurrentWave = false;
-        int spawned = 0;
+        List<UUID> spawned = new ArrayList<>();
         for (BlockPos absolutePos : getSpawnerPositions()) {
             BlockEntity be = world.getBlockEntity(absolutePos);
             if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity newMobSpawner) {
                 if (Math.max(1, newMobSpawner.getEntityDefinition().wave()) != waveNumber) continue;
                 for (LivingEntity entity : newMobSpawner.spawnScaled(world, healthMultiplier)) {
                     trackSpawnedMob(entity.getUUID());
-                    spawned++;
+                    spawned.add(entity.getUUID());
                 }
             } else if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity newBossSpawner) {
                 if (Math.max(1, newBossSpawner.getEntityDefinition().wave()) != waveNumber) continue;
@@ -447,7 +478,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 if (entity != null) {
                     trackBossMob(entity.getUUID());
                     bossInCurrentWave = true;
-                    spawned++;
+                    spawned.add(entity.getUUID());
                 }
             } else if (logInvalid) {
                 ArenasLdMod.LOGGER.warn(
@@ -467,7 +498,23 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
      * @return UUIDs of newly spawned mobs, for run registration; empty when nothing spawned
      */
     public List<UUID> tickWaveProgression(ServerLevel world, TierConfig tier, double partyHealthMultiplier) {
-        if (!activated || cleared || !aliveMobs.isEmpty() || isOnFinalWave()) {
+        if (!activated || cleared) {
+            nextWaveDelayTicks = -1;
+            return List.of();
+        }
+        // SURVIVE runs on its own schedule: waves force-spawn at a fixed interval no matter what's
+        // still alive (no AFKing behind a leftover mob), and the timer — not mob deaths — ends the room.
+        if (surviveTicksRemaining > 0 && objective.type() == RoomObjectiveConfig.Type.SURVIVE) {
+            nextWaveDelayTicks = -1;
+            surviveTicksRemaining--;
+            if (surviveTicksRemaining == 0) {
+                discardAliveMobs(world);
+                markCleared();
+                return List.of();
+            }
+            return tickSurviveSchedule(world, tier, partyHealthMultiplier);
+        }
+        if (!aliveMobs.isEmpty() || isOnFinalWave()) {
             nextWaveDelayTicks = -1;
             return List.of();
         }
@@ -484,13 +531,64 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         double healthMultiplier = tier.healthMultiplier() * partyHealthMultiplier;
         while (!isOnFinalWave()) {
             currentWaveIndex++;
-            if (spawnWave(world, healthMultiplier, waveNumbers.get(currentWaveIndex), false) > 0) {
+            if (!spawnWave(world, healthMultiplier, waveNumbers.get(currentWaveIndex), false).isEmpty()) {
                 setChanged();
                 return List.copyOf(aliveMobs); // was empty before spawn → exactly the new mobs
             }
         }
         markCleared();
         return List.of();
+    }
+
+    /**
+     * SURVIVE wave schedule, derived from the survive timer so no extra state needs persisting:
+     * every {@code surviveWaveIntervalSeconds} of elapsed survive time the next wave (looping past
+     * the last back to the first) spawns on top of whatever is still alive, telegraphed
+     * {@link #NEXT_WAVE_DELAY_TICKS} in advance. Waves that spawn 0 (broken spawners) are skipped;
+     * the timer keeps running either way — it alone clears the room.
+     *
+     * @return UUIDs of newly spawned mobs, for run registration
+     */
+    private List<UUID> tickSurviveSchedule(ServerLevel world, TierConfig tier, double partyHealthMultiplier) {
+        if (waveNumbers.isEmpty()) {
+            return List.of();
+        }
+        int intervalTicks = Math.max(1, objective.surviveWaveIntervalSeconds()) * 20;
+        int elapsedTicks = Math.max(1, objective.surviveSeconds()) * 20 - surviveTicksRemaining;
+        if (elapsedTicks <= 0) {
+            return List.of();
+        }
+        if ((elapsedTicks + NEXT_WAVE_DELAY_TICKS) % intervalTicks == 0) {
+            waveCountdownJustStarted = true;
+        }
+        if (elapsedTicks % intervalTicks != 0) {
+            return List.of();
+        }
+        double healthMultiplier = tier.healthMultiplier() * partyHealthMultiplier;
+        for (int attempts = 0; attempts < waveNumbers.size(); attempts++) {
+            currentWaveIndex = (currentWaveIndex + 1) % waveNumbers.size();
+            List<UUID> spawned = spawnWave(world, healthMultiplier, waveNumbers.get(currentWaveIndex), false);
+            if (!spawned.isEmpty()) {
+                setChanged();
+                return spawned;
+            }
+        }
+        return List.of();
+    }
+
+    /** Discards every tracked mob and unregisters it from the run. */
+    private void discardAliveMobs(ServerLevel world) {
+        for (UUID uuid : new ArrayList<>(aliveMobs)) {
+            Entity entity = world.getEntity(uuid);
+            if (entity != null && entity.isAlive()) {
+                entity.discard();
+            }
+            ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);
+        }
+        aliveMobs.clear();
+        bossMobs.clear();
+        bossInCurrentWave = false;
+        setChanged();
     }
 
     /** True exactly once after a between-wave countdown starts; reading it resets the flag. */
@@ -534,9 +632,12 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         return waves.isEmpty() ? List.of() : getWaveSpawnPositions(world, waves.get(0));
     }
 
-    /** Spawn positions of the next configured wave, or empty when on the final wave. */
+    /** Spawn positions of the next configured wave, or empty when on the final wave (unless a survive loop wraps back to the first). */
     public List<BlockPos> getUpcomingWaveSpawnPositions(ServerLevel world) {
-        if (waveNumbers.isEmpty() || isOnFinalWave()) return List.of();
+        if (waveNumbers.isEmpty()) return List.of();
+        if (isOnFinalWave()) {
+            return isSurviveLooping() ? getWaveSpawnPositions(world, waveNumbers.get(0)) : List.of();
+        }
         return getWaveSpawnPositions(world, waveNumbers.get(currentWaveIndex + 1));
     }
 
@@ -649,20 +750,21 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
 
         // All bosses of the current wave died → discard the wave's remaining adds on the spot.
-        if (bossInCurrentWave && bossMobs.isEmpty() && !aliveMobs.isEmpty()) {
-            for (UUID uuid : new ArrayList<>(aliveMobs)) {
-                Entity entity = world.getEntity(uuid);
-                if (entity != null && entity.isAlive()) {
-                    entity.discard();
-                }
-                ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);
+        if (bossInCurrentWave && bossMobs.isEmpty()) {
+            if (!aliveMobs.isEmpty()) {
+                discardAliveMobs(world);
             }
-            aliveMobs.clear();
             bossInCurrentWave = false;
             changed = true;
+            // KILL_BOSS: the boss dying ends the room outright, waves left or not.
+            if (objective.type() == RoomObjectiveConfig.Type.KILL_BOSS && activated && !cleared) {
+                markCleared();
+                return;
+            }
         }
 
-        if (activated && !cleared && aliveMobs.isEmpty() && isOnFinalWave()) {
+        // A running SURVIVE timer owns the clear — dead waves loop instead (tickWaveProgression).
+        if (activated && !cleared && aliveMobs.isEmpty() && isOnFinalWave() && !isSurviveLooping()) {
             markCleared();
             return;
         }
@@ -686,7 +788,9 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         int nextWaveDelayTicks,
         boolean bossInCurrentWave,
         RoomRewardConfig roomReward,
-        List<BlockPos> entranceOffsets
+        List<BlockPos> entranceOffsets,
+        RoomObjectiveConfig objective,
+        int surviveTicksRemaining
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("spawnerOffsets").forGetter(State::spawnerOffsets),
@@ -708,7 +812,9 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             Codec.INT.optionalFieldOf("nextWaveDelayTicks", -1).forGetter(State::nextWaveDelayTicks),
             Codec.BOOL.optionalFieldOf("bossInCurrentWave", false).forGetter(State::bossInCurrentWave),
             RoomRewardConfig.CODEC.optionalFieldOf("roomReward", RoomRewardConfig.EMPTY).forGetter(State::roomReward),
-            BlockPos.CODEC.listOf().optionalFieldOf("entranceOffsets", List.of()).forGetter(State::entranceOffsets)
+            BlockPos.CODEC.listOf().optionalFieldOf("entranceOffsets", List.of()).forGetter(State::entranceOffsets),
+            RoomObjectiveConfig.CODEC.optionalFieldOf("objective", RoomObjectiveConfig.DEFAULT).forGetter(State::objective),
+            Codec.INT.optionalFieldOf("surviveTicksRemaining", -1).forGetter(State::surviveTicksRemaining)
         ).apply(i, State::new));
     }
 
@@ -717,7 +823,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         super.saveAdditional(nbt, registries);
         State state = new State(spawnerOffsets, doorOffsets,
             Optional.ofNullable(respawnOffset), aliveMobs, bossMobs, activated, cleared, roomName,
-            waveNumbers, currentWaveIndex, nextWaveDelayTicks, bossInCurrentWave, roomReward, entranceOffsets);
+            waveNumbers, currentWaveIndex, nextWaveDelayTicks, bossInCurrentWave, roomReward, entranceOffsets,
+            objective, surviveTicksRemaining);
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save RoomController at {}: {}", worldPosition, err))
@@ -752,6 +859,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     roomReward = state.roomReward();
                     entranceOffsets.clear();
                     entranceOffsets.addAll(state.entranceOffsets());
+                    objective = state.objective();
+                    surviveTicksRemaining = state.surviveTicksRemaining();
                 });
         }
     }
@@ -794,7 +903,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             }
         }
         return new RoomControllerData(worldPosition, entries, getDoorPositions(), getEntrancePositions(),
-            roomName, Optional.ofNullable(getRespawnPos()), roomReward, enumerateLootTables());
+            roomName, Optional.ofNullable(getRespawnPos()), roomReward, objective, enumerateLootTables());
     }
 
     /** Sorted loot table ids for the reward screen's autocomplete; empty when called client-side. */

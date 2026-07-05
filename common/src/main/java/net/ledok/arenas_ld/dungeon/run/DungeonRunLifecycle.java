@@ -259,7 +259,7 @@ public final class DungeonRunLifecycle {
 
         tickDownedPlayers(world, controller, run);
         tickDisconnectedPlayers(world, controller, run);
-        updateDungeonTimeBossBar(world, run, room.getAliveMobs().size(), room.getWaveDisplay(), room.getTotalWaves());
+        updateDungeonTimeBossBar(world, run, room);
     }
 
     /** Branching mode iff any room has entrance doors linked; legacy dungeons keep the index walk. */
@@ -355,7 +355,7 @@ public final class DungeonRunLifecycle {
             finishRoom(world, controller, run, dbs, current, room);
             return;
         }
-        updateDungeonTimeBossBar(world, run, room.getAliveMobs().size(), room.getWaveDisplay(), room.getTotalWaves());
+        updateDungeonTimeBossBar(world, run, room);
     }
 
     /** Locks the party into the entered room and starts the grace countdown. */
@@ -726,11 +726,21 @@ public final class DungeonRunLifecycle {
         }
     }
 
-    private static void updateDungeonTimeBossBar(ServerLevel world, DungeonRun run, int mobsLeftInRoom, int waveDisplay, int totalWaves) {
+    private static void updateDungeonTimeBossBar(ServerLevel world, DungeonRun run, RoomControllerBlockEntity room) {
         String timeLeft = formatBossBarTime(run);
-        updateDungeonTimeBossBarNamed(world, run, totalWaves > 1
-            ? Component.translatable("boss_bar.arenas_ld.dungeon_time_waves", timeLeft, waveDisplay, totalWaves, mobsLeftInRoom)
-            : Component.translatable("boss_bar.arenas_ld.dungeon_time", timeLeft, mobsLeftInRoom));
+        Component name;
+        if (room.getObjective().type() == net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig.Type.SURVIVE
+                && room.getSurviveTicksRemaining() > 0) {
+            int surviveSeconds = (room.getSurviveTicksRemaining() + 19) / 20;
+            name = Component.translatable("boss_bar.arenas_ld.dungeon_time_survive", timeLeft,
+                String.format("%d:%02d", surviveSeconds / 60, surviveSeconds % 60));
+        } else if (room.getTotalWaves() > 1) {
+            name = Component.translatable("boss_bar.arenas_ld.dungeon_time_waves", timeLeft,
+                room.getWaveDisplay(), room.getTotalWaves(), room.getAliveMobs().size());
+        } else {
+            name = Component.translatable("boss_bar.arenas_ld.dungeon_time", timeLeft, room.getAliveMobs().size());
+        }
+        updateDungeonTimeBossBarNamed(world, run, name);
     }
 
     private static void updateDungeonTimeBossBarNamed(ServerLevel world, DungeonRun run, Component name) {
