@@ -27,6 +27,9 @@ public class ArenasLdConfig {
     // Potion/mob effects stripped from players during a run (e.g. "minecraft:speed",
     // "galosphere:astral"). Removed every tick, so they can't be applied mid-run either.
     public java.util.List<String> run_effect_blacklist = new java.util.ArrayList<>();
+    // Verbose "[debug]" logging of run lifecycle events: teleports (with full player state),
+    // reconnect/disconnect decisions, and chunk force-loading. For diagnosing stuck players.
+    public boolean debug_logging = false;
 
     public static ArenasLdConfig getInstance() {
         if (instance == null) {

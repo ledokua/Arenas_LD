@@ -3,8 +3,10 @@ package net.ledok.arenas_ld.arena.run;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.run.RunParticipant;
+import net.ledok.arenas_ld.util.ServerTaskScheduler;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.util.UUID;
 
@@ -28,11 +30,18 @@ public final class ArenaConnectionListener {
 
         // REMOVED participants are included on join so the lifecycle can eject them to their
         // return point (grace expired while they were offline, but the run is still going).
+        // Deferred to the next tick: reconnect handling may teleport, which must not happen
+        // from inside the JOIN event (mid placeNewPlayer).
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            RunRef ref = findRun(server, handler.player.getUUID(), true);
-            if (ref != null) {
-                ArenaRunLifecycle.handlePlayerReconnect(ref.world(), ref.controller(), ref.run(), handler.player);
-            }
+            UUID uuid = handler.player.getUUID();
+            ServerTaskScheduler.nextTick(s -> {
+                ServerPlayer player = s.getPlayerList().getPlayer(uuid);
+                if (player == null) return;
+                RunRef ref = findRun(s, uuid, true);
+                if (ref != null) {
+                    ArenaRunLifecycle.handlePlayerReconnect(ref.world(), ref.controller(), ref.run(), player);
+                }
+            });
         });
     }
 

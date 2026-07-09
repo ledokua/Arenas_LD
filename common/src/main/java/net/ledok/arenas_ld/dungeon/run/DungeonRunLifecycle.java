@@ -10,6 +10,7 @@ import net.ledok.arenas_ld.dungeon.room.RoomRewardConfig;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.util.BusyStateCompat;
+import net.ledok.arenas_ld.util.DebugLog;
 import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.ledok.arenas_ld.util.LobbyChatActions;
 import net.ledok.arenas_ld.util.PartyTeamStore;
@@ -129,10 +130,6 @@ public final class DungeonRunLifecycle {
             BusyStateCompat.setBusy(uuid, BUSY_REASON);
             addToPartyTeam(world, run, player);
             PlayerStatsStore.get(world.getServer()).recordRunStart(uuid, PlayerStatsStore.Mode.DUNGEON);
-
-            BlockPos entrance = dbs.getAbsoluteEntrancePos();
-            player.setGameMode(GameType.ADVENTURE);
-            player.teleportTo(targetLevel, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0f, 0.0f);
         }
 
         // Freeze the per-player HP multiplier at run start — players leaving mid-run don't weaken it.
@@ -152,7 +149,29 @@ public final class DungeonRunLifecycle {
             startRoom.openEntranceDoorsArmed(world);
         }
 
+        // Register the run before moving anyone: if a teleport throws (e.g. vanilla
+        // chunk-tracking corruption), the run must still exist and tick so it can be
+        // forfeited normally and reconnect recovery works, instead of leaving players
+        // registered to a run no controller knows about.
         controller.startRun(dbsPos, run);
+
+        BlockPos entrance = dbs.getAbsoluteEntrancePos();
+        DebugLog.log("startRun: dbs={} in {} -> entrance={} in {}, party={}",
+            dbsPos, world.dimension().location(), entrance, targetLevel.dimension().location(), partyUuids.size());
+        for (UUID uuid : partyUuids) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            if (player == null) continue;
+            try {
+                DebugLog.log("startRun: teleporting {}", DebugLog.describe(player));
+                player.setGameMode(GameType.ADVENTURE);
+                player.teleportTo(targetLevel, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0f, 0.0f);
+                DebugLog.log("startRun: teleported {}", DebugLog.describe(player));
+            } catch (Exception e) {
+                ArenasLdMod.LOGGER.error("Failed to teleport {} into dungeon run at {}; relogging will pull them back into the run",
+                    player.getGameProfile().getName(), dbsPos, e);
+            }
+        }
+
         return run;
     }
 
@@ -1024,6 +1043,7 @@ public final class DungeonRunLifecycle {
                 if (target == null) {
                     target = world;
                 }
+                DebugLog.log("hardcore death: ejecting {} to {}", DebugLog.describe(player), returnPoint.pos());
                 player.teleportTo(
                     target,
                     returnPoint.pos().x(),
@@ -1121,6 +1141,7 @@ public final class DungeonRunLifecycle {
     private static void teleportToRoomRespawnOrEntrance(ServerLevel world, DungeonBossSpawnerBlockEntity dbs, DungeonRun run, ServerPlayer player) {
         BlockPos roomRespawn = activeRoomRespawnPos(world, dbs, run);
         if (roomRespawn != null) {
+            DebugLog.log("teleport to room respawn {} in {}: {}", roomRespawn, world.dimension().location(), DebugLog.describe(player));
             player.teleportTo(world, roomRespawn.getX() + 0.5, roomRespawn.getY(), roomRespawn.getZ() + 0.5, 0.0F, 0.0F);
             return;
         }
@@ -1129,12 +1150,14 @@ public final class DungeonRunLifecycle {
             target = world;
         }
         BlockPos entrance = dbs.getAbsoluteEntrancePos();
+        DebugLog.log("teleport to entrance {} in {}: {}", entrance, target.dimension().location(), DebugLog.describe(player));
         player.teleportTo(target, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5, 0.0F, 0.0F);
     }
 
     /** Teleports a player to a captured return point and restores their pre-run game mode + health. */
     private static void applyReturnPoint(MinecraftServer server, ServerPlayer player, PlayerReturnPoint rp) {
         ServerLevel target = server.getLevel(rp.dimension());
+        DebugLog.log("teleport to return point {} in {}: {}", rp.pos(), rp.dimension().location(), DebugLog.describe(player));
         if (target != null) {
             player.teleportTo(target, rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
         }
@@ -1237,6 +1260,7 @@ public final class DungeonRunLifecycle {
             return;
         }
         long now = world.getGameTime();
+        DebugLog.log("disconnect: {} leaves run at {} (status was {})", DebugLog.describe(player), run.dbsPos(), participant.status());
         run.updateParticipant(participant.withStatus(ParticipantStatus.DISCONNECTED, now));
         run.markDisconnected(uuid, now);
 
@@ -1255,9 +1279,11 @@ public final class DungeonRunLifecycle {
      */
     public static void handlePlayerReconnect(MinecraftServer server, ServerPlayer player) {
         UUID uuid = player.getUUID();
+        DebugLog.log("reconnect: {}", DebugLog.describe(player));
 
         PlayerReturnPoint pending = PendingRestoreStore.get(server).take(uuid);
         if (pending != null) {
+            DebugLog.log("reconnect: pending restore -> {} in {}", pending.pos(), pending.dimension().location());
             applyReturnPoint(server, player, pending);
             player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.run_ended_while_away")
                 .withStyle(ChatFormatting.YELLOW));
@@ -1266,8 +1292,30 @@ public final class DungeonRunLifecycle {
 
         DungeonRun run = ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(uuid);
         if (run == null) {
+            DebugLog.log("reconnect: no run for {}", player.getScoreboardName());
             return;
         }
+
+        // Orphaned run: no loaded controller owns it (controllers keep their own chunk
+        // force-loaded, so this means the run isn't ticking — e.g. a crash during start
+        // aborted registration). Eject instead of teleporting into a dead dungeon.
+        if (ArenasLdMod.DUNGEON_MANAGER.findControllerForRun(server, run) == null) {
+            DebugLog.log("reconnect: run at {} is orphaned, ejecting {}", run.dbsPos(), player.getScoreboardName());
+            PlayerReturnPoint rp = run.returnPoints().get(uuid);
+            if (rp != null) {
+                applyReturnPoint(server, player, rp);
+                run.removeReturnPoint(uuid);
+            } else {
+                player.setGameMode(GameType.SURVIVAL);
+            }
+            removeFromPartyTeam(player.serverLevel(), run, player.getScoreboardName());
+            ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
+            BusyStateCompat.clearBusy(uuid, BUSY_REASON);
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.run_ended_while_away")
+                .withStyle(ChatFormatting.YELLOW));
+            return;
+        }
+
         RunParticipant participant = run.participants().get(uuid);
         if (participant == null || participant.status() == ParticipantStatus.REMOVED) {
             PlayerReturnPoint rp = run.returnPoints().get(uuid);
@@ -1287,6 +1335,7 @@ public final class DungeonRunLifecycle {
             && world.getBlockEntity(run.dbsPos()) instanceof DungeonBossSpawnerBlockEntity d ? d : null;
 
         if (run.isDowned(uuid)) {
+            DebugLog.log("reconnect: rejoining run at {} as DOWNED, dbs {}", run.dbsPos(), dbs != null ? "loaded" : "NOT LOADED");
             run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, now));
             player.setGameMode(GameType.SPECTATOR);
             player.setHealth(1.0F);
@@ -1296,6 +1345,7 @@ public final class DungeonRunLifecycle {
             player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.reconnected_downed")
                 .withStyle(ChatFormatting.YELLOW));
         } else {
+            DebugLog.log("reconnect: rejoining run at {} as ACTIVE, dbs {}", run.dbsPos(), dbs != null ? "loaded" : "NOT LOADED");
             run.updateParticipant(participant.withStatus(ParticipantStatus.ACTIVE, now));
             player.setGameMode(GameType.ADVENTURE);
             player.setHealth(player.getMaxHealth());
@@ -1314,16 +1364,42 @@ public final class DungeonRunLifecycle {
 
     public static void forceLoadChunksForRun(ServerLevel world, BlockPos dbsPos) {
         Set<ChunkPos> chunks = collectRunChunks(world, dbsPos);
+        DebugLog.log("forceLoad: {} chunks in {} for dbs {}: {}", chunks.size(), world.dimension().location(), dbsPos, chunks);
         for (ChunkPos chunkPos : chunks) {
             world.setChunkForced(chunkPos.x, chunkPos.z, true);
         }
+        setEntranceChunkForced(world, dbsPos, true);
     }
 
     private static void unforceChunksForRun(ServerLevel world, BlockPos dbsPos) {
         Set<ChunkPos> chunks = collectRunChunks(world, dbsPos);
+        DebugLog.log("unforce: {} chunks in {} for dbs {}", chunks.size(), world.dimension().location(), dbsPos);
         for (ChunkPos chunkPos : chunks) {
             world.setChunkForced(chunkPos.x, chunkPos.z, false);
         }
+        setEntranceChunkForced(world, dbsPos, false);
+    }
+
+    /**
+     * The entrance may live in a different dimension than the DBS and its rooms, so
+     * {@link #collectRunChunks} can't cover it — force it separately in its own level.
+     * Keeps run starts and reconnects from dropping players into an unloaded chunk.
+     */
+    private static void setEntranceChunkForced(ServerLevel world, BlockPos dbsPos, boolean forced) {
+        if (!(world.getBlockEntity(dbsPos) instanceof DungeonBossSpawnerBlockEntity dbs)) {
+            return;
+        }
+        BlockPos entrance = dbs.getAbsoluteEntrancePos();
+        if (entrance == null) {
+            return;
+        }
+        ServerLevel entranceLevel = world.getServer().getLevel(dbs.getEntranceDimension());
+        if (entranceLevel == null) {
+            entranceLevel = world;
+        }
+        ChunkPos chunkPos = new ChunkPos(entrance);
+        DebugLog.log("{} entrance chunk {} in {}", forced ? "forceLoad:" : "unforce:", chunkPos, entranceLevel.dimension().location());
+        entranceLevel.setChunkForced(chunkPos.x, chunkPos.z, forced);
     }
 
     private static Set<ChunkPos> collectRunChunks(ServerLevel world, BlockPos dbsPos) {

@@ -50,6 +50,7 @@ public class ArenasLdMod {
         ModPackets.registerC2SPackets();
         ModPackets.registerS2CPackets();
         CommandRegistry.initialize();
+        net.ledok.arenas_ld.util.ServerTaskScheduler.register();
         RAID_BOSS_MANAGER.initialize();
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> DUNGEON_MANAGER.clearForServerStop());
         DungeonConnectionListener.register();

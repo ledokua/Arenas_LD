@@ -26,10 +26,16 @@ public class RaidBossManager {
             }
         });
 
+        // Deferred to the next tick — server.execute runs inline on the server thread, which
+        // would teleport from inside the JOIN event (mid placeNewPlayer) and desync the client.
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            ServerPlayer player = handler.getPlayer();
-            server.execute(() -> {
-                RaidBossSpawnerBlockEntity spawner = getSpawnerForOfflinePlayer(player.getUUID());
+            UUID uuid = handler.getPlayer().getUUID();
+            net.ledok.arenas_ld.util.ServerTaskScheduler.nextTick(s -> {
+                ServerPlayer player = s.getPlayerList().getPlayer(uuid);
+                if (player == null) {
+                    return;
+                }
+                RaidBossSpawnerBlockEntity spawner = getSpawnerForOfflinePlayer(uuid);
                 if (spawner != null) {
                     spawner.handlePlayerReconnect(player);
                     return;
