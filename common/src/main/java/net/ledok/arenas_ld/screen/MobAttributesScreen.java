@@ -1,115 +1,109 @@
 package net.ledok.arenas_ld.screen;
 
-import io.wispforest.owo.ui.base.BaseOwoHandledScreen;
-import io.wispforest.owo.ui.component.ButtonComponent;
-import io.wispforest.owo.ui.component.Components;
-import io.wispforest.owo.ui.component.LabelComponent;
-import io.wispforest.owo.ui.component.TextBoxComponent;
-import io.wispforest.owo.ui.container.Containers;
-import io.wispforest.owo.ui.container.FlowLayout;
-import io.wispforest.owo.ui.container.ScrollContainer;
-import io.wispforest.owo.ui.core.Color;
-import io.wispforest.owo.ui.core.HorizontalAlignment;
-import io.wispforest.owo.ui.core.Insets;
-import io.wispforest.owo.ui.core.OwoUIAdapter;
-import io.wispforest.owo.ui.core.Sizing;
-import io.wispforest.owo.ui.core.Surface;
-import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.util.AttributeData;
+import net.ledok.vectorlib.client.canvas.TextNode;
+import net.ledok.vectorlib.client.canvas.VectorCanvas;
+import net.ledok.vectorlib.client.canvas.layout.Align;
+import net.ledok.vectorlib.client.canvas.layout.Flex;
+import net.ledok.vectorlib.client.canvas.layout.Insets;
+import net.ledok.vectorlib.client.canvas.layout.Justify;
+import net.ledok.vectorlib.client.canvas.layout.Sizing;
+import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
+import net.ledok.vectorlib.client.canvas.widget.TextField;
+import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
+import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
+import static net.ledok.arenas_ld.screen.ArenasUi.BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
+
 /**
- * owo-lib editor for a mob's attribute list (id + value rows). Opened from the
+ * VectorLib editor for a mob's attribute list (id + value rows). Opened from the
  * boss / mob spawner screens. Mirrors the dark spawner-screen styling and, like
  * the parent screens, ignores the inventory ("E") key so it can't be closed
  * mid-edit.
  */
-public class MobAttributesScreen extends BaseOwoHandledScreen<FlowLayout, MobAttributesScreenHandler> {
-    private static final int BG          = 0xFF070E14;
-    private static final int PANEL       = 0xFF121922;
-    private static final int PANEL_2     = 0xFF0C1218;
-    private static final int HAIRLINE    = 0xFF283442;
-    private static final int HAIRLINE_HI = 0xFF3A4A5C;
-    private static final int INK         = 0xFFE8EEF5;
-    private static final int INK_DIM     = 0xFF5F6E80;
-    private static final int DANGER      = 0xFFE8624A;
-    private static final int ACCENT      = 0xFFA98BE8;
-    private static final int ACCENT_DARK = 0xFF6C4FB5;
-
+public class MobAttributesScreen extends CanvasHandledScreen<MobAttributesScreenHandler> {
     // Working model — raw strings so mid-edit values survive add/remove rebuilds.
     private final List<String> ids = new ArrayList<>();
     private final List<String> values = new ArrayList<>();
     private final List<Double> maxValues = new ArrayList<>();
 
-    private FlowLayout contentArea;
-    private LabelComponent footerLabel;
+    private Flex contentArea;
+    private TextNode footerLabel;
     private String footerError;
 
     // One attribute-ID dropdown open at a time across the rows.
     private final IdSuggestionDropdown.Group idDropdowns = new IdSuggestionDropdown.Group();
 
     public MobAttributesScreen(MobAttributesScreenHandler handler, Inventory inventory, Component title) {
-        super(handler, inventory, title);
-        this.titleLabelY = 9999;
-        this.inventoryLabelY = 9999;
+        super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
+        canvas.theme(ArenasUi.THEME);
+        dimBackground(false);
+        fillWindow();
     }
 
     /**
      * Swallow the inventory key so tapping E mid-edit doesn't close the editor.
-     * Character input still reaches focused fields via charTyped; closing happens
-     * via × or Escape.
+     * Typing in focused fields still goes through; closing happens via × or Escape.
      */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
-            return true;
-        }
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
+                && !(input.focusedNode() instanceof TextField)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
-        return OwoUIAdapter.create(this, Containers::verticalFlow);
+    protected void onCanvasResized(float width, float height) {
+        buildAll();
     }
 
-    @Override
-    protected void build(FlowLayout rootComponent) {
+    private void buildAll() {
         loadFromHandler();
+        canvas.clear();
 
-        rootComponent.surface(Surface.flat(BG));
-        rootComponent.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        Flex root = canvas.add(Flex.column());
+        root.sizing(Sizing.fill(), Sizing.fill());
+        root.justify(Justify.CENTER).alignItems(Align.CENTER);
+        root.backgroundFill(BG);
 
-        int shellWidth  = Math.max(440, Math.min(560, this.width - 24));
-        int shellHeight = Math.max(260, this.height - 24);
-        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
-        shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
+        float shellWidth  = Math.max(440, Math.min(560, canvas.width() - 24));
+        float shellHeight = Math.max(260, canvas.height() - 24);
+        Flex shell = root.item(Flex.column());
+        shell.sizing(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
+        shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
 
-        shell.child(buildHeader());
+        shell.item(buildHeader());
 
-        contentArea = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        contentArea.surface(Surface.flat(PANEL));
-        contentArea.padding(Insets.of(10));
-        contentArea.gap(4);
-        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.expand(), contentArea);
-        scroll.surface(Surface.flat(PANEL));
-        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        scroll.scrollbarThiccness(8);
-        scroll.fixedScrollbarLength(28);
-        scroll.scrollStep(18);
-        shell.child(scroll);
+        contentArea = Flex.column().gap(4).padding(Insets.of(10));
+        contentArea.sizing(Sizing.fill(), Sizing.content());
+        contentArea.backgroundFill(PANEL);
+        ScrollPanel scroll = new ScrollPanel(100, 100, contentArea);
+        scroll.sizing(Sizing.fill(), Sizing.expand());
+        scroll.barWidth(8);
+        scroll.wheelStep(18);
+        shell.item(scroll);
 
-        shell.child(buildFooter());
-        rootComponent.child(shell);
+        shell.item(buildFooter());
 
+        root.layoutIn(canvas.width(), canvas.height());
         rebuildUi();
     }
 
@@ -124,113 +118,96 @@ public class MobAttributesScreen extends BaseOwoHandledScreen<FlowLayout, MobAtt
         }
     }
 
-    private FlowLayout buildHeader() {
-        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(46));
-        header.surface(Surface.flat(PANEL_2));
-        header.padding(Insets.of(8, 8, 10, 10));
-        header.gap(10);
-        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildHeader() {
+        Flex header = Flex.row().gap(10).padding(Insets.of(8, 10, 8, 10)).alignItems(Align.CENTER);
+        header.sizing(Sizing.fill(), Sizing.fixed(46));
+        header.backgroundFill(PANEL_2);
 
-        FlowLayout mark = Containers.verticalFlow(Sizing.fixed(20), Sizing.fixed(20));
-        mark.surface(Surface.flat(ACCENT).and(Surface.outline(ACCENT_DARK)));
-        header.child(mark);
+        Flex mark = header.item(Flex.column());
+        mark.sizing(Sizing.fixed(20), Sizing.fixed(20));
+        mark.backgroundFill(ACCENT, ACCENT_DARK, 1);
 
-        LabelComponent titleLabel = Components.label(this.title);
-        titleLabel.color(Color.ofArgb(INK));
-        header.child(titleLabel);
-
-        header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-
-        ButtonComponent close = smallButton(Component.literal("×"), b -> onClose());
-        close.sizing(Sizing.fixed(22), Sizing.fixed(18));
-        header.child(close);
+        header.item(ArenasUi.text(this.title, INK));
+        header.spacer();
+        header.item(ArenasUi.button(Component.literal("×"), 22, 18, this::onClose));
         return header;
     }
 
-    private FlowLayout buildFooter() {
-        FlowLayout footer = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
-        footer.surface(Surface.flat(PANEL_2));
-        footer.padding(Insets.of(6));
-        footer.gap(6);
-        footer.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildFooter() {
+        Flex footer = Flex.row().gap(6).padding(Insets.of(6)).alignItems(Align.CENTER);
+        footer.sizing(Sizing.fill(), Sizing.fixed(34));
+        footer.backgroundFill(PANEL_2);
 
-        footerLabel = Components.label(Component.empty());
-        footerLabel.color(Color.ofArgb(DANGER));
-        footerLabel.horizontalSizing(Sizing.expand());
-        footer.child(footerLabel);
+        footerLabel = ArenasUi.text(Component.empty(), DANGER);
+        footerLabel.sizing(Sizing.expand(), Sizing.content());
+        footer.item(footerLabel);
 
-        ButtonComponent add = smallButton(Component.translatable("gui.arenas_ld.add"), b -> {
+        footer.item(ArenasUi.button(Component.translatable("gui.arenas_ld.add"), 90, 18, () -> {
             ids.add("minecraft:generic.max_health");
             values.add("20.0");
             maxValues.add(Double.MAX_VALUE);
             rebuildUi();
-        });
-        add.horizontalSizing(Sizing.fixed(90));
-        footer.child(add);
-
-        ButtonComponent save = smallButton(Component.translatable("gui.arenas_ld.save"), b -> onSave());
-        save.horizontalSizing(Sizing.fixed(90));
-        footer.child(save);
+        }));
+        footer.item(ArenasUi.button(Component.translatable("gui.arenas_ld.save"), 90, 18, this::onSave));
         return footer;
     }
 
     private void rebuildUi() {
         if (contentArea == null) return;
         idDropdowns.closeAll();
-        contentArea.clearChildren();
+        contentArea.clear();
 
-        contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.attributes")));
-        contentArea.child(spacer(2));
+        contentArea.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.attributes")));
+        contentArea.item(ArenasUi.spacer(2));
 
         if (ids.isEmpty()) {
-            contentArea.child(text(Component.translatable("gui.arenas_ld.no_attributes"), INK_DIM));
+            contentArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.no_attributes"), INK_DIM));
         }
         for (int i = 0; i < ids.size(); i++) {
-            contentArea.child(attributeRow(i));
+            contentArea.item(attributeRow(i));
         }
 
         footerLabel.text(footerError != null ? Component.literal(footerError) : Component.empty());
     }
 
-    private FlowLayout attributeRow(int index) {
-        FlowLayout container = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+    private Flex attributeRow(int index) {
+        Flex container = Flex.column();
+        container.sizing(Sizing.fill(), Sizing.content());
 
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        row.gap(4);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex row = Flex.row().gap(4).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.fixed(22));
 
         // ID field with an attribute-registry suggestion dropdown, mirroring the
         // mob-ID autocomplete on the spawner screens.
-        FlowLayout idWrap = Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(22));
-        idWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        idWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        idWrap.child(accent);
+        Flex idWrap = Flex.row().alignItems(Align.CENTER);
+        idWrap.sizing(Sizing.expand(), Sizing.fixed(22));
+        idWrap.backgroundFill(PANEL_2, HAIRLINE, 1);
+        Flex accent = idWrap.item(Flex.column());
+        accent.sizing(Sizing.fixed(2), Sizing.fill());
+        accent.backgroundFill(ACCENT);
 
-        TextBoxComponent idField = IdSuggestionDropdown.textBox(Sizing.expand(), ids.get(index), 256);
-        idField.verticalSizing(Sizing.fixed(18));
-        idField.onChanged().subscribe(v -> ids.set(index, v));
-        idWrap.child(idField);
+        IdSuggestionDropdown.Field idField = IdSuggestionDropdown.textBox(100, ids.get(index), 256);
+        idField.size(100, 18);
+        idField.sizing(Sizing.expand(), Sizing.fixed(18));
+        idField.changeListeners.add(v -> ids.set(index, v));
+        idWrap.item(idField);
 
         IdSuggestionDropdown dropdown = new IdSuggestionDropdown(
-            this.font, BuiltInRegistries.ATTRIBUTE, idField, idDropdowns);
-        idWrap.child(dropdown.chevron());
+            BuiltInRegistries.ATTRIBUTE, idField, idDropdowns);
+        idWrap.item(dropdown.chevron());
 
-        row.child(idWrap);
-        row.child(boxedField(Sizing.fixed(70), values.get(index), v -> values.set(index, v)));
+        row.item(idWrap);
+        row.item(boxedField(70, values.get(index), v -> values.set(index, v)));
 
-        ButtonComponent remove = smallButton(Component.literal("×"), b -> {
+        row.item(ArenasUi.button(Component.literal("×"), 20, 20, () -> {
             ids.remove(index);
             values.remove(index);
             maxValues.remove(index);
             rebuildUi();
-        });
-        remove.sizing(Sizing.fixed(20), Sizing.fixed(20));
-        row.child(remove);
+        }));
 
-        container.child(row);
-        container.child(dropdown.panel());
+        container.item(row);
+        container.item(dropdown.panel());
         return container;
     }
 
@@ -257,52 +234,20 @@ public class MobAttributesScreen extends BaseOwoHandledScreen<FlowLayout, MobAtt
 
     // ── UI helpers (shared styling with the spawner screens) ──────────────────
 
-    private FlowLayout boxedField(Sizing width, String initial, Consumer<String> onChange) {
-        FlowLayout wrap = Containers.horizontalFlow(width, Sizing.fixed(22));
-        wrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        wrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        wrap.child(accent);
+    private Flex boxedField(float width, String initial, Consumer<String> onChange) {
+        Flex wrap = Flex.row().alignItems(Align.CENTER);
+        wrap.sizing(Sizing.fixed(width), Sizing.fixed(22));
+        wrap.backgroundFill(PANEL_2, HAIRLINE, 1);
+        Flex accent = wrap.item(Flex.column());
+        accent.sizing(Sizing.fixed(2), Sizing.fill());
+        accent.backgroundFill(ACCENT);
 
-        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.expand(), initial, 256);
-        field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(onChange::accept);
-        wrap.child(field);
+        IdSuggestionDropdown.Field field = IdSuggestionDropdown.textBox(width - 2, initial, 256);
+        field.size(width - 2, 18);
+        field.sizing(Sizing.expand(), Sizing.fixed(18));
+        field.changeListeners.add(onChange);
+        wrap.item(field);
         return wrap;
-    }
-
-    private FlowLayout sectionHeader(Component title) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        LabelComponent titleLabel = Components.label(title);
-        titleLabel.color(Color.ofArgb(INK_DIM));
-        row.child(titleLabel);
-        return row;
-    }
-
-    private FlowLayout spacer(int px) {
-        FlowLayout spacer = Containers.verticalFlow(Sizing.fill(100), Sizing.fixed(px));
-        spacer.surface(Surface.BLANK);
-        return spacer;
-    }
-
-    private LabelComponent text(Component component, int color) {
-        LabelComponent label = Components.label(component);
-        label.color(Color.ofArgb(color));
-        return label;
-    }
-
-    private ButtonComponent smallButton(Component text, Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text, action);
-        button.sizing(Sizing.content(), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.active() ? (rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK) : PANEL;
-            int border = rendered.active() ? ACCENT : HAIRLINE;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), border);
-        });
-        return button;
     }
 
     private static String trimDouble(double value) {

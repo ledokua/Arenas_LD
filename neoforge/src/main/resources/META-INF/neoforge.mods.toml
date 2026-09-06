@@ -34,7 +34,7 @@ ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.arenas_ld]]
-modId = "owo"
+modId = "vectorlib"
 type = "required"
 versionRange = "*"
 ordering = "NONE"

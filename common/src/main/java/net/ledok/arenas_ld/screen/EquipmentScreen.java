@@ -1,46 +1,51 @@
 package net.ledok.arenas_ld.screen;
 
-import io.wispforest.owo.ui.base.BaseOwoHandledScreen;
-import io.wispforest.owo.ui.component.ButtonComponent;
-import io.wispforest.owo.ui.component.Components;
-import io.wispforest.owo.ui.component.LabelComponent;
-import io.wispforest.owo.ui.component.TextBoxComponent;
-import io.wispforest.owo.ui.container.Containers;
-import io.wispforest.owo.ui.container.FlowLayout;
-import io.wispforest.owo.ui.core.Color;
-import io.wispforest.owo.ui.core.HorizontalAlignment;
-import io.wispforest.owo.ui.core.Insets;
-import io.wispforest.owo.ui.core.OwoUIAdapter;
-import io.wispforest.owo.ui.core.Sizing;
-import io.wispforest.owo.ui.core.Surface;
-import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.util.EquipmentData;
+import net.ledok.vectorlib.client.canvas.ItemStackNode;
+import net.ledok.vectorlib.client.canvas.Shapes;
+import net.ledok.vectorlib.client.canvas.VectorCanvas;
+import net.ledok.vectorlib.client.canvas.layout.Align;
+import net.ledok.vectorlib.client.canvas.layout.Flex;
+import net.ledok.vectorlib.client.canvas.layout.Insets;
+import net.ledok.vectorlib.client.canvas.layout.Justify;
+import net.ledok.vectorlib.client.canvas.layout.Sizing;
+import net.ledok.vectorlib.client.canvas.widget.Button;
+import net.ledok.vectorlib.client.canvas.widget.TextField;
+import net.ledok.vectorlib.client.canvas.widget.Widget;
+import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.vectorlib.client.presentation.Placement;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.ItemStack;
-import org.jetbrains.annotations.NotNull;
 
-import java.util.function.Consumer;
+import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
+import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
+import static net.ledok.arenas_ld.screen.ArenasUi.BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.GOOD;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
 
 /**
- * owo-lib editor for a mob's equipment: six <em>ghost</em> item slots (drag/click an item to stamp a
+ * VectorLib editor for a mob's equipment: six <em>ghost</em> item slots (drag/click an item to stamp a
  * template — your item isn't consumed) each with a 0–100% spawn chance, plus the natural-loot toggle.
  * Ignores the inventory ("E") key so it can't be closed mid-edit.
+ *
+ * <p>The menu's slots are never positioned or drawn by vanilla: every slot is a canvas
+ * {@link SlotWidget} that renders the live stack and forwards clicks through
+ * {@code gameMode.handleInventoryMouseClick}, so the ghost-stamp logic in
+ * {@link EquipmentScreenHandler#clicked} runs on both sides exactly as before.
  */
-public class EquipmentScreen extends BaseOwoHandledScreen<FlowLayout, EquipmentScreenHandler> {
-    private static final int BG          = 0xFF070E14;
-    private static final int PANEL       = 0xFF121922;
-    private static final int PANEL_2     = 0xFF0C1218;
-    private static final int HAIRLINE    = 0xFF283442;
-    private static final int HAIRLINE_HI = 0xFF3A4A5C;
-    private static final int INK         = 0xFFE8EEF5;
-    private static final int INK_DIM     = 0xFF5F6E80;
-    private static final int GOOD        = 0xFF86D36C;
-    private static final int ACCENT      = 0xFFA98BE8;
-    private static final int ACCENT_DARK = 0xFF6C4FB5;
-    private static final int SLOT_BG     = 0xFF1D2530;
+public class EquipmentScreen extends CanvasHandledScreen<EquipmentScreenHandler> {
+    private static final int SLOT_BG = 0xFF1D2530;
+    private static final int SLOT_BG_HOVER = 0xFF2A3542;
 
     private static final String[] SLOT_KEYS = {
         "gui.arenas_ld.equipment.slot.head", "gui.arenas_ld.equipment.slot.chest",
@@ -50,54 +55,65 @@ public class EquipmentScreen extends BaseOwoHandledScreen<FlowLayout, EquipmentS
 
     private final int[] chances = new int[EquipmentData.SLOT_COUNT];
     private boolean dropChance = false;
+    private boolean loaded = false;
 
     public EquipmentScreen(EquipmentScreenHandler handler, Inventory inventory, Component title) {
-        super(handler, inventory, title);
-        this.titleLabelY = 9999;
-        this.inventoryLabelY = 9999;
+        super(handler, inventory, title, VectorCanvas.create(360, 300), Placement.Screen.center());
+        canvas.theme(ArenasUi.THEME);
+        dimBackground(false);
+        fillWindow();
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
-            return true;
-        }
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
+                && !(input.focusedNode() instanceof TextField)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
+    /** Never interpret an off-panel click as "throw the carried item out". */
     @Override
-    protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
-        return OwoUIAdapter.create(this, Containers::verticalFlow);
+    protected boolean hasClickedOutside(double mouseX, double mouseY, int left, int top, int button) {
+        return false;
     }
 
     @Override
-    protected void build(FlowLayout rootComponent) {
-        loadFromHandler();
+    protected void onCanvasResized(float width, float height) {
+        buildAll();
+    }
 
-        rootComponent.surface(Surface.flat(BG));
-        rootComponent.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
-
-        int shellWidth = Math.max(300, Math.min(360, this.width - 24));
-        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.content());
-        shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
-
-        shell.child(buildHeader());
-
-        FlowLayout content = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        content.surface(Surface.flat(PANEL));
-        content.padding(Insets.of(10));
-        content.gap(4);
-        for (int i = 0; i < EquipmentData.SLOT_COUNT; i++) {
-            content.child(slotRow(i));
+    private void buildAll() {
+        if (!loaded) {
+            loadFromHandler();
+            loaded = true;
         }
-        content.child(spacer(4));
-        content.child(dropToggle());
-        content.child(spacer(6));
-        content.child(inventoryGrid());
-        shell.child(content);
+        canvas.clear();
+        Flex root = canvas.add(Flex.column());
+        root.sizing(Sizing.fill(), Sizing.fill());
+        root.justify(Justify.CENTER).alignItems(Align.CENTER);
+        root.backgroundFill(BG);
 
-        shell.child(buildFooter());
-        rootComponent.child(shell);
+        float shellWidth = Math.max(300, Math.min(360, canvas.width() - 24));
+        Flex shell = root.item(Flex.column());
+        shell.sizing(Sizing.fixed(shellWidth), Sizing.content());
+        shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
+
+        shell.item(buildHeader());
+
+        Flex content = Flex.column().gap(4).padding(Insets.of(10));
+        content.sizing(Sizing.fill(), Sizing.content());
+        content.backgroundFill(PANEL);
+        for (int i = 0; i < EquipmentData.SLOT_COUNT; i++) {
+            content.item(slotRow(i));
+        }
+        content.item(ArenasUi.spacer(4));
+        content.item(dropToggle());
+        content.item(ArenasUi.spacer(6));
+        content.item(inventoryGrid());
+        shell.item(content);
+
+        shell.item(buildFooter());
+        root.layoutIn(canvas.width(), canvas.height());
     }
 
     private void loadFromHandler() {
@@ -109,25 +125,21 @@ public class EquipmentScreen extends BaseOwoHandledScreen<FlowLayout, EquipmentS
         dropChance = data.dropChance;
     }
 
-    private FlowLayout slotRow(int index) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        row.gap(8);
-        row.verticalAlignment(VerticalAlignment.CENTER);
+    private Flex slotRow(int index) {
+        Flex row = Flex.row().gap(8).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.fixed(22));
 
-        row.child(framedSlot(index));
+        row.item(new SlotWidget(index));
 
-        LabelComponent label = text(Component.translatable(SLOT_KEYS[index]), INK);
-        label.horizontalSizing(Sizing.fixed(74));
-        row.child(label);
+        var label = ArenasUi.label(74, Component.translatable(SLOT_KEYS[index]), INK);
+        label.sizing(Sizing.fixed(74), Sizing.content());
+        row.item(label);
 
-        row.child(text(Component.translatable("gui.arenas_ld.equipment.chance"), INK_DIM));
+        row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.equipment.chance"), INK_DIM));
 
-        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.fixed(46), Sizing.fixed(18));
-        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldWrap.verticalAlignment(VerticalAlignment.CENTER);
-        TextBoxComponent field = Components.textBox(Sizing.fill(100), Integer.toString(chances[index]));
-        field.verticalSizing(Sizing.fixed(16));
-        field.onChanged().subscribe(v -> {
+        TextField field = ArenasUi.textField(46, Integer.toString(chances[index]), 8);
+        field.size(46, 18);
+        field.onChange(v -> {
             int parsed;
             try {
                 parsed = Integer.parseInt(v.trim());
@@ -136,79 +148,56 @@ public class EquipmentScreen extends BaseOwoHandledScreen<FlowLayout, EquipmentS
             }
             chances[index] = Math.max(0, Math.min(100, parsed));
         });
-        fieldWrap.child(field);
-        row.child(fieldWrap);
-        row.child(text(Component.literal("%"), INK_DIM));
+        row.item(field);
+        row.item(ArenasUi.text(Component.literal("%"), INK_DIM));
         return row;
     }
 
-    /** A bordered 18×18 frame around a menu slot so empty slots are visible drop targets. */
-    private FlowLayout framedSlot(int index) {
-        FlowLayout frame = Containers.horizontalFlow(Sizing.fixed(18), Sizing.fixed(18));
-        frame.surface(Surface.flat(SLOT_BG).and(Surface.outline(HAIRLINE)));
-        frame.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
-        frame.child(this.slotAsComponent(index));
-        return frame;
-    }
-
-    private FlowLayout inventoryGrid() {
-        FlowLayout grid = Containers.verticalFlow(Sizing.content(), Sizing.content());
-        grid.gap(1);
-        grid.horizontalAlignment(HorizontalAlignment.CENTER);
+    private Flex inventoryGrid() {
+        Flex grid = Flex.column().gap(1).alignItems(Align.CENTER);
+        grid.sizing(Sizing.content(), Sizing.content());
         // Main inventory: handler slots 6..32 (3 rows of 9).
         for (int r = 0; r < 3; r++) {
-            FlowLayout rowFlow = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-            rowFlow.gap(1);
+            Flex rowFlow = Flex.row().gap(1);
+            rowFlow.sizing(Sizing.content(), Sizing.content());
             for (int c = 0; c < 9; c++) {
-                rowFlow.child(framedSlot(EquipmentData.SLOT_COUNT + r * 9 + c));
+                rowFlow.item(new SlotWidget(EquipmentData.SLOT_COUNT + r * 9 + c));
             }
-            grid.child(rowFlow);
+            grid.item(rowFlow);
         }
-        grid.child(spacer(3));
+        grid.item(ArenasUi.spacer(3));
         // Hotbar: handler slots 33..41.
-        FlowLayout hotbar = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        hotbar.gap(1);
+        Flex hotbar = Flex.row().gap(1);
+        hotbar.sizing(Sizing.content(), Sizing.content());
         for (int c = 0; c < 9; c++) {
-            hotbar.child(framedSlot(EquipmentData.SLOT_COUNT + 27 + c));
+            hotbar.item(new SlotWidget(EquipmentData.SLOT_COUNT + 27 + c));
         }
-        grid.child(hotbar);
+        grid.item(hotbar);
         return grid;
     }
 
-    private FlowLayout buildHeader() {
-        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(46));
-        header.surface(Surface.flat(PANEL_2));
-        header.padding(Insets.of(8, 8, 10, 10));
-        header.gap(10);
-        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildHeader() {
+        Flex header = Flex.row().gap(10).padding(Insets.of(8, 10, 8, 10)).alignItems(Align.CENTER);
+        header.sizing(Sizing.fill(), Sizing.fixed(46));
+        header.backgroundFill(PANEL_2);
 
-        FlowLayout mark = Containers.verticalFlow(Sizing.fixed(20), Sizing.fixed(20));
-        mark.surface(Surface.flat(ACCENT).and(Surface.outline(ACCENT_DARK)));
-        header.child(mark);
+        Flex mark = Flex.column();
+        mark.sizing(Sizing.fixed(20), Sizing.fixed(20));
+        mark.backgroundFill(ACCENT, ACCENT_DARK, 1);
+        header.item(mark);
 
-        LabelComponent titleLabel = Components.label(this.title);
-        titleLabel.color(Color.ofArgb(INK));
-        header.child(titleLabel);
-
-        header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-
-        ButtonComponent close = smallButton(Component.literal("×"), b -> onClose());
-        close.sizing(Sizing.fixed(22), Sizing.fixed(18));
-        header.child(close);
+        header.item(ArenasUi.text(this.title, INK));
+        header.spacer();
+        header.item(ArenasUi.button(Component.literal("×"), 22, 18, this::onClose));
         return header;
     }
 
-    private FlowLayout buildFooter() {
-        FlowLayout footer = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
-        footer.surface(Surface.flat(PANEL_2));
-        footer.padding(Insets.of(6));
-        footer.gap(6);
-        footer.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
-
-        footer.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-        ButtonComponent save = smallButton(Component.translatable("gui.arenas_ld.save"), b -> onSave());
-        save.horizontalSizing(Sizing.fixed(110));
-        footer.child(save);
+    private Flex buildFooter() {
+        Flex footer = Flex.row().gap(6).padding(Insets.of(6)).alignItems(Align.CENTER);
+        footer.sizing(Sizing.fill(), Sizing.fixed(34));
+        footer.backgroundFill(PANEL_2);
+        footer.spacer();
+        footer.item(ArenasUi.button(Component.translatable("gui.arenas_ld.save"), 110, 18, this::onSave));
         return footer;
     }
 
@@ -219,18 +208,17 @@ public class EquipmentScreen extends BaseOwoHandledScreen<FlowLayout, EquipmentS
         this.onClose();
     }
 
-    private FlowLayout dropToggle() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(8);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        row.child(text(Component.translatable("gui.arenas_ld.enable_drops"), INK_DIM));
+    private Flex dropToggle() {
+        Flex row = Flex.row().gap(8).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
+        row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.enable_drops"), INK_DIM));
 
-        ButtonComponent toggle = smallButton(dropLabel(), b -> {
+        Button toggle = ArenasUi.button(dropLabel(), 60, 18, null);
+        toggle.onClick(() -> {
             dropChance = !dropChance;
-            b.setMessage(dropLabel());
+            toggle.label(dropLabel());
         });
-        toggle.horizontalSizing(Sizing.fixed(60));
-        row.child(toggle);
+        row.item(toggle);
         return row;
     }
 
@@ -240,27 +228,58 @@ public class EquipmentScreen extends BaseOwoHandledScreen<FlowLayout, EquipmentS
             : Component.translatable("gui.arenas_ld.toggle_off").withStyle(s -> s.withColor(INK_DIM));
     }
 
-    private FlowLayout spacer(int px) {
-        FlowLayout spacer = Containers.verticalFlow(Sizing.fill(100), Sizing.fixed(px));
-        spacer.surface(Surface.BLANK);
-        return spacer;
+    // ---------------------------------------------------------------- carried stack on the cursor
+
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        super.render(graphics, mouseX, mouseY, partialTick);
+        ItemStack carried = menu.getCarried();
+        if (!carried.isEmpty()) {
+            graphics.pose().pushPose();
+            graphics.pose().translate(0, 0, 400);
+            graphics.renderItem(carried, mouseX - 8, mouseY - 8);
+            graphics.renderItemDecorations(font, carried, mouseX - 8, mouseY - 8);
+            graphics.pose().popPose();
+        }
     }
 
-    private LabelComponent text(Component component, int color) {
-        LabelComponent label = Components.label(component);
-        label.color(Color.ofArgb(color));
-        return label;
-    }
+    /**
+     * An 18×18 bordered frame showing a menu slot's live stack; clicks go through the normal
+     * container click path (ghost stamping happens in the handler on both sides).
+     */
+    private final class SlotWidget extends Widget {
+        private final int slotIndex;
+        private final ItemStackNode item;
 
-    private ButtonComponent smallButton(Component text, Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text, action);
-        button.sizing(Sizing.content(), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.active() ? (rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK) : PANEL;
-            int border = rendered.active() ? ACCENT : HAIRLINE;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), border);
-        });
-        return button;
+        SlotWidget(int slotIndex) {
+            super(18, 18);
+            this.slotIndex = slotIndex;
+            this.item = ItemStackNode.of(ItemStack.EMPTY, 1, 1);
+        }
+
+        @Override
+        protected void rebuild() {
+            add(Shapes.rect(0, 0, width(), height())
+                    .fill(isHovered() ? SLOT_BG_HOVER : SLOT_BG)
+                    .stroke(isHovered() ? HAIRLINE_HI : HAIRLINE, 1));
+            add(item.stack(menu.getSlot(slotIndex).getItem()));
+        }
+
+        @Override
+        public boolean onMouseDown(float x, float y, int button) {
+            if (minecraft != null && minecraft.gameMode != null && minecraft.player != null) {
+                minecraft.gameMode.handleInventoryMouseClick(
+                        menu.containerId, slotIndex, button, ClickType.PICKUP, minecraft.player);
+                refresh();
+            }
+            return true;
+        }
+
+        @Override
+        protected void draw(net.ledok.vectorlib.client.canvas.CanvasRenderContext ctx) {
+            // The menu syncs stacks outside our control; keep the node current every frame.
+            item.stack(menu.getSlot(slotIndex).getItem());
+            super.draw(ctx);
+        }
     }
 }

@@ -1,74 +1,78 @@
+// NeoForge glue: @Mod entrypoints and event bridging. The common code is written
+// against Fabric API, provided at runtime by the Forgified Fabric API (Sinytra).
 plugins {
-    id 'com.gradleup.shadow'
+    id 'net.neoforged.moddev'
 }
 
-architectury {
-    platformSetupLoomIde()
-    neoForge()
+repositories {
+    maven { name = 'Sinytra'; url = 'https://maven.su5ed.dev/releases' }
 }
 
-configurations {
-    common {
-        canBeResolved = true
-        canBeConsumed = false
+base {
+    archivesName = "${rootProject.archives_base_name}-neoforge"
+}
+
+def commonSourceSet = project(':common').sourceSets.main
+
+neoForge {
+    version = rootProject.neoforge_version
+
+    runs {
+        client {
+            client()
+            gameDirectory = project.file('run')
+        }
+        server {
+            server()
+            gameDirectory = project.file('run-server')
+        }
     }
-    compileClasspath.extendsFrom common
-    runtimeClasspath.extendsFrom common
-    developmentNeoForge.extendsFrom common
 
-    shadowBundle {
-        canBeResolved = true
-        canBeConsumed = false
+    mods {
+        arenas_ld {
+            sourceSet sourceSets.main
+            sourceSet commonSourceSet
+        }
     }
 }
 
 dependencies {
-    neoForge "net.neoforged:neoforge:${rootProject.neoforge_version}"
+    compileOnly project(path: ':common', configuration: 'namedElements')
 
     // Forgified Fabric API - provides the Fabric API surface the common module
     // is written against.
-    modImplementation "org.sinytra.forgified-fabric-api:forgified-fabric-api:${rootProject.ffapi_version}"
+    implementation "org.sinytra.forgified-fabric-api:forgified-fabric-api:${rootProject.ffapi_version}"
 
-    modImplementation "io.wispforest:owo-lib-neoforge:${rootProject.owo_neoforge_version}"
-    // owo's companion libraries are jar-in-jar'd into the Fabric artifact but the
-    // NeoForge artifact declares them as plain maven deps; the dev runtime needs
-    // them on the game classpath explicitly.
-    forgeRuntimeLibrary "io.wispforest:endec:0.1.8"
-    forgeRuntimeLibrary "io.wispforest.endec:netty:0.1.4"
-    forgeRuntimeLibrary "io.wispforest.endec:gson:0.1.5"
-    forgeRuntimeLibrary "io.wispforest.endec:jankson:0.1.5"
-    forgeRuntimeLibrary "blue.endless:jankson:1.2.2"
+    // VectorLib canvas UI (replaces owo-lib). Dev runtime classpath (FML finds mod
+    // jars on it) + jar-in-jar for the release jar.
+    jarJar(implementation("net.ledok:VectorLib-neoforge:${rootProject.vectorlib_version}"))
 
     // Local jars for dev runtime only (multiloader BusyLib's NeoForge build)
-    modLocalRuntime fileTree(
+    runtimeOnly fileTree(
             dir: "${rootProject.projectDir}/libs",
             include: ["BusyLib-neoforge-*.jar"],
             exclude: ["*sources.jar"]
     )
-
-    common(project(path: ':common', configuration: 'namedElements')) { transitive false }
-    shadowBundle project(path: ':common', configuration: 'transformProductionNeoForge')
 }
 
 processResources {
+    from commonSourceSet.resources
+
     inputs.property 'version', project.version
+    filteringCharset 'UTF-8'
 
     filesMatching('META-INF/neoforge.mods.toml') {
         expand 'version': project.version
     }
 }
 
-shadowJar {
-    configurations = [project.configurations.shadowBundle]
-    archiveClassifier = 'dev-shadow'
-}
-
-remapJar {
-    inputFile.set shadowJar.archiveFile
-}
-
 jar {
+    from commonSourceSet.output.classesDirs
     from(rootProject.file('LICENSE')) {
         rename { "${it}_${rootProject.archives_base_name}" }
     }
+}
+
+sourcesJar {
+    from commonSourceSet.allSource
 }

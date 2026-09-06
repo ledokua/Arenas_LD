@@ -1,14 +1,38 @@
+// Fabric glue: entrypoints, gametests, dev-runtime companions.
 plugins {
-    id 'com.gradleup.shadow'
+    id 'fabric-loom'
 }
 
-architectury {
-    platformSetupLoomIde()
-    fabric()
+base {
+    archivesName = "${rootProject.archives_base_name}-fabric"
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_version}"
+
+    // VectorLib canvas UI (replaces owo-lib). Dev runtime classpath + jar-in-jar for
+    // the release jar (users need a single download; Fabric Loader dedupes by version
+    // if VectorLib is also installed standalone).
+    modImplementation "net.ledok:VectorLib-fabric:${rootProject.vectorlib_version}"
+    include "net.ledok:VectorLib-fabric:${rootProject.vectorlib_version}"
+
+    // Local jars for dev runtime only (BusyLib is a hard runtime dep, Economy_LD optional)
+    modLocalRuntime fileTree(
+            dir: "${rootProject.projectDir}/libs",
+            include: ["BusyLib-fabric-*.jar", "Economy_LD-*.jar"],
+            exclude: ["*sources.jar"]
+    )
+
+    implementation project(path: ':common', configuration: 'namedElements')
 }
 
 loom {
     runs {
+        client { ideConfigGenerated = true; runDir = "run" }
+        server { ideConfigGenerated = true; runDir = "run-server" }
         gametestServer {
             server()
             name "Gametest Server"
@@ -19,40 +43,12 @@ loom {
     }
 }
 
-configurations {
-    common {
-        canBeResolved = true
-        canBeConsumed = false
-    }
-    compileClasspath.extendsFrom common
-    runtimeClasspath.extendsFrom common
-    developmentFabric.extendsFrom common
-
-    // Files in this configuration will be bundled into your mod using the Shadow plugin.
-    // Don't use the shadow configuration from the plugin itself as it's for excluding files.
-    shadowBundle {
-        canBeResolved = true
-        canBeConsumed = false
-    }
-}
-
-dependencies {
-    modImplementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_version}"
-    modImplementation "io.wispforest:owo-lib:${rootProject.owo_version}"
-
-    // Local jars for dev runtime only (BusyLib is a hard runtime dep, Economy_LD optional)
-    modLocalRuntime fileTree(
-            dir: "${rootProject.projectDir}/libs",
-            include: ["BusyLib-fabric-*.jar", "Economy_LD-*.jar"],
-            exclude: ["*sources.jar"]
-    )
-
-    common(project(path: ':common', configuration: 'namedElements')) { transitive false }
-    shadowBundle project(path: ':common', configuration: 'transformProductionFabric')
-}
+// Bundle common classes + resources into the Fabric jar.
+def commonSourceSet = project(':common').sourceSets.main
 
 processResources {
+    from commonSourceSet.resources
+
     inputs.property 'version', project.version
     inputs.property 'minecraft_version', rootProject.minecraft_version
     inputs.property 'loader_version', rootProject.loader_version
@@ -65,17 +61,13 @@ processResources {
     }
 }
 
-shadowJar {
-    configurations = [project.configurations.shadowBundle]
-    archiveClassifier = 'dev-shadow'
-}
-
-remapJar {
-    inputFile.set shadowJar.archiveFile
-}
-
 jar {
+    from commonSourceSet.output.classesDirs
     from(rootProject.file('LICENSE')) {
         rename { "${it}_${rootProject.archives_base_name}" }
     }
+}
+
+sourcesJar {
+    from commonSourceSet.allSource
 }

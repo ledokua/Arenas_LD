@@ -1,20 +1,5 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
-import io.wispforest.owo.ui.base.BaseOwoHandledScreen;
-import io.wispforest.owo.ui.component.ButtonComponent;
-import io.wispforest.owo.ui.component.Components;
-import io.wispforest.owo.ui.component.LabelComponent;
-import io.wispforest.owo.ui.component.TextBoxComponent;
-import io.wispforest.owo.ui.container.Containers;
-import io.wispforest.owo.ui.container.FlowLayout;
-import io.wispforest.owo.ui.container.ScrollContainer;
-import io.wispforest.owo.ui.core.Color;
-import io.wispforest.owo.ui.core.HorizontalAlignment;
-import io.wispforest.owo.ui.core.Insets;
-import io.wispforest.owo.ui.core.OwoUIAdapter;
-import io.wispforest.owo.ui.core.Sizing;
-import io.wispforest.owo.ui.core.Surface;
-import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearEntrancesPayload;
@@ -26,34 +11,83 @@ import net.ledok.arenas_ld.dungeon.packet.RoomResetPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomSetNamePayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomSetObjectivePayload;
 import net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig;
+import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
+import net.ledok.vectorlib.client.canvas.VectorCanvas;
+import net.ledok.vectorlib.client.canvas.layout.Align;
+import net.ledok.vectorlib.client.canvas.layout.Flex;
+import net.ledok.vectorlib.client.canvas.layout.Insets;
+import net.ledok.vectorlib.client.canvas.layout.Justify;
+import net.ledok.vectorlib.client.canvas.layout.Sizing;
+import net.ledok.vectorlib.client.canvas.widget.Button;
+import net.ledok.vectorlib.client.canvas.widget.Label;
+import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
+import net.ledok.vectorlib.client.canvas.widget.TextField;
+import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
+import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.vectorlib.client.presentation.Placement;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Consumer;
 
-public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomControllerScreenHandler> {
+import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
+import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
+import static net.ledok.arenas_ld.screen.ArenasUi.BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_MID;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
+import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
+import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
 
-    private static final int BG          = 0xFF070E14;
-    private static final int PANEL       = 0xFF121922;
-    private static final int PANEL_2     = 0xFF0C1218;
-    private static final int HAIRLINE    = 0xFF283442;
-    private static final int HAIRLINE_HI = 0xFF3A4A5C;
-    private static final int ROW_BG      = 0xFF19222D;
-    private static final int ROW_BG_ALT  = 0xFF16202A;
-    private static final int INK         = 0xFFE8EEF5;
-    private static final int INK_MID     = 0xFF9AA8B8;
-    private static final int INK_DIM     = 0xFF5F6E80;
-    private static final int WARN        = 0xFFF5B042;
-    private static final int ACCENT      = 0xFFA98BE8;
-    private static final int ACCENT_DARK = 0xFF6C4FB5;
-    private static final int DANGER      = 0xFFE8624A;
+public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScreenHandler> {
+
+    /** Selected segment of the objective-type selector (old owo renderer: accent fill, accent border). */
+    private static final WidgetStyle SEGMENT_ON = new WidgetStyle(
+            new WidgetStyle.Skin.Flat(ACCENT_DARK, ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(ACCENT, ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(ACCENT_DARK, ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(0xFF232B36, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            INK, 0xFFFFFFFF, INK_DIM, INK_DIM, ACCENT, 0x80A98BE8,
+            18, 16, 4, true);
+
+    /** Unselected segment (old owo renderer: panel fill, hairline border, row highlight on hover). */
+    private static final WidgetStyle SEGMENT_OFF = new WidgetStyle(
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(ROW_BG, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(ROW_BG, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            INK, 0xFFFFFFFF, INK_DIM, INK_DIM, HAIRLINE, 0x80A98BE8,
+            18, 16, 4, true);
+
+    /** Destructive footer actions (old owo renderer: translucent danger fill, danger border). */
+    private static final WidgetStyle DANGER_BUTTON = new WidgetStyle(
+            new WidgetStyle.Skin.Flat((DANGER & 0x00FFFFFF) | 0x1F000000, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat((DANGER & 0x00FFFFFF) | 0x44000000, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat((DANGER & 0x00FFFFFF) | 0x44000000, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            INK, 0xFFFFFFFF, INK_DIM, INK_DIM, DANGER, 0x80A98BE8,
+            18, 16, 4, true);
 
     private final List<RoomControllerData.SpawnerEntry> spawners = new ArrayList<>();
     private List<BlockPos> doorPositions = List.of();
@@ -69,453 +103,384 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
     private String newAttrIdInput = "";
     private String newAttrValueInput = "";
 
-    private FlowLayout contentArea;
-    private FlowLayout footerActions;
-    private LabelComponent footerLabel;
+    private Flex contentArea;
+    private Flex footerActions;
+    private Label footerLabel;
 
     public RoomControllerScreen(RoomControllerScreenHandler handler, Inventory inventory, Component title) {
-        super(handler, inventory, title);
-        this.inventoryLabelY = 9999;
-        this.titleLabelY = 9999;
+        super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
+        canvas.theme(ArenasUi.THEME);
+        dimBackground(false);
+        fillWindow();
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
-            return true;
-        }
+        // The old owo screen swallowed the inventory key entirely (close via × or Esc only).
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
+                && !(input.focusedNode() instanceof TextField)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
-        return OwoUIAdapter.create(this, Containers::verticalFlow);
+    protected void onCanvasResized(float width, float height) {
+        buildAll();
     }
 
-    @Override
-    protected void build(FlowLayout rootComponent) {
+    private void buildAll() {
         syncState();
 
-        rootComponent.surface(Surface.flat(BG));
-        rootComponent.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        canvas.clear();
+        Flex root = canvas.add(Flex.column());
+        root.sizing(Sizing.fill(), Sizing.fill());
+        root.justify(Justify.CENTER).alignItems(Align.CENTER);
+        root.backgroundFill(BG);
 
-        int shellWidth  = Math.max(440, Math.min(560, this.width - 24));
-        int shellHeight = Math.max(300, this.height - 24);
-        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
-        shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
+        float shellWidth  = Math.max(440, Math.min(560, canvas.width() - 24));
+        float shellHeight = Math.max(300, canvas.height() - 24);
+        Flex shell = root.item(Flex.column());
+        shell.sizing(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
+        shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
 
-        shell.child(buildHeader());
+        shell.item(buildHeader());
 
-        contentArea = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        contentArea.surface(Surface.flat(PANEL));
-        contentArea.padding(Insets.of(10));
-        contentArea.gap(4);
-        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.expand(), contentArea);
-        scroll.surface(Surface.flat(PANEL));
-        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        scroll.scrollbarThiccness(8);
-        scroll.fixedScrollbarLength(28);
-        scroll.scrollStep(18);
-        shell.child(scroll);
+        contentArea = Flex.column().gap(4).padding(Insets.of(10));
+        contentArea.sizing(Sizing.fill(), Sizing.content());
+        contentArea.backgroundFill(PANEL);
+        ScrollPanel scroll = new ScrollPanel(100, 100, contentArea);
+        scroll.sizing(Sizing.fill(), Sizing.expand());
+        scroll.barWidth(8);
+        scroll.wheelStep(18);
+        shell.item(scroll);
 
-        shell.child(buildFooter());
-        rootComponent.child(shell);
+        shell.item(buildFooter());
 
+        root.layoutIn(canvas.width(), canvas.height());
         rebuildUi();
     }
 
-    private FlowLayout buildHeader() {
-        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(42));
-        header.surface(Surface.flat(PANEL_2));
-        header.padding(Insets.of(6));
-        header.gap(8);
-        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildHeader() {
+        Flex header = Flex.row().gap(8).padding(Insets.of(6)).alignItems(Align.CENTER);
+        header.sizing(Sizing.fill(), Sizing.fixed(42));
+        header.backgroundFill(PANEL_2);
 
-        FlowLayout mark = Containers.verticalFlow(Sizing.fixed(18), Sizing.fixed(18));
-        mark.surface(Surface.flat(WARN));
-        header.child(mark);
+        Flex mark = Flex.column();
+        mark.sizing(Sizing.fixed(18), Sizing.fixed(18));
+        mark.backgroundFill(WARN);
+        header.item(mark);
 
-        FlowLayout info = Containers.verticalFlow(Sizing.content(), Sizing.content());
-        info.gap(3);
-        LabelComponent titleLabel = Components.label(Component.translatable("gui.arenas_ld.room_controller.title"));
-        titleLabel.color(Color.ofArgb(INK));
-        info.child(titleLabel);
-        LabelComponent posLabel = Components.label(Component.literal(
-            "POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
-        posLabel.color(Color.ofArgb(INK_DIM));
-        info.child(posLabel);
-        header.child(info);
+        Flex info = Flex.column().gap(3);
+        info.sizing(Sizing.content(), Sizing.content());
+        info.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.title"), INK));
+        info.item(ArenasUi.text(Component.literal(
+            "POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()), INK_DIM));
+        header.item(info);
 
-        header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-
-        ButtonComponent close = smallButton(Component.literal("×"), b -> onClose());
-        close.sizing(Sizing.fixed(22), Sizing.fixed(18));
-        header.child(close);
+        header.spacer();
+        header.item(ArenasUi.button(Component.literal("×"), 22, 18, this::onClose));
         return header;
     }
 
-    private FlowLayout buildFooter() {
-        FlowLayout footer = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
-        footer.surface(Surface.flat(PANEL_2));
-        footer.padding(Insets.of(6));
-        footer.gap(6);
+    private Flex buildFooter() {
+        Flex footer = Flex.row().gap(6).padding(Insets.of(6));
+        footer.sizing(Sizing.fill(), Sizing.fixed(34));
+        footer.backgroundFill(PANEL_2);
 
-        footerLabel = Components.label(Component.empty());
-        footerLabel.color(Color.ofArgb(DANGER));
-        footerLabel.horizontalSizing(Sizing.expand());
-        footer.child(footerLabel);
+        footerLabel = ArenasUi.label(100, Component.empty(), DANGER);
+        footerLabel.sizing(Sizing.expand(), Sizing.content());
+        footer.item(footerLabel);
 
-        footerActions = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        footerActions.gap(4);
-        footer.child(footerActions);
+        footerActions = Flex.row().gap(4);
+        footerActions.sizing(Sizing.content(), Sizing.content());
+        footer.item(footerActions);
         return footer;
     }
 
     private void rebuildUi() {
         if (contentArea == null) return;
-        contentArea.clearChildren();
-        footerActions.clearChildren();
+        contentArea.clear();
+        footerActions.clear();
 
         // ── Room ────────────────────────────────────────────────────────────
-        contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.room")));
-        contentArea.child(spacer(2));
-        contentArea.child(buildNameRow());
-        contentArea.child(spacer(8));
+        contentArea.item(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.room")));
+        contentArea.item(ArenasUi.spacer(2));
+        contentArea.item(buildNameRow());
+        contentArea.item(ArenasUi.spacer(8));
 
         // ── Objective ───────────────────────────────────────────────────────
-        contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.objective")));
-        contentArea.child(spacer(2));
-        contentArea.child(buildObjectiveTypeRow());
+        contentArea.item(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.objective")));
+        contentArea.item(ArenasUi.spacer(2));
+        contentArea.item(buildObjectiveTypeRow());
         if (objectiveType == RoomObjectiveConfig.Type.SURVIVE) {
-            contentArea.child(spacer(2));
-            contentArea.child(buildSurviveSecondsRow());
+            contentArea.item(ArenasUi.spacer(2));
+            contentArea.item(buildSurviveSecondsRow());
         }
         if (objectiveType == RoomObjectiveConfig.Type.PROTECT) {
-            contentArea.child(spacer(2));
+            contentArea.item(ArenasUi.spacer(2));
             buildProtectRows(contentArea);
         }
-        contentArea.child(spacer(8));
+        contentArea.item(ArenasUi.spacer(8));
 
         // ── Spawners ────────────────────────────────────────────────────────
-        contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.spawners")
+        contentArea.item(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.spawners")
             .copy().append(Component.literal(" · " + spawners.size()))));
-        contentArea.child(spacer(2));
+        contentArea.item(ArenasUi.spacer(2));
         if (spawners.isEmpty()) {
-            LabelComponent empty = Components.label(Component.translatable("gui.arenas_ld.room_controller.spawners_empty"));
-            empty.color(Color.ofArgb(INK_DIM));
-            contentArea.child(empty);
+            contentArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.spawners_empty"), INK_DIM));
         } else {
             for (int i = 0; i < spawners.size(); i++) {
-                if (i > 0) contentArea.child(rowDivider());
-                contentArea.child(spawnerRow(i));
+                if (i > 0) contentArea.item(ArenasUi.hairline());
+                contentArea.item(spawnerRow(i));
             }
         }
-        contentArea.child(spacer(8));
+        contentArea.item(ArenasUi.spacer(8));
 
         // ── Door ────────────────────────────────────────────────────────────
-        contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.door")));
-        contentArea.child(spacer(2));
-        contentArea.child(buildDoorRow());
-        contentArea.child(spacer(8));
+        contentArea.item(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.door")));
+        contentArea.item(ArenasUi.spacer(2));
+        contentArea.item(buildDoorRow());
+        contentArea.item(ArenasUi.spacer(8));
 
         // ── Entrance doors ──────────────────────────────────────────────────
-        contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.entrances")));
-        contentArea.child(spacer(2));
-        contentArea.child(buildEntranceRow());
-        contentArea.child(spacer(8));
+        contentArea.item(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.entrances")));
+        contentArea.item(ArenasUi.spacer(2));
+        contentArea.item(buildEntranceRow());
+        contentArea.item(ArenasUi.spacer(8));
 
         // ── Respawn point ───────────────────────────────────────────────────
-        contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.respawn")));
-        contentArea.child(spacer(2));
-        contentArea.child(buildRespawnRow());
-        contentArea.child(spacer(8));
+        contentArea.item(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.respawn")));
+        contentArea.item(ArenasUi.spacer(2));
+        contentArea.item(buildRespawnRow());
+        contentArea.item(ArenasUi.spacer(8));
 
         // ── Rewards (edited in a dedicated screen) ──────────────────────────
-        contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.rewards")));
-        contentArea.child(spacer(2));
-        FlowLayout rewardsRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        rewardsRow.gap(8);
-        rewardsRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        LabelComponent rewardHint = Components.label(Component.translatable("gui.arenas_ld.room_controller.reward_hint"));
-        rewardHint.color(Color.ofArgb(INK_DIM));
-        rewardsRow.child(rewardHint);
-        rewardsRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
-        ButtonComponent rewardsBtn = accentButton(
-            Component.translatable("gui.arenas_ld.room_controller.button.rewards"), b -> openRewardsScreen());
-        rewardsBtn.sizing(Sizing.content(), Sizing.fixed(18));
-        rewardsRow.child(rewardsBtn);
-        contentArea.child(rewardsRow);
+        contentArea.item(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.rewards")));
+        contentArea.item(ArenasUi.spacer(2));
+        Flex rewardsRow = Flex.row().gap(8).alignItems(Align.CENTER);
+        rewardsRow.sizing(Sizing.fill(), Sizing.content());
+        rewardsRow.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.reward_hint"), INK_DIM));
+        rewardsRow.spacer();
+        rewardsRow.item(ArenasUi.button(
+            Component.translatable("gui.arenas_ld.room_controller.button.rewards"), this::openRewardsScreen));
+        contentArea.item(rewardsRow);
 
         // ── Footer actions ──────────────────────────────────────────────────
 
         if (!spawners.isEmpty()) {
-            ButtonComponent clearAll = dangerButton(
+            footerActions.item(dangerButton(
                 Component.translatable("gui.arenas_ld.room_controller.button.clear_all"),
-                b -> {
+                () -> {
                     if (minecraft == null) return;
                     minecraft.setScreen(new ConfirmScreen(ok -> {
                         minecraft.setScreen(this);
                         if (ok) ClientPlayNetworking.send(new RoomClearSpawnersPayload(menu.getBlockPos()));
                     }, Component.translatable("gui.arenas_ld.room_controller.confirm.clear_title"),
                        Component.translatable("gui.arenas_ld.room_controller.confirm.clear_message")));
-                });
-            footerActions.child(clearAll);
+                }));
         }
 
-        ButtonComponent reset = dangerButton(
+        footerActions.item(dangerButton(
             Component.translatable("gui.arenas_ld.room_controller.button.reset"),
-            b -> {
+            () -> {
                 if (minecraft == null) return;
                 minecraft.setScreen(new ConfirmScreen(ok -> {
                     minecraft.setScreen(this);
                     if (ok) ClientPlayNetworking.send(new RoomResetPayload(menu.getBlockPos()));
                 }, Component.translatable("gui.arenas_ld.room_controller.confirm.reset_title"),
                    Component.translatable("gui.arenas_ld.room_controller.confirm.reset_message")));
-            });
-        footerActions.child(reset);
+            }));
     }
 
-    private FlowLayout buildNameRow() {
-        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildNameRow() {
+        Flex fieldRow = Flex.row().alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldRow.child(accent);
+        fieldRow.item(accentBar());
 
-        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.expand(), roomNameInput, 48);
-        field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(v -> roomNameInput = v);
+        IdSuggestionDropdown.Field field = IdSuggestionDropdown.textBox(100, roomNameInput, 48);
+        field.sizing(Sizing.expand(), Sizing.fixed(18));
+        field.changeListeners.add(v -> roomNameInput = v);
         IdSuggestionDropdown.attachFullValueTooltip(field);
-        fieldRow.child(field);
+        fieldRow.item(field);
 
-        ButtonComponent setBtn = accentButton(Component.translatable("gui.arenas_ld.room_controller.button.set_name"),
-            b -> ClientPlayNetworking.send(new RoomSetNamePayload(menu.getBlockPos(), roomNameInput == null ? "" : roomNameInput)));
-        setBtn.sizing(Sizing.fixed(64), Sizing.fixed(18));
-        fieldRow.child(setBtn);
+        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.set_name"), 64, 18,
+            () -> ClientPlayNetworking.send(new RoomSetNamePayload(menu.getBlockPos(), roomNameInput == null ? "" : roomNameInput))));
         return fieldRow;
     }
 
-    private FlowLayout buildObjectiveTypeRow() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(4);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildObjectiveTypeRow() {
+        Flex row = Flex.row().gap(4).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
         for (RoomObjectiveConfig.Type type : RoomObjectiveConfig.Type.values()) {
-            row.child(objectiveTypeButton(type));
+            row.item(objectiveTypeButton(type));
         }
         return row;
     }
 
-    private ButtonComponent objectiveTypeButton(RoomObjectiveConfig.Type type) {
-        boolean selected = objectiveType == type;
-        ButtonComponent button = Components.button(
+    private Button objectiveTypeButton(RoomObjectiveConfig.Type type) {
+        Button button = ArenasUi.button(
             Component.translatable("gui.arenas_ld.room_controller.objective." + type.getSerializedName()),
-            b -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(type))));
-        button.sizing(Sizing.content(), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
-            int fill = selected ? (rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK)
-                                : (rendered.isHoveredOrFocused() ? ROW_BG : PANEL_2);
-            int border = selected ? ACCENT : HAIRLINE;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), border);
-        });
+            () -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(type))));
+        button.style(objectiveType == type ? SEGMENT_ON : SEGMENT_OFF);
         return button;
     }
 
-    private FlowLayout buildSurviveSecondsRow() {
-        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        fieldRow.gap(6);
+    private Flex buildSurviveSecondsRow() {
+        Flex fieldRow = Flex.row().gap(6).alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldRow.child(accent);
+        fieldRow.item(accentBar());
 
-        LabelComponent label = Components.label(Component.translatable("gui.arenas_ld.room_controller.objective.survive_seconds"));
-        label.color(Color.ofArgb(INK_MID));
-        fieldRow.child(label);
+        fieldRow.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.objective.survive_seconds"), INK_MID));
 
-        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.fixed(48), String.valueOf(surviveSecondsInput), 4);
-        field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(v -> {
+        IdSuggestionDropdown.Field field = IdSuggestionDropdown.textBox(48, String.valueOf(surviveSecondsInput), 4);
+        field.size(48, 18);
+        field.changeListeners.add(v -> {
             try {
                 surviveSecondsInput = Math.clamp(Integer.parseInt(v.trim()), 1, 3600);
             } catch (NumberFormatException ignored) {
             }
         });
-        fieldRow.child(field);
+        fieldRow.item(field);
 
-        LabelComponent intervalLabel = Components.label(Component.translatable("gui.arenas_ld.room_controller.objective.wave_interval"));
-        intervalLabel.color(Color.ofArgb(INK_MID));
-        fieldRow.child(intervalLabel);
+        fieldRow.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.objective.wave_interval"), INK_MID));
 
-        TextBoxComponent intervalField = IdSuggestionDropdown.textBox(Sizing.fixed(48), String.valueOf(surviveIntervalInput), 3);
-        intervalField.verticalSizing(Sizing.fixed(18));
-        intervalField.onChanged().subscribe(v -> {
+        IdSuggestionDropdown.Field intervalField = IdSuggestionDropdown.textBox(48, String.valueOf(surviveIntervalInput), 3);
+        intervalField.size(48, 18);
+        intervalField.changeListeners.add(v -> {
             try {
                 surviveIntervalInput = Math.clamp(Integer.parseInt(v.trim()), 5, 600);
             } catch (NumberFormatException ignored) {
             }
         });
-        fieldRow.child(intervalField);
+        fieldRow.item(intervalField);
 
-        fieldRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        fieldRow.spacer();
 
-        ButtonComponent setBtn = accentButton(Component.translatable("gui.arenas_ld.room_controller.button.set_time"),
-            b -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType))));
-        setBtn.sizing(Sizing.fixed(64), Sizing.fixed(18));
-        fieldRow.child(setBtn);
+        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.set_time"), 64, 18,
+            () -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)))));
         return fieldRow;
     }
 
-    private void buildProtectRows(FlowLayout container) {
+    private void buildProtectRows(Flex container) {
         // Target mob row: id field with entity-type autocomplete + Apply.
-        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        fieldRow.gap(6);
+        Flex fieldRow = Flex.row().gap(6).alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldRow.child(accent);
+        fieldRow.item(accentBar());
 
-        LabelComponent mobLabel = Components.label(Component.translatable("gui.arenas_ld.room_controller.objective.protect_mob"));
-        mobLabel.color(Color.ofArgb(INK_MID));
-        fieldRow.child(mobLabel);
+        fieldRow.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.objective.protect_mob"), INK_MID));
 
-        TextBoxComponent mobField = IdSuggestionDropdown.textBox(Sizing.expand(), protectMobIdInput, 256);
-        mobField.verticalSizing(Sizing.fixed(18));
-        mobField.onChanged().subscribe(v -> protectMobIdInput = v);
+        IdSuggestionDropdown.Field mobField = IdSuggestionDropdown.textBox(100, protectMobIdInput, 256);
+        mobField.sizing(Sizing.expand(), Sizing.fixed(18));
+        mobField.changeListeners.add(v -> protectMobIdInput = v);
         IdSuggestionDropdown.attachFullValueTooltip(mobField);
-        fieldRow.child(mobField);
+        fieldRow.item(mobField);
 
         IdSuggestionDropdown dropdown = new IdSuggestionDropdown(
-            this.font, net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE, mobField);
-        fieldRow.child(dropdown.chevron());
+            net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE, mobField);
+        fieldRow.item(dropdown.chevron());
 
-        ButtonComponent applyBtn = accentButton(Component.translatable("gui.arenas_ld.room_controller.button.set_time"),
-            b -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType))));
-        applyBtn.sizing(Sizing.fixed(64), Sizing.fixed(18));
-        fieldRow.child(applyBtn);
+        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.set_time"), 64, 18,
+            () -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)))));
 
-        container.child(fieldRow);
-        container.child(dropdown.panel());
-        container.child(spacer(2));
+        container.item(fieldRow);
+        container.item(dropdown.panel());
+        container.item(ArenasUi.spacer(2));
 
         // Target attributes (absolute values, e.g. generic.max_health = 60).
-        LabelComponent attrCaption = Components.label(Component.translatable("gui.arenas_ld.attributes"));
-        attrCaption.color(Color.ofArgb(INK_DIM));
-        container.child(attrCaption);
-        container.child(spacer(2));
+        container.item(ArenasUi.text(Component.translatable("gui.arenas_ld.attributes"), INK_DIM));
+        container.item(ArenasUi.spacer(2));
         for (int i = 0; i < protectAttributesInput.size(); i++) {
-            container.child(protectAttributeRow(i));
+            container.item(protectAttributeRow(i));
         }
-        container.child(buildAddAttributeRow());
-        container.child(spacer(2));
+        container.item(buildAddAttributeRow());
+        container.item(ArenasUi.spacer(2));
 
         // Position + stationary row.
-        FlowLayout posRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        posRow.gap(8);
-        posRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex posRow = Flex.row().gap(8).alignItems(Align.CENTER);
+        posRow.sizing(Sizing.fill(), Sizing.content());
 
         Optional<BlockPos> protectOffset = menu.getObjective().protectOffset();
-        LabelComponent posValue = Components.label(protectOffset
+        posRow.item(ArenasUi.text(protectOffset
             .map(offset -> (Component) Component.literal(menu.getBlockPos().offset(offset).toShortString()))
-            .orElse(Component.translatable("gui.arenas_ld.room_controller.objective.protect_pos_none")));
-        posValue.color(Color.ofArgb(protectOffset.isPresent() ? INK : INK_DIM));
-        posRow.child(posValue);
+            .orElse(Component.translatable("gui.arenas_ld.room_controller.objective.protect_pos_none")),
+            protectOffset.isPresent() ? INK : INK_DIM));
 
-        LabelComponent posHint = Components.label(Component.translatable("gui.arenas_ld.room_controller.objective.protect_pos_hint"));
-        posHint.color(Color.ofArgb(INK_DIM));
-        posRow.child(posHint);
+        posRow.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.objective.protect_pos_hint"), INK_DIM));
 
-        posRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        posRow.spacer();
 
-        ButtonComponent stationaryBtn = smallButton(
+        posRow.item(ArenasUi.button(
             Component.translatable(protectStationaryInput
                 ? "gui.arenas_ld.room_controller.objective.stationary_on"
                 : "gui.arenas_ld.room_controller.objective.stationary_off"),
-            b -> {
+            () -> {
                 protectStationaryInput = !protectStationaryInput;
                 ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)));
-            });
-        posRow.child(stationaryBtn);
+            }));
 
-        ButtonComponent clearPos = smallButton(Component.translatable("gui.arenas_ld.room_controller.button.clear_respawn"),
-            b -> ClientPlayNetworking.send(new RoomClearProtectPosPayload(menu.getBlockPos())));
-        clearPos.active(protectOffset.isPresent());
-        posRow.child(clearPos);
+        Button clearPos = ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.clear_respawn"),
+            () -> ClientPlayNetworking.send(new RoomClearProtectPosPayload(menu.getBlockPos())));
+        clearPos.enabled(protectOffset.isPresent());
+        posRow.item(clearPos);
 
-        container.child(posRow);
+        container.item(posRow);
     }
 
-    private FlowLayout protectAttributeRow(int index) {
+    private Flex protectAttributeRow(int index) {
         net.ledok.arenas_ld.util.AttributeData attr = protectAttributesInput.get(index);
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(20));
-        row.surface(Surface.flat(index % 2 == 0 ? ROW_BG : ROW_BG_ALT));
-        row.padding(Insets.of(0, 0, 6, 6));
-        row.gap(6);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex row = Flex.row().gap(6).padding(Insets.of(0, 6, 0, 6)).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.fixed(20));
+        row.backgroundFill(index % 2 == 0 ? ROW_BG : ROW_BG_ALT);
 
-        LabelComponent id = Components.label(Component.literal(attr.id()));
-        id.color(Color.ofArgb(INK));
-        row.child(id);
+        row.item(ArenasUi.text(Component.literal(attr.id()), INK));
+        row.item(ArenasUi.text(Component.literal("= " + formatAttrValue(attr.value())), INK_MID));
 
-        LabelComponent value = Components.label(Component.literal("= " + formatAttrValue(attr.value())));
-        value.color(Color.ofArgb(INK_MID));
-        row.child(value);
-
-        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        row.spacer();
 
         int capturedIndex = index;
-        ButtonComponent remove = smallButton(Component.literal("×"), b -> {
+        row.item(ArenasUi.button(Component.literal("×"), 20, 16, () -> {
             protectAttributesInput.remove(capturedIndex);
             ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)));
-        });
-        remove.sizing(Sizing.fixed(20), Sizing.fixed(16));
-        row.child(remove);
+        }));
         return row;
     }
 
-    private FlowLayout buildAddAttributeRow() {
-        FlowLayout container = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+    private Flex buildAddAttributeRow() {
+        Flex container = Flex.column();
+        container.sizing(Sizing.fill(), Sizing.content());
 
-        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        fieldRow.gap(6);
+        Flex fieldRow = Flex.row().gap(6).alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldRow.child(accent);
+        fieldRow.item(accentBar());
 
-        TextBoxComponent idField = IdSuggestionDropdown.textBox(Sizing.expand(), newAttrIdInput, 256);
-        idField.verticalSizing(Sizing.fixed(18));
-        idField.onChanged().subscribe(v -> newAttrIdInput = v);
-        fieldRow.child(idField);
+        IdSuggestionDropdown.Field idField = IdSuggestionDropdown.textBox(100, newAttrIdInput, 256);
+        idField.sizing(Sizing.expand(), Sizing.fixed(18));
+        idField.changeListeners.add(v -> newAttrIdInput = v);
+        fieldRow.item(idField);
 
         IdSuggestionDropdown dropdown = new IdSuggestionDropdown(
-            this.font, net.minecraft.core.registries.BuiltInRegistries.ATTRIBUTE, idField);
-        fieldRow.child(dropdown.chevron());
+            net.minecraft.core.registries.BuiltInRegistries.ATTRIBUTE, idField);
+        fieldRow.item(dropdown.chevron());
 
-        LabelComponent valueCaption = Components.label(Component.translatable("gui.arenas_ld.room_controller.objective.attr_value"));
-        valueCaption.color(Color.ofArgb(INK_MID));
-        fieldRow.child(valueCaption);
+        fieldRow.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.objective.attr_value"), INK_MID));
 
-        TextBoxComponent valueField = IdSuggestionDropdown.textBox(Sizing.fixed(56), newAttrValueInput, 12);
-        valueField.verticalSizing(Sizing.fixed(18));
-        valueField.onChanged().subscribe(v -> newAttrValueInput = v);
-        fieldRow.child(valueField);
+        IdSuggestionDropdown.Field valueField = IdSuggestionDropdown.textBox(56, newAttrValueInput, 12);
+        valueField.size(56, 18);
+        valueField.changeListeners.add(v -> newAttrValueInput = v);
+        fieldRow.item(valueField);
 
-        ButtonComponent addBtn = accentButton(Component.translatable("gui.arenas_ld.room_controller.reward.add_effect"),
-            b -> addProtectAttribute());
-        addBtn.sizing(Sizing.content(), Sizing.fixed(18));
-        fieldRow.child(addBtn);
+        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.reward.add_effect"),
+            this::addProtectAttribute));
 
-        container.child(fieldRow);
-        container.child(dropdown.panel());
+        container.item(fieldRow);
+        container.item(dropdown.panel());
         return container;
     }
 
@@ -544,117 +509,91 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
             : String.valueOf(value);
     }
 
-    private FlowLayout spawnerRow(int index) {
+    private Flex spawnerRow(int index) {
         RoomControllerData.SpawnerEntry entry = spawners.get(index);
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(20));
-        row.surface(Surface.flat(index % 2 == 0 ? ROW_BG : ROW_BG_ALT));
-        row.padding(Insets.of(0, 0, 6, 6));
-        row.gap(6);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex row = Flex.row().gap(6).padding(Insets.of(0, 6, 0, 6)).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.fixed(20));
+        row.backgroundFill(index % 2 == 0 ? ROW_BG : ROW_BG_ALT);
 
-        LabelComponent coord = Components.label(Component.literal(entry.pos().toShortString()));
-        coord.color(Color.ofArgb(entry.missing() ? INK_DIM : INK));
-        row.child(coord);
+        row.item(ArenasUi.text(Component.literal(entry.pos().toShortString()), entry.missing() ? INK_DIM : INK));
 
         if (entry.missing()) {
-            LabelComponent missing = Components.label(Component.translatable("gui.arenas_ld.room_controller.spawner_missing"));
-            missing.color(Color.ofArgb(DANGER));
-            row.child(missing);
+            row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.spawner_missing"), DANGER));
         } else {
-            LabelComponent wave = Components.label(Component.translatable("gui.arenas_ld.room_controller.wave_badge", entry.wave()));
-            wave.color(Color.ofArgb(INK_MID));
-            row.child(wave);
+            row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.wave_badge", entry.wave()), INK_MID));
             if (entry.isBoss()) {
-                LabelComponent boss = Components.label(Component.translatable("gui.arenas_ld.room_controller.boss_badge"));
-                boss.color(Color.ofArgb(WARN));
-                row.child(boss);
+                row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.boss_badge"), WARN));
             }
         }
 
-        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        row.spacer();
 
-        ButtonComponent remove = smallButton(Component.translatable("gui.arenas_ld.room_controller.button.remove"),
-            b -> ClientPlayNetworking.send(new RoomRemoveSpawnerPayload(menu.getBlockPos(), entry.pos())));
-        remove.sizing(Sizing.content(), Sizing.fixed(16));
-        row.child(remove);
+        row.item(contentButton(Component.translatable("gui.arenas_ld.room_controller.button.remove"), 16,
+            () -> ClientPlayNetworking.send(new RoomRemoveSpawnerPayload(menu.getBlockPos(), entry.pos()))));
         return row;
     }
 
-    private FlowLayout buildDoorRow() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(8);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildDoorRow() {
+        Flex row = Flex.row().gap(8).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
 
         Component doorValue = doorPositions.isEmpty()
             ? Component.translatable("gui.arenas_ld.room_controller.door_none")
             : (doorPositions.size() == 1
                 ? Component.literal(doorPositions.get(0).toShortString())
                 : Component.translatable("gui.arenas_ld.room_controller.door_count", doorPositions.size()));
-        LabelComponent value = Components.label(doorValue);
-        value.color(Color.ofArgb(doorPositions.isEmpty() ? INK_DIM : INK));
-        row.child(value);
+        row.item(ArenasUi.text(doorValue, doorPositions.isEmpty() ? INK_DIM : INK));
 
-        LabelComponent hint = Components.label(Component.translatable("gui.arenas_ld.room_controller.door_hint"));
-        hint.color(Color.ofArgb(INK_DIM));
-        row.child(hint);
+        row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.door_hint"), INK_DIM));
 
-        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        row.spacer();
 
-        ButtonComponent clearDoor = smallButton(Component.translatable("gui.arenas_ld.room_controller.button.clear_door"),
-            b -> ClientPlayNetworking.send(new RoomClearDoorPayload(menu.getBlockPos())));
-        clearDoor.active(!doorPositions.isEmpty());
-        row.child(clearDoor);
+        Button clearDoor = ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.clear_door"),
+            () -> ClientPlayNetworking.send(new RoomClearDoorPayload(menu.getBlockPos())));
+        clearDoor.enabled(!doorPositions.isEmpty());
+        row.item(clearDoor);
         return row;
     }
 
-    private FlowLayout buildEntranceRow() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(8);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildEntranceRow() {
+        Flex row = Flex.row().gap(8).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
 
         Component entranceValue = entrancePositions.isEmpty()
             ? Component.translatable("gui.arenas_ld.room_controller.entrance_none")
             : (entrancePositions.size() == 1
                 ? Component.literal(entrancePositions.get(0).toShortString())
                 : Component.translatable("gui.arenas_ld.room_controller.entrance_count", entrancePositions.size()));
-        LabelComponent value = Components.label(entranceValue);
-        value.color(Color.ofArgb(entrancePositions.isEmpty() ? INK_DIM : INK));
-        row.child(value);
+        row.item(ArenasUi.text(entranceValue, entrancePositions.isEmpty() ? INK_DIM : INK));
 
-        LabelComponent hint = Components.label(Component.translatable("gui.arenas_ld.room_controller.entrance_hint"));
-        hint.color(Color.ofArgb(INK_DIM));
-        row.child(hint);
+        row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.entrance_hint"), INK_DIM));
 
-        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        row.spacer();
 
-        ButtonComponent clear = smallButton(Component.translatable("gui.arenas_ld.room_controller.button.clear_entrances"),
-            b -> ClientPlayNetworking.send(new RoomClearEntrancesPayload(menu.getBlockPos())));
-        clear.active(!entrancePositions.isEmpty());
-        row.child(clear);
+        Button clear = ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.clear_entrances"),
+            () -> ClientPlayNetworking.send(new RoomClearEntrancesPayload(menu.getBlockPos())));
+        clear.enabled(!entrancePositions.isEmpty());
+        row.item(clear);
         return row;
     }
 
-    private FlowLayout buildRespawnRow() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(8);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildRespawnRow() {
+        Flex row = Flex.row().gap(8).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
 
-        LabelComponent value = Components.label(respawnPos
+        row.item(ArenasUi.text(respawnPos
             .map(pos -> (Component) Component.literal(pos.toShortString()))
-            .orElse(Component.translatable("gui.arenas_ld.room_controller.respawn_none")));
-        value.color(Color.ofArgb(respawnPos.isPresent() ? INK : INK_DIM));
-        row.child(value);
+            .orElse(Component.translatable("gui.arenas_ld.room_controller.respawn_none")),
+            respawnPos.isPresent() ? INK : INK_DIM));
 
-        LabelComponent hint = Components.label(Component.translatable("gui.arenas_ld.room_controller.respawn_hint"));
-        hint.color(Color.ofArgb(INK_DIM));
-        row.child(hint);
+        row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.respawn_hint"), INK_DIM));
 
-        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        row.spacer();
 
-        ButtonComponent clear = smallButton(Component.translatable("gui.arenas_ld.room_controller.button.clear_respawn"),
-            b -> ClientPlayNetworking.send(new RoomClearRespawnPayload(menu.getBlockPos())));
-        clear.active(respawnPos.isPresent());
-        row.child(clear);
+        Button clear = ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.clear_respawn"),
+            () -> ClientPlayNetworking.send(new RoomClearRespawnPayload(menu.getBlockPos())));
+        clear.enabled(respawnPos.isPresent());
+        row.item(clear);
         return row;
     }
 
@@ -699,58 +638,29 @@ public class RoomControllerScreen extends BaseOwoHandledScreen<FlowLayout, RoomC
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    private FlowLayout sectionLabel(Component text) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        LabelComponent label = Components.label(text);
-        label.color(Color.ofArgb(INK_DIM));
-        row.child(label);
+    private Flex sectionLabel(Component text) {
+        Flex row = Flex.row().alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
+        row.item(ArenasUi.text(text, INK_DIM));
         return row;
     }
 
-    private FlowLayout spacer(int px) {
-        FlowLayout s = Containers.verticalFlow(Sizing.fill(100), Sizing.fixed(px));
-        s.surface(Surface.BLANK);
-        return s;
+    /** 2px accent stripe at the left edge of a boxed field row. */
+    private static Flex accentBar() {
+        Flex accent = Flex.column();
+        accent.sizing(Sizing.fixed(2), Sizing.fill());
+        accent.backgroundFill(ACCENT);
+        return accent;
     }
 
-    private FlowLayout rowDivider() {
-        FlowLayout d = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(1));
-        d.surface(Surface.flat(HAIRLINE));
-        return d;
+    /** Content-width button with a non-default height (the old {@code Sizing.content() x fixed(h)}). */
+    private static Button contentButton(Component label, float height, Runnable onClick) {
+        return ArenasUi.button(label, Minecraft.getInstance().font.width(label) + 12, height, onClick);
     }
 
-    private ButtonComponent smallButton(Component text, Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text, action);
-        button.sizing(Sizing.content(), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.active() ? (rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK) : PANEL;
-            int border = rendered.active() ? ACCENT : HAIRLINE;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), border);
-        });
+    private Button dangerButton(Component text, Runnable onClick) {
+        Button button = ArenasUi.button(text.copy().withStyle(net.minecraft.ChatFormatting.RED), onClick);
+        button.style(DANGER_BUTTON);
         return button;
     }
-
-    private ButtonComponent accentButton(Component text, Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text, action);
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), ACCENT);
-        });
-        return button;
-    }
-
-    private ButtonComponent dangerButton(Component text, Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text.copy().withStyle(net.minecraft.ChatFormatting.RED), action);
-        button.sizing(Sizing.content(), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.isHoveredOrFocused() ? ((DANGER & 0x00FFFFFF) | 0x44000000) : ((DANGER & 0x00FFFFFF) | 0x1F000000);
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), DANGER);
-        });
-        return button;
-    }
-
 }

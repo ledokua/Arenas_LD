@@ -1,39 +1,43 @@
 package net.ledok.arenas_ld.raid.screen;
 
-import io.wispforest.owo.ui.base.BaseOwoHandledScreen;
-import io.wispforest.owo.ui.component.ButtonComponent;
-import io.wispforest.owo.ui.component.Components;
-import io.wispforest.owo.ui.component.LabelComponent;
-import io.wispforest.owo.ui.component.TextBoxComponent;
-import io.wispforest.owo.ui.container.Containers;
-import io.wispforest.owo.ui.container.FlowLayout;
-import io.wispforest.owo.ui.container.ScrollContainer;
-import io.wispforest.owo.ui.core.Color;
-import io.wispforest.owo.ui.core.HorizontalAlignment;
-import io.wispforest.owo.ui.core.Insets;
-import io.wispforest.owo.ui.core.OwoUIAdapter;
-import io.wispforest.owo.ui.core.Sizing;
-import io.wispforest.owo.ui.core.Surface;
-import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
-import net.ledok.arenas_ld.raid.packet.RaidSetMaxPartySizePayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetRespawnTimeTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidMoveInstancePayload;
 import net.ledok.arenas_ld.raid.packet.RaidRemoveInstancePayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetCloseTimerSecondsPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetCooldownTicksPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetDeathTimePenaltyPayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetLootViaInboxPayload;
-import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
+import net.ledok.arenas_ld.raid.packet.RaidSetMaxPartySizePayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetNamePayload;
+import net.ledok.arenas_ld.raid.packet.RaidSetRespawnTimeTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
 import net.ledok.arenas_ld.raid.run.RaidTierConfig;
+import net.ledok.arenas_ld.screen.ArenasUi;
+import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.arenas_ld.util.InstanceStatus;
+import net.ledok.vectorlib.client.canvas.Shapes;
+import net.ledok.vectorlib.client.canvas.TextNode;
+import net.ledok.vectorlib.client.canvas.VectorCanvas;
+import net.ledok.vectorlib.client.canvas.layout.Align;
+import net.ledok.vectorlib.client.canvas.layout.Flex;
+import net.ledok.vectorlib.client.canvas.layout.Insets;
+import net.ledok.vectorlib.client.canvas.layout.Justify;
+import net.ledok.vectorlib.client.canvas.layout.Sizing;
+import net.ledok.vectorlib.client.canvas.widget.Button;
+import net.ledok.vectorlib.client.canvas.widget.Label;
+import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
+import net.ledok.vectorlib.client.canvas.widget.TextField;
+import net.ledok.vectorlib.client.canvas.widget.UiSounds;
+import net.ledok.vectorlib.client.canvas.widget.Widget;
+import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
+import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.vectorlib.client.presentation.Placement;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -44,27 +48,47 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
-public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, RaidControllerAdminScreenHandler> {
-    private static final int BG = 0xFF070E14;
-    private static final int PANEL = 0xFF121922;
-    private static final int PANEL_2 = 0xFF0C1218;
-    private static final int HAIRLINE = 0xFF283442;
-    private static final int HAIRLINE_HI = 0xFF3A4A5C;
-    private static final int ROW_BG = 0xFF19222D;
-    private static final int ROW_BG_ALT = 0xFF16202A;
-    private static final int INK = 0xFFE8EEF5;
-    private static final int INK_MID = 0xFF9AA8B8;
-    private static final int INK_DIM = 0xFF5F6E80;
-    private static final int GOOD = 0xFF86D36C;
-    private static final int WARN = 0xFFF5B042;
-    private static final int DANGER = 0xFFE8624A;
-    private static final int INFO = 0xFF6DA3E8;
-    private static final int ACCENT = 0xFFA98BE8;
-    private static final int ACCENT_DARK = 0xFF6C4FB5;
-    private static final int DROPDOWN_MAX_CANDIDATES = 50;
-    private static final int DROPDOWN_MAX_HEIGHT = 140;
+import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
+import static net.ledok.arenas_ld.screen.ArenasUi.BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
+import static net.ledok.arenas_ld.screen.ArenasUi.GOOD;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
+import static net.ledok.arenas_ld.screen.ArenasUi.INFO;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_MID;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
+import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
+
+public class RaidControllerAdminScreen extends CanvasHandledScreen<RaidControllerAdminScreenHandler> {
+
+    /** Flat tab/step-button look: PANEL_2 idle, ROW_BG on hover, PANEL + ACCENT outline when selected (= disabled). */
+    private static final WidgetStyle TAB_STYLE = new WidgetStyle(
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(ROW_BG, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(ROW_BG, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL, ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            0xFFFFFFFF, 0xFFFFFFFF, 0xFFA0A0A0, INK_DIM, HAIRLINE, 0x80A98BE8,
+            18, 16, 4, true);
+
+    /** Translucent red remove-button look (fill brightens on hover, DANGER outline). */
+    private static final WidgetStyle DANGER_STYLE = new WidgetStyle(
+            new WidgetStyle.Skin.Flat(0x1FE8624A, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(0x44E8624A, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(0x44E8624A, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(0x1FE8624A, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            INK, INK, INK_DIM, INK_DIM, DANGER, 0x80A98BE8,
+            18, 16, 4, true);
 
     private enum Tab {
         INSTANCES,
@@ -78,30 +102,27 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
     private final List<RaidControllerAdminData.InstanceEntry> instances = new ArrayList<>();
     private final Set<BlockPos> pendingRemovals = new HashSet<>();
     private final Map<BlockPos, RaidControllerAdminData.InstanceRun> runningInstances = new HashMap<>();
-    private final Map<BlockPos, FlowLayout> statusBadges = new HashMap<>();
+    private final Map<BlockPos, BadgeHandle> statusBadges = new HashMap<>();
     private final Map<DifficultyTier, RaidTierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
 
     private Tab currentTab = Tab.INSTANCES;
     private String footerError;
     private long lastCooldownSecond = -1L;
     private long cooldownSnapshotEpochMs = System.currentTimeMillis();
+    private boolean synced;
 
-    private FlowLayout contentArea;
-    private FlowLayout footerActions;
-    private LabelComponent footerLabel;
+    private Flex contentArea;
+    private Flex footerActions;
+    private Label footerLabel;
 
-    private ButtonComponent instancesTabButton;
-    private ButtonComponent generalTabButton;
-    private ButtonComponent easyTabButton;
-    private ButtonComponent normalTabButton;
-    private ButtonComponent hardTabButton;
-    private ButtonComponent nightmareTabButton;
+    private Button instancesTabButton;
+    private Button generalTabButton;
+    private Button easyTabButton;
+    private Button normalTabButton;
+    private Button hardTabButton;
+    private Button nightmareTabButton;
 
     private List<String> knownLootTableIds = List.of();
-    private boolean lootDropdownOpen = false;
-    private FlowLayout lootDropdownPanel;
-    private TextBoxComponent currentLootField;
-    private Consumer<String> currentLootOnChange;
 
     private String nameInput;
     private String cooldownInput;
@@ -123,45 +144,58 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
     private final Map<DifficultyTier, Boolean> enabledInputs = new EnumMap<>(DifficultyTier.class);
 
     public RaidControllerAdminScreen(RaidControllerAdminScreenHandler handler, Inventory inventory, Component title) {
-        super(handler, inventory, title);
-        this.inventoryLabelY = 9999;
-        this.titleLabelY = 9999;
+        super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
+        canvas.theme(ArenasUi.THEME);
+        dimBackground(false);
+        fillWindow();
     }
 
     @Override
-    protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
-        return OwoUIAdapter.create(this, Containers::verticalFlow);
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // The old owo screen swallowed the inventory key entirely (close via X or Esc only).
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
+                && !(input.focusedNode() instanceof TextField)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    protected void build(FlowLayout rootComponent) {
-        rootComponent.surface(Surface.flat(BG));
-        rootComponent.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+    protected void onCanvasResized(float width, float height) {
+        buildAll();
+    }
 
-        int shellWidth = Math.max(500, Math.min(620, this.width - 24));
-        int shellHeight = Math.max(300, this.height - 24);
-        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
-        shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
+    private void buildAll() {
+        canvas.clear();
+        Flex root = canvas.add(Flex.column());
+        root.sizing(Sizing.fill(), Sizing.fill());
+        root.justify(Justify.CENTER).alignItems(Align.CENTER);
+        root.backgroundFill(BG);
 
-        shell.child(buildHeader());
-        shell.child(buildTabs());
+        float shellWidth = Math.max(500, Math.min(620, canvas.width() - 24));
+        float shellHeight = Math.max(300, canvas.height() - 24);
+        Flex shell = root.item(Flex.column());
+        shell.sizing(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
+        shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
 
-        contentArea = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        contentArea.surface(Surface.flat(PANEL));
-        contentArea.padding(Insets.of(10));
-        contentArea.gap(4);
-        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.expand(), contentArea);
-        scroll.surface(Surface.flat(PANEL));
-        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        scroll.scrollbarThiccness(8);
-        scroll.fixedScrollbarLength(28);
-        scroll.scrollStep(18);
-        shell.child(scroll);
+        shell.item(buildHeader());
+        shell.item(buildTabs());
 
-        shell.child(buildFooter());
-        rootComponent.child(shell);
+        contentArea = Flex.column().gap(4).padding(Insets.of(10));
+        contentArea.sizing(Sizing.fill(), Sizing.content());
+        contentArea.backgroundFill(PANEL);
+        ScrollPanel scroll = new ScrollPanel(100, 100, contentArea);
+        scroll.sizing(Sizing.fill(), Sizing.expand());
+        scroll.barWidth(8);
+        scroll.wheelStep(18);
+        shell.item(scroll);
 
-        syncFromMenu();
+        shell.item(buildFooter());
+
+        root.layoutIn(canvas.width(), canvas.height());
+
+        if (!synced) {
+            syncFromMenu();
+            synced = true;
+        }
         rebuildUi();
     }
 
@@ -180,7 +214,7 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
     private void refreshCooldownsInPlace() {
         for (RaidControllerAdminData.InstanceEntry entry : instances) {
             BlockPos pos = entry.spawnerPos();
-            FlowLayout badge = statusBadges.get(pos);
+            BadgeHandle badge = statusBadges.get(pos);
             if (badge == null) continue;
             if (pendingRemovals.contains(pos) || entry.status() == InstanceStatus.RUNNING) {
                 continue;
@@ -190,64 +224,52 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         }
     }
 
-    private void updateBadge(FlowLayout badge, String text, int color) {
-        badge.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
-        if (!badge.children().isEmpty() && badge.children().get(0) instanceof LabelComponent label) {
-            label.text(Component.literal(text));
-            label.color(Color.ofArgb(color));
-        }
+    private void updateBadge(BadgeHandle badge, String text, int color) {
+        badge.box().backgroundFill((color & 0x00FFFFFF) | 0x22000000, (color & 0x00FFFFFF) | 0x55000000, 1);
+        badge.label().text(Component.literal(text));
+        badge.label().color(color);
     }
 
-    private FlowLayout buildHeader() {
-        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(42));
-        header.surface(Surface.flat(PANEL_2));
-        header.padding(Insets.of(6));
-        header.gap(8);
+    private Flex buildHeader() {
+        Flex header = Flex.row().gap(8).padding(Insets.of(6));
+        header.sizing(Sizing.fill(), Sizing.fixed(42));
+        header.backgroundFill(PANEL_2);
 
-        FlowLayout mark = Containers.verticalFlow(Sizing.fixed(18), Sizing.fixed(18));
-        mark.surface(Surface.flat(WARN));
-        header.child(mark);
+        Flex mark = Flex.column();
+        mark.sizing(Sizing.fixed(18), Sizing.fixed(18));
+        mark.backgroundFill(WARN);
+        header.item(mark);
 
-        FlowLayout info = Containers.verticalFlow(Sizing.content(), Sizing.content());
-        info.gap(3);
+        Flex info = Flex.column().gap(3);
+        info.sizing(Sizing.content(), Sizing.content());
 
-        FlowLayout titleLine = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        titleLine.gap(8);
-        titleLine.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        LabelComponent titleLabel = Components.label(Component.translatable("gui.arenas_ld.raid_controller_admin.title"));
-        titleLabel.color(Color.ofArgb(INK));
-        titleLine.child(titleLabel);
-        titleLine.child(badge(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.op"), WARN));
-        info.child(titleLine);
+        Flex titleLine = Flex.row().gap(8).alignItems(Align.CENTER);
+        titleLine.sizing(Sizing.content(), Sizing.content());
+        titleLine.item(ArenasUi.text(Component.translatable("gui.arenas_ld.raid_controller_admin.title"), INK));
+        titleLine.item(badge(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.op"), WARN));
+        info.item(titleLine);
 
-        FlowLayout meta = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        meta.gap(10);
-        meta.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        meta.child(smallMeta("POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
-        FlowLayout live = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        live.gap(4);
-        live.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        LabelComponent liveDot = Components.label(Component.literal("●"));
-        liveDot.color(Color.ofArgb(GOOD));
-        live.child(liveDot);
-        live.child(smallMeta("LIVE", GOOD));
-        meta.child(live);
-        info.child(meta);
-        header.child(info);
+        Flex meta = Flex.row().gap(10).alignItems(Align.CENTER);
+        meta.sizing(Sizing.content(), Sizing.content());
+        meta.item(smallMeta("POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
+        Flex live = Flex.row().gap(4).alignItems(Align.CENTER);
+        live.sizing(Sizing.content(), Sizing.content());
+        live.item(ArenasUi.text(Component.literal("●"), GOOD));
+        live.item(smallMeta("LIVE", GOOD));
+        meta.item(live);
+        info.item(meta);
+        header.item(info);
 
-        header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+        header.spacer();
 
-        ButtonComponent close = smallButton(Component.literal("X"), b -> onClose());
-        close.sizing(Sizing.fixed(20), Sizing.fixed(16));
-        header.child(close);
+        header.item(ArenasUi.button(Component.literal("X"), 20, 16, this::onClose));
         return header;
     }
 
-    private FlowLayout buildTabs() {
-        FlowLayout tabs = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(30));
-        tabs.surface(Surface.flat(PANEL_2));
-        tabs.padding(Insets.of(4));
-        tabs.gap(4);
+    private Flex buildTabs() {
+        Flex tabs = Flex.row().gap(4).padding(Insets.of(4));
+        tabs.sizing(Sizing.fill(), Sizing.fixed(30));
+        tabs.backgroundFill(PANEL_2);
 
         instancesTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.instances", Tab.INSTANCES, 76);
         generalTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.general", Tab.GENERAL, 72);
@@ -256,65 +278,51 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         hardTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.hard", Tab.HARD, 56);
         nightmareTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.nightmare", Tab.NIGHTMARE, 80);
 
-        tabs.child(instancesTabButton);
-        tabs.child(generalTabButton);
-        tabs.child(easyTabButton);
-        tabs.child(normalTabButton);
-        tabs.child(hardTabButton);
-        tabs.child(nightmareTabButton);
+        tabs.item(instancesTabButton);
+        tabs.item(generalTabButton);
+        tabs.item(easyTabButton);
+        tabs.item(normalTabButton);
+        tabs.item(hardTabButton);
+        tabs.item(nightmareTabButton);
         return tabs;
     }
 
-    private FlowLayout buildFooter() {
-        FlowLayout footer = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
-        footer.surface(Surface.flat(PANEL_2));
-        footer.padding(Insets.of(6));
-        footer.gap(6);
+    private Flex buildFooter() {
+        Flex footer = Flex.row().gap(6).padding(Insets.of(6));
+        footer.sizing(Sizing.fill(), Sizing.fixed(34));
+        footer.backgroundFill(PANEL_2);
 
-        footerLabel = Components.label(Component.empty());
-        footerLabel.color(Color.ofArgb(DANGER));
-        footerLabel.horizontalSizing(Sizing.expand());
-        footer.child(footerLabel);
+        footerLabel = ArenasUi.label(100, Component.empty(), DANGER);
+        footerLabel.sizing(Sizing.expand(), Sizing.content());
+        footer.item(footerLabel);
 
-        footerActions = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        footerActions.gap(4);
-        footer.child(footerActions);
+        footerActions = Flex.row().gap(4);
+        footerActions.sizing(Sizing.content(), Sizing.content());
+        footer.item(footerActions);
         return footer;
     }
 
-    private ButtonComponent tabButton(String key, Tab tab, int width) {
-        ButtonComponent button = Components.button(Component.translatable(key), b -> {
+    private Button tabButton(String key, Tab tab, float width) {
+        Button button = new Button(width, 18, Component.translatable(key), () -> {
             currentTab = tab;
             footerError = null;
             rebuildUi();
         });
-        button.sizing(Sizing.fixed(width), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
-            boolean active = !rendered.active();
-            int fill = active ? PANEL : (rendered.isHoveredOrFocused() ? ROW_BG : PANEL_2);
-            int border = active ? ACCENT : HAIRLINE;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), border);
-        });
+        button.style(TAB_STYLE);
         return button;
     }
 
     private void rebuildUi() {
-        lootDropdownOpen = false;
-        lootDropdownPanel = null;
-        currentLootField = null;
-        currentLootOnChange = null;
+        contentArea.clear();
+        footerActions.clear();
 
-        contentArea.clearChildren();
-        footerActions.clearChildren();
-
-        instancesTabButton.active(currentTab != Tab.INSTANCES);
-        generalTabButton.active(currentTab != Tab.GENERAL);
-        easyTabButton.active(currentTab != Tab.EASY);
-        normalTabButton.active(currentTab != Tab.NORMAL);
-        hardTabButton.active(currentTab != Tab.HARD);
-        nightmareTabButton.active(currentTab != Tab.NIGHTMARE);
-        instancesTabButton.setMessage(Component.translatable("gui.arenas_ld.dungeon_controller_admin.tab.instances").append(" [" + instances.size() + "]"));
+        instancesTabButton.enabled(currentTab != Tab.INSTANCES);
+        generalTabButton.enabled(currentTab != Tab.GENERAL);
+        easyTabButton.enabled(currentTab != Tab.EASY);
+        normalTabButton.enabled(currentTab != Tab.NORMAL);
+        hardTabButton.enabled(currentTab != Tab.HARD);
+        nightmareTabButton.enabled(currentTab != Tab.NIGHTMARE);
+        instancesTabButton.label(Component.translatable("gui.arenas_ld.dungeon_controller_admin.tab.instances").append(" [" + instances.size() + "]"));
 
         switch (currentTab) {
             case INSTANCES -> buildInstancesTab();
@@ -343,140 +351,133 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
             }
         }
 
-        contentArea.child(instancesSummaryBar(running, instances.size(), idleCooldown));
+        contentArea.item(instancesSummaryBar(running, instances.size(), idleCooldown));
 
         if (instances.isEmpty()) {
-            FlowLayout empty = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-            empty.surface(Surface.flat(ROW_BG));
-            empty.padding(Insets.of(10));
-            empty.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-            empty.child(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller_admin.use_linker_hint")));
-            contentArea.child(empty);
+            Flex empty = Flex.row().padding(Insets.of(10)).alignItems(Align.CENTER);
+            empty.sizing(Sizing.fill(), Sizing.content());
+            empty.backgroundFill(ROW_BG);
+            empty.item(ArenasUi.text(Component.translatable("gui.arenas_ld.dungeon_controller_admin.use_linker_hint"), INK_DIM));
+            contentArea.item(empty);
             return;
         }
 
-        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        list.child(instanceHeaderRow());
-        list.child(rowDivider(HAIRLINE_HI));
+        Flex list = Flex.column();
+        list.sizing(Sizing.fill(), Sizing.content());
+        list.item(instanceHeaderRow());
+        list.item(rowDivider(HAIRLINE_HI));
         for (int i = 0; i < instances.size(); i++) {
             if (i > 0) {
-                list.child(rowDivider(HAIRLINE));
+                list.item(rowDivider(HAIRLINE));
             }
-            list.child(instanceRow(i, instances.get(i)));
+            list.item(instanceRow(i, instances.get(i)));
         }
-        contentArea.child(list);
+        contentArea.item(list);
     }
 
-    private FlowLayout instancesSummaryBar(int running, int total, int idleCooldown) {
-        FlowLayout bar = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(40));
-        bar.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
-        bar.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        bar.child(accent);
+    private Flex instancesSummaryBar(int running, int total, int idleCooldown) {
+        Flex bar = Flex.row().alignItems(Align.CENTER);
+        bar.sizing(Sizing.fill(), Sizing.fixed(40));
+        bar.backgroundFill(ROW_BG, HAIRLINE, 1);
+        Flex accent = Flex.column();
+        accent.sizing(Sizing.fixed(3), Sizing.fill());
+        accent.backgroundFill(ACCENT);
+        bar.item(accent);
 
-        FlowLayout inner = Containers.horizontalFlow(Sizing.expand(), Sizing.fill(100));
-        inner.padding(Insets.of(0, 0, 12, 10));
-        inner.gap(0);
-        inner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex inner = Flex.row().gap(0).padding(Insets.of(0, 10, 0, 12)).alignItems(Align.CENTER);
+        inner.sizing(Sizing.expand(), Sizing.fill());
 
-        LabelComponent activeValue = Components.label(Component.literal(running + " / " + total));
-        activeValue.color(Color.ofArgb(running > 0 ? GOOD : INK));
-        inner.child(summaryColumn(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.active_runs"), activeValue, Sizing.fixed(120)));
-        inner.child(summaryColumn(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.idle_cooldown"), labelLiteral(Integer.toString(idleCooldown), INK), Sizing.fixed(140)));
+        TextNode activeValue = ArenasUi.text(Component.literal(running + " / " + total), running > 0 ? GOOD : INK);
+        inner.item(summaryColumn(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.active_runs"), activeValue, Sizing.fixed(120)));
+        inner.item(summaryColumn(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.idle_cooldown"), labelLiteral(Integer.toString(idleCooldown), INK), Sizing.fixed(140)));
 
-        FlowLayout hint = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
-        hint.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
-        hint.gap(3);
-        hint.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.hint_pre"), INK_DIM));
-        hint.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.hint_link"), ACCENT));
-        hint.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.hint_post"), INK_DIM));
-        inner.child(hint);
-        bar.child(inner);
+        Flex hint = Flex.row().gap(3).justify(Justify.END).alignItems(Align.CENTER);
+        hint.sizing(Sizing.expand(), Sizing.content());
+        hint.item(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.hint_pre"), INK_DIM));
+        hint.item(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.hint_link"), ACCENT));
+        hint.item(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.summary.hint_post"), INK_DIM));
+        inner.item(hint);
+        bar.item(inner);
         return bar;
     }
 
-    private FlowLayout summaryColumn(String caption, LabelComponent value, Sizing width) {
-        FlowLayout col = Containers.verticalFlow(width, Sizing.content());
-        col.gap(3);
-        col.child(labelLiteral(caption, INK_DIM));
-        col.child(value);
+    private Flex summaryColumn(String caption, TextNode value, Sizing width) {
+        Flex col = Flex.column().gap(3);
+        col.sizing(width, Sizing.content());
+        col.item(labelLiteral(caption, INK_DIM));
+        col.item(value);
         return col;
     }
 
-    private FlowLayout instanceRow(int index, RaidControllerAdminData.InstanceEntry entry) {
+    private Flex instanceRow(int index, RaidControllerAdminData.InstanceEntry entry) {
         BlockPos pos = entry.spawnerPos();
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.surface(Surface.flat(ROW_BG));
-        row.padding(Insets.of(7, 7, 8, 8));
-        row.gap(6);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex row = Flex.row().gap(6).padding(Insets.of(7, 8, 7, 8)).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
+        row.backgroundFill(ROW_BG);
 
-        LabelComponent rank = labelLiteral(Integer.toString(index + 1), INK_MID);
-        rank.horizontalSizing(Sizing.fixed(22));
-        row.child(rank);
+        Label rank = ArenasUi.label(22, Component.literal(Integer.toString(index + 1)), INK_MID);
+        row.item(rank);
 
-        FlowLayout posCol = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        posCol.gap(1);
-        posCol.child(labelLiteral("X " + pos.getX() + " · Y " + pos.getY() + " · Z " + pos.getZ(), INK));
-        posCol.child(labelLiteral(entry.dimension(), INK_DIM));
-        row.child(posCol);
+        Flex posCol = Flex.column().gap(1);
+        posCol.sizing(Sizing.expand(), Sizing.content());
+        posCol.item(labelLiteral("X " + pos.getX() + " · Y " + pos.getY() + " · Z " + pos.getZ(), INK));
+        posCol.item(labelLiteral(entry.dimension(), INK_DIM));
+        row.item(posCol);
 
         InstanceStatusInfo status = instanceStatusInfo(entry);
-        FlowLayout statusBadge = fixedBadge(Component.literal(status.label()), 120, status.color());
+        BadgeHandle statusBadge = fixedBadge(Component.literal(status.label()), 120, status.color());
         statusBadges.put(pos, statusBadge);
-        row.child(statusBadge);
+        row.item(statusBadge.box());
 
-        FlowLayout tierParty = Containers.verticalFlow(Sizing.fixed(120), Sizing.content());
-        tierParty.gap(1);
+        Flex tierParty = Flex.column().gap(1);
+        tierParty.sizing(Sizing.fixed(120), Sizing.content());
         RaidControllerAdminData.InstanceRun run = runningInstances.get(pos);
         if (run != null) {
-            tierParty.child(labelLiteral(titleCase(run.tier().name()), tierColor(run.tier())));
+            tierParty.item(labelLiteral(titleCase(run.tier().name()), tierColor(run.tier())));
             String party = run.party() == null || run.party().isEmpty()
                 ? tr("gui.arenas_ld.dungeon_controller_admin.ui.party_fallback")
                 : Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.party_suffix", run.party()).getString();
-            tierParty.child(labelLiteral(party, INK_MID));
+            tierParty.item(labelLiteral(party, INK_MID));
         } else {
-            tierParty.child(labelLiteral("—", INK_DIM));
+            tierParty.item(labelLiteral("—", INK_DIM));
         }
-        row.child(tierParty);
+        row.item(tierParty);
 
-        ButtonComponent up = smallButton(Component.literal("↑"), b -> {
+        Button up = ArenasUi.button(Component.literal("↑"), 22, 18, () -> {
             footerError = null;
             ClientPlayNetworking.send(new RaidMoveInstancePayload(menu.getBlockPos(), index, Math.max(0, index - 1)));
         });
-        up.sizing(Sizing.fixed(22), Sizing.fixed(18));
-        up.active(index > 0);
-        row.child(up);
+        up.enabled(index > 0);
+        row.item(up);
 
-        ButtonComponent down = smallButton(Component.literal("↓"), b -> {
+        Button down = ArenasUi.button(Component.literal("↓"), 22, 18, () -> {
             footerError = null;
             ClientPlayNetworking.send(new RaidMoveInstancePayload(menu.getBlockPos(), index, Math.min(instances.size() - 1, index + 1)));
         });
-        down.sizing(Sizing.fixed(22), Sizing.fixed(18));
-        down.active(index < instances.size() - 1);
-        row.child(down);
+        down.enabled(index < instances.size() - 1);
+        row.item(down);
 
         boolean pending = pendingRemovals.contains(pos);
         String dimension = entry.dimension();
-        ButtonComponent action;
+        Button action;
         if (pending) {
-            action = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.action.cancel"), b -> {
+            action = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.action.cancel"), 64, 18, () -> {
                 footerError = null;
                 ClientPlayNetworking.send(new RaidRemoveInstancePayload(menu.getBlockPos(), pos, dimension));
             });
         } else {
-            action = dangerButton(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.action.remove"), b -> {
+            action = dangerButton(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.action.remove"), 64, () -> {
                 footerError = null;
                 ClientPlayNetworking.send(new RaidRemoveInstancePayload(menu.getBlockPos(), pos, dimension));
             });
         }
-        action.horizontalSizing(Sizing.fixed(64));
-        row.child(action);
+        row.item(action);
         return row;
     }
 
     private record InstanceStatusInfo(String label, int color) {}
+
+    private record BadgeHandle(Flex box, Label label) {}
 
     private InstanceStatusInfo instanceStatusInfo(RaidControllerAdminData.InstanceEntry entry) {
         BlockPos pos = entry.spawnerPos();
@@ -505,27 +506,27 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
     }
 
     private void buildGeneralTab() {
-        contentArea.child(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.general.section"), null));
-        contentArea.child(spacer(2));
-        contentArea.child(nameFieldRow());
-        contentArea.child(spacer(8));
-        contentArea.child(twoColumnRow(
+        contentArea.item(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.general.section"), null));
+        contentArea.item(ArenasUi.spacer(2));
+        contentArea.item(nameFieldRow());
+        contentArea.item(ArenasUi.spacer(8));
+        contentArea.item(twoColumnRow(
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.cooldown"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.cooldown_hint"), "S", 5, 0, 86400, cooldownInput, v -> cooldownInput = v),
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.close_timer"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.close_timer_hint"), "S", 5, 0, 86400, closeTimerInput, v -> closeTimerInput = v)
         ));
-        contentArea.child(spacer(8));
-        contentArea.child(twoColumnRow(
+        contentArea.item(ArenasUi.spacer(8));
+        contentArea.item(twoColumnRow(
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.max_party"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.max_party_hint"), "P", 1, 1, 64, maxPartyInput, v -> maxPartyInput = v),
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.invite_expiry"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.invite_expiry_hint"), "S", 5, 1, 86400, inviteExpiryInput, v -> inviteExpiryInput = v)
         ));
-        contentArea.child(spacer(8));
-        contentArea.child(twoColumnRow(
+        contentArea.item(ArenasUi.spacer(8));
+        contentArea.item(twoColumnRow(
             stepperField(tr("gui.arenas_ld.raid_controller_admin.ui.general.respawn_time"), tr("gui.arenas_ld.raid_controller_admin.ui.general.respawn_time_hint"), "T", 20, 0, 1_200_000, respawnTimeInput, v -> respawnTimeInput = v),
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.death_penalty"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.death_penalty_hint"), "S", 1, 0, 600, deathPenaltyInput, v -> deathPenaltyInput = v)
         ));
-        contentArea.child(spacer(10));
+        contentArea.item(ArenasUi.spacer(10));
 
-        contentArea.child(togglePanel(
+        contentArea.item(togglePanel(
             tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox"),
             tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_desc"),
             lootViaInboxInput ? tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_on") : tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_off"),
@@ -538,112 +539,107 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
                 rebuildUi();
             }
         ));
-        contentArea.child(spacer(10));
+        contentArea.item(ArenasUi.spacer(10));
 
-        FlowLayout applyRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        applyRow.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
-        ButtonComponent apply = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.general.apply"), b -> applyGeneral());
-        apply.horizontalSizing(Sizing.fixed(120));
-        applyRow.child(apply);
-        contentArea.child(applyRow);
+        Flex applyRow = Flex.row().justify(Justify.END).alignItems(Align.CENTER);
+        applyRow.sizing(Sizing.fill(), Sizing.content());
+        applyRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.general.apply"), 120, 18, this::applyGeneral));
+        contentArea.item(applyRow);
     }
 
-    private FlowLayout twoColumnRow(FlowLayout left, FlowLayout right) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        FlowLayout c0 = Containers.verticalFlow(Sizing.fill(50), Sizing.content());
-        c0.padding(Insets.of(0, 0, 0, 5));
-        c0.child(left);
-        FlowLayout c1 = Containers.verticalFlow(Sizing.fill(50), Sizing.content());
-        c1.padding(Insets.of(0, 0, 5, 0));
-        c1.child(right);
-        row.child(c0);
-        row.child(c1);
+    private Flex twoColumnRow(Flex left, Flex right) {
+        Flex row = Flex.row();
+        row.sizing(Sizing.fill(), Sizing.content());
+        Flex c0 = Flex.column().padding(Insets.of(0, 5, 0, 0));
+        c0.sizing(Sizing.fill(0.5f), Sizing.content());
+        c0.item(left);
+        Flex c1 = Flex.column().padding(Insets.of(0, 0, 0, 5));
+        c1.sizing(Sizing.fill(0.5f), Sizing.content());
+        c1.item(right);
+        row.item(c0);
+        row.item(c1);
         return row;
     }
 
-    private FlowLayout nameFieldRow() {
-        FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        col.gap(4);
+    private Flex nameFieldRow() {
+        Flex col = Flex.column().gap(4);
+        col.sizing(Sizing.fill(), Sizing.content());
 
-        FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        head.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        head.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.name"), INK_DIM));
-        head.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-        LabelComponent hintLabel = Components.label(
-            Component.literal(tr("gui.arenas_ld.raid_controller_admin.ui.general.name_hint")).withStyle(net.minecraft.ChatFormatting.ITALIC));
-        hintLabel.color(Color.ofArgb(INK_DIM));
-        head.child(hintLabel);
-        col.child(head);
+        Flex head = Flex.row().alignItems(Align.CENTER);
+        head.sizing(Sizing.fill(), Sizing.content());
+        head.item(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.name"), INK_DIM));
+        head.spacer();
+        head.item(ArenasUi.text(
+            Component.literal(tr("gui.arenas_ld.raid_controller_admin.ui.general.name_hint")).withStyle(ChatFormatting.ITALIC), INK_DIM));
+        col.item(head);
 
-        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldWrap.child(accent);
-        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.expand(), nameInput, 48);
-        field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(v -> nameInput = v);
-        fieldWrap.child(field);
-        col.child(fieldWrap);
+        Flex fieldWrap = Flex.row().alignItems(Align.CENTER);
+        fieldWrap.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldWrap.backgroundFill(PANEL_2, HAIRLINE, 1);
+        Flex accent = Flex.column();
+        accent.sizing(Sizing.fixed(2), Sizing.fill());
+        accent.backgroundFill(ACCENT);
+        fieldWrap.item(accent);
+        TextField field = ArenasUi.textField(100, nameInput, 48);
+        field.sizing(Sizing.expand(), Sizing.fixed(18));
+        field.onChange(v -> nameInput = v);
+        fieldWrap.item(field);
+        col.item(fieldWrap);
         return col;
     }
 
-    private FlowLayout stepperField(String caption, String hint, String unit, int step, int min, int max,
-                                    String initial, java.util.function.Consumer<String> onChange) {
-        FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        col.gap(4);
+    private Flex stepperField(String caption, String hint, String unit, int step, int min, int max,
+                              String initial, Consumer<String> onChange) {
+        Flex col = Flex.column().gap(4);
+        col.sizing(Sizing.fill(), Sizing.content());
 
-        FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        head.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        head.child(labelLiteral(caption, INK_DIM));
-        head.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-        LabelComponent hintLabel = Components.label(Component.literal(hint).withStyle(net.minecraft.ChatFormatting.ITALIC));
-        hintLabel.color(Color.ofArgb(INK_DIM));
-        head.child(hintLabel);
-        col.child(head);
+        Flex head = Flex.row().alignItems(Align.CENTER);
+        head.sizing(Sizing.fill(), Sizing.content());
+        head.item(labelLiteral(caption, INK_DIM));
+        head.spacer();
+        head.item(ArenasUi.text(Component.literal(hint).withStyle(ChatFormatting.ITALIC), INK_DIM));
+        col.item(head);
 
-        FlowLayout stepper = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        stepper.gap(6);
-        stepper.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex stepper = Flex.row().gap(6).alignItems(Align.CENTER);
+        stepper.sizing(Sizing.fill(), Sizing.content());
 
-        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(22));
-        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldWrap.child(accent);
-        TextBoxComponent field = Components.textBox(Sizing.expand(), initial);
-        field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(onChange::accept);
-        fieldWrap.child(field);
-        FlowLayout unitCell = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        unitCell.padding(Insets.of(0, 0, 6, 6));
-        unitCell.child(labelLiteral(unit, INK_DIM));
-        fieldWrap.child(unitCell);
+        TextField field = new TextField(100, initial == null ? "" : initial, onChange::accept);
+        field.sizing(Sizing.expand(), Sizing.fixed(18));
 
-        stepper.child(stepButton("-", () -> stepValue(field, -step, min, max, onChange)));
-        stepper.child(fieldWrap);
-        stepper.child(stepButton("+", () -> stepValue(field, step, min, max, onChange)));
-        col.child(stepper);
+        stepper.item(stepButton("-", () -> stepValue(field, -step, min, max, onChange)));
+        stepper.item(fieldWrap(field, unit));
+        stepper.item(stepButton("+", () -> stepValue(field, step, min, max, onChange)));
+        col.item(stepper);
         return col;
     }
 
-    private ButtonComponent stepButton(String glyph, Runnable action) {
-        ButtonComponent button = Components.button(Component.literal(glyph), b -> action.run());
-        button.sizing(Sizing.fixed(34), Sizing.fixed(22));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.isHoveredOrFocused() ? ROW_BG : PANEL_2;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), HAIRLINE);
-        });
+    /** The accent-barred field box shared by every stepper (PANEL_2 fill, HAIRLINE outline, unit cell). */
+    private Flex fieldWrap(TextField field, String unit) {
+        Flex fieldWrap = Flex.row().alignItems(Align.CENTER);
+        fieldWrap.sizing(Sizing.expand(), Sizing.fixed(22));
+        fieldWrap.backgroundFill(PANEL_2, HAIRLINE, 1);
+        Flex accent = Flex.column();
+        accent.sizing(Sizing.fixed(2), Sizing.fill());
+        accent.backgroundFill(ACCENT);
+        fieldWrap.item(accent);
+        fieldWrap.item(field);
+        Flex unitCell = Flex.row().padding(Insets.of(0, 6, 0, 6));
+        unitCell.sizing(Sizing.content(), Sizing.content());
+        unitCell.item(labelLiteral(unit, INK_DIM));
+        fieldWrap.item(unitCell);
+        return fieldWrap;
+    }
+
+    private Button stepButton(String glyph, Runnable action) {
+        Button button = new Button(34, 22, Component.literal(glyph), action);
+        button.style(TAB_STYLE);
         return button;
     }
 
-    private void stepValue(TextBoxComponent field, int delta, int min, int max, java.util.function.Consumer<String> onChange) {
+    private void stepValue(TextField field, int delta, int min, int max, Consumer<String> onChange) {
         int current;
         try {
-            current = Integer.parseInt(field.getValue().trim());
+            current = Integer.parseInt(field.text().trim());
         } catch (Exception ignored) {
             current = min;
         }
@@ -658,10 +654,10 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         String tierName = titleCase(tier.name());
         boolean enabled = enabledInputs.getOrDefault(tier, config.enabled());
 
-        contentArea.child(tierBanner(tier, tierName));
-        contentArea.child(spacer(4));
+        contentArea.item(tierBanner(tier, tierName));
+        contentArea.item(ArenasUi.spacer(4));
 
-        contentArea.child(togglePanel(
+        contentArea.item(togglePanel(
             tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.availability"),
             Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.availability_desc", tierName).getString(),
             enabled ? tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.enabled") : tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.disabled"),
@@ -674,159 +670,156 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
             }
         ));
 
-        contentArea.child(spacer(6));
-        contentArea.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.parameters"), INK_DIM));
-        contentArea.child(spacer(2));
+        contentArea.item(ArenasUi.spacer(6));
+        contentArea.item(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.parameters"), INK_DIM));
+        contentArea.item(ArenasUi.spacer(2));
 
-        contentArea.child(twoColumnRow(
+        contentArea.item(twoColumnRow(
             stepperFieldDouble(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.health"), tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.health_hint"), "×", 0.25, 0.0, 100.0,
                 healthInputs.getOrDefault(tier, trimDouble(config.healthMultiplier())), v -> healthInputs.put(tier, v)),
             stepperFieldDouble(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.damage"), tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.damage_hint"), "×", 0.25, 0.0, 100.0,
                 damageInputs.getOrDefault(tier, trimDouble(config.damageMultiplier())), v -> damageInputs.put(tier, v))
         ));
 
-        contentArea.child(spacer(6));
-        contentArea.child(twoColumnRow(
+        contentArea.item(ArenasUi.spacer(6));
+        contentArea.item(twoColumnRow(
             lootField(lootInputs.getOrDefault(tier, config.perPlayerLootTable()), v -> lootInputs.put(tier, v)),
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.time"), tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.time_hint"), "S", 30, 1, 86400,
                 timeInputs.getOrDefault(tier, Integer.toString(config.raidTimeSeconds())), v -> timeInputs.put(tier, v))
         ));
 
-        contentArea.child(spacer(6));
-        contentArea.child(twoColumnRow(
+        contentArea.item(ArenasUi.spacer(6));
+        contentArea.item(twoColumnRow(
             stepperField(tr("gui.arenas_ld.raid_controller_admin.ui.tier.xp"), tr("gui.arenas_ld.raid_controller_admin.ui.tier.xp_hint"), "XP", 10, 0, 1_000_000,
                 xpInputs.getOrDefault(tier, Integer.toString(config.skillExperiencePerWin())), v -> xpInputs.put(tier, v)),
             stepperField(tr("gui.arenas_ld.raid_controller_admin.ui.tier.regen"), tr("gui.arenas_ld.raid_controller_admin.ui.tier.regen_hint"), "HP", 1, 0, 1_000_000,
                 regenInputs.getOrDefault(tier, Integer.toString(config.regeneration())), v -> regenInputs.put(tier, v))
         ));
 
-        contentArea.child(spacer(6));
-        contentArea.child(twoColumnRow(
+        contentArea.item(ArenasUi.spacer(6));
+        contentArea.item(twoColumnRow(
             stepperFieldDouble(tr("gui.arenas_ld.raid_controller_admin.ui.tier.hp_scale_per_player"), tr("gui.arenas_ld.raid_controller_admin.ui.tier.hp_scale_per_player_hint"), "×", 0.05, -0.99, 10.0,
                 hpScaleInputs.getOrDefault(tier, trimDouble(config.hpScalePerPlayer())), v -> hpScaleInputs.put(tier, v)),
             rewardCurrencyField(tier, config)
         ));
 
-        contentArea.child(spacer(8));
-        FlowLayout applyRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        applyRow.alignment(HorizontalAlignment.RIGHT, VerticalAlignment.CENTER);
-        ButtonComponent apply = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.apply", tier.name()), b -> applyTier(tier));
-        apply.horizontalSizing(Sizing.fixed(150));
-        applyRow.child(apply);
-        contentArea.child(applyRow);
+        contentArea.item(ArenasUi.spacer(8));
+        Flex applyRow = Flex.row().justify(Justify.END).alignItems(Align.CENTER);
+        applyRow.sizing(Sizing.fill(), Sizing.content());
+        applyRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.apply", tier.name()), 150, 18, () -> applyTier(tier)));
+        contentArea.item(applyRow);
     }
 
-    private FlowLayout tierBanner(DifficultyTier tier, String tierName) {
+    private Flex tierBanner(DifficultyTier tier, String tierName) {
         int color = tierColor(tier);
-        FlowLayout banner = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
-        banner.surface(Surface.flat((color & 0x00FFFFFF) | 0x1F000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
-        banner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(3), Sizing.fill(100));
-        accent.surface(Surface.flat(color));
-        banner.child(accent);
-        FlowLayout inner = Containers.horizontalFlow(Sizing.expand(), Sizing.content());
-        inner.padding(Insets.of(0, 0, 10, 10));
-        inner.gap(8);
-        inner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        inner.child(badge(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.banner_badge", tier.name()), color));
-        inner.child(labelLiteral(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.banner_desc", tierName).getString(), INK));
-        banner.child(inner);
+        Flex banner = Flex.row().alignItems(Align.CENTER);
+        banner.sizing(Sizing.fill(), Sizing.fixed(34));
+        banner.backgroundFill((color & 0x00FFFFFF) | 0x1F000000, (color & 0x00FFFFFF) | 0x55000000, 1);
+        Flex accent = Flex.column();
+        accent.sizing(Sizing.fixed(3), Sizing.fill());
+        accent.backgroundFill(color);
+        banner.item(accent);
+        Flex inner = Flex.row().gap(8).padding(Insets.of(0, 10, 0, 10)).alignItems(Align.CENTER);
+        inner.sizing(Sizing.expand(), Sizing.content());
+        inner.item(badge(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.banner_badge", tier.name()), color));
+        inner.item(labelLiteral(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.banner_desc", tierName).getString(), INK));
+        banner.item(inner);
         return banner;
     }
 
-    private FlowLayout togglePanel(String caption, String description, String stateLabel, int stateColor, int onColor,
-                                   java.util.function.BooleanSupplier on, Runnable onToggle) {
-        FlowLayout panel = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(40));
-        panel.surface(Surface.flat(ROW_BG).and(Surface.outline(HAIRLINE)));
-        panel.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(onColor));
-        panel.child(accent);
+    private Flex togglePanel(String caption, String description, String stateLabel, int stateColor, int onColor,
+                             java.util.function.BooleanSupplier on, Runnable onToggle) {
+        Flex panel = Flex.row().alignItems(Align.CENTER);
+        panel.sizing(Sizing.fill(), Sizing.fixed(40));
+        panel.backgroundFill(ROW_BG, HAIRLINE, 1);
+        Flex accent = Flex.column();
+        accent.sizing(Sizing.fixed(2), Sizing.fill());
+        accent.backgroundFill(onColor);
+        panel.item(accent);
 
-        FlowLayout inner = Containers.horizontalFlow(Sizing.expand(), Sizing.fill(100));
-        inner.padding(Insets.of(6, 6, 10, 10));
-        inner.gap(8);
-        inner.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex inner = Flex.row().gap(8).padding(Insets.of(6, 10, 6, 10)).alignItems(Align.CENTER);
+        inner.sizing(Sizing.expand(), Sizing.fill());
 
-        FlowLayout text = Containers.verticalFlow(Sizing.expand(), Sizing.content());
-        text.gap(2);
-        text.child(labelLiteral(caption, INK_DIM));
-        text.child(labelLiteral(description, INK));
-        inner.child(text);
+        Flex text = Flex.column().gap(2);
+        text.sizing(Sizing.expand(), Sizing.content());
+        text.item(labelLiteral(caption, INK_DIM));
+        text.item(labelLiteral(description, INK));
+        inner.item(text);
 
         if (stateLabel != null) {
-            inner.child(labelLiteral(stateLabel, stateColor));
+            inner.item(labelLiteral(stateLabel, stateColor));
         }
-        inner.child(toggleSwitch(onColor, on, onToggle));
-        panel.child(inner);
+        inner.item(new ToggleSwitch(onColor, on, onToggle));
+        panel.item(inner);
         return panel;
     }
 
-    private ButtonComponent toggleSwitch(int onColor, java.util.function.BooleanSupplier on, Runnable onToggle) {
-        ButtonComponent button = Components.button(Component.empty(), b -> onToggle.run());
-        button.sizing(Sizing.fixed(38), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
+    /** The custom-drawn track+knob switch the owo screen rendered via a button renderer lambda. */
+    private static final class ToggleSwitch extends Widget {
+        private final int onColor;
+        private final java.util.function.BooleanSupplier on;
+        private final Runnable onToggle;
+
+        ToggleSwitch(int onColor, java.util.function.BooleanSupplier on, Runnable onToggle) {
+            super(38, 18);
+            this.onColor = onColor;
+            this.on = on;
+            this.onToggle = onToggle;
+        }
+
+        @Override
+        protected void rebuild() {
             boolean isOn = on.getAsBoolean();
-            int x1 = rendered.getX();
-            int y1 = rendered.getY();
-            int w = rendered.getWidth();
-            int h = rendered.getHeight();
             int track = isOn ? ((onColor & 0x00FFFFFF) | 0x55000000) : PANEL_2;
             int border = isOn ? onColor : HAIRLINE;
-            context.fill(x1, y1, x1 + w, y1 + h, track);
-            context.drawRectOutline(x1, y1, w, h, border);
-            int knobW = w / 2 - 3;
-            int knobX = isOn ? (x1 + w - knobW - 2) : (x1 + 2);
+            add(Shapes.rect(0, 0, width, height).fill(track).stroke(border, 1));
+            float knobW = (int) (width / 2) - 3;
+            float knobX = isOn ? (width - knobW - 2) : 2;
             int knobColor = isOn ? onColor : INK;
-            context.fill(knobX, y1 + 2, knobX + knobW, y1 + h - 2, knobColor);
-        });
-        return button;
+            add(Shapes.rect(knobX, 2, knobW, height - 4).fill(knobColor));
+        }
+
+        @Override
+        public boolean onMouseDown(float x, float y, int button) {
+            if (!enabled || button != 0) return false;
+            UiSounds.click();
+            onToggle.run();
+            return true;
+        }
+
+        @Override
+        public Cursor cursor() { return enabled ? Cursor.HAND : Cursor.DEFAULT; }
     }
 
-    private FlowLayout rewardCurrencyField(DifficultyTier tier, RaidTierConfig config) {
+    private Flex rewardCurrencyField(DifficultyTier tier, RaidTierConfig config) {
         String initial = rewardInputs.getOrDefault(tier, Long.toString(config.rewardCurrency()));
-        FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        col.gap(4);
+        Flex col = Flex.column().gap(4);
+        col.sizing(Sizing.fill(), Sizing.content());
 
-        FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        head.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        head.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.reward"), INK_DIM));
-        head.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-        LabelComponent hintLabel = Components.label(Component.literal(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.reward_hint")).withStyle(net.minecraft.ChatFormatting.ITALIC));
-        hintLabel.color(Color.ofArgb(INK_DIM));
-        head.child(hintLabel);
-        col.child(head);
+        Flex head = Flex.row().alignItems(Align.CENTER);
+        head.sizing(Sizing.fill(), Sizing.content());
+        head.item(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.reward"), INK_DIM));
+        head.spacer();
+        head.item(ArenasUi.text(Component.literal(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.reward_hint")).withStyle(ChatFormatting.ITALIC), INK_DIM));
+        col.item(head);
 
-        FlowLayout stepper = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        stepper.gap(6);
-        stepper.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex stepper = Flex.row().gap(6).alignItems(Align.CENTER);
+        stepper.sizing(Sizing.fill(), Sizing.content());
 
-        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(22));
-        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldWrap.child(accent);
-        TextBoxComponent field = Components.textBox(Sizing.expand(), initial);
-        field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(v -> rewardInputs.put(tier, v));
-        fieldWrap.child(field);
-        FlowLayout unitCell = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        unitCell.padding(Insets.of(0, 0, 6, 6));
-        unitCell.child(labelLiteral("LC", INK_DIM));
-        fieldWrap.child(unitCell);
+        TextField field = new TextField(100, initial, v -> rewardInputs.put(tier, v));
+        field.sizing(Sizing.expand(), Sizing.fixed(18));
 
-        stepper.child(stepButton("-", () -> stepLong(field, -10L, 0L, 1_000_000_000L, v -> rewardInputs.put(tier, v))));
-        stepper.child(fieldWrap);
-        stepper.child(stepButton("+", () -> stepLong(field, 10L, 0L, 1_000_000_000L, v -> rewardInputs.put(tier, v))));
-        col.child(stepper);
+        stepper.item(stepButton("-", () -> stepLong(field, -10L, 0L, 1_000_000_000L, v -> rewardInputs.put(tier, v))));
+        stepper.item(fieldWrap(field, "LC"));
+        stepper.item(stepButton("+", () -> stepLong(field, 10L, 0L, 1_000_000_000L, v -> rewardInputs.put(tier, v))));
+        col.item(stepper);
         return col;
     }
 
-    private void stepLong(TextBoxComponent field, long delta, long min, long max, java.util.function.Consumer<String> onChange) {
+    private void stepLong(TextField field, long delta, long min, long max, Consumer<String> onChange) {
         long current;
         try {
-            current = Long.parseLong(field.getValue().trim());
+            current = Long.parseLong(field.text().trim());
         } catch (Exception ignored) {
             current = min;
         }
@@ -836,182 +829,67 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         onChange.accept(value);
     }
 
-    private FlowLayout lootField(String initial, Consumer<String> onChange) {
-        FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        col.gap(4);
-        FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        head.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        head.child(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.loot"), INK_DIM));
-        col.child(head);
+    private Flex lootField(String initial, Consumer<String> onChange) {
+        Flex col = Flex.column().gap(4);
+        col.sizing(Sizing.fill(), Sizing.content());
+        Flex head = Flex.row().alignItems(Align.CENTER);
+        head.sizing(Sizing.fill(), Sizing.content());
+        head.item(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.loot"), INK_DIM));
+        col.item(head);
 
-        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        fieldRow.gap(4);
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldRow.child(accent);
-        FlowLayout idCell = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        idCell.padding(Insets.of(0, 0, 4, 0));
-        idCell.child(labelLiteral("id:", INK_DIM));
-        fieldRow.child(idCell);
+        Flex fieldRow = Flex.row().gap(4).alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
+        Flex accent = Flex.column();
+        accent.sizing(Sizing.fixed(2), Sizing.fill());
+        accent.backgroundFill(ACCENT);
+        fieldRow.item(accent);
+        Flex idCell = Flex.row().padding(Insets.of(0, 0, 0, 4));
+        idCell.sizing(Sizing.content(), Sizing.content());
+        idCell.item(labelLiteral("id:", INK_DIM));
+        fieldRow.item(idCell);
 
-        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.expand(), initial, 256);
-        field.verticalSizing(Sizing.fixed(18));
-        IdSuggestionDropdown.attachFullValueTooltip(field);
-        field.onChanged().subscribe(v -> {
-            onChange.accept(v);
-            if (lootDropdownOpen) refreshLootDropdown();
-        });
-        field.mouseDown().subscribe((mx, my, btn) -> {
-            currentLootField = field;
-            currentLootOnChange = onChange;
-            openLootDropdown();
-            return false;
-        });
-        currentLootField = field;
-        currentLootOnChange = onChange;
-        fieldRow.child(field);
+        IdSuggestionDropdown.Field field = IdSuggestionDropdown.textBox(100, initial, 256);
+        field.sizing(Sizing.expand(), Sizing.fixed(18));
+        IdSuggestionDropdown dropdown = new IdSuggestionDropdown(() -> knownLootTableIds, field);
+        field.changeListeners.add(onChange::accept);
+        fieldRow.item(field);
+        fieldRow.item(dropdown.chevron());
+        col.item(fieldRow);
 
-        ButtonComponent chevron = Components.button(Component.empty(), b -> {
-            currentLootField = field;
-            currentLootOnChange = onChange;
-            toggleLootDropdown();
-        });
-        chevron.sizing(Sizing.fixed(18), Sizing.fixed(20));
-        chevron.renderer((context, rendered, delta) -> {
-            String glyph = lootDropdownOpen ? "▲" : "▼";
-            int tx = rendered.getX() + (rendered.getWidth() - this.font.width(glyph)) / 2;
-            int ty = rendered.getY() + (rendered.getHeight() - this.font.lineHeight) / 2 + 1;
-            context.drawString(this.font, glyph, tx, ty, INK_MID, false);
-        });
-        fieldRow.child(chevron);
-        col.child(fieldRow);
-
-        FlowLayout dropdown = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        dropdown.surface(Surface.BLANK);
-        lootDropdownPanel = dropdown;
-        col.child(dropdown);
-
+        col.item(dropdown.panel());
         return col;
     }
 
-    private void openLootDropdown() {
-        if (!lootDropdownOpen) {
-            lootDropdownOpen = true;
-            refreshLootDropdown();
-        }
-    }
+    private Flex stepperFieldDouble(String caption, String hint, String unit, double step, double min, double max,
+                                    String initial, Consumer<String> onChange) {
+        Flex col = Flex.column().gap(4);
+        col.sizing(Sizing.fill(), Sizing.content());
 
-    private void closeLootDropdown() {
-        lootDropdownOpen = false;
-        if (lootDropdownPanel != null) {
-            lootDropdownPanel.clearChildren();
-            lootDropdownPanel.surface(Surface.BLANK);
-        }
-    }
+        Flex head = Flex.row().alignItems(Align.CENTER);
+        head.sizing(Sizing.fill(), Sizing.content());
+        head.item(labelLiteral(caption, INK_DIM));
+        head.spacer();
+        head.item(ArenasUi.text(Component.literal(hint).withStyle(ChatFormatting.ITALIC), INK_DIM));
+        col.item(head);
 
-    private void toggleLootDropdown() {
-        if (lootDropdownOpen) closeLootDropdown();
-        else openLootDropdown();
-    }
+        Flex stepper = Flex.row().gap(6).alignItems(Align.CENTER);
+        stepper.sizing(Sizing.fill(), Sizing.content());
 
-    private void refreshLootDropdown() {
-        if (lootDropdownPanel == null) return;
-        String current = currentLootField != null ? currentLootField.getValue() : "";
-        List<String> candidates = lootCandidates(current);
-        lootDropdownPanel.clearChildren();
-        if (!lootDropdownOpen || candidates.isEmpty()) {
-            lootDropdownPanel.surface(Surface.BLANK);
-            return;
-        }
-        lootDropdownPanel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        TextField field = new TextField(100, initial == null ? "" : initial, onChange::accept);
+        field.sizing(Sizing.expand(), Sizing.fixed(18));
 
-        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        boolean first = true;
-        for (String id : candidates) {
-            if (!first) list.child(rowDivider(HAIRLINE));
-            Consumer<String> captured = currentLootOnChange;
-            list.child(registryRow(id, () -> {
-                if (currentLootField != null) currentLootField.text(id);
-                if (captured != null) captured.accept(id);
-                closeLootDropdown();
-            }));
-            first = false;
-        }
-
-        int rowsHeight = candidates.size() * 20 + Math.max(0, candidates.size() - 1);
-        int visibleHeight = Math.min(rowsHeight, DROPDOWN_MAX_HEIGHT);
-        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.fixed(visibleHeight), list);
-        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        lootDropdownPanel.child(scroll);
-    }
-
-    private List<String> lootCandidates(String filter) {
-        String needle = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
-        return knownLootTableIds.stream()
-            .filter(id -> needle.isEmpty() || id.toLowerCase(Locale.ROOT).contains(needle))
-            .limit(DROPDOWN_MAX_CANDIDATES)
-            .collect(Collectors.toList());
-    }
-
-    private ButtonComponent registryRow(String id, Runnable onClick) {
-        ButtonComponent row = Components.button(Component.empty(), b -> onClick.run());
-        row.sizing(Sizing.fill(100), Sizing.fixed(20));
-        row.renderer((context, rendered, delta) -> {
-            int x1 = rendered.getX(); int y1 = rendered.getY();
-            boolean hover = rendered.isHoveredOrFocused();
-            context.fill(x1, y1, x1 + rendered.getWidth(), y1 + rendered.getHeight(), hover ? ROW_BG : PANEL_2);
-            if (hover) context.fill(x1, y1, x1 + 2, y1 + rendered.getHeight(), ACCENT);
-            context.drawString(this.font, id, x1 + 8, y1 + (rendered.getHeight() - this.font.lineHeight) / 2 + 1, INK, false);
-        });
-        return row;
-    }
-
-    private FlowLayout stepperFieldDouble(String caption, String hint, String unit, double step, double min, double max,
-                                          String initial, java.util.function.Consumer<String> onChange) {
-        FlowLayout col = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        col.gap(4);
-
-        FlowLayout head = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        head.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        head.child(labelLiteral(caption, INK_DIM));
-        head.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-        LabelComponent hintLabel = Components.label(Component.literal(hint).withStyle(net.minecraft.ChatFormatting.ITALIC));
-        hintLabel.color(Color.ofArgb(INK_DIM));
-        head.child(hintLabel);
-        col.child(head);
-
-        FlowLayout stepper = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        stepper.gap(6);
-        stepper.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-
-        FlowLayout fieldWrap = Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(22));
-        fieldWrap.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldWrap.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldWrap.child(accent);
-        TextBoxComponent field = Components.textBox(Sizing.expand(), initial);
-        field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(onChange::accept);
-        fieldWrap.child(field);
-        FlowLayout unitCell = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        unitCell.padding(Insets.of(0, 0, 6, 6));
-        unitCell.child(labelLiteral(unit, INK_DIM));
-        fieldWrap.child(unitCell);
-
-        stepper.child(stepButton("-", () -> stepValueDouble(field, -step, min, max, onChange)));
-        stepper.child(fieldWrap);
-        stepper.child(stepButton("+", () -> stepValueDouble(field, step, min, max, onChange)));
-        col.child(stepper);
+        stepper.item(stepButton("-", () -> stepValueDouble(field, -step, min, max, onChange)));
+        stepper.item(fieldWrap(field, unit));
+        stepper.item(stepButton("+", () -> stepValueDouble(field, step, min, max, onChange)));
+        col.item(stepper);
         return col;
     }
 
-    private void stepValueDouble(TextBoxComponent field, double delta, double min, double max, java.util.function.Consumer<String> onChange) {
+    private void stepValueDouble(TextField field, double delta, double min, double max, Consumer<String> onChange) {
         double current;
         try {
-            current = Double.parseDouble(field.getValue().trim());
+            current = Double.parseDouble(field.text().trim());
         } catch (Exception ignored) {
             current = min;
         }
@@ -1021,32 +899,16 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         onChange.accept(value);
     }
 
-    private ButtonComponent smallButton(Component text, java.util.function.Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text, action);
-        button.sizing(Sizing.content(), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.active() ? (rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK) : PANEL;
-            int border = rendered.active() ? ACCENT : HAIRLINE;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), border);
-        });
+    private Button dangerButton(Component text, float width, Runnable action) {
+        Button button = new Button(width, 18, text.copy().withStyle(ChatFormatting.RED), action);
+        button.style(DANGER_STYLE);
         return button;
     }
 
-    private ButtonComponent dangerButton(Component text, java.util.function.Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text.copy().withStyle(net.minecraft.ChatFormatting.RED), action);
-        button.sizing(Sizing.content(), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.isHoveredOrFocused() ? ((DANGER & 0x00FFFFFF) | 0x44000000) : ((DANGER & 0x00FFFFFF) | 0x1F000000);
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), DANGER);
-        });
-        return button;
-    }
-
-    private FlowLayout rowDivider(int color) {
-        FlowLayout divider = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(1));
-        divider.surface(Surface.flat(color));
+    private Flex rowDivider(int color) {
+        Flex divider = Flex.row();
+        divider.sizing(Sizing.fill(), Sizing.fixed(1));
+        divider.backgroundFill(color);
         return divider;
     }
 
@@ -1063,81 +925,60 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         if (value.isEmpty()) {
             return value;
         }
-        return value.charAt(0) + value.substring(1).toLowerCase(java.util.Locale.ROOT);
+        return value.charAt(0) + value.substring(1).toLowerCase(Locale.ROOT);
     }
 
-    private LabelComponent dimLabel(Component text) {
-        LabelComponent label = Components.label(text);
-        label.color(Color.ofArgb(INK_DIM));
-        return label;
-    }
-
-    private FlowLayout sectionHeader(Component title, Integer count) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        row.gap(8);
-        LabelComponent titleLabel = Components.label(title);
-        titleLabel.color(Color.ofArgb(INK_DIM));
-        row.child(titleLabel);
+    private Flex sectionHeader(Component title, Integer count) {
+        Flex row = Flex.row().gap(8).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
+        row.item(ArenasUi.text(title, INK_DIM));
         if (count != null) {
-            LabelComponent countLabel = Components.label(Component.literal("· " + count));
-            countLabel.color(Color.ofArgb(ACCENT));
-            row.child(countLabel);
+            row.item(ArenasUi.text(Component.literal("· " + count), ACCENT));
         }
         return row;
     }
 
-    private FlowLayout instanceHeaderRow() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.surface(Surface.flat(PANEL_2));
-        row.padding(Insets.of(5, 5, 8, 8));
-        row.gap(6);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        row.child(headerCell("#", Sizing.fixed(22)));
-        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller_admin.ui.col.position"), Sizing.expand()));
-        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller_admin.ui.col.status"), Sizing.fixed(120)));
-        row.child(headerCell(tr("gui.arenas_ld.dungeon_controller_admin.ui.col.tier_party"), Sizing.fixed(120)));
-        row.child(headerCell("", Sizing.fixed(22)));
-        row.child(headerCell("", Sizing.fixed(22)));
-        row.child(headerCell("", Sizing.fixed(64)));
+    private Flex instanceHeaderRow() {
+        Flex row = Flex.row().gap(6).padding(Insets.of(5, 8, 5, 8)).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
+        row.backgroundFill(PANEL_2);
+        row.item(headerCell("#", Sizing.fixed(22)));
+        row.item(headerCell(tr("gui.arenas_ld.dungeon_controller_admin.ui.col.position"), Sizing.expand()));
+        row.item(headerCell(tr("gui.arenas_ld.dungeon_controller_admin.ui.col.status"), Sizing.fixed(120)));
+        row.item(headerCell(tr("gui.arenas_ld.dungeon_controller_admin.ui.col.tier_party"), Sizing.fixed(120)));
+        row.item(headerCell("", Sizing.fixed(22)));
+        row.item(headerCell("", Sizing.fixed(22)));
+        row.item(headerCell("", Sizing.fixed(64)));
         return row;
     }
 
-    private FlowLayout badge(Component text, int color) {
-        FlowLayout tag = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        tag.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
-        tag.padding(Insets.of(4, 2, 4, 4));
-        tag.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
-        LabelComponent label = Components.label(text);
-        label.color(Color.ofArgb(color));
-        tag.child(label);
+    private Flex badge(Component text, int color) {
+        Flex tag = Flex.row().padding(Insets.of(4, 4, 2, 4)).justify(Justify.CENTER).alignItems(Align.CENTER);
+        tag.sizing(Sizing.content(), Sizing.content());
+        tag.backgroundFill((color & 0x00FFFFFF) | 0x22000000, (color & 0x00FFFFFF) | 0x55000000, 1);
+        tag.item(ArenasUi.text(text, color));
         return tag;
     }
 
-    private LabelComponent headerCell(String text, Sizing sizing) {
-        LabelComponent label = Components.label(Component.literal(text));
-        label.color(Color.ofArgb(INK_DIM));
-        label.horizontalSizing(sizing);
+    private Label headerCell(String text, Sizing sizing) {
+        Label label = ArenasUi.label(10, Component.literal(text), INK_DIM);
+        label.sizing(sizing, Sizing.content());
         return label;
     }
 
-    private FlowLayout fixedBadge(Component text, int width, int color) {
-        FlowLayout tag = Containers.horizontalFlow(Sizing.fixed(width), Sizing.content());
-        tag.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
-        tag.padding(Insets.of(4, 2, 4, 4));
-        tag.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
-        LabelComponent label = Components.label(text);
-        label.color(Color.ofArgb(color));
-        label.horizontalSizing(Sizing.expand());
-        label.horizontalTextAlignment(HorizontalAlignment.CENTER);
-        tag.child(label);
-        return tag;
+    private BadgeHandle fixedBadge(Component text, float width, int color) {
+        Flex tag = Flex.row().padding(Insets.of(4, 4, 2, 4)).justify(Justify.CENTER).alignItems(Align.CENTER);
+        tag.sizing(Sizing.fixed(width), Sizing.content());
+        tag.backgroundFill((color & 0x00FFFFFF) | 0x22000000, (color & 0x00FFFFFF) | 0x55000000, 1);
+        Label label = ArenasUi.label(100, text, color);
+        label.align(TextNode.Align.CENTER);
+        label.sizing(Sizing.expand(), Sizing.content());
+        tag.item(label);
+        return new BadgeHandle(tag, label);
     }
 
-    private LabelComponent labelLiteral(String value, int color) {
-        LabelComponent label = Components.label(Component.literal(value));
-        label.color(Color.ofArgb(color));
-        return label;
+    private TextNode labelLiteral(String value, int color) {
+        return ArenasUi.text(Component.literal(value), color);
     }
 
     private String tr(String key) {
@@ -1148,23 +989,15 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         if (Math.abs(value - Math.rint(value)) < 0.0001D) {
             return Integer.toString((int) Math.rint(value));
         }
-        return String.format(java.util.Locale.ROOT, "%.2f", value);
+        return String.format(Locale.ROOT, "%.2f", value);
     }
 
-    private LabelComponent smallMeta(String text, int color) {
-        LabelComponent label = Components.label(Component.literal(text));
-        label.color(Color.ofArgb(color));
-        return label;
+    private TextNode smallMeta(String text, int color) {
+        return ArenasUi.text(Component.literal(text), color);
     }
 
-    private LabelComponent smallMeta(String text) {
+    private TextNode smallMeta(String text) {
         return smallMeta(text, INK_DIM);
-    }
-
-    private FlowLayout spacer(int px) {
-        FlowLayout spacer = Containers.verticalFlow(Sizing.fill(100), Sizing.fixed(px));
-        spacer.surface(Surface.BLANK);
-        return spacer;
     }
 
     private void applyGeneral() {
@@ -1181,7 +1014,7 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
         }
 
         footerError = null;
-        ClientPlayNetworking.send(new net.ledok.arenas_ld.raid.packet.RaidSetNamePayload(menu.getBlockPos(), nameInput == null ? "" : nameInput));
+        ClientPlayNetworking.send(new RaidSetNamePayload(menu.getBlockPos(), nameInput == null ? "" : nameInput));
         ClientPlayNetworking.send(new RaidSetCooldownTicksPayload(menu.getBlockPos(), cooldown * 20));
         ClientPlayNetworking.send(new RaidSetCloseTimerSecondsPayload(menu.getBlockPos(), close));
         ClientPlayNetworking.send(new RaidSetMaxPartySizePayload(menu.getBlockPos(), maxParty));
@@ -1294,14 +1127,8 @@ public class RaidControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, 
     public void applyData(RaidControllerAdminData data) {
         menu.applyData(data);
         syncFromMenu();
-        rebuildUi();
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
-            return true;
+        if (contentArea != null) {
+            rebuildUi();
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 }

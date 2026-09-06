@@ -1,23 +1,22 @@
 package net.ledok.arenas_ld.screen;
 
-import io.wispforest.owo.ui.component.ButtonComponent;
-import io.wispforest.owo.ui.component.Components;
-import io.wispforest.owo.ui.component.TextBoxComponent;
-import io.wispforest.owo.ui.container.Containers;
-import io.wispforest.owo.ui.container.FlowLayout;
-import io.wispforest.owo.ui.container.ScrollContainer;
-import io.wispforest.owo.ui.core.Sizing;
-import io.wispforest.owo.ui.core.Surface;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
+import net.ledok.vectorlib.client.canvas.TextNode;
+import net.ledok.vectorlib.client.canvas.layout.Flex;
+import net.ledok.vectorlib.client.canvas.layout.Sizing;
+import net.ledok.vectorlib.client.canvas.widget.Button;
+import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
+import net.ledok.vectorlib.client.canvas.widget.TextField;
+import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
 import net.minecraft.core.Registry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -25,68 +24,72 @@ import java.util.stream.Collectors;
  * Registry-backed suggestion dropdown for a ResourceLocation-ID text box, shared by the
  * spawner screens (entity types) and the attribute editor (attributes).
  *
- * <p>Construct with the text box it completes, mount {@link #panel()} directly below the
- * field's row, and place {@link #chevron()} inside the row. Clicking the field or the
- * chevron opens the dropdown, typing filters it live, and picking a row writes the id
- * back via {@code field.text(...)} so the caller's own onChanged subscriber sees it.
+ * <p>Construct with the text box it completes (created via {@link #textBox}), mount
+ * {@link #panel()} directly below the field's row, and place {@link #chevron()} inside the
+ * row. Clicking the field or the chevron opens the dropdown, typing filters it live, and
+ * picking a row writes the id back via {@code field.text(...)} so the caller's own
+ * change listener sees it.
  *
  * <p>Screens with several completed fields at once (the attribute editor's rows) share a
  * {@link Group} so opening one dropdown closes any other.
  */
 public final class IdSuggestionDropdown {
-    // Shared dark-UI palette (matches the spawner/attribute screens).
-    private static final int PANEL_2  = 0xFF0C1218;
-    private static final int HAIRLINE = 0xFF283442;
-    private static final int ROW_BG   = 0xFF19222D;
-    private static final int INK      = 0xFFE8EEF5;
-    private static final int INK_MID  = 0xFF9AA8B8;
-    private static final int ACCENT   = 0xFFA98BE8;
-
     private static final int MAX_CANDIDATES = 50;
     private static final int MAX_HEIGHT = 140;
+    private static final float ROW_H = 20;
 
-    private final Font font;
+    /** Suggestion-row look: flat panel rows that highlight on hover. */
+    private static final WidgetStyle ROW_STYLE = new WidgetStyle(
+            new WidgetStyle.Skin.Flat(ArenasUi.PANEL_2, 0, 0, 0),
+            new WidgetStyle.Skin.Flat(ArenasUi.ROW_BG, ArenasUi.ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(ArenasUi.ROW_BG, ArenasUi.ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(ArenasUi.PANEL_2, 0, 0, 0),
+            new WidgetStyle.Skin.Flat(ArenasUi.PANEL_2, ArenasUi.HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(ArenasUi.PANEL_2, ArenasUi.ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(ArenasUi.PANEL_2, ArenasUi.HAIRLINE, 1, 0),
+            ArenasUi.INK, ArenasUi.INK, ArenasUi.INK_DIM, ArenasUi.INK_DIM, ArenasUi.ACCENT, 0x80A98BE8,
+            ROW_H, 16, 4, false);
+
     private final Supplier<? extends Collection<String>> candidateSource;
-    private final TextBoxComponent field;
-    private final FlowLayout panel;
+    private final Field field;
+    private final Flex panel;
     @Nullable private final Group group;
     private boolean open;
 
-    public IdSuggestionDropdown(Font font, Registry<?> registry, TextBoxComponent field) {
-        this(font, registry, field, null);
+    public IdSuggestionDropdown(Registry<?> registry, Field field) {
+        this(registry, field, null);
     }
 
-    public IdSuggestionDropdown(Font font, Registry<?> registry, TextBoxComponent field, @Nullable Group group) {
-        this(font, () -> registry.keySet().stream().map(ResourceLocation::toString).toList(), field, group);
+    public IdSuggestionDropdown(Registry<?> registry, Field field, @Nullable Group group) {
+        this(() -> registry.keySet().stream().map(ResourceLocation::toString).toList(), field, group);
     }
 
     /** Non-registry candidates (e.g. server-provided loot table ids); the supplier is re-read on every refresh. */
-    public IdSuggestionDropdown(Font font, Supplier<? extends Collection<String>> candidateSource, TextBoxComponent field) {
-        this(font, candidateSource, field, null);
+    public IdSuggestionDropdown(Supplier<? extends Collection<String>> candidateSource, Field field) {
+        this(candidateSource, field, null);
     }
 
-    public IdSuggestionDropdown(Font font, Supplier<? extends Collection<String>> candidateSource,
-                                TextBoxComponent field, @Nullable Group group) {
-        this.font = font;
+    public IdSuggestionDropdown(Supplier<? extends Collection<String>> candidateSource,
+                                Field field, @Nullable Group group) {
         this.candidateSource = candidateSource;
         this.field = field;
         this.group = group;
-        this.panel = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        this.panel.surface(Surface.BLANK);
-        field.onChanged().subscribe(v -> { if (open) refresh(); });
-        field.mouseDown().subscribe((mouseX, mouseY, button) -> { open(); return false; });
+        this.panel = Flex.column();
+        this.panel.sizing(Sizing.fill(), Sizing.content());
+        field.changeListeners.add(v -> { if (open) refresh(); });
+        field.mouseDownHooks.add(this::open);
         attachFullValueTooltip(field);
     }
 
     /**
-     * Creates a text box whose max length is raised BEFORE the initial value goes in.
-     * {@code Components.textBox(sizing, text)} inserts the text while the vanilla 32-char
-     * default still applies, silently clipping long ids/names every time a screen rebuilds —
-     * a later {@code setMaxLength} can't restore what was already cut.
+     * Creates a text box for use with this dropdown. The max length is raised BEFORE the
+     * initial value goes in, so long ids/names are never silently clipped on screen rebuilds.
+     * VectorLib's change/mouse hooks are single-consumer, so the returned {@link Field}
+     * multiplexes them: register via {@code field.changeListeners.add(...)}.
      */
-    public static TextBoxComponent textBox(Sizing horizontalSizing, @Nullable String initialValue, int maxLength) {
-        TextBoxComponent field = Components.textBox(horizontalSizing);
-        field.setMaxLength(maxLength);
+    public static Field textBox(float width, @Nullable String initialValue, int maxLength) {
+        Field field = new Field(width);
+        field.maxLength(maxLength);
         field.text(initialValue == null ? "" : initialValue);
         return field;
     }
@@ -96,34 +99,28 @@ public final class IdSuggestionDropdown {
      * a long ResourceLocation and an unfocused text box hard-clips its text at the pixel width,
      * so without this the stored value looks truncated even though it is intact.
      */
-    public static void attachFullValueTooltip(TextBoxComponent field) {
-        applyFullValueTooltip(field, field.getValue());
-        field.onChanged().subscribe(v -> applyFullValueTooltip(field, v));
+    public static void attachFullValueTooltip(Field field) {
+        applyFullValueTooltip(field, field.text());
+        field.changeListeners.add(v -> applyFullValueTooltip(field, v));
     }
 
-    private static void applyFullValueTooltip(TextBoxComponent field, String value) {
+    private static void applyFullValueTooltip(TextField field, String value) {
         if (value == null || value.isBlank()) {
-            field.tooltip((List<ClientTooltipComponent>) null);
+            field.tooltip((Supplier<List<Component>>) null);
         } else {
             field.tooltip(Component.literal(value));
         }
     }
 
     /** Empty flow to mount directly below the field's row; fills when the dropdown opens. */
-    public FlowLayout panel() {
+    public Flex panel() {
         return panel;
     }
 
     /** ▲/▼ toggle button sized to sit at the end of a 22px field row. */
-    public ButtonComponent chevron() {
-        ButtonComponent chevron = Components.button(Component.empty(), b -> toggle());
-        chevron.sizing(Sizing.fixed(18), Sizing.fixed(20));
-        chevron.renderer((context, rendered, delta) -> {
-            String glyph = open ? "▲" : "▼";
-            int tx = rendered.getX() + (rendered.getWidth() - font.width(glyph)) / 2;
-            int ty = rendered.getY() + (rendered.getHeight() - font.lineHeight) / 2 + 1;
-            context.drawString(font, glyph, tx, ty, INK_MID, false);
-        });
+    public Button chevron() {
+        Button chevron = new Button(18, 20, Component.literal("▼"), this::toggle);
+        chevron.style(ROW_STYLE);
         return chevron;
     }
 
@@ -137,8 +134,8 @@ public final class IdSuggestionDropdown {
     public void close() {
         if (!open) return;
         open = false;
-        panel.clearChildren();
-        panel.surface(Surface.BLANK);
+        panel.clear();
+        panel.background(null);
         if (group != null) group.closed(this);
     }
 
@@ -147,27 +144,28 @@ public final class IdSuggestionDropdown {
     }
 
     private void refresh() {
-        List<String> candidates = candidates(field.getValue());
-        panel.clearChildren();
+        List<String> candidates = candidates(field.text());
+        panel.clear();
         if (!open || candidates.isEmpty()) {
-            panel.surface(Surface.BLANK);
+            panel.background(null);
             return;
         }
-        panel.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
+        panel.background(ArenasUi.flatOutline(ArenasUi.PANEL_2, ArenasUi.HAIRLINE));
 
-        FlowLayout list = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        Flex list = Flex.column();
+        list.sizing(Sizing.fill(), Sizing.content());
         boolean first = true;
         for (String id : candidates) {
-            if (!first) list.child(hairline());
-            list.child(candidateRow(id));
+            if (!first) list.item(ArenasUi.hairline());
+            list.item(candidateRow(id));
             first = false;
         }
 
-        int rowsHeight = candidates.size() * 20 + Math.max(0, candidates.size() - 1);
-        int visibleHeight = Math.min(rowsHeight, MAX_HEIGHT);
-        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.fixed(visibleHeight), list);
-        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        panel.child(scroll);
+        float rowsHeight = candidates.size() * ROW_H + Math.max(0, candidates.size() - 1);
+        float visibleHeight = Math.min(rowsHeight, MAX_HEIGHT);
+        ScrollPanel scroll = new ScrollPanel(100, visibleHeight, list);
+        scroll.sizing(Sizing.fill(), Sizing.fixed(visibleHeight));
+        panel.item(scroll);
     }
 
     private List<String> candidates(String filter) {
@@ -179,26 +177,16 @@ public final class IdSuggestionDropdown {
             .collect(Collectors.toList());
     }
 
-    private ButtonComponent candidateRow(String id) {
-        ButtonComponent row = Components.button(Component.empty(), b -> {
+    private Button candidateRow(String id) {
+        Button row = new Button(100, ROW_H, Component.literal(id), () -> {
             field.text(id);
+            field.notifyChanged();
             close();
         });
-        row.sizing(Sizing.fill(100), Sizing.fixed(20));
-        row.renderer((context, rendered, delta) -> {
-            int x1 = rendered.getX(); int y1 = rendered.getY();
-            boolean hover = rendered.isHoveredOrFocused();
-            context.fill(x1, y1, x1 + rendered.getWidth(), y1 + rendered.getHeight(), hover ? ROW_BG : PANEL_2);
-            if (hover) context.fill(x1, y1, x1 + 2, y1 + rendered.getHeight(), ACCENT);
-            context.drawString(font, id, x1 + 8, y1 + (rendered.getHeight() - font.lineHeight) / 2 + 1, INK, false);
-        });
+        row.style(ROW_STYLE);
+        row.align(TextNode.Align.LEFT);
+        row.sizing(Sizing.fill(), Sizing.fixed(ROW_H));
         return row;
-    }
-
-    private FlowLayout hairline() {
-        FlowLayout line = Containers.verticalFlow(Sizing.fill(100), Sizing.fixed(1));
-        line.surface(Surface.flat(HAIRLINE));
-        return line;
     }
 
     /** Shared by dropdowns that should be mutually exclusive: opening one closes the rest. */
@@ -216,6 +204,32 @@ public final class IdSuggestionDropdown {
 
         public void closeAll() {
             if (openDropdown != null) openDropdown.close();
+        }
+    }
+
+    /**
+     * TextField with multiplexed change/mouse-down hooks. VectorLib's {@code onChange} is a
+     * single consumer (owo had subscribable event streams); the dropdown and the owning screen
+     * both need to observe the field, so they register in {@link #changeListeners} instead.
+     */
+    public static final class Field extends TextField {
+        public final List<Consumer<String>> changeListeners = new ArrayList<>();
+        public final List<Runnable> mouseDownHooks = new ArrayList<>();
+
+        public Field(float width) {
+            super(width, "", null);
+            onChange(v -> changeListeners.forEach(l -> l.accept(v)));
+        }
+
+        /** Fires the change listeners for a programmatic {@code text(...)} write. */
+        public void notifyChanged() {
+            changeListeners.forEach(l -> l.accept(text()));
+        }
+
+        @Override
+        public boolean onMouseDown(float x, float y, int button) {
+            mouseDownHooks.forEach(Runnable::run);
+            return super.onMouseDown(x, y, button);
         }
     }
 }

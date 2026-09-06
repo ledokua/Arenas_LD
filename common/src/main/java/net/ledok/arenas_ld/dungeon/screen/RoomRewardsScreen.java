@@ -1,25 +1,25 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
-import io.wispforest.owo.ui.base.BaseOwoHandledScreen;
-import io.wispforest.owo.ui.component.ButtonComponent;
-import io.wispforest.owo.ui.component.Components;
-import io.wispforest.owo.ui.component.LabelComponent;
-import io.wispforest.owo.ui.component.TextBoxComponent;
-import io.wispforest.owo.ui.container.Containers;
-import io.wispforest.owo.ui.container.FlowLayout;
-import io.wispforest.owo.ui.container.ScrollContainer;
-import io.wispforest.owo.ui.core.Color;
-import io.wispforest.owo.ui.core.HorizontalAlignment;
-import io.wispforest.owo.ui.core.Insets;
-import io.wispforest.owo.ui.core.OwoUIAdapter;
-import io.wispforest.owo.ui.core.Sizing;
-import io.wispforest.owo.ui.core.Surface;
-import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.RoomSetRewardPayload;
 import net.ledok.arenas_ld.dungeon.room.RoomEffectData;
 import net.ledok.arenas_ld.dungeon.room.RoomRewardConfig;
+import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
+import net.ledok.vectorlib.client.canvas.VectorCanvas;
+import net.ledok.vectorlib.client.canvas.layout.Align;
+import net.ledok.vectorlib.client.canvas.layout.Flex;
+import net.ledok.vectorlib.client.canvas.layout.Insets;
+import net.ledok.vectorlib.client.canvas.layout.Justify;
+import net.ledok.vectorlib.client.canvas.layout.Sizing;
+import net.ledok.vectorlib.client.canvas.widget.Button;
+import net.ledok.vectorlib.client.canvas.widget.Label;
+import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
+import net.ledok.vectorlib.client.canvas.widget.TextField;
+import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
+import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.vectorlib.client.presentation.Placement;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -27,32 +27,42 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
+import static net.ledok.arenas_ld.screen.ArenasUi.BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_MID;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
+import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
+import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
+
 /**
  * Room clear reward editor, opened from the Room Controller screen's "Rewards" button.
  * Shares the parent's menu instance, so it edits the same server-synced snapshot.
  */
-public class RoomRewardsScreen extends BaseOwoHandledScreen<FlowLayout, RoomControllerScreenHandler> {
+public class RoomRewardsScreen extends CanvasHandledScreen<RoomControllerScreenHandler> {
 
-    private static final int BG          = 0xFF070E14;
-    private static final int PANEL       = 0xFF121922;
-    private static final int PANEL_2     = 0xFF0C1218;
-    private static final int HAIRLINE    = 0xFF283442;
-    private static final int HAIRLINE_HI = 0xFF3A4A5C;
-    private static final int ROW_BG      = 0xFF19222D;
-    private static final int ROW_BG_ALT  = 0xFF16202A;
-    private static final int INK         = 0xFFE8EEF5;
-    private static final int INK_MID     = 0xFF9AA8B8;
-    private static final int INK_DIM     = 0xFF5F6E80;
-    private static final int WARN        = 0xFFF5B042;
-    private static final int ACCENT      = 0xFFA98BE8;
-    private static final int ACCENT_DARK = 0xFF6C4FB5;
-    private static final int DANGER      = 0xFFE8624A;
+    /** Stepper − / + buttons (old owo renderer: panel fill, hairline border, row highlight on hover). */
+    private static final WidgetStyle STEP_STYLE = new WidgetStyle(
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(ROW_BG, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(ROW_BG, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            INK, 0xFFFFFFFF, INK_DIM, INK_DIM, HAIRLINE, 0x80A98BE8,
+            18, 16, 4, true);
 
     private String lootTableInput = "";
     private long currencyValue = 0L;
@@ -62,129 +72,116 @@ public class RoomRewardsScreen extends BaseOwoHandledScreen<FlowLayout, RoomCont
     private int newEffectDuration = 30;
     private int newEffectLevel = 1;
 
-    private FlowLayout contentArea;
-    private FlowLayout footerActions;
-    private LabelComponent footerLabel;
-    private TextBoxComponent newEffectIdField;
-    private TextBoxComponent effectDurationField;
-    private TextBoxComponent effectLevelField;
-    private TextBoxComponent newCommandField;
+    private Flex contentArea;
+    private Flex footerActions;
+    private Label footerLabel;
+    private IdSuggestionDropdown.Field newEffectIdField;
+    private TextField effectDurationField;
+    private TextField effectLevelField;
+    private IdSuggestionDropdown.Field newCommandField;
 
     public RoomRewardsScreen(RoomControllerScreenHandler handler, Inventory inventory, Component title) {
-        super(handler, inventory, title);
-        this.inventoryLabelY = 9999;
-        this.titleLabelY = 9999;
+        super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
+        canvas.theme(ArenasUi.THEME);
+        dimBackground(false);
+        fillWindow();
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
-            return true;
-        }
+        // The old owo screen swallowed the inventory key entirely (close via × or Esc only).
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
+                && !(input.focusedNode() instanceof TextField)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
-        return OwoUIAdapter.create(this, Containers::verticalFlow);
+    protected void onCanvasResized(float width, float height) {
+        buildAll();
     }
 
-    @Override
-    protected void build(FlowLayout rootComponent) {
+    private void buildAll() {
         syncState();
 
-        rootComponent.surface(Surface.flat(BG));
-        rootComponent.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        canvas.clear();
+        Flex root = canvas.add(Flex.column());
+        root.sizing(Sizing.fill(), Sizing.fill());
+        root.justify(Justify.CENTER).alignItems(Align.CENTER);
+        root.backgroundFill(BG);
 
-        int shellWidth  = Math.max(440, Math.min(560, this.width - 24));
-        int shellHeight = Math.max(300, this.height - 24);
-        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
-        shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
+        float shellWidth  = Math.max(440, Math.min(560, canvas.width() - 24));
+        float shellHeight = Math.max(300, canvas.height() - 24);
+        Flex shell = root.item(Flex.column());
+        shell.sizing(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
+        shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
 
-        shell.child(buildHeader());
+        shell.item(buildHeader());
 
-        contentArea = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        contentArea.surface(Surface.flat(PANEL));
-        contentArea.padding(Insets.of(10));
-        contentArea.gap(4);
-        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.expand(), contentArea);
-        scroll.surface(Surface.flat(PANEL));
-        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        scroll.scrollbarThiccness(8);
-        scroll.fixedScrollbarLength(28);
-        scroll.scrollStep(18);
-        shell.child(scroll);
+        contentArea = Flex.column().gap(4).padding(Insets.of(10));
+        contentArea.sizing(Sizing.fill(), Sizing.content());
+        contentArea.backgroundFill(PANEL);
+        ScrollPanel scroll = new ScrollPanel(100, 100, contentArea);
+        scroll.sizing(Sizing.fill(), Sizing.expand());
+        scroll.barWidth(8);
+        scroll.wheelStep(18);
+        shell.item(scroll);
 
-        shell.child(buildFooter());
-        rootComponent.child(shell);
+        shell.item(buildFooter());
 
+        root.layoutIn(canvas.width(), canvas.height());
         rebuildUi();
     }
 
-    private FlowLayout buildHeader() {
-        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(42));
-        header.surface(Surface.flat(PANEL_2));
-        header.padding(Insets.of(6));
-        header.gap(8);
-        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildHeader() {
+        Flex header = Flex.row().gap(8).padding(Insets.of(6)).alignItems(Align.CENTER);
+        header.sizing(Sizing.fill(), Sizing.fixed(42));
+        header.backgroundFill(PANEL_2);
 
-        ButtonComponent back = smallButton(Component.literal("←"), b -> returnToRoomScreen());
-        back.sizing(Sizing.fixed(22), Sizing.fixed(18));
-        header.child(back);
+        header.item(ArenasUi.button(Component.literal("←"), 22, 18, this::returnToRoomScreen));
 
-        FlowLayout mark = Containers.verticalFlow(Sizing.fixed(18), Sizing.fixed(18));
-        mark.surface(Surface.flat(WARN));
-        header.child(mark);
+        Flex mark = Flex.column();
+        mark.sizing(Sizing.fixed(18), Sizing.fixed(18));
+        mark.backgroundFill(WARN);
+        header.item(mark);
 
-        FlowLayout info = Containers.verticalFlow(Sizing.content(), Sizing.content());
-        info.gap(3);
-        LabelComponent titleLabel = Components.label(Component.translatable("gui.arenas_ld.room_controller.rewards_title"));
-        titleLabel.color(Color.ofArgb(INK));
-        info.child(titleLabel);
-        LabelComponent posLabel = Components.label(Component.literal(
-            "POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
-        posLabel.color(Color.ofArgb(INK_DIM));
-        info.child(posLabel);
-        header.child(info);
+        Flex info = Flex.column().gap(3);
+        info.sizing(Sizing.content(), Sizing.content());
+        info.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.rewards_title"), INK));
+        info.item(ArenasUi.text(Component.literal(
+            "POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()), INK_DIM));
+        header.item(info);
 
-        header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-
-        ButtonComponent close = smallButton(Component.literal("×"), b -> onClose());
-        close.sizing(Sizing.fixed(22), Sizing.fixed(18));
-        header.child(close);
+        header.spacer();
+        header.item(ArenasUi.button(Component.literal("×"), 22, 18, this::onClose));
         return header;
     }
 
-    private FlowLayout buildFooter() {
-        FlowLayout footer = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
-        footer.surface(Surface.flat(PANEL_2));
-        footer.padding(Insets.of(6));
-        footer.gap(6);
+    private Flex buildFooter() {
+        Flex footer = Flex.row().gap(6).padding(Insets.of(6));
+        footer.sizing(Sizing.fill(), Sizing.fixed(34));
+        footer.backgroundFill(PANEL_2);
 
-        footerLabel = Components.label(Component.empty());
-        footerLabel.color(Color.ofArgb(DANGER));
-        footerLabel.horizontalSizing(Sizing.expand());
-        footer.child(footerLabel);
+        footerLabel = ArenasUi.label(100, Component.empty(), DANGER);
+        footerLabel.sizing(Sizing.expand(), Sizing.content());
+        footer.item(footerLabel);
 
-        footerActions = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        footerActions.gap(4);
-        footer.child(footerActions);
+        footerActions = Flex.row().gap(4);
+        footerActions.sizing(Sizing.content(), Sizing.content());
+        footer.item(footerActions);
         return footer;
     }
 
     private void rebuildUi() {
         if (contentArea == null) return;
-        contentArea.clearChildren();
-        footerActions.clearChildren();
+        contentArea.clear();
+        footerActions.clear();
 
-        LabelComponent rewardHint = Components.label(Component.translatable("gui.arenas_ld.room_controller.reward_hint"));
-        rewardHint.color(Color.ofArgb(INK_DIM));
-        contentArea.child(rewardHint);
-        contentArea.child(spacer(6));
+        contentArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.reward_hint"), INK_DIM));
+        contentArea.item(ArenasUi.spacer(6));
 
-        contentArea.child(buildLootTableRow());
-        contentArea.child(spacer(4));
-        contentArea.child(buildNumberRow(
+        contentArea.item(buildLootTableRow());
+        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(buildNumberRow(
             Component.translatable("gui.arenas_ld.room_controller.reward.currency"),
             String.valueOf(currencyValue),
             value -> {
@@ -193,7 +190,7 @@ public class RoomRewardsScreen extends BaseOwoHandledScreen<FlowLayout, RoomCont
                 } catch (NumberFormatException ignored) {
                 }
             }));
-        contentArea.child(buildNumberRow(
+        contentArea.item(buildNumberRow(
             Component.translatable("gui.arenas_ld.room_controller.reward.skill_xp"),
             String.valueOf(xpValue),
             value -> {
@@ -202,145 +199,118 @@ public class RoomRewardsScreen extends BaseOwoHandledScreen<FlowLayout, RoomCont
                 } catch (NumberFormatException ignored) {
                 }
             }));
-        contentArea.child(spacer(8));
+        contentArea.item(ArenasUi.spacer(8));
 
-        LabelComponent effectsCaption = Components.label(Component.translatable("gui.arenas_ld.room_controller.reward.effects"));
-        effectsCaption.color(Color.ofArgb(INK_MID));
-        contentArea.child(effectsCaption);
-        contentArea.child(spacer(2));
+        contentArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.reward.effects"), INK_MID));
+        contentArea.item(ArenasUi.spacer(2));
         for (int i = 0; i < effectsEdit.size(); i++) {
-            if (i > 0) contentArea.child(rowDivider());
-            contentArea.child(effectRow(i));
+            if (i > 0) contentArea.item(ArenasUi.hairline());
+            contentArea.item(effectRow(i));
         }
-        contentArea.child(spacer(2));
-        contentArea.child(buildAddEffectRow());
-        contentArea.child(spacer(8));
+        contentArea.item(ArenasUi.spacer(2));
+        contentArea.item(buildAddEffectRow());
+        contentArea.item(ArenasUi.spacer(8));
 
-        LabelComponent commandsCaption = Components.label(Component.translatable("gui.arenas_ld.room_controller.reward.commands"));
-        commandsCaption.color(Color.ofArgb(INK_MID));
-        contentArea.child(commandsCaption);
-        LabelComponent commandHint = Components.label(Component.translatable("gui.arenas_ld.room_controller.reward.command_hint"));
-        commandHint.color(Color.ofArgb(INK_DIM));
-        contentArea.child(commandHint);
-        contentArea.child(spacer(2));
+        contentArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.reward.commands"), INK_MID));
+        contentArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.reward.command_hint"), INK_DIM));
+        contentArea.item(ArenasUi.spacer(2));
         for (int i = 0; i < commandsEdit.size(); i++) {
-            if (i > 0) contentArea.child(rowDivider());
-            contentArea.child(commandRow(i));
+            if (i > 0) contentArea.item(ArenasUi.hairline());
+            contentArea.item(commandRow(i));
         }
-        contentArea.child(spacer(2));
-        contentArea.child(buildAddCommandRow());
+        contentArea.item(ArenasUi.spacer(2));
+        contentArea.item(buildAddCommandRow());
 
-        ButtonComponent applyRewards = accentButton(
-            Component.translatable("gui.arenas_ld.room_controller.reward.apply"), b -> sendApplyRewards());
-        applyRewards.sizing(Sizing.content(), Sizing.fixed(18));
-        footerActions.child(applyRewards);
+        footerActions.item(ArenasUi.button(
+            Component.translatable("gui.arenas_ld.room_controller.reward.apply"), this::sendApplyRewards));
     }
 
-    private FlowLayout buildLootTableRow() {
-        FlowLayout container = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+    private Flex buildLootTableRow() {
+        Flex container = Flex.column();
+        container.sizing(Sizing.fill(), Sizing.content());
 
-        LabelComponent caption = Components.label(Component.translatable("gui.arenas_ld.room_controller.reward.loot_table"));
-        caption.color(Color.ofArgb(INK_MID));
-        container.child(caption);
-        container.child(spacer(2));
+        container.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.reward.loot_table"), INK_MID));
+        container.item(ArenasUi.spacer(2));
 
-        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex fieldRow = Flex.row().alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldRow.child(accent);
+        fieldRow.item(accentBar());
 
-        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.expand(), lootTableInput, 256);
-        field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(v -> lootTableInput = v);
+        IdSuggestionDropdown.Field field = IdSuggestionDropdown.textBox(100, lootTableInput, 256);
+        field.sizing(Sizing.expand(), Sizing.fixed(18));
+        field.changeListeners.add(v -> lootTableInput = v);
 
         IdSuggestionDropdown dropdown = new IdSuggestionDropdown(
-            this.font, () -> menu.getKnownLootTableIds(), field);
-        fieldRow.child(field);
-        fieldRow.child(dropdown.chevron());
+            () -> menu.getKnownLootTableIds(), field);
+        fieldRow.item(field);
+        fieldRow.item(dropdown.chevron());
 
-        container.child(fieldRow);
-        container.child(dropdown.panel());
+        container.item(fieldRow);
+        container.item(dropdown.panel());
         return container;
     }
 
-    private FlowLayout buildNumberRow(Component caption, String initial, Consumer<String> onChanged) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(8);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildNumberRow(Component caption, String initial, Consumer<String> onChanged) {
+        Flex row = Flex.row().gap(8).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
 
-        LabelComponent label = Components.label(caption);
-        label.color(Color.ofArgb(INK_MID));
-        row.child(label);
-        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        row.item(ArenasUi.text(caption, INK_MID));
+        row.spacer();
 
-        TextBoxComponent field = Components.textBox(Sizing.fixed(70), initial);
-        field.verticalSizing(Sizing.fixed(16));
-        field.onChanged().subscribe(onChanged::accept);
-        row.child(field);
+        TextField field = ArenasUi.textField(70, initial, 32);
+        field.size(70, 16);
+        field.onChange(onChanged);
+        row.item(field);
         return row;
     }
 
-    private FlowLayout effectRow(int index) {
+    private Flex effectRow(int index) {
         RoomEffectData effect = effectsEdit.get(index);
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(20));
-        row.surface(Surface.flat(index % 2 == 0 ? ROW_BG : ROW_BG_ALT));
-        row.padding(Insets.of(0, 0, 6, 6));
-        row.gap(6);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex row = Flex.row().gap(6).padding(Insets.of(0, 6, 0, 6)).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.fixed(20));
+        row.backgroundFill(index % 2 == 0 ? ROW_BG : ROW_BG_ALT);
 
-        LabelComponent id = Components.label(Component.literal(effect.effectId()));
-        id.color(Color.ofArgb(INK));
-        row.child(id);
+        row.item(ArenasUi.text(Component.literal(effect.effectId()), INK));
+        row.item(ArenasUi.text(Component.literal(effect.durationSeconds() + "s · Lv " + (effect.amplifier() + 1)), INK_MID));
 
-        LabelComponent meta = Components.label(Component.literal(effect.durationSeconds() + "s · Lv " + (effect.amplifier() + 1)));
-        meta.color(Color.ofArgb(INK_MID));
-        row.child(meta);
-
-        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        row.spacer();
 
         int capturedIndex = index;
-        ButtonComponent remove = smallButton(Component.literal("×"), b -> {
+        row.item(ArenasUi.button(Component.literal("×"), 20, 16, () -> {
             effectsEdit.remove(capturedIndex);
             rebuildUi();
-        });
-        remove.sizing(Sizing.fixed(20), Sizing.fixed(16));
-        row.child(remove);
+        }));
         return row;
     }
 
-    private FlowLayout buildAddEffectRow() {
-        FlowLayout container = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+    private Flex buildAddEffectRow() {
+        Flex container = Flex.column();
+        container.sizing(Sizing.fill(), Sizing.content());
 
-        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex fieldRow = Flex.row().alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldRow.child(accent);
+        fieldRow.item(accentBar());
 
-        newEffectIdField = Components.textBox(Sizing.expand(), "");
-        newEffectIdField.verticalSizing(Sizing.fixed(18));
-        fieldRow.child(newEffectIdField);
+        newEffectIdField = IdSuggestionDropdown.textBox(100, "", 256);
+        newEffectIdField.sizing(Sizing.expand(), Sizing.fixed(18));
+        fieldRow.item(newEffectIdField);
 
         IdSuggestionDropdown dropdown = new IdSuggestionDropdown(
-            this.font, BuiltInRegistries.MOB_EFFECT, newEffectIdField);
-        fieldRow.child(dropdown.chevron());
-        container.child(fieldRow);
-        container.child(dropdown.panel());
-        container.child(spacer(2));
+            BuiltInRegistries.MOB_EFFECT, newEffectIdField);
+        fieldRow.item(dropdown.chevron());
+        container.item(fieldRow);
+        container.item(dropdown.panel());
+        container.item(ArenasUi.spacer(2));
 
-        FlowLayout paramsRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        paramsRow.gap(8);
-        paramsRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex paramsRow = Flex.row().gap(8).alignItems(Align.CENTER);
+        paramsRow.sizing(Sizing.fill(), Sizing.content());
 
-        LabelComponent durationCaption = Components.label(Component.translatable("gui.arenas_ld.room_controller.reward.effect_duration"));
-        durationCaption.color(Color.ofArgb(INK_DIM));
-        paramsRow.child(durationCaption);
-        paramsRow.child(buildStepper(
+        paramsRow.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.reward.effect_duration"), INK_DIM));
+        paramsRow.item(buildStepper(
             String.valueOf(newEffectDuration),
             field -> effectDurationField = field,
             delta -> {
@@ -354,10 +324,8 @@ public class RoomRewardsScreen extends BaseOwoHandledScreen<FlowLayout, RoomCont
                 }
             }));
 
-        LabelComponent levelCaption = Components.label(Component.translatable("gui.arenas_ld.room_controller.reward.effect_level"));
-        levelCaption.color(Color.ofArgb(INK_DIM));
-        paramsRow.child(levelCaption);
-        paramsRow.child(buildStepper(
+        paramsRow.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.reward.effect_level"), INK_DIM));
+        paramsRow.item(buildStepper(
             String.valueOf(newEffectLevel),
             field -> effectLevelField = field,
             delta -> {
@@ -371,65 +339,54 @@ public class RoomRewardsScreen extends BaseOwoHandledScreen<FlowLayout, RoomCont
                 }
             }));
 
-        paramsRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        paramsRow.spacer();
 
-        ButtonComponent addBtn = accentButton(Component.translatable("gui.arenas_ld.room_controller.reward.add_effect"),
-            b -> addEffect());
-        addBtn.sizing(Sizing.content(), Sizing.fixed(16));
-        paramsRow.child(addBtn);
+        paramsRow.item(contentButton(Component.translatable("gui.arenas_ld.room_controller.reward.add_effect"), 16,
+            this::addEffect));
 
-        container.child(paramsRow);
+        container.item(paramsRow);
         return container;
     }
 
-    private FlowLayout commandRow(int index) {
+    private Flex commandRow(int index) {
         String command = commandsEdit.get(index);
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(20));
-        row.surface(Surface.flat(index % 2 == 0 ? ROW_BG : ROW_BG_ALT));
-        row.padding(Insets.of(0, 0, 6, 6));
-        row.gap(6);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex row = Flex.row().gap(6).padding(Insets.of(0, 6, 0, 6)).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.fixed(20));
+        row.backgroundFill(index % 2 == 0 ? ROW_BG : ROW_BG_ALT);
 
-        LabelComponent text = Components.label(Component.literal(command));
-        text.color(Color.ofArgb(INK));
+        Label text = ArenasUi.label(100, Component.literal(command), INK);
+        text.sizing(Sizing.expand(), Sizing.content());
+        text.pickable(true);
         text.tooltip(Component.literal(command));
-        text.horizontalSizing(Sizing.expand());
-        row.child(text);
+        row.item(text);
 
         int capturedIndex = index;
-        ButtonComponent remove = smallButton(Component.literal("×"), b -> {
+        row.item(ArenasUi.button(Component.literal("×"), 20, 16, () -> {
             commandsEdit.remove(capturedIndex);
             rebuildUi();
-        });
-        remove.sizing(Sizing.fixed(20), Sizing.fixed(16));
-        row.child(remove);
+        }));
         return row;
     }
 
-    private FlowLayout buildAddCommandRow() {
-        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildAddCommandRow() {
+        Flex fieldRow = Flex.row().alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldRow.child(accent);
+        fieldRow.item(accentBar());
 
-        newCommandField = Components.textBox(Sizing.expand(), "");
-        newCommandField.verticalSizing(Sizing.fixed(18));
-        newCommandField.setMaxLength(256);
+        newCommandField = IdSuggestionDropdown.textBox(100, "", 256);
+        newCommandField.sizing(Sizing.expand(), Sizing.fixed(18));
         IdSuggestionDropdown.attachFullValueTooltip(newCommandField);
-        fieldRow.child(newCommandField);
+        fieldRow.item(newCommandField);
 
-        ButtonComponent addBtn = accentButton(Component.translatable("gui.arenas_ld.room_controller.reward.add_effect"),
-            b -> addCommand());
-        addBtn.sizing(Sizing.fixed(64), Sizing.fixed(18));
-        fieldRow.child(addBtn);
+        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.reward.add_effect"), 64, 18,
+            this::addCommand));
         return fieldRow;
     }
 
     private void addCommand() {
-        String raw = newCommandField == null ? "" : newCommandField.getValue().trim();
+        String raw = newCommandField == null ? "" : newCommandField.text().trim();
         if (raw.isEmpty()) {
             return;
         }
@@ -438,7 +395,7 @@ public class RoomRewardsScreen extends BaseOwoHandledScreen<FlowLayout, RoomCont
     }
 
     private void addEffect() {
-        String raw = newEffectIdField == null ? "" : newEffectIdField.getValue().trim();
+        String raw = newEffectIdField == null ? "" : newEffectIdField.text().trim();
         ResourceLocation id = ResourceLocation.tryParse(raw);
         if (raw.isEmpty() || id == null
             || BuiltInRegistries.MOB_EFFECT.getHolder(ResourceKey.create(Registries.MOB_EFFECT, id)).isEmpty()) {
@@ -493,69 +450,40 @@ public class RoomRewardsScreen extends BaseOwoHandledScreen<FlowLayout, RoomCont
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    private FlowLayout buildStepper(String initial, Consumer<TextBoxComponent> fieldSink,
-                                    java.util.function.IntConsumer step, Consumer<String> onChanged) {
-        FlowLayout stepper = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        stepper.gap(2);
-        stepper.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        stepper.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        stepper.padding(Insets.of(2, 4, 2, 4));
+    private Flex buildStepper(String initial, Consumer<TextField> fieldSink,
+                              java.util.function.IntConsumer step, Consumer<String> onChanged) {
+        Flex stepper = Flex.row().gap(2).alignItems(Align.CENTER).padding(Insets.of(2, 4, 4, 2));
+        stepper.sizing(Sizing.content(), Sizing.content());
+        stepper.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        ButtonComponent minus = stepBtn("−", b -> step.accept(-1));
-        TextBoxComponent field = Components.textBox(Sizing.fixed(34), initial);
-        field.verticalSizing(Sizing.fixed(16));
-        field.onChanged().subscribe(onChanged::accept);
+        stepper.item(stepBtn("−", () -> step.accept(-1)));
+
+        TextField field = ArenasUi.textField(34, initial, 32);
+        field.size(34, 16);
+        field.onChange(onChanged);
         fieldSink.accept(field);
-        ButtonComponent plus = stepBtn("+", b -> step.accept(1));
+        stepper.item(field);
 
-        stepper.child(minus);
-        stepper.child(field);
-        stepper.child(plus);
+        stepper.item(stepBtn("+", () -> step.accept(1)));
         return stepper;
     }
 
-    private FlowLayout spacer(int px) {
-        FlowLayout s = Containers.verticalFlow(Sizing.fill(100), Sizing.fixed(px));
-        s.surface(Surface.BLANK);
-        return s;
+    /** 2px accent stripe at the left edge of a boxed field row. */
+    private static Flex accentBar() {
+        Flex accent = Flex.column();
+        accent.sizing(Sizing.fixed(2), Sizing.fill());
+        accent.backgroundFill(ACCENT);
+        return accent;
     }
 
-    private FlowLayout rowDivider() {
-        FlowLayout d = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(1));
-        d.surface(Surface.flat(HAIRLINE));
-        return d;
+    /** Content-width button with a non-default height (the old {@code Sizing.content() x fixed(h)}). */
+    private static Button contentButton(Component label, float height, Runnable onClick) {
+        return ArenasUi.button(label, Minecraft.getInstance().font.width(label) + 12, height, onClick);
     }
 
-    private ButtonComponent smallButton(Component text, Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text, action);
-        button.sizing(Sizing.content(), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.active() ? (rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK) : PANEL;
-            int border = rendered.active() ? ACCENT : HAIRLINE;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), border);
-        });
-        return button;
-    }
-
-    private ButtonComponent accentButton(Component text, Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text, action);
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), ACCENT);
-        });
-        return button;
-    }
-
-    private ButtonComponent stepBtn(String glyph, Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(Component.literal(glyph), action);
-        button.sizing(Sizing.fixed(16), Sizing.fixed(16));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.isHoveredOrFocused() ? ROW_BG : PANEL_2;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), HAIRLINE);
-        });
+    private Button stepBtn(String glyph, Runnable onClick) {
+        Button button = ArenasUi.button(Component.literal(glyph), 16, 16, onClick);
+        button.style(STEP_STYLE);
         return button;
     }
 }

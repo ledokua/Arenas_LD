@@ -1,233 +1,213 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
-import io.wispforest.owo.ui.base.BaseOwoHandledScreen;
-import io.wispforest.owo.ui.component.ButtonComponent;
-import io.wispforest.owo.ui.component.Components;
-import io.wispforest.owo.ui.component.LabelComponent;
-import io.wispforest.owo.ui.component.TextBoxComponent;
-import io.wispforest.owo.ui.container.Containers;
-import io.wispforest.owo.ui.container.FlowLayout;
-import io.wispforest.owo.ui.container.ScrollContainer;
-import io.wispforest.owo.ui.core.Color;
-import io.wispforest.owo.ui.core.HorizontalAlignment;
-import io.wispforest.owo.ui.core.Insets;
-import io.wispforest.owo.ui.core.OwoUIAdapter;
-import io.wispforest.owo.ui.core.Sizing;
-import io.wispforest.owo.ui.core.Surface;
-import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.DbsClearRoomsPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsMoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsRemoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
-import net.ledok.arenas_ld.screen.EquipmentScreen;
-import net.ledok.arenas_ld.screen.EquipmentScreenData;
-import net.ledok.arenas_ld.screen.EquipmentScreenHandler;
+import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.arenas_ld.screen.MobAttributesData;
 import net.ledok.arenas_ld.screen.MobAttributesScreen;
 import net.ledok.arenas_ld.screen.MobAttributesScreenHandler;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.ledok.vectorlib.client.canvas.VectorCanvas;
+import net.ledok.vectorlib.client.canvas.layout.Align;
+import net.ledok.vectorlib.client.canvas.layout.Flex;
+import net.ledok.vectorlib.client.canvas.layout.Insets;
+import net.ledok.vectorlib.client.canvas.layout.Justify;
+import net.ledok.vectorlib.client.canvas.layout.Sizing;
+import net.ledok.vectorlib.client.canvas.widget.Button;
+import net.ledok.vectorlib.client.canvas.widget.Label;
+import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
+import net.ledok.vectorlib.client.canvas.widget.TextField;
+import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
+import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, DungeonBossSpawnerScreenHandler> {
+import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
+import static net.ledok.arenas_ld.screen.ArenasUi.BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
+import static net.ledok.arenas_ld.screen.ArenasUi.GOOD;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_MID;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
+import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
+import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
 
-    private static final int BG          = 0xFF070E14;
-    private static final int PANEL       = 0xFF121922;
-    private static final int PANEL_2     = 0xFF0C1218;
-    private static final int HAIRLINE    = 0xFF283442;
-    private static final int HAIRLINE_HI = 0xFF3A4A5C;
-    private static final int ROW_BG      = 0xFF19222D;
-    private static final int ROW_BG_ALT  = 0xFF16202A;
-    private static final int INK         = 0xFFE8EEF5;
-    private static final int INK_MID     = 0xFF9AA8B8;
-    private static final int INK_DIM     = 0xFF5F6E80;
-    private static final int WARN        = 0xFFF5B042;
-    private static final int ACCENT      = 0xFFA98BE8;
-    private static final int ACCENT_DARK = 0xFF6C4FB5;
-    private static final int DANGER      = 0xFFE8624A;
+public class DungeonBossSpawnerScreen extends CanvasHandledScreen<DungeonBossSpawnerScreenHandler> {
 
-    private static final int GOOD = 0xFF86D36C;
+    /** The old translucent danger-button renderer: faint DANGER fill, stronger on hover, DANGER outline. */
+    private static final WidgetStyle DANGER_STYLE = new WidgetStyle(
+            new WidgetStyle.Skin.Flat((DANGER & 0x00FFFFFF) | 0x1F000000, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat((DANGER & 0x00FFFFFF) | 0x44000000, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat((DANGER & 0x00FFFFFF) | 0x44000000, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat((DANGER & 0x00FFFFFF) | 0x1F000000, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            INK, 0xFFFFFFFF, INK_DIM, INK_DIM, ACCENT, 0x80A98BE8,
+            18, 16, 4, true);
 
     private String mobIdValue = "";
     private int waveValue = 1;
-    private TextBoxComponent waveField;
+    private TextField waveField;
     private final List<BlockPos> rooms = new ArrayList<>();
     private final List<String> roomNames = new ArrayList<>();
     private java.util.Optional<BlockPos> startRoom = java.util.Optional.empty();
     private java.util.Optional<BlockPos> finalRoom = java.util.Optional.empty();
 
-    private FlowLayout contentArea;
-    private FlowLayout footerActions;
-    private LabelComponent footerLabel;
+    private Flex contentArea;
+    private Flex footerActions;
+    private Label footerLabel;
 
     public DungeonBossSpawnerScreen(DungeonBossSpawnerScreenHandler handler, Inventory inventory, Component title) {
-        super(handler, inventory, title);
-        this.inventoryLabelY = 9999;
-        this.titleLabelY = 9999;
+        super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
+        canvas.theme(ArenasUi.THEME);
+        dimBackground(false);
+        fillWindow();
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
-            return true;
-        }
+        // The old owo screen swallowed the inventory key entirely (close via × or Esc only).
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
+                && !(input.focusedNode() instanceof TextField)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
-        return OwoUIAdapter.create(this, Containers::verticalFlow);
+    protected void onCanvasResized(float width, float height) {
+        buildAll();
     }
 
-    @Override
-    protected void build(FlowLayout rootComponent) {
+    private void buildAll() {
         syncState();
 
-        rootComponent.surface(Surface.flat(BG));
-        rootComponent.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+        canvas.clear();
+        Flex root = canvas.add(Flex.column());
+        root.sizing(Sizing.fill(), Sizing.fill());
+        root.justify(Justify.CENTER).alignItems(Align.CENTER);
+        root.backgroundFill(BG);
 
-        int shellWidth  = Math.max(440, Math.min(560, this.width - 24));
-        int shellHeight = Math.max(300, this.height - 24);
-        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
-        shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
+        float shellWidth  = Math.max(440, Math.min(560, canvas.width() - 24));
+        float shellHeight = Math.max(300, canvas.height() - 24);
+        Flex shell = root.item(Flex.column());
+        shell.sizing(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
+        shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
 
-        shell.child(buildHeader());
+        shell.item(buildHeader());
 
-        contentArea = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        contentArea.surface(Surface.flat(PANEL));
-        contentArea.padding(Insets.of(10));
-        contentArea.gap(4);
-        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.expand(), contentArea);
-        scroll.surface(Surface.flat(PANEL));
-        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        scroll.scrollbarThiccness(8);
-        scroll.fixedScrollbarLength(28);
-        scroll.scrollStep(18);
-        shell.child(scroll);
+        contentArea = Flex.column().gap(4).padding(Insets.of(10));
+        contentArea.sizing(Sizing.fill(), Sizing.content());
+        contentArea.backgroundFill(PANEL);
+        ScrollPanel scroll = new ScrollPanel(100, 100, contentArea);
+        scroll.sizing(Sizing.fill(), Sizing.expand());
+        scroll.barWidth(8);
+        scroll.wheelStep(18);
+        shell.item(scroll);
 
-        shell.child(buildFooter());
-        rootComponent.child(shell);
+        shell.item(buildFooter());
 
+        root.layoutIn(canvas.width(), canvas.height());
         rebuildUi();
     }
 
-    private FlowLayout buildHeader() {
-        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(42));
-        header.surface(Surface.flat(PANEL_2));
-        header.padding(Insets.of(6));
-        header.gap(8);
-        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildHeader() {
+        Flex header = Flex.row().gap(8).padding(Insets.of(6)).alignItems(Align.CENTER);
+        header.sizing(Sizing.fill(), Sizing.fixed(42));
+        header.backgroundFill(PANEL_2);
 
-        FlowLayout mark = Containers.verticalFlow(Sizing.fixed(18), Sizing.fixed(18));
-        mark.surface(Surface.flat(WARN));
-        header.child(mark);
+        Flex mark = Flex.column();
+        mark.sizing(Sizing.fixed(18), Sizing.fixed(18));
+        mark.backgroundFill(WARN);
+        header.item(mark);
 
-        FlowLayout info = Containers.verticalFlow(Sizing.content(), Sizing.content());
-        info.gap(3);
-        LabelComponent titleLabel = Components.label(Component.translatable("gui.arenas_ld.boss_spawner"));
-        titleLabel.color(Color.ofArgb(INK));
-        info.child(titleLabel);
-        LabelComponent posLabel = Components.label(Component.literal(
-            "POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
-        posLabel.color(Color.ofArgb(INK_DIM));
-        info.child(posLabel);
-        header.child(info);
+        Flex info = Flex.column().gap(3);
+        info.sizing(Sizing.content(), Sizing.content());
+        info.item(ArenasUi.text(Component.translatable("gui.arenas_ld.boss_spawner"), INK));
+        info.item(ArenasUi.text(Component.literal(
+            "POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()), INK_DIM));
+        header.item(info);
 
-        header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
+        header.spacer();
 
-        ButtonComponent close = smallButton(Component.literal("×"), b -> onClose());
-        close.sizing(Sizing.fixed(22), Sizing.fixed(18));
-        header.child(close);
+        header.item(ArenasUi.button(Component.literal("×"), 22, 18, this::onClose));
         return header;
     }
 
-    private FlowLayout buildFooter() {
-        FlowLayout footer = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(34));
-        footer.surface(Surface.flat(PANEL_2));
-        footer.padding(Insets.of(6));
-        footer.gap(6);
+    private Flex buildFooter() {
+        Flex footer = Flex.row().gap(6).padding(Insets.of(6)).alignItems(Align.CENTER);
+        footer.sizing(Sizing.fill(), Sizing.fixed(34));
+        footer.backgroundFill(PANEL_2);
 
-        footerLabel = Components.label(Component.empty());
-        footerLabel.color(Color.ofArgb(DANGER));
-        footerLabel.horizontalSizing(Sizing.expand());
-        footer.child(footerLabel);
+        footerLabel = ArenasUi.label(100, Component.empty(), DANGER);
+        footerLabel.sizing(Sizing.expand(), Sizing.content());
+        footer.item(footerLabel);
 
-        footerActions = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        footerActions.gap(4);
-        footer.child(footerActions);
+        footerActions = Flex.row().gap(4);
+        footerActions.sizing(Sizing.content(), Sizing.content());
+        footer.item(footerActions);
         return footer;
     }
 
     private void rebuildUi() {
         if (contentArea == null) return;
-        contentArea.clearChildren();
-        footerActions.clearChildren();
+        contentArea.clear();
+        footerActions.clear();
 
         // General section
-        contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.tab_general")));
-        contentArea.child(spacer(2));
-        contentArea.child(buildMobIdSection());
-        contentArea.child(spacer(6));
-        contentArea.child(buildWaveRow());
-        contentArea.child(spacer(6));
+        contentArea.item(sectionLabel(Component.translatable("gui.arenas_ld.tab_general")));
+        contentArea.item(ArenasUi.spacer(2));
+        contentArea.item(buildMobIdSection());
+        contentArea.item(ArenasUi.spacer(6));
+        contentArea.item(buildWaveRow());
+        contentArea.item(ArenasUi.spacer(6));
 
-        LabelComponent entranceHint = Components.label(Component.translatable("gui.arenas_ld.dbs.entrance_hint"));
-        entranceHint.color(Color.ofArgb(INK_DIM));
-        contentArea.child(entranceHint);
-        contentArea.child(spacer(6));
+        contentArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.dbs.entrance_hint"), INK_DIM));
+        contentArea.item(ArenasUi.spacer(6));
 
-        FlowLayout actionRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        actionRow.gap(6);
-        actionRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex actionRow = Flex.row().gap(6).alignItems(Align.CENTER);
+        actionRow.sizing(Sizing.fill(), Sizing.content());
+        actionRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.attributes"), 110, 18, this::openAttributesScreen));
+        actionRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.equipment"), 110, 18, this::openEquipmentScreen));
+        contentArea.item(actionRow);
 
-        ButtonComponent attrsBtn = smallButton(Component.translatable("gui.arenas_ld.attributes"), b -> openAttributesScreen());
-        attrsBtn.horizontalSizing(Sizing.fixed(110));
-        actionRow.child(attrsBtn);
-
-        ButtonComponent equipBtn = smallButton(Component.translatable("gui.arenas_ld.equipment"), b -> openEquipmentScreen());
-        equipBtn.horizontalSizing(Sizing.fixed(110));
-        actionRow.child(equipBtn);
-        contentArea.child(actionRow);
-
-        contentArea.child(spacer(10));
+        contentArea.item(ArenasUi.spacer(10));
 
         // Rooms section
-        contentArea.child(sectionLabel(Component.translatable("gui.arenas_ld.dbs.rooms")));
-        LabelComponent orderHint = Components.label(Component.translatable("gui.arenas_ld.dbs.order_hint"));
-        orderHint.color(Color.ofArgb(INK_DIM));
-        contentArea.child(orderHint);
-        contentArea.child(spacer(2));
+        contentArea.item(sectionLabel(Component.translatable("gui.arenas_ld.dbs.rooms")));
+        contentArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.dbs.order_hint"), INK_DIM));
+        contentArea.item(ArenasUi.spacer(2));
 
         if (rooms.isEmpty()) {
-            LabelComponent empty = Components.label(Component.translatable("gui.arenas_ld.room_controller.spawners_empty"));
-            empty.color(Color.ofArgb(INK_DIM));
-            contentArea.child(empty);
+            contentArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.spawners_empty"), INK_DIM));
         } else {
             for (int i = 0; i < rooms.size(); i++) {
-                if (i > 0) contentArea.child(rowDivider());
-                contentArea.child(roomRow(i));
+                if (i > 0) contentArea.item(ArenasUi.hairline());
+                contentArea.item(roomRow(i));
             }
         }
 
         // Footer: apply mob ID + clear all
-        ButtonComponent applyMobId = smallButton(
-            Component.translatable("gui.arenas_ld.apply"),
-            b -> applyMobId());
-        applyMobId.horizontalSizing(Sizing.fixed(80));
-        footerActions.child(applyMobId);
+        footerActions.item(ArenasUi.button(Component.translatable("gui.arenas_ld.apply"), 80, 18, this::applyMobId));
 
         if (!rooms.isEmpty()) {
-            ButtonComponent clearAll = dangerButton(
-                Component.translatable("gui.arenas_ld.room_controller.button.clear_all"),
-                b -> {
+            Button clearAll = new Button(90, 18,
+                Component.translatable("gui.arenas_ld.room_controller.button.clear_all").copy().withStyle(net.minecraft.ChatFormatting.RED),
+                () -> {
                     if (minecraft == null) return;
                     minecraft.setScreen(new ConfirmScreen(ok -> {
                         minecraft.setScreen(this);
@@ -235,142 +215,116 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
                     }, Component.translatable("gui.arenas_ld.room_controller.confirm.clear_title"),
                        Component.translatable("gui.arenas_ld.dbs.clear_rooms_confirm")));
                 });
-            clearAll.horizontalSizing(Sizing.fixed(90));
-            footerActions.child(clearAll);
+            clearAll.style(DANGER_STYLE);
+            footerActions.item(clearAll);
         }
     }
 
-    private FlowLayout buildMobIdSection() {
-        FlowLayout container = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        container.gap(0);
+    private Flex buildMobIdSection() {
+        Flex container = Flex.column().gap(0);
+        container.sizing(Sizing.fill(), Sizing.content());
 
-        LabelComponent caption = Components.label(Component.translatable("gui.arenas_ld.mob_id"));
-        caption.color(Color.ofArgb(INK_DIM));
-        container.child(caption);
-        container.child(spacer(4));
+        container.item(ArenasUi.text(Component.translatable("gui.arenas_ld.mob_id"), INK_DIM));
+        container.item(ArenasUi.spacer(4));
 
-        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex fieldRow = Flex.row().alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldRow.child(accent);
+        Flex accent = Flex.column();
+        accent.sizing(Sizing.fixed(2), Sizing.fill());
+        accent.backgroundFill(ACCENT);
+        fieldRow.item(accent);
 
-        TextBoxComponent field = IdSuggestionDropdown.textBox(Sizing.expand(), mobIdValue, 256);
-        field.verticalSizing(Sizing.fixed(18));
-        field.onChanged().subscribe(v -> mobIdValue = v);
-        fieldRow.child(field);
+        IdSuggestionDropdown.Field field = IdSuggestionDropdown.textBox(100, mobIdValue, 256);
+        field.sizing(Sizing.expand(), Sizing.fixed(18));
+        field.changeListeners.add(v -> mobIdValue = v);
+        fieldRow.item(field);
 
-        IdSuggestionDropdown dropdown = new IdSuggestionDropdown(
-            this.font, BuiltInRegistries.ENTITY_TYPE, field);
-        fieldRow.child(dropdown.chevron());
-        container.child(fieldRow);
-        container.child(dropdown.panel());
+        IdSuggestionDropdown dropdown = new IdSuggestionDropdown(BuiltInRegistries.ENTITY_TYPE, field);
+        fieldRow.item(dropdown.chevron());
+        container.item(fieldRow);
+        container.item(dropdown.panel());
 
         return container;
     }
 
-    private FlowLayout roomRow(int index) {
+    private Flex roomRow(int index) {
         BlockPos room = rooms.get(index);
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(24));
-        row.surface(Surface.flat(index % 2 == 0 ? ROW_BG : ROW_BG_ALT));
-        row.padding(Insets.of(0, 0, 6, 6));
-        row.gap(4);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex row = Flex.row().gap(4).padding(Insets.of(0, 6, 0, 6)).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.fixed(24));
+        row.backgroundFill(index % 2 == 0 ? ROW_BG : ROW_BG_ALT);
 
-        LabelComponent num = Components.label(Component.literal((index + 1) + ". "));
-        num.color(Color.ofArgb(INK_MID));
-        num.horizontalSizing(Sizing.fixed(26));
-        row.child(num);
+        Label num = ArenasUi.label(26, Component.literal((index + 1) + ". "), INK_MID);
+        num.sizing(Sizing.fixed(26), Sizing.content());
+        row.item(num);
 
         String name = index < roomNames.size() ? roomNames.get(index) : "";
         String label = name == null || name.isBlank()
             ? room.toShortString()
             : name + " (" + room.toShortString() + ")";
-        LabelComponent coord = Components.label(Component.literal(label));
-        coord.color(Color.ofArgb(INK));
-        coord.horizontalSizing(Sizing.expand());
-        row.child(coord);
+        Label coord = ArenasUi.label(100, Component.literal(label), INK);
+        coord.sizing(Sizing.expand(), Sizing.content());
+        row.item(coord);
 
         if (startRoom.filter(room::equals).isPresent()) {
-            LabelComponent startBadge = Components.label(Component.translatable("gui.arenas_ld.dbs.badge.start"));
-            startBadge.color(Color.ofArgb(GOOD));
-            row.child(startBadge);
+            row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.dbs.badge.start"), GOOD));
         }
         if (finalRoom.filter(room::equals).isPresent()) {
-            LabelComponent finalBadge = Components.label(Component.translatable("gui.arenas_ld.dbs.badge.final"));
-            finalBadge.color(Color.ofArgb(DANGER));
-            row.child(finalBadge);
+            row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.dbs.badge.final"), DANGER));
         }
 
-        ButtonComponent markStart = smallButton(Component.literal("S"), b ->
+        Button markStart = ArenasUi.button(Component.literal("S"), 20, 18, () ->
             ClientPlayNetworking.send(new net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload(menu.getBlockPos(), room, false)));
-        markStart.sizing(Sizing.fixed(20), Sizing.fixed(18));
         markStart.tooltip(Component.translatable("gui.arenas_ld.dbs.room_marker.start"));
-        row.child(markStart);
+        row.item(markStart);
 
-        ButtonComponent markFinal = smallButton(Component.literal("F"), b ->
+        Button markFinal = ArenasUi.button(Component.literal("F"), 20, 18, () ->
             ClientPlayNetworking.send(new net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload(menu.getBlockPos(), room, true)));
-        markFinal.sizing(Sizing.fixed(20), Sizing.fixed(18));
         markFinal.tooltip(Component.translatable("gui.arenas_ld.dbs.room_marker.final"));
-        row.child(markFinal);
+        row.item(markFinal);
 
-        ButtonComponent up = smallButton(Component.literal("↑"), b ->
+        Button up = ArenasUi.button(Component.literal("↑"), 20, 18, () ->
             ClientPlayNetworking.send(new DbsMoveRoomPayload(menu.getBlockPos(), index, Math.max(0, index - 1))));
-        up.sizing(Sizing.fixed(20), Sizing.fixed(18));
-        up.active(index > 0);
-        row.child(up);
+        up.enabled(index > 0);
+        row.item(up);
 
-        ButtonComponent down = smallButton(Component.literal("↓"), b ->
+        Button down = ArenasUi.button(Component.literal("↓"), 20, 18, () ->
             ClientPlayNetworking.send(new DbsMoveRoomPayload(menu.getBlockPos(), index, Math.min(rooms.size() - 1, index + 1))));
-        down.sizing(Sizing.fixed(20), Sizing.fixed(18));
-        down.active(index < rooms.size() - 1);
-        row.child(down);
+        down.enabled(index < rooms.size() - 1);
+        row.item(down);
 
-        ButtonComponent remove = smallButton(Component.literal("×"), b ->
-            ClientPlayNetworking.send(new DbsRemoveRoomPayload(menu.getBlockPos(), room)));
-        remove.sizing(Sizing.fixed(20), Sizing.fixed(18));
-        row.child(remove);
+        row.item(ArenasUi.button(Component.literal("×"), 20, 18, () ->
+            ClientPlayNetworking.send(new DbsRemoveRoomPayload(menu.getBlockPos(), room))));
 
         return row;
     }
 
-    private FlowLayout buildWaveRow() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(8);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildWaveRow() {
+        Flex row = Flex.row().gap(8).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
 
-        LabelComponent caption = Components.label(Component.translatable("gui.arenas_ld.dungeon_boss_spawner.ui.wave"));
-        caption.color(Color.ofArgb(INK_DIM));
-        row.child(caption);
-        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.dungeon_boss_spawner.ui.wave"), INK_DIM));
+        row.spacer();
 
-        FlowLayout stepper = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        stepper.gap(2);
-        stepper.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        stepper.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        stepper.padding(Insets.of(2, 4, 2, 4));
+        Flex stepper = Flex.row().gap(2).padding(Insets.of(2, 4, 4, 2)).alignItems(Align.CENTER);
+        stepper.sizing(Sizing.content(), Sizing.content());
+        stepper.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        ButtonComponent minus = smallButton(Component.literal("−"), b -> adjustWave(-1));
-        minus.sizing(Sizing.fixed(16), Sizing.fixed(16));
+        stepper.item(ArenasUi.button(Component.literal("−"), 16, 16, () -> adjustWave(-1)));
 
-        waveField = Components.textBox(Sizing.fixed(30), String.valueOf(waveValue));
-        waveField.verticalSizing(Sizing.fixed(16));
-        waveField.onChanged().subscribe(value -> {
+        waveField = ArenasUi.textField(30, String.valueOf(waveValue), 32);
+        waveField.size(30, 16);
+        waveField.onChange(value -> {
             try {
                 waveValue = Math.max(1, Math.min(10, Integer.parseInt(value.trim())));
             } catch (NumberFormatException ignored) {
             }
         });
+        stepper.item(waveField);
 
-        ButtonComponent plus = smallButton(Component.literal("+"), b -> adjustWave(1));
-        plus.sizing(Sizing.fixed(16), Sizing.fixed(16));
-
-        stepper.child(minus);
-        stepper.child(waveField);
-        stepper.child(plus);
-        row.child(stepper);
+        stepper.item(ArenasUi.button(Component.literal("+"), 16, 16, () -> adjustWave(1)));
+        row.item(stepper);
         return row;
     }
 
@@ -421,47 +375,10 @@ public class DungeonBossSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, D
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    private FlowLayout sectionLabel(Component text) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        LabelComponent label = Components.label(text);
-        label.color(Color.ofArgb(INK_DIM));
-        row.child(label);
+    private Flex sectionLabel(Component text) {
+        Flex row = Flex.row().alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
+        row.item(ArenasUi.text(text, INK_DIM));
         return row;
-    }
-
-    private FlowLayout spacer(int px) {
-        FlowLayout s = Containers.verticalFlow(Sizing.fill(100), Sizing.fixed(px));
-        s.surface(Surface.BLANK);
-        return s;
-    }
-
-    private FlowLayout rowDivider() {
-        FlowLayout d = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(1));
-        d.surface(Surface.flat(HAIRLINE));
-        return d;
-    }
-
-    private ButtonComponent smallButton(Component text, java.util.function.Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text, action);
-        button.sizing(Sizing.content(), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.active() ? (rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK) : PANEL;
-            int border = rendered.active() ? ACCENT : HAIRLINE;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), border);
-        });
-        return button;
-    }
-
-    private ButtonComponent dangerButton(Component text, java.util.function.Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text.copy().withStyle(net.minecraft.ChatFormatting.RED), action);
-        button.sizing(Sizing.content(), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.isHoveredOrFocused() ? ((DANGER & 0x00FFFFFF) | 0x44000000) : ((DANGER & 0x00FFFFFF) | 0x1F000000);
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), DANGER);
-        });
-        return button;
     }
 }

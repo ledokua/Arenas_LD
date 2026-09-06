@@ -1,251 +1,243 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
-import io.wispforest.owo.ui.base.BaseOwoHandledScreen;
-import io.wispforest.owo.ui.component.ButtonComponent;
-import io.wispforest.owo.ui.component.Components;
-import io.wispforest.owo.ui.component.LabelComponent;
-import io.wispforest.owo.ui.component.TextBoxComponent;
-import io.wispforest.owo.ui.container.Containers;
-import io.wispforest.owo.ui.container.FlowLayout;
-import io.wispforest.owo.ui.container.ScrollContainer;
-import io.wispforest.owo.ui.core.Color;
-import io.wispforest.owo.ui.core.HorizontalAlignment;
-import io.wispforest.owo.ui.core.Insets;
-import io.wispforest.owo.ui.core.OwoUIAdapter;
-import io.wispforest.owo.ui.core.Sizing;
-import io.wispforest.owo.ui.core.Surface;
-import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
-import net.ledok.arenas_ld.screen.EquipmentScreen;
-import net.ledok.arenas_ld.screen.EquipmentScreenData;
-import net.ledok.arenas_ld.screen.EquipmentScreenHandler;
+import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.arenas_ld.screen.MobAttributesData;
 import net.ledok.arenas_ld.screen.MobAttributesScreen;
 import net.ledok.arenas_ld.screen.MobAttributesScreenHandler;
+import net.ledok.vectorlib.client.canvas.VectorCanvas;
+import net.ledok.vectorlib.client.canvas.layout.Align;
+import net.ledok.vectorlib.client.canvas.layout.Flex;
+import net.ledok.vectorlib.client.canvas.layout.Insets;
+import net.ledok.vectorlib.client.canvas.layout.Justify;
+import net.ledok.vectorlib.client.canvas.layout.Sizing;
+import net.ledok.vectorlib.client.canvas.widget.Button;
+import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
+import net.ledok.vectorlib.client.canvas.widget.TextField;
+import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
+import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.vectorlib.client.presentation.Placement;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 import java.util.function.IntFunction;
 
-public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawnerScreenHandler> {
+import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
+import static net.ledok.arenas_ld.screen.ArenasUi.BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_MID;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
+import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
+import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
 
-    private static final int BG         = 0xFF070E14;
-    private static final int PANEL      = 0xFF121922;
-    private static final int PANEL_2    = 0xFF0C1218;
-    private static final int HAIRLINE   = 0xFF283442;
-    private static final int HAIRLINE_HI= 0xFF3A4A5C;
-    private static final int ROW_BG     = 0xFF19222D;
-    private static final int ROW_BG_ALT = 0xFF16202A;
-    private static final int INK        = 0xFFE8EEF5;
-    private static final int INK_MID    = 0xFF9AA8B8;
-    private static final int INK_DIM    = 0xFF5F6E80;
-    private static final int WARN       = 0xFFF5B042;
-    private static final int ACCENT     = 0xFFA98BE8;
-    private static final int ACCENT_DARK= 0xFF6C4FB5;
-    private static final int DANGER     = 0xFFE8624A;
-    private static final int GOOD       = 0xFF86D36C;
+public class MobSpawnerScreen extends CanvasHandledScreen<MobSpawnerScreenHandler> {
 
     private static final int POS_ROW_HEIGHT = 20;
     private static final int POS_MAX_VISIBLE = 6;
 
-    private TextBoxComponent mobIdField;
-    private TextBoxComponent spawnCountField;
-    private TextBoxComponent waveField;
-    private FlowLayout positionsList;
-    private ScrollContainer<FlowLayout> positionsScroll;
-    private TextBoxComponent addXField;
-    private TextBoxComponent addYField;
-    private TextBoxComponent addZField;
+    /** The old subtle stepper-button renderer: PANEL_2 fill, ROW_BG on hover, HAIRLINE outline. */
+    private static final WidgetStyle STEP_STYLE = new WidgetStyle(
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(ROW_BG, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(ROW_BG, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
+            new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
+            INK, 0xFFFFFFFF, INK_DIM, INK_DIM, ACCENT, 0x80A98BE8,
+            16, 16, 4, true);
+
+    private IdSuggestionDropdown.Field mobIdField;
+    private TextField spawnCountField;
+    private TextField waveField;
+    private Flex positionsList;
+    private ScrollPanel positionsScroll;
+    private TextField addXField;
+    private TextField addYField;
+    private TextField addZField;
 
     private int spawnCount;
     private int wave;
     private final List<BlockPos> spawnOffsets = new ArrayList<>();
 
     public MobSpawnerScreen(MobSpawnerScreenHandler handler, Inventory inventory, Component title) {
-        super(handler, inventory, title);
-        this.inventoryLabelY = 9999;
-        this.titleLabelY = 9999;
+        super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
+        canvas.theme(ArenasUi.THEME);
+        dimBackground(false);
+        fillWindow();
     }
 
     @Override
-    protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
-        return OwoUIAdapter.create(this, Containers::verticalFlow);
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // The old owo screen swallowed the inventory key entirely (close via × or Esc only).
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
+                && !(input.focusedNode() instanceof TextField)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    protected void build(FlowLayout rootComponent) {
-        rootComponent.surface(Surface.flat(BG));
-        rootComponent.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+    protected void onCanvasResized(float width, float height) {
+        buildAll();
+    }
+
+    private void buildAll() {
+        canvas.clear();
+        Flex root = canvas.add(Flex.column());
+        root.sizing(Sizing.fill(), Sizing.fill());
+        root.justify(Justify.CENTER).alignItems(Align.CENTER);
+        root.backgroundFill(BG);
 
         spawnCount = menu.getSpawnCount();
         wave = menu.getWave();
         spawnOffsets.clear();
         spawnOffsets.addAll(menu.getSpawnOffsets());
 
-        int shellWidth = Math.min(340, Math.max(260, this.width - 40));
+        float shellWidth = Math.min(340, Math.max(260, canvas.width() - 40));
 
-        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(shellWidth), Sizing.content());
-        shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
+        Flex shell = root.item(Flex.column());
+        shell.sizing(Sizing.fixed(shellWidth), Sizing.content());
+        shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
 
-        shell.child(buildHeader());
-        shell.child(buildContent());
+        shell.item(buildHeader());
+        shell.item(buildContent());
 
-        rootComponent.child(shell);
+        root.layoutIn(canvas.width(), canvas.height());
     }
 
-    private FlowLayout buildHeader() {
-        FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(42));
-        header.surface(Surface.flat(PANEL_2));
-        header.padding(Insets.of(6));
-        header.gap(8);
-        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+    private Flex buildHeader() {
+        Flex header = Flex.row().gap(8).padding(Insets.of(6)).alignItems(Align.CENTER);
+        header.sizing(Sizing.fill(), Sizing.fixed(42));
+        header.backgroundFill(PANEL_2);
 
-        FlowLayout mark = Containers.verticalFlow(Sizing.fixed(18), Sizing.fixed(18));
-        mark.surface(Surface.flat(WARN));
-        header.child(mark);
+        Flex mark = Flex.column();
+        mark.sizing(Sizing.fixed(18), Sizing.fixed(18));
+        mark.backgroundFill(WARN);
+        header.item(mark);
 
-        FlowLayout info = Containers.verticalFlow(Sizing.content(), Sizing.content());
-        info.gap(3);
+        Flex info = Flex.column().gap(3);
+        info.sizing(Sizing.content(), Sizing.content());
 
-        FlowLayout titleLine = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        titleLine.gap(8);
-        titleLine.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        LabelComponent titleLabel = Components.label(Component.translatable("gui.arenas_ld.mob_spawner.title"));
-        titleLabel.color(Color.ofArgb(INK));
-        titleLine.child(titleLabel);
-        titleLine.child(badge(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.op")), WARN));
-        info.child(titleLine);
+        Flex titleLine = Flex.row().gap(8).alignItems(Align.CENTER);
+        titleLine.sizing(Sizing.content(), Sizing.content());
+        titleLine.item(ArenasUi.text(Component.translatable("gui.arenas_ld.mob_spawner.title"), INK));
+        titleLine.item(badge(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.op")), WARN));
+        info.item(titleLine);
 
-        FlowLayout meta = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        meta.gap(8);
-        meta.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        meta.child(metaLabel("POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
-        info.child(meta);
+        Flex meta = Flex.row().gap(8).alignItems(Align.CENTER);
+        meta.sizing(Sizing.content(), Sizing.content());
+        meta.item(ArenasUi.text(Component.literal(
+            "POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()), INK_DIM));
+        info.item(meta);
 
-        header.child(info);
-        header.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
-
-        ButtonComponent close = smallButton(Component.literal("X"), b -> onClose());
-        close.sizing(Sizing.fixed(20), Sizing.fixed(16));
-        header.child(close);
+        header.item(info);
+        header.spacer();
+        header.item(ArenasUi.button(Component.literal("X"), 20, 16, this::onClose));
         return header;
     }
 
-    private FlowLayout buildContent() {
-        FlowLayout content = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        content.padding(Insets.of(10));
-        content.gap(8);
+    private Flex buildContent() {
+        Flex content = Flex.column().gap(8).padding(Insets.of(10));
+        content.sizing(Sizing.fill(), Sizing.content());
 
         // MOB ID
-        content.child(sectionCaption(tr("gui.arenas_ld.mob_spawner.ui.mob_id")));
-        content.child(buildMobIdSection());
+        content.item(sectionCaption(tr("gui.arenas_ld.mob_spawner.ui.mob_id")));
+        content.item(buildMobIdSection());
 
-        content.child(hairline());
+        content.item(ArenasUi.hairline());
 
         // SPAWN COUNT
-        content.child(sectionCaption(tr("gui.arenas_ld.mob_spawner.ui.spawn_settings")));
-        FlowLayout countRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        countRow.gap(8);
-        countRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        LabelComponent countCaption = Components.label(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.count")));
-        countCaption.color(Color.ofArgb(INK_MID));
-        countRow.child(countCaption);
-        countRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
-        countRow.child(buildCountStepper());
-        content.child(countRow);
+        content.item(sectionCaption(tr("gui.arenas_ld.mob_spawner.ui.spawn_settings")));
+        Flex countRow = Flex.row().gap(8).alignItems(Align.CENTER);
+        countRow.sizing(Sizing.fill(), Sizing.content());
+        countRow.item(ArenasUi.text(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.count")), INK_MID));
+        countRow.spacer();
+        countRow.item(buildCountStepper());
+        content.item(countRow);
 
-        FlowLayout waveRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        waveRow.gap(8);
-        waveRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        LabelComponent waveCaption = Components.label(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.wave")));
-        waveCaption.color(Color.ofArgb(INK_MID));
-        waveRow.child(waveCaption);
-        waveRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
-        waveRow.child(buildWaveStepper());
-        content.child(waveRow);
+        Flex waveRow = Flex.row().gap(8).alignItems(Align.CENTER);
+        waveRow.sizing(Sizing.fill(), Sizing.content());
+        waveRow.item(ArenasUi.text(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.wave")), INK_MID));
+        waveRow.spacer();
+        waveRow.item(buildWaveStepper());
+        content.item(waveRow);
 
-        content.child(hairline());
+        content.item(ArenasUi.hairline());
 
         // SPAWN POSITIONS
-        FlowLayout posHeaderRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        posHeaderRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        posHeaderRow.gap(8);
-        LabelComponent posCaption = Components.label(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.spawn_positions")));
-        posCaption.color(Color.ofArgb(INK_MID));
-        posHeaderRow.child(posCaption);
-        posHeaderRow.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
-        content.child(posHeaderRow);
+        Flex posHeaderRow = Flex.row().gap(8).alignItems(Align.CENTER);
+        posHeaderRow.sizing(Sizing.fill(), Sizing.content());
+        posHeaderRow.item(ArenasUi.text(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.spawn_positions")), INK_MID));
+        posHeaderRow.spacer();
+        content.item(posHeaderRow);
 
-        positionsList = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        positionsScroll = Containers.verticalScroll(Sizing.fill(100), Sizing.fixed(POS_ROW_HEIGHT), positionsList);
-        positionsScroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        positionsScroll.scrollbarThiccness(4);
-        positionsScroll.scrollStep(POS_ROW_HEIGHT);
+        positionsList = Flex.column();
+        positionsList.sizing(Sizing.fill(), Sizing.content());
+        positionsScroll = new ScrollPanel(100, POS_ROW_HEIGHT, positionsList);
+        positionsScroll.sizing(Sizing.fill(), Sizing.fixed(POS_ROW_HEIGHT));
+        positionsScroll.barWidth(4);
+        positionsScroll.wheelStep(POS_ROW_HEIGHT);
         rebuildPositionsList();
-        content.child(positionsScroll);
+        content.item(positionsScroll);
 
-        content.child(buildAddRow());
+        content.item(buildAddRow());
 
-        content.child(hairline());
+        content.item(ArenasUi.hairline());
 
         // ACTION BUTTONS
-        FlowLayout actions = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        ButtonComponent attrsBtn = Components.button(
-            Component.literal(tr("gui.arenas_ld.mob_spawner.ui.attributes")),
-            b -> openAttributesScreen()
-        );
-        attrsBtn.sizing(Sizing.fill(100), Sizing.fixed(20));
-        ButtonComponent equipBtn = Components.button(
-            Component.literal(tr("gui.arenas_ld.mob_spawner.ui.equipment")),
-            b -> openEquipmentScreen()
-        );
-        equipBtn.sizing(Sizing.fill(100), Sizing.fixed(20));
+        Flex actions = Flex.row();
+        actions.sizing(Sizing.fill(), Sizing.content());
 
-        FlowLayout leftCell = Containers.verticalFlow(Sizing.fill(50), Sizing.content());
-        leftCell.padding(Insets.of(0, 0, 0, 3));
-        leftCell.child(attrsBtn);
-        FlowLayout rightCell = Containers.verticalFlow(Sizing.fill(50), Sizing.content());
-        rightCell.padding(Insets.of(0, 0, 3, 0));
-        rightCell.child(equipBtn);
-        actions.child(leftCell);
-        actions.child(rightCell);
-        content.child(actions);
+        Button attrsBtn = ArenasUi.button(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.attributes")),
+            100, 20, this::openAttributesScreen);
+        attrsBtn.sizing(Sizing.fill(), Sizing.fixed(20));
+        Button equipBtn = ArenasUi.button(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.equipment")),
+            100, 20, this::openEquipmentScreen);
+        equipBtn.sizing(Sizing.fill(), Sizing.fixed(20));
+
+        Flex leftCell = Flex.column().padding(Insets.of(0, 3, 0, 0));
+        leftCell.sizing(Sizing.fill(0.5f), Sizing.content());
+        leftCell.item(attrsBtn);
+        Flex rightCell = Flex.column().padding(Insets.of(0, 0, 0, 3));
+        rightCell.sizing(Sizing.fill(0.5f), Sizing.content());
+        rightCell.item(equipBtn);
+        actions.item(leftCell);
+        actions.item(rightCell);
+        content.item(actions);
 
         return content;
     }
 
-    private FlowLayout buildCountStepper() {
-        FlowLayout stepper = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        stepper.gap(2);
-        stepper.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        stepper.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        stepper.padding(Insets.of(2, 4, 2, 4));
+    private Flex buildCountStepper() {
+        Flex stepper = Flex.row().gap(2).padding(Insets.of(2, 4, 4, 2)).alignItems(Align.CENTER);
+        stepper.sizing(Sizing.content(), Sizing.content());
+        stepper.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        ButtonComponent minus = stepBtn("−", b -> adjustCount(-1));
+        stepper.item(stepBtn("−", () -> adjustCount(-1)));
 
-        spawnCountField = Components.textBox(Sizing.fixed(30), String.valueOf(spawnCount));
-        spawnCountField.verticalSizing(Sizing.fixed(16));
+        spawnCountField = ArenasUi.textField(30, String.valueOf(spawnCount), 32);
+        spawnCountField.size(30, 16);
         // 0 is a legal stored value ("unconfigured", spawns a single mob at the spawner).
-        spawnCountField.onChanged().subscribe(value -> {
+        spawnCountField.onChange(value -> {
             try {
                 spawnCount = Math.max(0, Math.min(64, Integer.parseInt(value.trim())));
             } catch (NumberFormatException ignored) {
             }
         });
+        stepper.item(spawnCountField);
 
-        ButtonComponent plus = stepBtn("+", b -> adjustCount(1));
-
-        stepper.child(minus);
-        stepper.child(spawnCountField);
-        stepper.child(plus);
+        stepper.item(stepBtn("+", () -> adjustCount(1)));
         return stepper;
     }
 
@@ -256,29 +248,24 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
         }
     }
 
-    private FlowLayout buildWaveStepper() {
-        FlowLayout stepper = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        stepper.gap(2);
-        stepper.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        stepper.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        stepper.padding(Insets.of(2, 4, 2, 4));
+    private Flex buildWaveStepper() {
+        Flex stepper = Flex.row().gap(2).padding(Insets.of(2, 4, 4, 2)).alignItems(Align.CENTER);
+        stepper.sizing(Sizing.content(), Sizing.content());
+        stepper.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        ButtonComponent minus = stepBtn("−", b -> adjustWave(-1));
+        stepper.item(stepBtn("−", () -> adjustWave(-1)));
 
-        waveField = Components.textBox(Sizing.fixed(30), String.valueOf(wave));
-        waveField.verticalSizing(Sizing.fixed(16));
-        waveField.onChanged().subscribe(value -> {
+        waveField = ArenasUi.textField(30, String.valueOf(wave), 32);
+        waveField.size(30, 16);
+        waveField.onChange(value -> {
             try {
                 wave = Math.max(1, Math.min(10, Integer.parseInt(value.trim())));
             } catch (NumberFormatException ignored) {
             }
         });
+        stepper.item(waveField);
 
-        ButtonComponent plus = stepBtn("+", b -> adjustWave(1));
-
-        stepper.child(minus);
-        stepper.child(waveField);
-        stepper.child(plus);
+        stepper.item(stepBtn("+", () -> adjustWave(1)));
         return stepper;
     }
 
@@ -290,78 +277,61 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
     }
 
     private void rebuildPositionsList() {
-        positionsList.clearChildren();
+        positionsList.clear();
         if (spawnOffsets.isEmpty()) {
-            FlowLayout emptyRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(POS_ROW_HEIGHT));
-            emptyRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-            emptyRow.padding(Insets.of(0, 0, 6, 6));
-            LabelComponent empty = Components.label(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.no_positions")));
-            empty.color(Color.ofArgb(INK_DIM));
-            emptyRow.child(empty);
-            positionsList.child(emptyRow);
+            Flex emptyRow = Flex.row().padding(Insets.of(0, 6, 0, 6)).alignItems(Align.CENTER);
+            emptyRow.sizing(Sizing.fill(), Sizing.fixed(POS_ROW_HEIGHT));
+            emptyRow.item(ArenasUi.text(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.no_positions")), INK_DIM));
+            positionsList.item(emptyRow);
         } else {
             for (int i = 0; i < spawnOffsets.size(); i++) {
-                positionsList.child(buildPositionRow(i));
+                positionsList.item(buildPositionRow(i));
             }
         }
         if (positionsScroll != null) {
             int visibleRows = Math.min(Math.max(spawnOffsets.size(), 1), POS_MAX_VISIBLE);
-            positionsScroll.verticalSizing(Sizing.fixed(visibleRows * POS_ROW_HEIGHT));
+            positionsScroll.sizing(Sizing.fill(), Sizing.fixed(visibleRows * POS_ROW_HEIGHT));
         }
     }
 
-    private FlowLayout buildPositionRow(int index) {
+    private Flex buildPositionRow(int index) {
         BlockPos offset = spawnOffsets.get(index);
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(POS_ROW_HEIGHT));
-        row.surface(index % 2 == 0 ? Surface.flat(ROW_BG) : Surface.flat(ROW_BG_ALT));
-        row.padding(Insets.of(0, 0, 6, 6));
-        row.gap(6);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex row = Flex.row().gap(6).padding(Insets.of(0, 6, 0, 6)).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.fixed(POS_ROW_HEIGHT));
+        row.backgroundFill(index % 2 == 0 ? ROW_BG : ROW_BG_ALT);
 
         IntFunction<String> sign = x -> x >= 0 ? "+" + x : String.valueOf(x);
         String coordText = sign.apply(offset.getX()) + ", " + sign.apply(offset.getY()) + ", " + sign.apply(offset.getZ());
-        LabelComponent coordLabel = Components.label(Component.literal(coordText));
-        coordLabel.color(Color.ofArgb(INK_MID));
-        row.child(coordLabel);
+        row.item(ArenasUi.text(Component.literal(coordText), INK_MID));
 
-        row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.fixed(1)));
+        row.spacer();
 
         int capturedIndex = index;
-        ButtonComponent removeBtn = smallButton(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.remove")), b -> {
+        Component removeLabel = Component.literal(tr("gui.arenas_ld.mob_spawner.ui.remove"));
+        row.item(ArenasUi.button(removeLabel, Minecraft.getInstance().font.width(removeLabel) + 12, 16, () -> {
             spawnOffsets.remove(capturedIndex);
             rebuildPositionsList();
-        });
-        removeBtn.sizing(Sizing.content(), Sizing.fixed(16));
-        row.child(removeBtn);
+        }));
         return row;
     }
 
-    private FlowLayout buildAddRow() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.gap(4);
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        row.padding(Insets.of(4, 0, 0, 0));
+    private Flex buildAddRow() {
+        Flex row = Flex.row().gap(4).padding(Insets.of(4, 0, 0, 0)).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
 
-        LabelComponent xLbl = Components.label(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.pos_x")));
-        xLbl.color(Color.ofArgb(INK_DIM));
-        addXField = Components.textBox(Sizing.fixed(36), "0");
-        addXField.verticalSizing(Sizing.fixed(16));
+        addXField = ArenasUi.textField(36, "0", 32);
+        addXField.size(36, 16);
+        addYField = ArenasUi.textField(36, "0", 32);
+        addYField.size(36, 16);
+        addZField = ArenasUi.textField(36, "0", 32);
+        addZField.size(36, 16);
 
-        LabelComponent yLbl = Components.label(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.pos_y")));
-        yLbl.color(Color.ofArgb(INK_DIM));
-        addYField = Components.textBox(Sizing.fixed(36), "0");
-        addYField.verticalSizing(Sizing.fixed(16));
-
-        LabelComponent zLbl = Components.label(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.pos_z")));
-        zLbl.color(Color.ofArgb(INK_DIM));
-        addZField = Components.textBox(Sizing.fixed(36), "0");
-        addZField.verticalSizing(Sizing.fixed(16));
-
-        ButtonComponent addBtn = accentButton(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.add_position")), b -> {
+        Component addLabel = Component.literal(tr("gui.arenas_ld.mob_spawner.ui.add_position"));
+        Button addBtn = ArenasUi.button(addLabel, Minecraft.getInstance().font.width(addLabel) + 12, 16, () -> {
             try {
-                int x = Integer.parseInt(addXField.getValue().trim());
-                int y = Integer.parseInt(addYField.getValue().trim());
-                int z = Integer.parseInt(addZField.getValue().trim());
+                int x = Integer.parseInt(addXField.text().trim());
+                int y = Integer.parseInt(addYField.text().trim());
+                int z = Integer.parseInt(addZField.text().trim());
                 spawnOffsets.add(new BlockPos(x, y, z));
                 rebuildPositionsList();
                 addXField.text("0");
@@ -369,44 +339,41 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
                 addZField.text("0");
             } catch (NumberFormatException ignored) {}
         });
-        addBtn.sizing(Sizing.content(), Sizing.fixed(16));
 
-        row.child(xLbl);
-        row.child(addXField);
-        row.child(yLbl);
-        row.child(addYField);
-        row.child(zLbl);
-        row.child(addZField);
-        row.child(addBtn);
+        row.item(ArenasUi.text(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.pos_x")), INK_DIM));
+        row.item(addXField);
+        row.item(ArenasUi.text(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.pos_y")), INK_DIM));
+        row.item(addYField);
+        row.item(ArenasUi.text(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.pos_z")), INK_DIM));
+        row.item(addZField);
+        row.item(addBtn);
         return row;
     }
 
-    private FlowLayout buildMobIdSection() {
-        FlowLayout container = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        container.gap(0);
+    private Flex buildMobIdSection() {
+        Flex container = Flex.column().gap(0);
+        container.sizing(Sizing.fill(), Sizing.content());
 
-        FlowLayout fieldRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(22));
-        fieldRow.surface(Surface.flat(PANEL_2).and(Surface.outline(HAIRLINE)));
-        fieldRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        Flex fieldRow = Flex.row().alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
 
-        FlowLayout accent = Containers.verticalFlow(Sizing.fixed(2), Sizing.fill(100));
-        accent.surface(Surface.flat(ACCENT));
-        fieldRow.child(accent);
+        Flex accent = Flex.column();
+        accent.sizing(Sizing.fixed(2), Sizing.fill());
+        accent.backgroundFill(ACCENT);
+        fieldRow.item(accent);
 
-        mobIdField = IdSuggestionDropdown.textBox(Sizing.expand(), menu.getMobId(), 256);
-        mobIdField.verticalSizing(Sizing.fixed(18));
-        fieldRow.child(mobIdField);
+        mobIdField = IdSuggestionDropdown.textBox(100, menu.getMobId(), 256);
+        mobIdField.sizing(Sizing.expand(), Sizing.fixed(18));
+        fieldRow.item(mobIdField);
 
-        IdSuggestionDropdown dropdown = new IdSuggestionDropdown(
-            this.font, BuiltInRegistries.ENTITY_TYPE, mobIdField);
-        fieldRow.child(dropdown.chevron());
+        IdSuggestionDropdown dropdown = new IdSuggestionDropdown(BuiltInRegistries.ENTITY_TYPE, mobIdField);
+        fieldRow.item(dropdown.chevron());
 
-        ButtonComponent applyBtn = accentButton(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.apply")), b -> sendApply());
-        applyBtn.sizing(Sizing.fixed(64), Sizing.fixed(18));
-        fieldRow.child(applyBtn);
+        fieldRow.item(ArenasUi.button(Component.literal(tr("gui.arenas_ld.mob_spawner.ui.apply")), 64, 18, this::sendApply));
 
-        container.child(fieldRow);
-        container.child(dropdown.panel());
+        container.item(fieldRow);
+        container.item(dropdown.panel());
 
         return container;
     }
@@ -414,7 +381,7 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
     private void sendApply() {
         ClientPlayNetworking.send(new UpdateMobSpawnerEntityDefPayload(
             menu.getBlockPos(),
-            mobIdField.getValue(),
+            mobIdField.text(),
             spawnCount,
             wave,
             List.copyOf(spawnOffsets)
@@ -444,6 +411,7 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
         menu.applyData(data);
         if (mobIdField != null) {
             mobIdField.text(menu.getMobId());
+            mobIdField.notifyChanged();
         }
         spawnCount = menu.getSpawnCount();
         if (spawnCountField != null) {
@@ -460,76 +428,25 @@ public class MobSpawnerScreen extends BaseOwoHandledScreen<FlowLayout, MobSpawne
         }
     }
 
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) {
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-
     // ---- Helpers ----
 
-    private FlowLayout badge(Component text, int color) {
-        FlowLayout tag = Containers.horizontalFlow(Sizing.content(), Sizing.content());
-        tag.surface(Surface.flat((color & 0x00FFFFFF) | 0x22000000).and(Surface.outline((color & 0x00FFFFFF) | 0x55000000)));
-        tag.padding(Insets.of(4, 2, 4, 4));
-        tag.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
-        LabelComponent label = Components.label(text);
-        label.color(Color.ofArgb(color));
-        tag.child(label);
+    private Flex badge(Component text, int color) {
+        Flex tag = Flex.row().padding(Insets.of(4, 4, 2, 4));
+        tag.sizing(Sizing.content(), Sizing.content());
+        tag.justify(Justify.CENTER).alignItems(Align.CENTER);
+        tag.backgroundFill((color & 0x00FFFFFF) | 0x22000000, (color & 0x00FFFFFF) | 0x55000000, 1);
+        tag.item(ArenasUi.text(text, color));
         return tag;
     }
 
-    private LabelComponent sectionCaption(String text) {
-        LabelComponent label = Components.label(Component.literal(text));
-        label.color(Color.ofArgb(INK_DIM));
-        return label;
+    private net.ledok.vectorlib.client.canvas.TextNode sectionCaption(String text) {
+        return ArenasUi.text(Component.literal(text), INK_DIM);
     }
 
-    private FlowLayout hairline() {
-        FlowLayout line = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(1));
-        line.surface(Surface.flat(HAIRLINE));
-        return line;
-    }
-
-    private ButtonComponent smallButton(Component text, Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text, action);
-        button.sizing(Sizing.content(), Sizing.fixed(18));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.active() ? (rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK) : PANEL;
-            int border = rendered.active() ? ACCENT : HAIRLINE;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), border);
-        });
+    private Button stepBtn(String glyph, Runnable action) {
+        Button button = new Button(16, 16, Component.literal(glyph), action);
+        button.style(STEP_STYLE);
         return button;
-    }
-
-    private ButtonComponent accentButton(Component text, Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(text, action);
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), ACCENT);
-        });
-        return button;
-    }
-
-    private ButtonComponent stepBtn(String glyph, Consumer<ButtonComponent> action) {
-        ButtonComponent button = Components.button(Component.literal(glyph), action);
-        button.sizing(Sizing.fixed(16), Sizing.fixed(16));
-        button.renderer((context, rendered, delta) -> {
-            int fill = rendered.isHoveredOrFocused() ? ROW_BG : PANEL_2;
-            context.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            context.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), HAIRLINE);
-        });
-        return button;
-    }
-
-    private LabelComponent metaLabel(String text) {
-        LabelComponent label = Components.label(Component.literal(text));
-        label.color(Color.ofArgb(INK_DIM));
-        return label;
     }
 
     private String tr(String key) {

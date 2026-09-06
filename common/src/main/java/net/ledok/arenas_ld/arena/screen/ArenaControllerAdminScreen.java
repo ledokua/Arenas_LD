@@ -1,20 +1,5 @@
 package net.ledok.arenas_ld.arena.screen;
 
-import io.wispforest.owo.ui.base.BaseOwoHandledScreen;
-import io.wispforest.owo.ui.component.ButtonComponent;
-import io.wispforest.owo.ui.component.Components;
-import io.wispforest.owo.ui.component.LabelComponent;
-import io.wispforest.owo.ui.component.TextBoxComponent;
-import io.wispforest.owo.ui.container.Containers;
-import io.wispforest.owo.ui.container.FlowLayout;
-import io.wispforest.owo.ui.container.ScrollContainer;
-import io.wispforest.owo.ui.core.Color;
-import io.wispforest.owo.ui.core.HorizontalAlignment;
-import io.wispforest.owo.ui.core.Insets;
-import io.wispforest.owo.ui.core.OwoUIAdapter;
-import io.wispforest.owo.ui.core.Sizing;
-import io.wispforest.owo.ui.core.Surface;
-import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.arena.packet.ArenaAdminSetBoolPayload;
@@ -23,44 +8,58 @@ import net.ledok.arenas_ld.arena.packet.ArenaMoveInstancePayload;
 import net.ledok.arenas_ld.arena.packet.ArenaRemoveInstancePayload;
 import net.ledok.arenas_ld.arena.packet.ArenaSetRewardCurvePayload;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
+import net.ledok.arenas_ld.screen.ArenasUi;
+import net.ledok.vectorlib.client.canvas.VectorCanvas;
+import net.ledok.vectorlib.client.canvas.layout.Align;
+import net.ledok.vectorlib.client.canvas.layout.Flex;
+import net.ledok.vectorlib.client.canvas.layout.Insets;
+import net.ledok.vectorlib.client.canvas.layout.Justify;
+import net.ledok.vectorlib.client.canvas.layout.Sizing;
+import net.ledok.vectorlib.client.canvas.widget.Button;
+import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
+import net.ledok.vectorlib.client.canvas.widget.TextField;
+import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
+
+import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
+import static net.ledok.arenas_ld.screen.ArenasUi.BG;
+import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
+import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK;
+import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
+import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
+import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 
 /** Admin/config view for the arena controller. Reads the client-synced controller; edits via packets. */
-public class ArenaControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout, ArenaControllerAdminScreenHandler> {
-    private static final int BG = 0xFF070E14, PANEL = 0xFF121922, PANEL_2 = 0xFF0C1218;
-    private static final int HAIRLINE = 0xFF283442, HAIRLINE_HI = 0xFF3A4A5C, ROW_BG = 0xFF19222D;
-    private static final int INK = 0xFFE8EEF5, INK_DIM = 0xFF5F6E80, ACCENT = 0xFFA98BE8, ACCENT_DARK = 0xFF6C4FB5, DANGER = 0xFFE8624A;
-
+public class ArenaControllerAdminScreen extends CanvasHandledScreen<ArenaControllerAdminScreenHandler> {
     private final BlockPos pos;
-    private FlowLayout dynamicArea;
-    private final Map<String, TextBoxComponent> intFields = new LinkedHashMap<>();
-    private TextBoxComponent currencyBase, currencyExp, xpBase, xpExp;
+    private Flex dynamicArea;
+    private final Map<String, TextField> intFields = new LinkedHashMap<>();
+    private TextField currencyBase, currencyExp, xpBase, xpExp;
     private int lastInstanceSig = Integer.MIN_VALUE;
 
     public ArenaControllerAdminScreen(ArenaControllerAdminScreenHandler handler, Inventory inventory, Component title) {
-        super(handler, inventory, title);
+        super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         this.pos = handler.getBlockPos();
-        this.titleLabelY = 9999;
-        this.inventoryLabelY = 9999;
+        canvas.theme(ArenasUi.THEME);
+        dimBackground(false);
+        fillWindow();
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)) return true;
+        // The old owo screen swallowed the inventory key entirely (close via × or Esc only).
+        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
+                && !(input.focusedNode() instanceof TextField)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
-        return OwoUIAdapter.create(this, Containers::verticalFlow);
     }
 
     private ArenaControllerBlockEntity controller() {
@@ -68,77 +67,82 @@ public class ArenaControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout,
     }
 
     @Override
-    protected void build(FlowLayout root) {
-        root.surface(Surface.flat(BG));
-        root.alignment(HorizontalAlignment.CENTER, VerticalAlignment.CENTER);
+    protected void onCanvasResized(float width, float height) {
+        buildAll();
+    }
 
-        int w = Math.max(480, Math.min(620, this.width - 24));
-        int h = Math.max(300, this.height - 24);
-        FlowLayout shell = Containers.verticalFlow(Sizing.fixed(w), Sizing.fixed(h));
-        shell.surface(Surface.flat(PANEL).and(Surface.outline(HAIRLINE_HI)));
-        shell.child(header());
+    private void buildAll() {
+        canvas.clear();
+        intFields.clear();
+        Flex root = canvas.add(Flex.column());
+        root.sizing(Sizing.fill(), Sizing.fill());
+        root.justify(Justify.CENTER).alignItems(Align.CENTER);
+        root.backgroundFill(BG);
 
-        FlowLayout content = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        content.padding(Insets.of(10));
-        content.gap(6);
+        float w = Math.max(480, Math.min(620, canvas.width() - 24));
+        float h = Math.max(300, canvas.height() - 24);
+        Flex shell = root.item(Flex.column());
+        shell.sizing(Sizing.fixed(w), Sizing.fixed(h));
+        shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
+        shell.item(header());
+
+        Flex content = Flex.column().gap(6).padding(Insets.of(10));
+        content.sizing(Sizing.fill(), Sizing.content());
         ArenaControllerBlockEntity c = controller();
         if (c == null) {
-            content.child(text(Component.translatable("gui.arenas_ld.arena.not_loaded"), DANGER));
+            content.item(ArenasUi.text(Component.translatable("gui.arenas_ld.arena.not_loaded"), DANGER));
         } else {
-            content.child(buildSettings(c));
-            dynamicArea = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-            dynamicArea.gap(4);
-            content.child(dynamicArea);
+            content.item(buildSettings(c));
+            dynamicArea = content.item(Flex.column().gap(4));
+            dynamicArea.sizing(Sizing.fill(), Sizing.content());
         }
-        ScrollContainer<FlowLayout> scroll = Containers.verticalScroll(Sizing.fill(100), Sizing.expand(), content);
-        scroll.surface(Surface.flat(PANEL));
-        scroll.scrollbar(ScrollContainer.Scrollbar.vanillaFlat());
-        shell.child(scroll);
-        root.child(shell);
+        ScrollPanel scroll = new ScrollPanel(100, 100, content);
+        scroll.sizing(Sizing.fill(), Sizing.expand());
+        shell.item(scroll);
 
+        root.layoutIn(canvas.width(), canvas.height());
         rebuildDynamic();
     }
 
     @Override
-    public void render(net.minecraft.client.gui.GuiGraphics ctx, int mouseX, int mouseY, float delta) {
+    protected void onCanvasFrame(float partialTick) {
         ArenaControllerBlockEntity c = controller();
         int sig = c == null ? 0 : c.getInstances().size() * 31 + c.getLeaderboard().size();
         if (sig != lastInstanceSig) rebuildDynamic();
-        super.render(ctx, mouseX, mouseY, delta);
     }
 
-    private FlowLayout buildSettings(ArenaControllerBlockEntity c) {
-        FlowLayout box = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        box.gap(4);
-        box.child(sectionHeader(Component.translatable("gui.arenas_ld.arena.settings")));
-        box.child(intField("maxPartySize", Component.translatable("gui.arenas_ld.arena.max_party"), c.getMaxPartySize()));
-        box.child(intField("maxWave", Component.translatable("gui.arenas_ld.arena.max_wave"), c.getMaxWave()));
-        box.child(intField("closeTimer", Component.translatable("gui.arenas_ld.arena.close_timer_seconds"), c.getCloseTimerSeconds()));
-        box.child(intField("cooldown", Component.translatable("gui.arenas_ld.arena.cooldown_ticks"), c.getCooldownTicks()));
-        box.child(intField("respawnTime", Component.translatable("gui.arenas_ld.arena.respawn_ticks"), c.getRespawnTimeTicks()));
-        box.child(intField("inviteExpiry", Component.translatable("gui.arenas_ld.arena.invite_expiry_ticks"), c.getInviteExpiryTicks()));
-        box.child(intField("deathPenalty", Component.translatable("gui.arenas_ld.arena.death_penalty_ticks"), c.getDeathTimePenaltyTicks()));
-        box.child(intField("hpScalePct", Component.translatable("gui.arenas_ld.arena.hp_scale_pct"), (int) Math.round(c.getHpScalePerPlayer() * 100.0)));
-        box.child(intField("hpWavePct", Component.translatable("gui.arenas_ld.arena.hp_wave_pct"), (int) Math.round(c.getHpScalePerWave() * 100.0)));
+    private Flex buildSettings(ArenaControllerBlockEntity c) {
+        Flex box = Flex.column().gap(4);
+        box.sizing(Sizing.fill(), Sizing.content());
+        box.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.settings")));
+        box.item(intField("maxPartySize", Component.translatable("gui.arenas_ld.arena.max_party"), c.getMaxPartySize()));
+        box.item(intField("maxWave", Component.translatable("gui.arenas_ld.arena.max_wave"), c.getMaxWave()));
+        box.item(intField("closeTimer", Component.translatable("gui.arenas_ld.arena.close_timer_seconds"), c.getCloseTimerSeconds()));
+        box.item(intField("cooldown", Component.translatable("gui.arenas_ld.arena.cooldown_ticks"), c.getCooldownTicks()));
+        box.item(intField("respawnTime", Component.translatable("gui.arenas_ld.arena.respawn_ticks"), c.getRespawnTimeTicks()));
+        box.item(intField("inviteExpiry", Component.translatable("gui.arenas_ld.arena.invite_expiry_ticks"), c.getInviteExpiryTicks()));
+        box.item(intField("deathPenalty", Component.translatable("gui.arenas_ld.arena.death_penalty_ticks"), c.getDeathTimePenaltyTicks()));
+        box.item(intField("hpScalePct", Component.translatable("gui.arenas_ld.arena.hp_scale_pct"), (int) Math.round(c.getHpScalePerPlayer() * 100.0)));
+        box.item(intField("hpWavePct", Component.translatable("gui.arenas_ld.arena.hp_wave_pct"), (int) Math.round(c.getHpScalePerWave() * 100.0)));
 
-        box.child(spacer(4));
-        box.child(sectionHeader(Component.translatable("gui.arenas_ld.arena.reward_curve")));
-        FlowLayout curveRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        curveRow.gap(6);
+        box.item(ArenasUi.spacer(4));
+        box.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.reward_curve")));
+        Flex curveRow = Flex.row().gap(6);
+        curveRow.sizing(Sizing.fill(), Sizing.content());
         currencyBase = labeledBox(curveRow, Component.literal("$ base"), str(c.getRewardCurrencyBase()));
         currencyExp = labeledBox(curveRow, Component.literal("$ exp"), str(c.getRewardCurrencyExp()));
         xpBase = labeledBox(curveRow, Component.literal("xp base"), str(c.getRewardXpBase()));
         xpExp = labeledBox(curveRow, Component.literal("xp exp"), str(c.getRewardXpExp()));
-        box.child(curveRow);
+        box.item(curveRow);
 
-        box.child(spacer(4));
-        FlowLayout buttons = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        buttons.gap(6);
-        buttons.child(button(Component.translatable("gui.arenas_ld.save"), b -> saveSettings()));
+        box.item(ArenasUi.spacer(4));
+        Flex buttons = Flex.row().gap(6);
+        buttons.sizing(Sizing.fill(), Sizing.content());
+        buttons.item(ArenasUi.button(Component.translatable("gui.arenas_ld.save"), this::saveSettings));
         boolean inbox = c.isLootViaInbox();
-        buttons.child(button(Component.translatable("gui.arenas_ld.arena.loot_via_inbox", inbox ? "ON" : "OFF"),
-            b -> ClientPlayNetworking.send(new ArenaAdminSetBoolPayload(pos, "lootViaInbox", !inbox))));
-        box.child(buttons);
+        buttons.item(ArenasUi.button(Component.translatable("gui.arenas_ld.arena.loot_via_inbox", inbox ? "ON" : "OFF"),
+            () -> ClientPlayNetworking.send(new ArenaAdminSetBoolPayload(pos, "lootViaInbox", !inbox))));
+        box.item(buttons);
         return box;
     }
 
@@ -147,47 +151,41 @@ public class ArenaControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout,
         ArenaControllerBlockEntity c = controller();
         if (c == null) return;
         lastInstanceSig = c.getInstances().size() * 31 + c.getLeaderboard().size();
-        dynamicArea.clearChildren();
+        dynamicArea.clear();
 
-        dynamicArea.child(spacer(4));
-        dynamicArea.child(sectionHeader(Component.translatable("gui.arenas_ld.arena.instances")));
+        dynamicArea.item(ArenasUi.spacer(4));
+        dynamicArea.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.instances")));
         List<ArenaControllerBlockEntity.ArenaInstanceState> instances = c.getInstances();
         if (instances.isEmpty()) {
-            dynamicArea.child(text(Component.translatable("gui.arenas_ld.arena.no_instances"), INK_DIM));
+            dynamicArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.arena.no_instances"), INK_DIM));
         }
         for (int i = 0; i < instances.size(); i++) {
             ArenaControllerBlockEntity.ArenaInstanceState inst = instances.get(i);
             int idx = i;
-            FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(20));
-            row.surface(Surface.flat(ROW_BG));
-            row.padding(Insets.of(2, 2, 6, 6));
-            row.gap(4);
-            row.verticalAlignment(VerticalAlignment.CENTER);
+            Flex row = Flex.row().gap(4).padding(Insets.of(2, 6, 2, 6)).alignItems(Align.CENTER);
+            row.sizing(Sizing.fill(), Sizing.fixed(20));
+            row.backgroundFill(ROW_BG);
             BlockPos sp = inst.spawnerPos();
-            row.child(text(Component.literal(sp.toShortString() + "  " + inst.status().name()), INK));
-            row.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-            ButtonComponent up = button(Component.literal("▲"), b -> ClientPlayNetworking.send(new ArenaMoveInstancePayload(pos, idx, idx - 1)));
-            up.sizing(Sizing.fixed(18), Sizing.fixed(16));
-            row.child(up);
-            ButtonComponent down = button(Component.literal("▼"), b -> ClientPlayNetworking.send(new ArenaMoveInstancePayload(pos, idx, idx + 1)));
-            down.sizing(Sizing.fixed(18), Sizing.fixed(16));
-            row.child(down);
-            ButtonComponent rm = button(Component.literal("✕"), b -> ClientPlayNetworking.send(
-                new ArenaRemoveInstancePayload(pos, sp, inst.dimension().location().toString())));
-            rm.sizing(Sizing.fixed(18), Sizing.fixed(16));
-            row.child(rm);
-            dynamicArea.child(row);
+            row.item(ArenasUi.text(Component.literal(sp.toShortString() + "  " + inst.status().name()), INK));
+            row.spacer();
+            row.item(ArenasUi.button(Component.literal("▲"), 18, 16,
+                () -> ClientPlayNetworking.send(new ArenaMoveInstancePayload(pos, idx, idx - 1))));
+            row.item(ArenasUi.button(Component.literal("▼"), 18, 16,
+                () -> ClientPlayNetworking.send(new ArenaMoveInstancePayload(pos, idx, idx + 1))));
+            row.item(ArenasUi.button(Component.literal("✕"), 18, 16,
+                () -> ClientPlayNetworking.send(new ArenaRemoveInstancePayload(pos, sp, inst.dimension().location().toString()))));
+            dynamicArea.item(row);
         }
 
-        dynamicArea.child(spacer(4));
-        dynamicArea.child(sectionHeader(Component.translatable("gui.arenas_ld.arena.leaderboard")));
+        dynamicArea.item(ArenasUi.spacer(4));
+        dynamicArea.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.leaderboard")));
         List<LeaderboardEntry> board = c.getLeaderboard();
         if (board.isEmpty()) {
-            dynamicArea.child(text(Component.translatable("gui.arenas_ld.arena.no_scores"), INK_DIM));
+            dynamicArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.arena.no_scores"), INK_DIM));
         }
         int rank = 1;
         for (LeaderboardEntry e : board) {
-            dynamicArea.child(text(Component.literal((rank++) + ". " + e.playerName()
+            dynamicArea.item(ArenasUi.text(Component.literal((rank++) + ". " + e.playerName()
                 + " — " + Component.translatable("gui.arenas_ld.arena.wave_n", e.timeSeconds()).getString()), INK));
         }
     }
@@ -195,89 +193,52 @@ public class ArenaControllerAdminScreen extends BaseOwoHandledScreen<FlowLayout,
     private void saveSettings() {
         intFields.forEach((key, field) -> {
             try {
-                ClientPlayNetworking.send(new ArenaAdminSetIntPayload(pos, key, Integer.parseInt(field.getValue().trim())));
+                ClientPlayNetworking.send(new ArenaAdminSetIntPayload(pos, key, Integer.parseInt(field.text().trim())));
             } catch (NumberFormatException ignored) {}
         });
         try {
             ClientPlayNetworking.send(new ArenaSetRewardCurvePayload(pos,
-                Double.parseDouble(currencyBase.getValue().trim()),
-                Double.parseDouble(currencyExp.getValue().trim()),
-                Double.parseDouble(xpBase.getValue().trim()),
-                Double.parseDouble(xpExp.getValue().trim())));
+                Double.parseDouble(currencyBase.text().trim()),
+                Double.parseDouble(currencyExp.text().trim()),
+                Double.parseDouble(xpBase.text().trim()),
+                Double.parseDouble(xpExp.text().trim())));
         } catch (NumberFormatException ignored) {}
     }
 
     // ── UI helpers ────────────────────────────────────────────────────────────
-    private FlowLayout intField(String key, Component caption, int value) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(20));
-        row.gap(6);
-        row.verticalAlignment(VerticalAlignment.CENTER);
-        LabelComponent label = text(caption, INK_DIM);
-        label.horizontalSizing(Sizing.fixed(180));
-        row.child(label);
-        TextBoxComponent box = Components.textBox(Sizing.fixed(80), String.valueOf(value));
-        box.verticalSizing(Sizing.fixed(16));
+    private Flex intField(String key, Component caption, int value) {
+        Flex row = Flex.row().gap(6).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.fixed(20));
+        var label = ArenasUi.label(180, caption, INK_DIM);
+        label.sizing(Sizing.fixed(180), Sizing.content());
+        row.item(label);
+        TextField box = ArenasUi.textField(80, String.valueOf(value), 32).size(80, 16);
         intFields.put(key, box);
-        row.child(box);
+        row.item(box);
         return row;
     }
 
-    private TextBoxComponent labeledBox(FlowLayout parent, Component caption, String value) {
-        FlowLayout col = Containers.verticalFlow(Sizing.content(), Sizing.content());
-        col.gap(2);
-        col.child(text(caption, INK_DIM));
-        TextBoxComponent box = Components.textBox(Sizing.fixed(64), value);
-        box.verticalSizing(Sizing.fixed(16));
-        col.child(box);
-        parent.child(col);
+    private TextField labeledBox(Flex parent, Component caption, String value) {
+        Flex col = Flex.column().gap(2);
+        col.item(ArenasUi.text(caption, INK_DIM));
+        TextField box = ArenasUi.textField(64, value, 32).size(64, 16);
+        col.item(box);
+        parent.item(col);
         return box;
     }
 
-    private FlowLayout header() {
-        FlowLayout h = Containers.horizontalFlow(Sizing.fill(100), Sizing.fixed(36));
-        h.surface(Surface.flat(PANEL_2));
-        h.padding(Insets.of(8, 8, 10, 10));
-        h.gap(10);
-        h.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        h.child(text(Component.translatable("gui.arenas_ld.arena_controller_admin.title"), INK));
-        h.child(Containers.horizontalFlow(Sizing.expand(), Sizing.content()));
-        ButtonComponent close = button(Component.literal("×"), b -> onClose());
-        close.sizing(Sizing.fixed(22), Sizing.fixed(18));
-        h.child(close);
+    private Flex header() {
+        Flex h = Flex.row().gap(10).padding(Insets.of(8, 10, 8, 10)).alignItems(Align.CENTER);
+        h.sizing(Sizing.fill(), Sizing.fixed(36));
+        h.backgroundFill(PANEL_2);
+        h.item(ArenasUi.text(Component.translatable("gui.arenas_ld.arena_controller_admin.title"), INK));
+        h.spacer();
+        h.item(ArenasUi.button(Component.literal("×"), 22, 18, this::onClose));
         return h;
     }
 
     private static String str(double d) {
         if (d == Math.floor(d) && !Double.isInfinite(d)) return String.valueOf((long) d);
         return String.valueOf(d);
-    }
-
-    private FlowLayout sectionHeader(Component title) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.child(text(title, INK_DIM));
-        return row;
-    }
-
-    private FlowLayout spacer(int px) {
-        FlowLayout s = Containers.verticalFlow(Sizing.fill(100), Sizing.fixed(px));
-        s.surface(Surface.BLANK);
-        return s;
-    }
-
-    private LabelComponent text(Component c, int color) {
-        LabelComponent l = Components.label(c);
-        l.color(Color.ofArgb(color));
-        return l;
-    }
-
-    private ButtonComponent button(Component text, Consumer<ButtonComponent> action) {
-        ButtonComponent b = Components.button(text, action);
-        b.sizing(Sizing.content(), Sizing.fixed(18));
-        b.renderer((ctx, rendered, delta) -> {
-            int fill = rendered.isHoveredOrFocused() ? ACCENT : ACCENT_DARK;
-            ctx.fill(rendered.getX(), rendered.getY(), rendered.getX() + rendered.getWidth(), rendered.getY() + rendered.getHeight(), fill);
-            ctx.drawRectOutline(rendered.getX(), rendered.getY(), rendered.getWidth(), rendered.getHeight(), HAIRLINE);
-        });
-        return b;
     }
 }
