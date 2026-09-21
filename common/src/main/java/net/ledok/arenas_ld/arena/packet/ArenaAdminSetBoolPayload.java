@@ -7,7 +7,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-/** Admin bool setting. {@code key}: lootViaInbox. */
+/** Admin bool setting, keyed by {@code key}. No keys are currently in use. */
 public record ArenaAdminSetBoolPayload(BlockPos controllerPos, String key, boolean value) implements CustomPacketPayload {
     public static final Type<ArenaAdminSetBoolPayload> TYPE =
         new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "arena_admin_set_bool"));

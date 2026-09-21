@@ -63,7 +63,7 @@ processResources {
 
 jar {
     from commonSourceSet.output.classesDirs
-    from(rootProject.file('LICENSE')) {
+    from(rootProject.file('LICENSE.txt')) {
         rename { "${it}_${rootProject.archives_base_name}" }
     }
 }

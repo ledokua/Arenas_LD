@@ -2,9 +2,8 @@ package net.ledok.arenas_ld.registry;
 
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.util.LinkerDataComponent;
-import net.ledok.arenas_ld.util.LinkerModeDataComponent;
+import net.ledok.arenas_ld.util.DungeonToolDataComponent;
 import net.ledok.arenas_ld.util.LootBundleDataComponent;
-import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
 import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -15,8 +14,7 @@ import java.util.function.UnaryOperator;
 public class DataComponentRegistry {
 
     public static final DataComponentType<LinkerDataComponent> LINKER_DATA = register("linker_data", builder -> builder.persistent(LinkerDataComponent.CODEC).networkSynchronized(LinkerDataComponent.STREAM_CODEC));
-    public static final DataComponentType<LinkerModeDataComponent> LINKER_MODE_DATA = register("linker_mode_data", builder -> builder.persistent(LinkerModeDataComponent.CODEC).networkSynchronized(LinkerModeDataComponent.STREAM_CODEC));
-    public static final DataComponentType<SpawnerSelectionDataComponent> SPAWNER_SELECTION_DATA = register("spawner_selection_data", builder -> builder.persistent(SpawnerSelectionDataComponent.CODEC).networkSynchronized(SpawnerSelectionDataComponent.STREAM_CODEC));
+    public static final DataComponentType<DungeonToolDataComponent> DUNGEON_TOOL_DATA = register("dungeon_tool_data", builder -> builder.persistent(DungeonToolDataComponent.CODEC).networkSynchronized(DungeonToolDataComponent.STREAM_CODEC));
     public static final DataComponentType<LootBundleDataComponent> LOOT_BUNDLE_DATA = register("loot_bundle_data", builder -> builder.persistent(LootBundleDataComponent.CODEC).networkSynchronized(LootBundleDataComponent.STREAM_CODEC));
 
     private static <T> DataComponentType<T> register(String id, UnaryOperator<DataComponentType.Builder<T>> operator) {

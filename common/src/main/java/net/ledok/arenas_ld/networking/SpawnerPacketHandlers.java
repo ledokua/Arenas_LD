@@ -39,7 +39,6 @@ import net.ledok.arenas_ld.dungeon.packet.SetLobbyVisibilityPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetCloseTimerSecondsPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetCooldownTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetInviteExpiryTicksPayload;
-import net.ledok.arenas_ld.dungeon.packet.SetLootViaInboxPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetRespawnTimeTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetDeathTimePenaltyPayload;
@@ -50,13 +49,11 @@ import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
 import net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle;
-import net.ledok.arenas_ld.item.LinkerItem;
-import net.ledok.arenas_ld.item.SpawnerConfiguratorItem;
+import net.ledok.arenas_ld.item.DungeonToolItem;
 import net.ledok.arenas_ld.registry.DataComponentRegistry;
 import net.ledok.arenas_ld.util.AttributeProvider;
 import net.ledok.arenas_ld.util.EquipmentProvider;
-import net.ledok.arenas_ld.util.LinkerModeDataComponent;
-import net.ledok.arenas_ld.util.SpawnerSelectionDataComponent;
+import net.ledok.arenas_ld.util.DungeonToolDataComponent;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
@@ -120,32 +117,34 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(CycleLinkerModePayload.TYPE, (payload, context) -> {
+        ServerPlayNetworking.registerGlobalReceiver(CycleDungeonToolModePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ItemStack stack = context.player().getMainHandItem();
-                if (stack.getItem() instanceof LinkerItem) {
-                    LinkerModeDataComponent data = stack.getOrDefault(DataComponentRegistry.LINKER_MODE_DATA, LinkerModeDataComponent.DEFAULT);
-                    int currentMode = data.mode();
-                    int newMode = (currentMode + (payload.forward() ? 1 : -1) + LinkerItem.Mode.values().length) % LinkerItem.Mode.values().length;
-                    stack.set(DataComponentRegistry.LINKER_MODE_DATA, new LinkerModeDataComponent(newMode, data.mainSpawnerPos(), data.mainSpawnerDimension()));
+                if (stack.getItem() instanceof DungeonToolItem) {
+                    DungeonToolDataComponent data = stack.getOrDefault(DataComponentRegistry.DUNGEON_TOOL_DATA, DungeonToolDataComponent.DEFAULT);
+                    int modeCount = DungeonToolItem.Mode.values().length;
+                    int newMode = (data.mode() + (payload.forward() ? 1 : -1) + modeCount) % modeCount;
+                    stack.set(DataComponentRegistry.DUNGEON_TOOL_DATA, data.withMode(newMode));
 
-                    LinkerItem.Mode mode = LinkerItem.Mode.values()[newMode];
+                    DungeonToolItem.Mode mode = DungeonToolItem.Mode.values()[newMode];
                     context.player().sendSystemMessage(net.minecraft.network.chat.Component.translatable("message.arenas_ld.linker.mode_changed", mode.getName()));
                 }
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(CycleConfiguratorModePayload.TYPE, (payload, context) -> {
+        ServerPlayNetworking.registerGlobalReceiver(SetDungeonToolModePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
-                ItemStack stack = context.player().getMainHandItem();
-                if (stack.getItem() instanceof SpawnerConfiguratorItem) {
-                    SpawnerSelectionDataComponent data = stack.getOrDefault(DataComponentRegistry.SPAWNER_SELECTION_DATA, SpawnerSelectionDataComponent.DEFAULT);
-                    int currentMode = data.mode();
-                    int newMode = (currentMode + (payload.forward() ? 1 : -1) + SpawnerConfiguratorItem.Mode.values().length) % SpawnerConfiguratorItem.Mode.values().length;
-                    stack.set(DataComponentRegistry.SPAWNER_SELECTION_DATA, new SpawnerSelectionDataComponent(newMode, data.selectedSpawnerPos(), data.selectedSpawnerDimension()));
+                ItemStack stack = payload.mainHand()
+                    ? context.player().getMainHandItem()
+                    : context.player().getOffhandItem();
+                if (stack.getItem() instanceof DungeonToolItem) {
+                    int modeCount = DungeonToolItem.Mode.values().length;
+                    int newMode = Math.floorMod(payload.mode(), modeCount);
+                    DungeonToolDataComponent data = stack.getOrDefault(DataComponentRegistry.DUNGEON_TOOL_DATA, DungeonToolDataComponent.DEFAULT);
+                    stack.set(DataComponentRegistry.DUNGEON_TOOL_DATA, data.withMode(newMode));
 
-                    SpawnerConfiguratorItem.Mode mode = SpawnerConfiguratorItem.Mode.values()[newMode];
-                    context.player().sendSystemMessage(net.minecraft.network.chat.Component.translatable("message.arenas_ld.configurator.mode_changed", mode.getName()));
+                    DungeonToolItem.Mode mode = DungeonToolItem.Mode.values()[newMode];
+                    context.player().sendSystemMessage(net.minecraft.network.chat.Component.translatable("message.arenas_ld.linker.mode_changed", mode.getName()));
                 }
             });
         });
@@ -235,23 +234,6 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.RoomClearEntrancesPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!player.hasPermissions(2)) {
-                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
-                    return;
-                }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof RoomControllerBlockEntity room) {
-                    room.clearEntranceDoors();
-                    markDirtyAndSync(world, room);
-                    broadcastRoomControllerSnapshot(player, room);
-                }
-            });
-        });
-
         ServerPlayNetworking.registerGlobalReceiver(RoomClearRespawnPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
@@ -262,7 +244,7 @@ public final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof RoomControllerBlockEntity room) {
-                    room.setRespawnPos(null);
+                    room.clearRespawnPoints();
                     markDirtyAndSync(world, room);
                     broadcastRoomControllerSnapshot(player, room);
                 }
@@ -694,7 +676,7 @@ public final class SpawnerPacketHandlers {
                 Level world = player.level();
                 BlockEntity be = world.getBlockEntity(payload.controllerPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
-                    controller.moveInstance(payload.fromIndex(), payload.toIndex());
+                    controller.moveInstance(payload.instancePos(), payload.direction());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerAdminSnapshot(player, controller);
                 }
@@ -867,22 +849,6 @@ public final class SpawnerPacketHandlers {
                 BlockEntity be = world.getBlockEntity(payload.controllerPos());
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
                     controller.setTierConfig(payload.tier(), payload.config());
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
-                }
-            });
-        });
-
-        ServerPlayNetworking.registerGlobalReceiver(SetLootViaInboxPayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!player.hasPermissions(2)) {
-                    return;
-                }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
-                    controller.setLootViaInbox(payload.lootViaInbox());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerAdminSnapshot(player, controller);
                 }

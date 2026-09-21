@@ -35,7 +35,6 @@ import net.ledok.arenas_ld.dungeon.packet.SetLobbyVisibilityPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetCloseTimerSecondsPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetCooldownTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetInviteExpiryTicksPayload;
-import net.ledok.arenas_ld.dungeon.packet.SetLootViaInboxPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetRespawnTimeTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetDeathTimePenaltyPayload;
@@ -57,7 +56,6 @@ import net.ledok.arenas_ld.raid.packet.RaidSetCooldownTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetDeathTimePenaltyPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetLootViaInboxPayload;
 import net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload;
 import net.ledok.arenas_ld.raid.packet.RaidCreateLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
@@ -84,8 +82,8 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(UpdateAttributesPayload.TYPE, UpdateAttributesPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateEquipmentPayload.TYPE, UpdateEquipmentPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload.TYPE, net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(CycleLinkerModePayload.TYPE, CycleLinkerModePayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(CycleConfiguratorModePayload.TYPE, CycleConfiguratorModePayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(CycleDungeonToolModePayload.TYPE, CycleDungeonToolModePayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(SetDungeonToolModePayload.TYPE, SetDungeonToolModePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(RoomRemoveSpawnerPayload.TYPE, RoomRemoveSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomClearSpawnersPayload.TYPE, RoomClearSpawnersPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomClearDoorPayload.TYPE, RoomClearDoorPayload.STREAM_CODEC);
@@ -95,7 +93,6 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(RoomSetRewardPayload.TYPE, RoomSetRewardPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.dungeon.packet.RoomSetObjectivePayload.TYPE, net.ledok.arenas_ld.dungeon.packet.RoomSetObjectivePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.dungeon.packet.RoomClearProtectPosPayload.TYPE, net.ledok.arenas_ld.dungeon.packet.RoomClearProtectPosPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.dungeon.packet.RoomClearEntrancesPayload.TYPE, net.ledok.arenas_ld.dungeon.packet.RoomClearEntrancesPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload.TYPE, net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateMobSpawnerEntityDefPayload.TYPE, UpdateMobSpawnerEntityDefPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(UpdateDbsEntityDefPayload.TYPE, UpdateDbsEntityDefPayload.STREAM_CODEC);
@@ -128,7 +125,6 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(SetDeathTimePenaltyPayload.TYPE, SetDeathTimePenaltyPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetHpScalePerPlayerPayload.TYPE, SetHpScalePerPlayerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetInviteExpiryTicksPayload.TYPE, SetInviteExpiryTicksPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(SetLootViaInboxPayload.TYPE, SetLootViaInboxPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SetTierConfigPayload.TYPE, SetTierConfigPayload.STREAM_CODEC);
         // New raid packets
         PayloadTypeRegistry.playC2S().register(RaidCreateLobbyPayload.TYPE, RaidCreateLobbyPayload.STREAM_CODEC);
@@ -156,7 +152,6 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(RaidSetInviteExpiryTicksPayload.TYPE, RaidSetInviteExpiryTicksPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidSetTierConfigPayload.TYPE, RaidSetTierConfigPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RaidSetDeathTimePenaltyPayload.TYPE, RaidSetDeathTimePenaltyPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(RaidSetLootViaInboxPayload.TYPE, RaidSetLootViaInboxPayload.STREAM_CODEC);
 
         // ── Arena (reworked) C2S ────────────────────────────────────────────────
         PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.arena.packet.ArenaLobbyActionPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaLobbyActionPayload.STREAM_CODEC);
@@ -185,5 +180,7 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playS2C().register(DungeonBossSpawnerSnapshotPayload.TYPE, DungeonBossSpawnerSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(DungeonControllerAdminSnapshotPayload.TYPE, DungeonControllerAdminSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RaidControllerAdminSnapshotPayload.TYPE, RaidControllerAdminSnapshotPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(net.ledok.arenas_ld.packet.LootRewardPayload.TYPE, net.ledok.arenas_ld.packet.LootRewardPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(net.ledok.arenas_ld.packet.RunHudPayload.TYPE, net.ledok.arenas_ld.packet.RunHudPayload.STREAM_CODEC);
     }
 }

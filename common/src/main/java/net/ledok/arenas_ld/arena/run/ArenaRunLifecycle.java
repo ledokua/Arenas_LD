@@ -9,21 +9,17 @@ import net.ledok.arenas_ld.dungeon.run.DownedPlayer;
 import net.ledok.arenas_ld.dungeon.run.PlayerReturnPoint;
 import net.ledok.arenas_ld.dungeon.run.RunParticipant;
 import net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus;
-import net.ledok.arenas_ld.registry.DataComponentRegistry;
-import net.ledok.arenas_ld.registry.ItemRegistry;
-import net.ledok.arenas_ld.util.EconomyCompat;
 import net.ledok.arenas_ld.util.EntityEquipmentHelper;
-import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.ledok.arenas_ld.util.MobArenaMobData;
 import net.ledok.arenas_ld.util.MobArenaRewardData;
+import net.ledok.arenas_ld.util.RewardDelivery;
+import net.ledok.arenas_ld.util.RunHudSync;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.BossEvent;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -483,27 +479,30 @@ public final class ArenaRunLifecycle {
         List<ServerPlayer> players = onlineParticipants(world, run);
         if (players.isEmpty()) return;
         int multiplier = run.hardcoreEnabled() ? 2 : 1;
-        boolean viaInbox = controller.isLootViaInbox();
 
+        Map<UUID, List<ItemStack>> perPlayerLoot = new HashMap<>();
         for (MobArenaRewardData reward : valid) {
             for (int i = 0; i < reward.rolls * multiplier; i++) {
                 if (reward.perPlayer) {
-                    for (ServerPlayer player : players) giveLootBundle(player, reward.lootTableId, viaInbox);
+                    for (ServerPlayer player : players) {
+                        perPlayerLoot.computeIfAbsent(player.getUUID(), k -> new ArrayList<>())
+                            .addAll(RewardDelivery.rollLoot(world, reward.lootTableId, player, player.position()));
+                    }
                 } else {
+                    // Communal rolls keep the old behavior: scattered on the arena floor for anyone.
                     ServerPlayer player = players.get(world.random.nextInt(players.size()));
                     rollLootTableToWorld(world, run, reward.lootTableId, player);
                 }
             }
         }
-    }
 
-    private static void giveLootBundle(ServerPlayer player, String lootTableId, boolean viaInbox) {
-        ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
-        bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(lootTableId));
-        if (viaInbox) {
-            EconomyCompat.deliverItem(player.getUUID(), bundle, bundle.getCount(), "ARENA_LOOT");
-        } else if (!player.getInventory().add(bundle)) {
-            player.drop(bundle, false);
+        for (ServerPlayer player : players) {
+            List<ItemStack> stacks = perPlayerLoot.get(player.getUUID());
+            if (stacks == null || stacks.isEmpty()) continue;
+            List<net.ledok.arenas_ld.packet.LootRewardPayload.Entry> delivered =
+                RewardDelivery.giveStacks(player, stacks, "ARENA_LOOT");
+            RewardDelivery.notify(player, net.ledok.arenas_ld.packet.LootRewardPayload.Source.ARENA_WAVE,
+                delivered, 0L, 0);
         }
     }
 
@@ -610,7 +609,6 @@ public final class ArenaRunLifecycle {
             if (e != null) e.discard();
         }
         run.clearAliveMobs();
-        clearWaveBossBar(run);
         run.setPhase(ArenaPhase.CLOSING);
         int closeTicks = Math.max(0, controller.getCloseTimerSeconds() * 20);
         run.setInitialCloseTimerTicks(closeTicks);
@@ -619,6 +617,8 @@ public final class ArenaRunLifecycle {
             finalizeRun(world, controller, run);
             return;
         }
+        // Swap the wave clock for the close countdown right away, not on the next second tick.
+        RunHudSync.send(world, hudTargets(run), closeHudPayload(run));
         sendExitPrompt(world, run);
     }
 
@@ -662,6 +662,7 @@ public final class ArenaRunLifecycle {
                 run.clearDowned(uuid);
                 run.clearDisconnected(uuid);
                 net.ledok.arenas_ld.util.BusyStateCompat.clearBusy(uuid, BUSY_REASON);
+                RunHudSync.hide(player);
 
                 boolean anyRemaining = run.participants().values().stream()
                     .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
@@ -690,15 +691,19 @@ public final class ArenaRunLifecycle {
         boolean skillsLoaded = FabricLoader.getInstance().isModLoaded("puffish_skills");
 
         for (UUID uuid : run.lootEligibleUuids()) {
-            if (currency > 0) EconomyCompat.deliverCurrency(uuid, currency, "ARENA_REWARD");
-            if (xp > 0 && skillsLoaded) {
-                ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-                if (player != null) PuffishSkillsCompat.addExperience(player, xp);
-            }
+            RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "ARENA_REWARD");
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            if (player != null) {
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.arena.summary", waves, currency, xp));
+            if (player == null) {
+                continue;
             }
+            int grantedXp = 0;
+            if (xp > 0 && skillsLoaded) {
+                PuffishSkillsCompat.addExperience(player, xp);
+                grantedXp = xp;
+            }
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.arena.summary", waves, currency, xp));
+            RewardDelivery.notify(player, net.ledok.arenas_ld.packet.LootRewardPayload.Source.ARENA_SUMMARY,
+                java.util.List.of(), RewardDelivery.displayableCurrency(currency), grantedXp);
         }
     }
 
@@ -713,8 +718,7 @@ public final class ArenaRunLifecycle {
             if (p != null) names.add(p.playerName());
             restoreToReturnPoint(world, run, uuid);
         }
-        clearWaveBossBar(run);
-        clearCloseTimerBossBar(run);
+        RunHudSync.hide(world, hudTargets(run));
         run.setPhase(ArenaPhase.DONE);
         controller.onArenaEnded(run.spawnerPos(), run.currentWave(), names);
     }
@@ -819,75 +823,50 @@ public final class ArenaRunLifecycle {
 
     // ── Boss bars ──────────────────────────────────────────────────────────────
 
-    private static ServerBossEvent ensureWaveBossBar(ArenaRun run) {
-        ServerBossEvent bar = run.getWaveBossBar();
-        if (bar == null) {
-            bar = (ServerBossEvent) new ServerBossEvent(Component.literal("Arena"),
-                BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS)
-                .setDarkenScreen(false).setPlayBossMusic(false).setCreateWorldFog(false);
-            run.setWaveBossBar(bar);
-        }
-        return bar;
-    }
-
     private static void updateWaveBossBar(ServerLevel world, ArenaRun run, ArenaSpawnerBlockEntity spawner) {
-        ServerBossEvent bar = ensureWaveBossBar(run);
-        bar.setVisible(true);
-        syncBarViewers(world, run, bar);
+        Component label;
+        int remaining;
+        int total;
         if (run.prepareTicksRemaining() > 0) {
-            int total = Math.max(1, spawner.getPrepareTime() * 20);
-            bar.setName(Component.translatable("bossbar.arenas_ld.prepare_time", run.prepareTicksRemaining() / 20));
-            bar.setProgress(Math.min(1f, (float) run.prepareTicksRemaining() / total));
+            total = Math.max(1, spawner.getPrepareTime() * 20);
+            remaining = run.prepareTicksRemaining();
+            label = Component.translatable("hud.arenas_ld.arena.prepare");
         } else if (run.betweenWaveTicksRemaining() > 0) {
-            int total = Math.max(1, spawner.getTimeBetweenWaves() * 20);
-            bar.setName(Component.translatable("bossbar.arenas_ld.next_wave_in", run.currentWave() + 1, run.betweenWaveTicksRemaining() / 20));
-            bar.setProgress(Math.min(1f, (float) run.betweenWaveTicksRemaining() / total));
+            total = Math.max(1, spawner.getTimeBetweenWaves() * 20);
+            remaining = run.betweenWaveTicksRemaining();
+            label = Component.translatable("hud.arenas_ld.arena.next_wave", run.currentWave() + 1);
         } else {
-            int total = Math.max(1, (spawner.getWaveTimer() + Math.max(0, run.currentWave() - 1) * spawner.getAdditionalTime()) * 20);
-            bar.setName(Component.translatable("bossbar.arenas_ld.wave_info", run.currentWave(), run.waveTicksRemaining() / 20));
-            bar.setProgress(Math.min(1f, (float) run.waveTicksRemaining() / total));
+            total = Math.max(1, (spawner.getWaveTimer() + Math.max(0, run.currentWave() - 1) * spawner.getAdditionalTime()) * 20);
+            remaining = run.waveTicksRemaining();
+            label = Component.translatable("hud.arenas_ld.arena.wave", run.currentWave(), run.aliveMobs().size());
         }
+        RunHudSync.tickSend(world, hudTargets(run), new net.ledok.arenas_ld.packet.RunHudPayload(
+            net.ledok.arenas_ld.packet.RunHudPayload.Kind.RUN, label,
+            Math.max(0, remaining), total, run.hardcoreEnabled(),
+            net.ledok.arenas_ld.packet.RunHudPayload.NO_BOSS_HP));
     }
 
-    private static void clearWaveBossBar(ArenaRun run) {
-        ServerBossEvent bar = run.getWaveBossBar();
-        if (bar != null) {
-            bar.removeAllPlayers();
-            bar.setVisible(false);
-            run.setWaveBossBar(null);
-        }
+    private static net.ledok.arenas_ld.packet.RunHudPayload closeHudPayload(ArenaRun run) {
+        return new net.ledok.arenas_ld.packet.RunHudPayload(
+            net.ledok.arenas_ld.packet.RunHudPayload.Kind.CLOSE,
+            Component.translatable("hud.arenas_ld.close"),
+            Math.max(0, run.closeTimerTicks()), run.initialCloseTimerTicks(),
+            run.hardcoreEnabled(), net.ledok.arenas_ld.packet.RunHudPayload.NO_BOSS_HP);
     }
 
     private static void updateCloseTimerBossBar(ServerLevel world, ArenaRun run) {
-        ServerBossEvent bar = run.getCloseTimerBossBar();
-        if (bar == null) {
-            bar = new ServerBossEvent(Component.translatable("boss_bar.arenas_ld.closing"),
-                BossEvent.BossBarColor.BLUE, BossEvent.BossBarOverlay.PROGRESS);
-            run.setCloseTimerBossBar(bar);
-        }
-        bar.setVisible(true);
-        syncBarViewers(world, run, bar);
-        int total = Math.max(1, run.initialCloseTimerTicks());
-        bar.setProgress(Math.max(0f, Math.min(1f, (float) run.closeTimerTicks() / total)));
+        RunHudSync.tickSend(world, hudTargets(run), closeHudPayload(run));
     }
 
-    private static void clearCloseTimerBossBar(ArenaRun run) {
-        ServerBossEvent bar = run.getCloseTimerBossBar();
-        if (bar != null) {
-            bar.removeAllPlayers();
-            bar.setVisible(false);
-            run.setCloseTimerBossBar(null);
+    /** Online, non-removed participants — the audience for the run HUD bar. */
+    private static List<UUID> hudTargets(ArenaRun run) {
+        List<UUID> targets = new ArrayList<>();
+        for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
+            if (entry.getValue().status() != ParticipantStatus.REMOVED) {
+                targets.add(entry.getKey());
+            }
         }
-    }
-
-    private static void syncBarViewers(ServerLevel world, ArenaRun run, ServerBossEvent bar) {
-        for (UUID uuid : run.participants().keySet()) {
-            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            if (player != null) bar.addPlayer(player);
-        }
-        for (ServerPlayer viewer : new ArrayList<>(bar.getPlayers())) {
-            if (!run.participants().containsKey(viewer.getUUID())) bar.removePlayer(viewer);
-        }
+        return targets;
     }
 
     // ── Misc helpers ────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 package net.ledok.arenas_ld.screen;
 
+import net.ledok.vectorlib.client.canvas.CanvasInput;
 import net.ledok.vectorlib.client.canvas.Shapes;
 import net.ledok.vectorlib.client.canvas.TextNode;
 import net.ledok.vectorlib.client.canvas.Theme;
@@ -58,6 +59,19 @@ public final class ArenasUi {
             WIDGETS);
 
     /** Plain colored text node (no shadow), the ported {@code Components.label(...).color(...)}. */
+    /**
+     * Whether a screen's {@code keyPressed} should swallow this key. The inventory key never
+     * closes an admin screen (close via × or Esc only), even mid-edit: a focused field still gets
+     * the key first (a rebound inventory key must not eat a shortcut), but it is never passed on to
+     * the container screen, which would close on it. The letter itself arrives through charTyped.
+     */
+    public static boolean swallowsInventoryKey(CanvasInput input, int keyCode, int scanCode, int modifiers) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!mc.options.keyInventory.matches(keyCode, scanCode)) return false;
+        input.keyPressed(keyCode, scanCode, modifiers);
+        return true;
+    }
+
     public static TextNode text(Component text, int color) {
         return TextNode.of(text).color(color).shadow(false);
     }

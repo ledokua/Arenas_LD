@@ -123,7 +123,7 @@ public final class ArenaPacketHandlers {
                 if (!isAdmin(player)) return;
                 ArenaControllerBlockEntity c = findController(player, payload.controllerPos());
                 if (c == null) return;
-                if ("lootViaInbox".equals(payload.key())) c.setLootViaInbox(payload.value());
+                // No bool keys currently handled.
             }));
 
         ServerPlayNetworking.registerGlobalReceiver(ArenaSetRewardCurvePayload.TYPE, (payload, context) ->
@@ -139,7 +139,7 @@ public final class ArenaPacketHandlers {
                 ServerPlayer player = context.player();
                 if (!isAdmin(player)) return;
                 ArenaControllerBlockEntity c = findController(player, payload.controllerPos());
-                if (c != null) c.moveInstance(payload.from(), payload.to());
+                if (c != null) c.moveInstance(payload.spawnerPos(), parseDimension(payload.dimension()), payload.direction());
             }));
 
         ServerPlayNetworking.registerGlobalReceiver(ArenaRemoveInstancePayload.TYPE, (payload, context) ->

@@ -81,7 +81,6 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private int disconnectGraceTicks = DEFAULT_DISCONNECT_GRACE_TICKS;
     private int lobbyOfflineTimeoutTicks = DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS;
     private double hpScalePerPlayer = DEFAULT_HP_SCALE_PER_PLAYER;
-    private boolean lootViaInbox = false;
     private String dungeonName = "";
     private final Map<BlockPos, Integer> instanceCooldownTimers = new HashMap<>();
     private final Set<BlockPos> pendingInstanceRemovals = new HashSet<>();
@@ -152,18 +151,6 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
 
     public int getLobbyOfflineTimeoutTicks() {
         return lobbyOfflineTimeoutTicks;
-    }
-
-    public boolean isLootViaInbox() {
-        return lootViaInbox;
-    }
-
-    public void setLootViaInbox(boolean lootViaInbox) {
-        if (this.lootViaInbox == lootViaInbox) {
-            return;
-        }
-        this.lootViaInbox = lootViaInbox;
-        setChanged();
     }
 
     public String getDungeonName() {
@@ -339,11 +326,13 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         return removed;
     }
 
-    public boolean moveInstance(int from, int to) {
-        if (from < 0 || from >= instances.size() || to < 0 || to >= instances.size()) return false;
-        if (from == to) return false;
-        BlockPos moved = instances.remove(from);
-        instances.add(to, moved);
+    /** Move an instance one slot up ({@code direction < 0}) or down ({@code direction > 0}) within the pool. */
+    public boolean moveInstance(BlockPos pos, int direction) {
+        int from = instances.indexOf(pos);
+        if (from < 0) return false;
+        int to = from + Integer.signum(direction);
+        if (to == from || to < 0 || to >= instances.size()) return false;
+        instances.add(to, instances.remove(from));
         markDirtyAndSync();
         return true;
     }
@@ -1249,7 +1238,6 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save DungeonController at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
-        nbt.putBoolean("LootViaInbox", lootViaInbox);
         nbt.putString("DungeonName", dungeonName);
     }
 
@@ -1326,7 +1314,6 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         } else {
             initializeDefaults();
         }
-        lootViaInbox = nbt.getBoolean("LootViaInbox");
         dungeonName = nbt.getString("DungeonName");
     }
 

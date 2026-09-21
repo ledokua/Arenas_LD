@@ -11,24 +11,20 @@ import net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus;
 import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity.ControllerKey;
-import net.ledok.arenas_ld.registry.DataComponentRegistry;
-import net.ledok.arenas_ld.registry.ItemRegistry;
 import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.util.EntityEquipmentHelper;
-import net.ledok.arenas_ld.util.LootBundleDataComponent;
 import net.ledok.arenas_ld.util.PartyTeamStore;
 import net.ledok.arenas_ld.util.PendingRestoreStore;
 import net.ledok.arenas_ld.util.PlayerStatsStore;
+import net.ledok.arenas_ld.util.RunHudSync;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
-import net.minecraft.world.BossEvent;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -110,30 +106,34 @@ public final class RaidRunLifecycle {
     //  Raid timer boss bar (transient, lazily created)
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Returns the raid-timer boss bar bound to this run, creating it on first call.
-     * The bar is transient (not persisted) so it gets recreated after a server restart.
-     */
-    public static ServerBossEvent ensureRaidTimerBossBar(RaidRun run) {
-        ServerBossEvent bar = run.getRaidTimerBossBar();
-        if (bar == null) {
-            bar = new ServerBossEvent(
-                Component.translatable("gui.arenas_ld.raid_timer"),
-                BossEvent.BossBarColor.YELLOW,
-                BossEvent.BossBarOverlay.PROGRESS
-            );
-            run.setRaidTimerBossBar(bar);
-        }
-        return bar;
+    /** RUN-kind HUD payload for the raid timer: countdown + boss HP row. */
+    private static net.ledok.arenas_ld.packet.RunHudPayload raidHudPayload(RaidRun run, int bossHpPercent) {
+        int raidTimeTicks = Math.max(0, run.resolvedTierConfig().raidTimeSeconds() * 20);
+        return new net.ledok.arenas_ld.packet.RunHudPayload(
+            net.ledok.arenas_ld.packet.RunHudPayload.Kind.RUN,
+            Component.translatable("hud.arenas_ld.raid.objective"),
+            Math.max(0, run.timerTicks()), raidTimeTicks, run.hardcoreEnabled(),
+            Math.min(100, Math.max(0, bossHpPercent)));
     }
 
-    /** Hide the bar (if present) and detach it from the run. Safe when bar is already null. */
-    public static void clearRaidTimerBossBar(RaidRun run) {
-        ServerBossEvent bar = run.getRaidTimerBossBar();
-        if (bar == null) return;
-        bar.removeAllPlayers();
-        bar.setVisible(false);
-        run.setRaidTimerBossBar(null);
+    /** CLOSE-kind HUD payload for the post-battle "returning home" countdown. */
+    private static net.ledok.arenas_ld.packet.RunHudPayload closeHudPayload(RaidRun run) {
+        return new net.ledok.arenas_ld.packet.RunHudPayload(
+            net.ledok.arenas_ld.packet.RunHudPayload.Kind.CLOSE,
+            Component.translatable("hud.arenas_ld.close"),
+            Math.max(0, run.closeTimerTicks()), run.initialCloseTimerTicks(),
+            run.hardcoreEnabled(), net.ledok.arenas_ld.packet.RunHudPayload.NO_BOSS_HP);
+    }
+
+    /** Online, non-removed participants — the audience for the run HUD bar. */
+    private static List<UUID> hudTargets(RaidRun run) {
+        List<UUID> targets = new ArrayList<>();
+        for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
+            if (entry.getValue().status() != ParticipantStatus.REMOVED) {
+                targets.add(entry.getKey());
+            }
+        }
+        return targets;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -212,20 +212,14 @@ public final class RaidRunLifecycle {
         RaidTierConfig runTier = run.resolvedTierConfig();
         int raidTimeTicks = Math.max(0, runTier.raidTimeSeconds() * 20);
 
-        ServerBossEvent bossBar = ensureRaidTimerBossBar(run);
         for (ServerPlayer p : players) {
             run.addParticipant(new RunParticipant(
                 p.getUUID(), p.getGameProfile().getName(), ParticipantStatus.ACTIVE, now));
             run.setReturnPoint(p.getUUID(), PlayerReturnPoint.capture(p));
-            bossBar.addPlayer(p);
             PlayerStatsStore.get(world.getServer()).recordRunStart(p.getUUID(), PlayerStatsStore.Mode.RAID);
         }
         if (raidTimeTicks > 0) {
-            bossBar.setVisible(true);
-            bossBar.setProgress(1.0f);
-            bossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining", formatTime(raidTimeTicks / 20), 100));
-        } else {
-            bossBar.setVisible(false);
+            RunHudSync.send(world, hudTargets(run), raidHudPayload(run, 100));
         }
 
         if (boss instanceof LivingEntity livingBoss) {
@@ -395,41 +389,38 @@ public final class RaidRunLifecycle {
         }
 
         int xpReward = tierCfg.skillExperiencePerWin();
-        if (xpReward > 0) {
-            for (UUID uuid : rewardIds) {
-                ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-                if (player != null && FabricLoader.getInstance().isModLoaded("puffish_skills")) {
-                    PuffishSkillsCompat.addExperience(player, xpReward);
-                }
-            }
-        }
-
         long rewardPerPlayer = tierCfg.rewardCurrency();
         if (run.hardcoreEnabled()) {
             rewardPerPlayer *= 2;
         }
-        if (rewardPerPlayer > 0L) {
-            for (UUID uuid : rewardIds) {
-                net.ledok.arenas_ld.util.EconomyCompat.deliverCurrency(uuid, rewardPerPlayer, "RAID_REWARD");
-            }
-        }
-
         String perPlayerLoot = tierCfg.perPlayerLootTable();
-        if (!perPlayerLoot.isEmpty()) {
-            boolean viaInbox = controller.isLootViaInbox();
-            for (UUID uuid : rewardIds) {
-                ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-                ItemStack bundle = new ItemStack(ItemRegistry.LOOT_BUNDLE);
-                bundle.set(DataComponentRegistry.LOOT_BUNDLE_DATA, new LootBundleDataComponent(perPlayerLoot));
-                if (viaInbox) {
-                    net.ledok.arenas_ld.util.EconomyCompat.deliverItem(uuid, bundle, bundle.getCount(), "RAID_LOOT");
-                    continue;
-                }
-                if (player == null) continue;
-                if (!player.getInventory().add(bundle)) {
-                    player.drop(bundle, false);
-                }
+        boolean puffishLoaded = FabricLoader.getInstance().isModLoaded("puffish_skills");
+
+        for (UUID uuid : rewardIds) {
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            List<ItemStack> loot = net.ledok.arenas_ld.util.RewardDelivery.rollLoot(world, perPlayerLoot, player,
+                player != null ? player.position() : Vec3.atCenterOf(run.spawnerPos()));
+
+            if (player == null) {
+                // Offline but loot-eligible: the reward still lands via the economy inbox.
+                net.ledok.arenas_ld.util.RewardDelivery.giveStacksOffline(uuid, loot, "RAID_LOOT");
+                net.ledok.arenas_ld.util.RewardDelivery.giveCurrency(world.getServer(), uuid, rewardPerPlayer, "RAID_REWARD");
+                continue;
             }
+
+            List<net.ledok.arenas_ld.packet.LootRewardPayload.Entry> delivered =
+                net.ledok.arenas_ld.util.RewardDelivery.giveStacks(player, loot, "RAID_LOOT");
+            net.ledok.arenas_ld.util.RewardDelivery.giveCurrency(world.getServer(), uuid, rewardPerPlayer, "RAID_REWARD");
+
+            int grantedXp = 0;
+            if (xpReward > 0 && puffishLoaded) {
+                PuffishSkillsCompat.addExperience(player, xpReward);
+                grantedXp = xpReward;
+            }
+
+            net.ledok.arenas_ld.util.RewardDelivery.notify(player,
+                net.ledok.arenas_ld.packet.LootRewardPayload.Source.RAID_WIN, delivered,
+                net.ledok.arenas_ld.util.RewardDelivery.displayableCurrency(rewardPerPlayer), grantedXp);
         }
 
         enterClosing(world, controller, run);
@@ -464,11 +455,14 @@ public final class RaidRunLifecycle {
      * {@link #finalizeRun}. The raid-timer bar is swapped for a close-timer bar.
      */
     private static void enterClosing(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run) {
-        clearRaidTimerBossBar(run);
         run.setPhase(RaidPhase.CLOSING);
         int closeTicks = Math.max(0, controller.getCloseTimerSeconds() * 20);
         run.setInitialCloseTimerTicks(closeTicks);
         run.setCloseTimerTicks(closeTicks);
+        if (closeTicks > 0) {
+            // Swap the raid timer for the close countdown right away, not on the next second tick.
+            RunHudSync.send(world, hudTargets(run), closeHudPayload(run));
+        }
         // No grace configured, or nobody left to wait for (e.g. a hardcore wipe) — finalize now
         // instead of ticking through an empty close timer.
         boolean anyRemaining = run.participants().values().stream()
@@ -521,6 +515,7 @@ public final class RaidRunLifecycle {
                 run.clearDisconnected(uuid);
                 BusyStateCompat.clearBusy(uuid, BUSY_REASON);
                 removeFromPartyTeam(world, run, participant.playerName());
+                RunHudSync.hide(player);
 
                 boolean anyRemaining = run.participants().values().stream()
                     .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
@@ -542,37 +537,7 @@ public final class RaidRunLifecycle {
     }
 
     private static void updateCloseTimerBossBar(ServerLevel world, RaidRun run) {
-        ServerBossEvent bar = run.getCloseTimerBossBar();
-        if (bar == null) {
-            bar = new ServerBossEvent(
-                Component.translatable("boss_bar.arenas_ld.close_timer"),
-                BossEvent.BossBarColor.RED,
-                BossEvent.BossBarOverlay.PROGRESS
-            );
-            run.setCloseTimerBossBar(bar);
-        }
-        int totalTicks = run.initialCloseTimerTicks();
-        float progress = totalTicks > 0
-            ? Mth.clamp((float) run.closeTimerTicks() / (float) totalTicks, 0.0f, 1.0f)
-            : 0.0f;
-        bar.setProgress(progress);
-        bar.setVisible(true);
-
-        for (UUID uuid : run.participants().keySet()) {
-            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            if (player != null && !bar.getPlayers().contains(player)) {
-                bar.addPlayer(player);
-            }
-        }
-    }
-
-    /** Detach the close-timer bar (if present). Safe when null. */
-    private static void clearCloseTimerBossBar(RaidRun run) {
-        ServerBossEvent bar = run.getCloseTimerBossBar();
-        if (bar == null) return;
-        bar.removeAllPlayers();
-        bar.setVisible(false);
-        run.setCloseTimerBossBar(null);
+        RunHudSync.tickSend(world, hudTargets(run), closeHudPayload(run));
     }
 
     /** Teleport players back to their captured return points and tear down the run's transient state. */
@@ -583,8 +548,7 @@ public final class RaidRunLifecycle {
         }
         teardownPartyTeam(world, run);
 
-        clearRaidTimerBossBar(run);
-        clearCloseTimerBossBar(run);
+        RunHudSync.hide(world, hudTargets(run));
         run.setPhase(RaidPhase.DONE);
         RaidBossSpawnerBlockEntity spawner = spawnerFor(world, run);
         if (spawner != null) {
@@ -875,29 +839,11 @@ public final class RaidRunLifecycle {
     }
 
     private static void updateRaidTimerBossBar(ServerLevel world, RaidRun run, @Nullable Entity boss) {
-        ServerBossEvent bossBar = ensureRaidTimerBossBar(run);
         int raidTimeTicks = Math.max(0, run.resolvedTierConfig().raidTimeSeconds() * 20);
         if (raidTimeTicks <= 0) {
-            bossBar.setVisible(false);
-            return;
+            return; // untimed raid: no clock to show (matches the old hidden bar)
         }
-        if (!bossBar.isVisible()) {
-            bossBar.setVisible(true);
-        }
-        int remainingTicks = Math.max(0, run.timerTicks());
-        float progress = (float) remainingTicks / (float) raidTimeTicks;
-        bossBar.setProgress(Mth.clamp(progress, 0.0f, 1.0f));
-        // ServerBossEvent.setName only broadcasts when the component actually changes,
-        // so per-tick updates cost a packet only when the second or HP percent moves.
-        bossBar.setName(Component.translatable("gui.arenas_ld.raid_timer_remaining",
-            formatTime((remainingTicks + 19) / 20), bossHealthPercent(boss)));
-
-        for (UUID uuid : run.participants().keySet()) {
-            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            if (player != null && !bossBar.getPlayers().contains(player)) {
-                bossBar.addPlayer(player);
-            }
-        }
+        RunHudSync.tickSend(world, hudTargets(run), raidHudPayload(run, bossHealthPercent(boss)));
     }
 
     /** Death-time penalty from the controller, falling back to the legacy constant. */
@@ -917,8 +863,4 @@ public final class RaidRunLifecycle {
         return 100;
     }
 
-    private static String formatTime(int totalSeconds) {
-        int clamped = Math.max(0, totalSeconds);
-        return String.format("%02d:%02d", clamped / 60, clamped % 60);
-    }
 }

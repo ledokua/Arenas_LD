@@ -28,7 +28,6 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     private int respawnTimeTicks;
     private int deathTimePenaltyTicks;
     private double hpScalePerPlayer;
-    private boolean lootViaInbox;
     private String dungeonName;
     private Map<DifficultyTier, TierConfig> tierConfigs;
     private Map<BlockPos, DungeonControllerAdminData.InstanceRun> runningInstances;
@@ -48,7 +47,6 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.respawnTimeTicks = data.respawnTimeTicks();
         this.deathTimePenaltyTicks = data.deathTimePenaltyTicks();
         this.hpScalePerPlayer = data.hpScalePerPlayer();
-        this.lootViaInbox = data.lootViaInbox();
         this.dungeonName = data.dungeonName();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());
@@ -69,7 +67,6 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
             controller.getRespawnTimeTicks(),
             controller.getDeathTimePenaltyTicks(),
             controller.getHpScalePerPlayer(),
-            controller.isLootViaInbox(),
             controller.getDungeonName(),
             controller.getTierConfigs(),
             Map.of(),
@@ -107,7 +104,6 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     public int getRespawnTimeTicks() { return respawnTimeTicks; }
     public int getDeathTimePenaltyTicks() { return deathTimePenaltyTicks; }
     public double getHpScalePerPlayer() { return hpScalePerPlayer; }
-    public boolean isLootViaInbox() { return lootViaInbox; }
     public String getDungeonName() { return dungeonName; }
     public Map<DifficultyTier, TierConfig> getTierConfigs() { return tierConfigs; }
     public Map<BlockPos, DungeonControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
@@ -125,7 +121,6 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.respawnTimeTicks = data.respawnTimeTicks();
         this.deathTimePenaltyTicks = data.deathTimePenaltyTicks();
         this.hpScalePerPlayer = data.hpScalePerPlayer();
-        this.lootViaInbox = data.lootViaInbox();
         this.dungeonName = data.dungeonName();
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());

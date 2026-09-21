@@ -16,6 +16,7 @@ import net.ledok.arenas_ld.raid.screen.RaidControllerAdminScreen;
 import net.ledok.arenas_ld.raid.screen.RaidControllerScreen;
 import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.screen.*;
+import net.ledok.vectorlib.client.ClientEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.client.gui.screens.Screen;
@@ -58,6 +59,29 @@ public class ArenasLdClient {
 
         SelectionOverlayRenderer.register();
         SpawnTelegraphRenderer.register();
+
+        // RMB-in-air on the Dungeon Tool opens its client-side mode picker.
+        net.ledok.arenas_ld.item.DungeonToolItem.clientModeScreenOpener = hand ->
+            net.minecraft.client.Minecraft.getInstance().setScreen(
+                new net.ledok.arenas_ld.screen.DungeonToolScreen(hand));
+        // Telegraph expiry compares absolute game time, so stale positions would
+        // render again in any world whose clock is behind the stored deadline.
+        ClientEvents.DISCONNECTED.add(SpawnTelegraphStore::clear);
+
+        // Run HUD overlays (timer bar + loot reveal): one OVERLAY listener drives their
+        // per-frame animation; the drawing itself happens through CanvasOverlay handles.
+        net.ledok.vectorlib.client.render.RenderEvents.onHudRender(
+            net.ledok.vectorlib.client.render.HudRenderStage.OVERLAY, ctx -> {
+                net.ledok.arenas_ld.client.hud.RunTimerHud.tick(ctx.partialTick());
+                net.ledok.arenas_ld.client.hud.LootRevealHud.tick();
+            });
+        ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.client.hud.RunTimerHud::clear);
+        ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.client.hud.LootRevealHud::clear);
+
+        ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.packet.RunHudPayload.TYPE, (payload, context) ->
+                context.client().execute(() -> net.ledok.arenas_ld.client.hud.RunTimerHud.onPayload(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.packet.LootRewardPayload.TYPE, (payload, context) ->
+                context.client().execute(() -> net.ledok.arenas_ld.client.hud.LootRevealHud.onPayload(payload)));
 
         ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> {

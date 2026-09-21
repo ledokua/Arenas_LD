@@ -115,7 +115,6 @@ public class ArenaControllerBlockEntity extends BlockEntity
     private int deathTimePenaltyTicks = DEFAULT_DEATH_TIME_PENALTY_TICKS;
     private int disconnectGraceTicks = DEFAULT_DISCONNECT_GRACE_TICKS;
     private int lobbyOfflineTimeoutTicks = DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS;
-    private boolean lootViaInbox = false;
     private int maxWave = DEFAULT_MAX_WAVE;
     private double rewardCurrencyBase = DEFAULT_CURRENCY_BASE;
     private double rewardCurrencyExp = DEFAULT_CURRENCY_EXP;
@@ -217,9 +216,6 @@ public class ArenaControllerBlockEntity extends BlockEntity
     public double resolveWaveHealthMultiplier(int wave) {
         return 1.0 + Math.max(0, wave - 1) * hpScalePerWave;
     }
-    public boolean isLootViaInbox() { return lootViaInbox; }
-    public void setLootViaInbox(boolean v) { if (lootViaInbox != v) { lootViaInbox = v; markDirtyAndSync(); } }
-
     /** Wave ceiling; {@code -1} = endless until wipe or wave-timer expiry. */
     public int getMaxWave() { return maxWave; }
     public void setMaxWave(int w) { this.maxWave = w < 0 ? -1 : w; markDirtyAndSync(); }
@@ -277,11 +273,18 @@ public class ArenaControllerBlockEntity extends BlockEntity
         return false;
     }
 
-    public boolean moveInstance(int from, int to) {
-        if (from < 0 || from >= instances.size() || to < 0 || to >= instances.size() || from == to) return false;
-        instances.add(to, instances.remove(from));
-        markDirtyAndSync();
-        return true;
+    /** Move an instance one slot up ({@code direction < 0}) or down ({@code direction > 0}) within the pool. */
+    public boolean moveInstance(BlockPos spawnerPos, ResourceKey<Level> dimension, int direction) {
+        for (int from = 0; from < instances.size(); from++) {
+            ArenaInstanceState inst = instances.get(from);
+            if (!inst.spawnerPos().equals(spawnerPos) || !inst.dimension().equals(dimension)) continue;
+            int to = from + Integer.signum(direction);
+            if (to == from || to < 0 || to >= instances.size()) return false;
+            instances.add(to, instances.remove(from));
+            markDirtyAndSync();
+            return true;
+        }
+        return false;
     }
 
     private @Nullable ArenaInstanceState reserveFreeInstance() {
@@ -812,7 +815,6 @@ public class ArenaControllerBlockEntity extends BlockEntity
         int inviteExpiryTicks,
         int cooldownTicks,
         int closeTimerSeconds,
-        boolean lootViaInbox,
         int maxWave,
         RewardCurve rewardCurve,
         List<InstanceEntry> instances,
@@ -830,7 +832,6 @@ public class ArenaControllerBlockEntity extends BlockEntity
             Codec.INT.optionalFieldOf("inviteExpiryTicks", DEFAULT_INVITE_EXPIRY_TICKS).forGetter(State::inviteExpiryTicks),
             Codec.INT.optionalFieldOf("cooldownTicks", DEFAULT_COOLDOWN_TICKS).forGetter(State::cooldownTicks),
             Codec.INT.optionalFieldOf("closeTimerSeconds", DEFAULT_CLOSE_TIMER_SECONDS).forGetter(State::closeTimerSeconds),
-            Codec.BOOL.optionalFieldOf("lootViaInbox", false).forGetter(State::lootViaInbox),
             Codec.INT.optionalFieldOf("maxWave", DEFAULT_MAX_WAVE).forGetter(State::maxWave),
             RewardCurve.CODEC.optionalFieldOf("rewardCurve", RewardCurve.DEFAULT).forGetter(State::rewardCurve),
             InstanceEntry.CODEC.listOf().optionalFieldOf("instances", List.of()).forGetter(State::instances),
@@ -858,7 +859,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
         }
         State state = new State(
             new LifecycleTimings(disconnectGraceTicks, lobbyOfflineTimeoutTicks, respawnTimeTicks, deathTimePenaltyTicks, hpScalePerPlayer, hpScalePerWave),
-            maxPartySize, inviteExpiryTicks, cooldownTicks, closeTimerSeconds, lootViaInbox, maxWave,
+            maxPartySize, inviteExpiryTicks, cooldownTicks, closeTimerSeconds, maxWave,
             new RewardCurve(rewardCurrencyBase, rewardCurrencyExp, rewardXpBase, rewardXpExp),
             instanceEntries, new ArrayList<>(lobbies), new ArrayList<>(queuedLobbyIds),
             new ArrayList<>(pendingInvites), new ArrayList<>(pendingJoinRequests),
@@ -885,7 +886,6 @@ public class ArenaControllerBlockEntity extends BlockEntity
                 inviteExpiryTicks = state.inviteExpiryTicks();
                 cooldownTicks = state.cooldownTicks();
                 closeTimerSeconds = state.closeTimerSeconds();
-                lootViaInbox = state.lootViaInbox();
                 maxWave = state.maxWave();
                 rewardCurrencyBase = state.rewardCurve().currencyBase();
                 rewardCurrencyExp = state.rewardCurve().currencyExp();

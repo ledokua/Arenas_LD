@@ -1,6 +1,6 @@
 {
   "parent": "item/generated",
   "textures": {
-    "layer0": "arenas_ld:item/linker"
+    "layer0": "arenas_ld:item/dungeon_tool"
   }
 }

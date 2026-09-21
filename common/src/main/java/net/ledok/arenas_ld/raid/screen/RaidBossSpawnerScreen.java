@@ -13,7 +13,6 @@ import net.ledok.vectorlib.client.canvas.layout.Sizing;
 import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.Label;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
-import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -24,7 +23,6 @@ import java.util.function.Consumer;
 
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
-import static net.ledok.arenas_ld.screen.ArenasUi.BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
 import static net.ledok.arenas_ld.screen.ArenasUi.GOOD;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
@@ -54,7 +52,6 @@ public class RaidBossSpawnerScreen extends CanvasHandledScreen<RaidBossSpawnerSc
     public RaidBossSpawnerScreen(RaidBossSpawnerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         canvas.theme(ArenasUi.THEME);
-        dimBackground(false);
         fillWindow();
     }
 
@@ -65,8 +62,7 @@ public class RaidBossSpawnerScreen extends CanvasHandledScreen<RaidBossSpawnerSc
      */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
-                && !(input.focusedNode() instanceof TextField)) return true;
+        if (ArenasUi.swallowsInventoryKey(input, keyCode, scanCode, modifiers)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -82,7 +78,6 @@ public class RaidBossSpawnerScreen extends CanvasHandledScreen<RaidBossSpawnerSc
         Flex root = canvas.add(Flex.column());
         root.sizing(Sizing.fill(), Sizing.fill());
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
-        root.backgroundFill(BG);
 
         float shellWidth  = Math.max(440, Math.min(560, canvas.width() - 24));
         float shellHeight = Math.max(260, canvas.height() - 24);

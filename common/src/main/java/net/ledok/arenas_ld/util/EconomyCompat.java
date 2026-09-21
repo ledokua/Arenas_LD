@@ -11,27 +11,32 @@ public final class EconomyCompat {
     private static final Method GET_INSTANCE;
     private static final Method DELIVER_CURRENCY;
     private static final Method DELIVER_ITEM;
+    private static final Method GIVE;
 
     static {
         Class<?> managerClass = null;
         Method getInstance = null;
         Method currency = null;
         Method item = null;
+        Method give = null;
         try {
             managerClass = Class.forName("net.ledok.economy_ld.manager.EconomyManager");
             getInstance = managerClass.getMethod("getInstance");
             currency = managerClass.getMethod("deliverCurrency", UUID.class, long.class, String.class);
             item = managerClass.getMethod("deliverItem", UUID.class, ItemStack.class, int.class, String.class);
+            give = managerClass.getMethod("give", UUID.class, String.class, long.class);
         } catch (Throwable ignored) {
             managerClass = null;
             getInstance = null;
             currency = null;
             item = null;
+            give = null;
         }
         MANAGER_CLASS = managerClass;
         GET_INSTANCE = getInstance;
         DELIVER_CURRENCY = currency;
         DELIVER_ITEM = item;
+        GIVE = give;
     }
 
     private EconomyCompat() {
@@ -49,6 +54,29 @@ public final class EconomyCompat {
             return GET_INSTANCE.invoke(null);
         } catch (Throwable ignored) {
             return null;
+        }
+    }
+
+    /**
+     * Deposits currency straight into the player's wallet balance (not the claimable inbox).
+     * Use for online players so the reward lands the moment the popup shows it; falls back to
+     * {@link #deliverCurrency} when the running Economy_LD build predates the wallet API.
+     */
+    public static void giveCurrency(UUID playerUuid, String username, long amount, String reason) {
+        if (playerUuid == null || amount <= 0L) {
+            return;
+        }
+        if (GIVE == null || username == null || username.isBlank()) {
+            deliverCurrency(playerUuid, amount, reason);
+            return;
+        }
+        Object instance = managerInstance();
+        if (instance == null) {
+            return;
+        }
+        try {
+            GIVE.invoke(instance, playerUuid, username, amount);
+        } catch (Throwable ignored) {
         }
     }
 

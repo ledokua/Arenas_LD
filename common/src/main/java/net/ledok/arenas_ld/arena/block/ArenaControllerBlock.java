@@ -2,7 +2,7 @@ package net.ledok.arenas_ld.arena.block;
 
 import com.mojang.serialization.MapCodec;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
-import net.ledok.arenas_ld.item.LinkerItem;
+import net.ledok.arenas_ld.item.DungeonToolItem;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionResult;
@@ -48,7 +48,7 @@ public class ArenaControllerBlock extends BaseEntityBlock {
 
     @Override
     public InteractionResult useWithoutItem(BlockState blockState, Level world, BlockPos pos, Player player, BlockHitResult hit) {
-        if (player.getMainHandItem().getItem() instanceof LinkerItem || player.getOffhandItem().getItem() instanceof LinkerItem) {
+        if (player.getMainHandItem().getItem() instanceof DungeonToolItem || player.getOffhandItem().getItem() instanceof DungeonToolItem) {
             return InteractionResult.PASS;
         }
         if (!world.isClientSide && world.getBlockEntity(pos) instanceof ArenaControllerBlockEntity controller) {

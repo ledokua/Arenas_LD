@@ -33,7 +33,6 @@ import java.util.List;
 import java.util.function.Consumer;
 
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
-import static net.ledok.arenas_ld.screen.ArenasUi.BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
@@ -83,15 +82,13 @@ public class RoomRewardsScreen extends CanvasHandledScreen<RoomControllerScreenH
     public RoomRewardsScreen(RoomControllerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         canvas.theme(ArenasUi.THEME);
-        dimBackground(false);
         fillWindow();
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         // The old owo screen swallowed the inventory key entirely (close via × or Esc only).
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
-                && !(input.focusedNode() instanceof TextField)) return true;
+        if (ArenasUi.swallowsInventoryKey(input, keyCode, scanCode, modifiers)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -107,7 +104,6 @@ public class RoomRewardsScreen extends CanvasHandledScreen<RoomControllerScreenH
         Flex root = canvas.add(Flex.column());
         root.sizing(Sizing.fill(), Sizing.fill());
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
-        root.backgroundFill(BG);
 
         float shellWidth  = Math.max(440, Math.min(560, canvas.width() - 24));
         float shellHeight = Math.max(300, canvas.height() - 24);

@@ -8,7 +8,6 @@ import net.ledok.arenas_ld.dungeon.packet.SetCooldownTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetInviteExpiryTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetRespawnTimeTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetDeathTimePenaltyPayload;
-import net.ledok.arenas_ld.dungeon.packet.SetLootViaInboxPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
@@ -47,7 +46,6 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
-import static net.ledok.arenas_ld.screen.ArenasUi.BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
 import static net.ledok.arenas_ld.screen.ArenasUi.GOOD;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
@@ -141,7 +139,6 @@ public class DungeonControllerAdminScreen extends CanvasHandledScreen<DungeonCon
     private String deathPenaltyInput;
     /** Percent of base HP added per extra player (0 = disabled); stored on the controller as a 0–100 double. */
     private String hpScaleInput;
-    private boolean lootViaInboxInput;
 
     private List<String> knownLootTableIds = List.of();
 
@@ -156,15 +153,13 @@ public class DungeonControllerAdminScreen extends CanvasHandledScreen<DungeonCon
     public DungeonControllerAdminScreen(DungeonControllerAdminScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         canvas.theme(ArenasUi.THEME);
-        dimBackground(false);
         fillWindow();
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         // The old owo screen swallowed the inventory key entirely (close via × or Esc only).
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
-                && !(input.focusedNode() instanceof TextField)) return true;
+        if (ArenasUi.swallowsInventoryKey(input, keyCode, scanCode, modifiers)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -178,7 +173,6 @@ public class DungeonControllerAdminScreen extends CanvasHandledScreen<DungeonCon
         Flex root = canvas.add(Flex.column());
         root.sizing(Sizing.fill(), Sizing.fill());
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
-        root.backgroundFill(BG);
 
         float shellWidth = Math.max(500, Math.min(620, canvas.width() - 24));
         float shellHeight = Math.max(300, canvas.height() - 24);
@@ -449,14 +443,14 @@ public class DungeonControllerAdminScreen extends CanvasHandledScreen<DungeonCon
 
         Button up = ArenasUi.button(Component.literal("↑"), 22, 18, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), index, Math.max(0, index - 1)));
+            ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), pos, -1));
         });
         up.enabled(index > 0);
         row.item(up);
 
         Button down = ArenasUi.button(Component.literal("↓"), 22, 18, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), index, Math.min(instances.size() - 1, index + 1)));
+            ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), pos, 1));
         });
         down.enabled(index < instances.size() - 1);
         row.item(down);
@@ -530,21 +524,6 @@ public class DungeonControllerAdminScreen extends CanvasHandledScreen<DungeonCon
             "%", 5, 0, 1000, hpScaleInput, v -> hpScaleInput = v));
         contentArea.item(ArenasUi.spacer(10));
 
-        contentArea.item(togglePanel(
-            tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox"),
-            tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_desc"),
-            lootViaInboxInput ? tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_on") : tr("gui.arenas_ld.dungeon_controller_admin.ui.general.loot_via_inbox_off"),
-            lootViaInboxInput ? INFO : INK_DIM,
-            INFO,
-            () -> lootViaInboxInput,
-            () -> {
-                lootViaInboxInput = !lootViaInboxInput;
-                ClientPlayNetworking.send(new SetLootViaInboxPayload(menu.getBlockPos(), lootViaInboxInput));
-                rebuildUi();
-            }
-        ));
-        contentArea.item(ArenasUi.spacer(10));
-
         Flex applyRow = Flex.row().justify(Justify.END).alignItems(Align.CENTER);
         applyRow.sizing(Sizing.fill(), Sizing.content());
         applyRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.general.apply"), 120, 18, this::applyGeneral));
@@ -569,13 +548,8 @@ public class DungeonControllerAdminScreen extends CanvasHandledScreen<DungeonCon
         Flex col = Flex.column().gap(4);
         col.sizing(Sizing.fill(), Sizing.content());
 
-        Flex head = Flex.row().alignItems(Align.CENTER);
-        head.sizing(Sizing.fill(), Sizing.content());
-        head.item(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.name"), INK_DIM));
-        head.spacer();
-        head.item(ArenasUi.text(
-            Component.literal(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.name_hint")).withStyle(ChatFormatting.ITALIC), INK_DIM));
-        col.item(head);
+        col.item(fieldHead(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.name"),
+            tr("gui.arenas_ld.dungeon_controller_admin.ui.general.name_hint")));
 
         Flex fieldWrap = Flex.row().alignItems(Align.CENTER);
         fieldWrap.sizing(Sizing.fill(), Sizing.fixed(22));
@@ -614,12 +588,13 @@ public class DungeonControllerAdminScreen extends CanvasHandledScreen<DungeonCon
     }
 
     /** Caption at the left, italic hint at the right — the head row shared by every field. */
-    private Flex fieldHead(String caption, String hint) {
-        Flex head = Flex.row().alignItems(Align.CENTER);
+    private Label fieldHead(String caption, String hint) {
+        Label head = ArenasUi.label(10, Component.literal(caption), INK_DIM)
+            .secondary(Component.literal(hint).withStyle(ChatFormatting.ITALIC))
+            .secondaryColor(INK_DIM)
+            .cutSecondaryFirst(true)
+            .tooltipWhenCut(true);
         head.sizing(Sizing.fill(), Sizing.content());
-        head.item(labelLiteral(caption, INK_DIM));
-        head.spacer();
-        head.item(ArenasUi.text(Component.literal(hint).withStyle(ChatFormatting.ITALIC), INK_DIM));
         return head;
     }
 
@@ -1102,7 +1077,6 @@ public class DungeonControllerAdminScreen extends CanvasHandledScreen<DungeonCon
         respawnTimeInput = Integer.toString(menu.getRespawnTimeTicks());
         deathPenaltyInput = Integer.toString(menu.getDeathTimePenaltyTicks() / 20);
         hpScaleInput = Integer.toString((int) Math.round(menu.getHpScalePerPlayer() * 100.0));
-        lootViaInboxInput = menu.isLootViaInbox();
 
         for (Map.Entry<DifficultyTier, TierConfig> entry : tierConfigs.entrySet()) {
             syncTierInputs(entry.getKey(), entry.getValue());

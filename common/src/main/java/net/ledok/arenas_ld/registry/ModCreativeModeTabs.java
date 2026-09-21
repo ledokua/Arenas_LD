@@ -17,7 +17,7 @@ public class ModCreativeModeTabs {
     public static void initialize() {
         RegistryBridge.register(BuiltInRegistries.CREATIVE_MODE_TAB, ARENAS_LD_TAB.location(), FabricItemGroup.builder()
                 .title(Component.translatable("creativetab.arenas_ld_tab"))
-                .icon(() -> ItemRegistry.LINKER.getDefaultInstance())
+                .icon(() -> ItemRegistry.DUNGEON_TOOL.getDefaultInstance())
                 .displayItems((displayContext, entries) -> {
                     entries.accept(BlockRegistry.RAID_BOSS_SPAWNER_BLOCK);
                     entries.accept(BlockRegistry.MOB_SPAWNER_BLOCK);
@@ -28,8 +28,7 @@ public class ModCreativeModeTabs {
                     entries.accept(BlockRegistry.DUNGEON_CONTROLLER_BLOCK);
                     entries.accept(BlockRegistry.ROOM_CONTROLLER_BLOCK);
                     entries.accept(BlockRegistry.PHASE_BLOCK);
-                    entries.accept(ItemRegistry.LINKER);
-                    entries.accept(ItemRegistry.SPAWNER_CONFIGURATOR);
+                    entries.accept(ItemRegistry.DUNGEON_TOOL);
                 })
                 .build());
     }

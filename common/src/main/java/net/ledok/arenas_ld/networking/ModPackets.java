@@ -234,11 +234,11 @@ public class ModPackets {
         }
     }
 
-    public record CycleLinkerModePayload(boolean forward) implements CustomPacketPayload {
-        public static final CustomPacketPayload.Type<CycleLinkerModePayload> TYPE = new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "cycle_linker_mode"));
-        public static final StreamCodec<FriendlyByteBuf, CycleLinkerModePayload> CODEC = StreamCodec.of(
+    public record CycleDungeonToolModePayload(boolean forward) implements CustomPacketPayload {
+        public static final CustomPacketPayload.Type<CycleDungeonToolModePayload> TYPE = new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "cycle_dungeon_tool_mode"));
+        public static final StreamCodec<FriendlyByteBuf, CycleDungeonToolModePayload> CODEC = StreamCodec.of(
                 (buf, payload) -> buf.writeBoolean(payload.forward()),
-                (buf) -> new CycleLinkerModePayload(buf.readBoolean())
+                (buf) -> new CycleDungeonToolModePayload(buf.readBoolean())
         );
 
         @Override
@@ -247,11 +247,15 @@ public class ModPackets {
         }
     }
 
-    public record CycleConfiguratorModePayload(boolean forward) implements CustomPacketPayload {
-        public static final CustomPacketPayload.Type<CycleConfiguratorModePayload> TYPE = new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "cycle_configurator_mode"));
-        public static final StreamCodec<FriendlyByteBuf, CycleConfiguratorModePayload> CODEC = StreamCodec.of(
-                (buf, payload) -> buf.writeBoolean(payload.forward()),
-                (buf) -> new CycleConfiguratorModePayload(buf.readBoolean())
+    /** Sets the Dungeon Tool's mode directly (from the mode-picker screen), for the given hand. */
+    public record SetDungeonToolModePayload(int mode, boolean mainHand) implements CustomPacketPayload {
+        public static final CustomPacketPayload.Type<SetDungeonToolModePayload> TYPE = new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "set_dungeon_tool_mode"));
+        public static final StreamCodec<FriendlyByteBuf, SetDungeonToolModePayload> CODEC = StreamCodec.of(
+                (buf, payload) -> {
+                    buf.writeVarInt(payload.mode());
+                    buf.writeBoolean(payload.mainHand());
+                },
+                (buf) -> new SetDungeonToolModePayload(buf.readVarInt(), buf.readBoolean())
         );
 
         @Override

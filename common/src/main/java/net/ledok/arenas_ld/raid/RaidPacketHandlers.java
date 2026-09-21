@@ -18,7 +18,6 @@ import net.ledok.arenas_ld.raid.packet.RaidSetCooldownTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetDeathTimePenaltyPayload;
-import net.ledok.arenas_ld.raid.packet.RaidSetLootViaInboxPayload;
 import net.ledok.arenas_ld.raid.packet.RaidCreateLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineJoinRequestPayload;
@@ -308,7 +307,9 @@ public final class RaidPacketHandlers {
                 if (!player.hasPermissions(2)) return;
                 RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
                 if (controller == null) return;
-                controller.moveInstance(payload.fromIndex(), payload.toIndex());
+                ResourceKey<Level> dim = parseDim(payload.dimension());
+                if (dim == null) return;
+                controller.moveInstance(payload.instancePos(), dim, payload.direction());
                 broadcastRaidControllerSnapshot(player, controller);
             })
         );
@@ -369,18 +370,6 @@ public final class RaidPacketHandlers {
                 RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
                 if (controller == null) return;
                 controller.setDeathTimePenaltyTicks(payload.ticks());
-                broadcastRaidControllerSnapshot(player, controller);
-            })
-        );
-
-        // ── Admin: Set Loot Via Inbox ─────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetLootViaInboxPayload.TYPE, (payload, context) ->
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
-                if (controller == null) return;
-                controller.setLootViaInbox(payload.lootViaInbox());
                 broadcastRaidControllerSnapshot(player, controller);
             })
         );

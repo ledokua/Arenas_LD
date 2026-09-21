@@ -1,7 +1,7 @@
 package net.ledok.arenas_ld.raid.block;
 
 import com.mojang.serialization.MapCodec;
-import net.ledok.arenas_ld.item.LinkerItem;
+import net.ledok.arenas_ld.item.DungeonToolItem;
 import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -41,7 +41,7 @@ public class RaidBossSpawnerBlock extends BaseEntityBlock {
 
     @Override
     public InteractionResult useWithoutItem(BlockState blockState, Level world, BlockPos pos, Player player, BlockHitResult hit) {
-        if (isHoldingLinker(player)) {
+        if (isHoldingDungeonTool(player)) {
             return InteractionResult.PASS;
         }
         if (!world.isClientSide) {
@@ -59,9 +59,9 @@ public class RaidBossSpawnerBlock extends BaseEntityBlock {
         return InteractionResult.SUCCESS;
     }
 
-    private static boolean isHoldingLinker(Player player) {
-        return player.getMainHandItem().getItem() instanceof LinkerItem
-                || player.getOffhandItem().getItem() instanceof LinkerItem;
+    private static boolean isHoldingDungeonTool(Player player) {
+        return player.getMainHandItem().getItem() instanceof DungeonToolItem
+                || player.getOffhandItem().getItem() instanceof DungeonToolItem;
     }
 
     // No ticker: the raid controller drives active runs via RaidRunLifecycle.

@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.dungeon.screen;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
-import net.ledok.arenas_ld.dungeon.packet.RoomClearEntrancesPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearProtectPosPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearRespawnPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearSpawnersPayload;
@@ -22,7 +21,6 @@ import net.ledok.vectorlib.client.canvas.layout.Sizing;
 import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.Label;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
-import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
 import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
@@ -38,7 +36,6 @@ import java.util.Optional;
 
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
-import static net.ledok.arenas_ld.screen.ArenasUi.BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
@@ -91,8 +88,7 @@ public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScre
 
     private final List<RoomControllerData.SpawnerEntry> spawners = new ArrayList<>();
     private List<BlockPos> doorPositions = List.of();
-    private List<BlockPos> entrancePositions = List.of();
-    private Optional<BlockPos> respawnPos = Optional.empty();
+    private List<BlockPos> respawnPositions = List.of();
     private String roomNameInput = "";
     private RoomObjectiveConfig.Type objectiveType = RoomObjectiveConfig.Type.KILL_ALL;
     private int surviveSecondsInput = 60;
@@ -110,15 +106,13 @@ public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScre
     public RoomControllerScreen(RoomControllerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         canvas.theme(ArenasUi.THEME);
-        dimBackground(false);
         fillWindow();
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         // The old owo screen swallowed the inventory key entirely (close via × or Esc only).
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
-                && !(input.focusedNode() instanceof TextField)) return true;
+        if (ArenasUi.swallowsInventoryKey(input, keyCode, scanCode, modifiers)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -134,7 +128,6 @@ public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScre
         Flex root = canvas.add(Flex.column());
         root.sizing(Sizing.fill(), Sizing.fill());
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
-        root.backgroundFill(BG);
 
         float shellWidth  = Math.max(440, Math.min(560, canvas.width() - 24));
         float shellHeight = Math.max(300, canvas.height() - 24);
@@ -239,12 +232,6 @@ public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScre
         contentArea.item(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.door")));
         contentArea.item(ArenasUi.spacer(2));
         contentArea.item(buildDoorRow());
-        contentArea.item(ArenasUi.spacer(8));
-
-        // ── Entrance doors ──────────────────────────────────────────────────
-        contentArea.item(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.entrances")));
-        contentArea.item(ArenasUi.spacer(2));
-        contentArea.item(buildEntranceRow());
         contentArea.item(ArenasUi.spacer(8));
 
         // ── Respawn point ───────────────────────────────────────────────────
@@ -555,36 +542,16 @@ public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScre
         return row;
     }
 
-    private Flex buildEntranceRow() {
-        Flex row = Flex.row().gap(8).alignItems(Align.CENTER);
-        row.sizing(Sizing.fill(), Sizing.content());
-
-        Component entranceValue = entrancePositions.isEmpty()
-            ? Component.translatable("gui.arenas_ld.room_controller.entrance_none")
-            : (entrancePositions.size() == 1
-                ? Component.literal(entrancePositions.get(0).toShortString())
-                : Component.translatable("gui.arenas_ld.room_controller.entrance_count", entrancePositions.size()));
-        row.item(ArenasUi.text(entranceValue, entrancePositions.isEmpty() ? INK_DIM : INK));
-
-        row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.entrance_hint"), INK_DIM));
-
-        row.spacer();
-
-        Button clear = ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.clear_entrances"),
-            () -> ClientPlayNetworking.send(new RoomClearEntrancesPayload(menu.getBlockPos())));
-        clear.enabled(!entrancePositions.isEmpty());
-        row.item(clear);
-        return row;
-    }
-
     private Flex buildRespawnRow() {
         Flex row = Flex.row().gap(8).alignItems(Align.CENTER);
         row.sizing(Sizing.fill(), Sizing.content());
 
-        row.item(ArenasUi.text(respawnPos
-            .map(pos -> (Component) Component.literal(pos.toShortString()))
-            .orElse(Component.translatable("gui.arenas_ld.room_controller.respawn_none")),
-            respawnPos.isPresent() ? INK : INK_DIM));
+        Component respawnValue = respawnPositions.isEmpty()
+            ? Component.translatable("gui.arenas_ld.room_controller.respawn_none")
+            : (respawnPositions.size() == 1
+                ? Component.literal(respawnPositions.get(0).toShortString())
+                : Component.translatable("gui.arenas_ld.room_controller.respawn_count", respawnPositions.size()));
+        row.item(ArenasUi.text(respawnValue, respawnPositions.isEmpty() ? INK_DIM : INK));
 
         row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.respawn_hint"), INK_DIM));
 
@@ -592,7 +559,7 @@ public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScre
 
         Button clear = ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.clear_respawn"),
             () -> ClientPlayNetworking.send(new RoomClearRespawnPayload(menu.getBlockPos())));
-        clear.enabled(respawnPos.isPresent());
+        clear.enabled(!respawnPositions.isEmpty());
         row.item(clear);
         return row;
     }
@@ -617,8 +584,7 @@ public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScre
         spawners.clear();
         spawners.addAll(menu.getSpawners());
         doorPositions = menu.getDoorPositions();
-        entrancePositions = menu.getEntrancePositions();
-        respawnPos = menu.getRespawnPos();
+        respawnPositions = menu.getRespawnPositions();
         roomNameInput = menu.getRoomName();
         objectiveType = menu.getObjective().type();
         surviveSecondsInput = menu.getObjective().surviveSeconds();

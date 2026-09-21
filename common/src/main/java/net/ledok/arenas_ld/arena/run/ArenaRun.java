@@ -10,7 +10,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
@@ -67,8 +66,6 @@ public final class ArenaRun {
     /** Mob HP multiplier from the starting party size — frozen at run start. */
     private double partyHealthMultiplier = 1.0;
 
-    @Nullable private transient ServerBossEvent waveBossBar;
-    @Nullable private transient ServerBossEvent closeTimerBossBar;
 
     public ArenaRun(
         UUID lobbyId,
@@ -171,8 +168,6 @@ public final class ArenaRun {
     public int initialCloseTimerTicks() { return initialCloseTimerTicks; }
     public double partyHealthMultiplier() { return partyHealthMultiplier; }
     void setPartyHealthMultiplier(double multiplier) { this.partyHealthMultiplier = Math.max(1.0, multiplier); }
-    @Nullable public ServerBossEvent getWaveBossBar() { return waveBossBar; }
-    @Nullable public ServerBossEvent getCloseTimerBossBar() { return closeTimerBossBar; }
 
     public Set<UUID> aliveMobs() { return Collections.unmodifiableSet(aliveMobs); }
     public Map<UUID, RunParticipant> participants() { return Collections.unmodifiableMap(participants); }
@@ -192,8 +187,6 @@ public final class ArenaRun {
     void setBetweenWaveTicksRemaining(int ticks) { this.betweenWaveTicksRemaining = ticks; }
     void setCloseTimerTicks(int ticks) { this.closeTimerTicks = ticks; }
     void setInitialCloseTimerTicks(int ticks) { this.initialCloseTimerTicks = ticks; }
-    void setWaveBossBar(@Nullable ServerBossEvent bar) { this.waveBossBar = bar; }
-    void setCloseTimerBossBar(@Nullable ServerBossEvent bar) { this.closeTimerBossBar = bar; }
 
     void addAliveMob(UUID uuid) { aliveMobs.add(uuid); }
     void removeAliveMob(UUID uuid) { aliveMobs.remove(uuid); }

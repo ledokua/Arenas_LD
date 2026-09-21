@@ -25,10 +25,11 @@ import net.ledok.arenas_ld.raid.packet.RaidSetLobbyVisibilityPayload;
 import net.ledok.arenas_ld.raid.packet.RaidStartRunPayload;
 import net.ledok.arenas_ld.raid.packet.RaidToggleReadyPayload;
 import net.ledok.arenas_ld.raid.screen.RaidControllerData.RaidInstanceState;
-import net.ledok.arenas_ld.screen.ArenasUi;
+import net.ledok.arenas_ld.screen.ArenasParchment;
 import net.ledok.arenas_ld.screen.ForcedGuiScale;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.arenas_ld.util.InstanceStatus;
+import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.vectorlib.client.canvas.Shapes;
 import net.ledok.vectorlib.client.canvas.TextNode;
 import net.ledok.vectorlib.client.canvas.VectorCanvas;
@@ -40,7 +41,6 @@ import net.ledok.vectorlib.client.canvas.layout.Sizing;
 import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.Label;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
-import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.vectorlib.client.canvas.widget.UiSounds;
 import net.ledok.vectorlib.client.canvas.widget.Widget;
 import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
@@ -60,22 +60,21 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
-import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
-import static net.ledok.arenas_ld.screen.ArenasUi.BG;
-import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
-import static net.ledok.arenas_ld.screen.ArenasUi.GOOD;
-import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
-import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
-import static net.ledok.arenas_ld.screen.ArenasUi.INFO;
-import static net.ledok.arenas_ld.screen.ArenasUi.INK;
-import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
-import static net.ledok.arenas_ld.screen.ArenasUi.INK_MID;
-import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
-import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
-import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
-import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
-import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
+import static net.ledok.arenas_ld.screen.ArenasParchment.ACCENT;
+import static net.ledok.arenas_ld.screen.ArenasParchment.ACCENT_DARK;
+import static net.ledok.arenas_ld.screen.ArenasParchment.DANGER;
+import static net.ledok.arenas_ld.screen.ArenasParchment.GOOD;
+import static net.ledok.arenas_ld.screen.ArenasParchment.HAIRLINE;
+import static net.ledok.arenas_ld.screen.ArenasParchment.HAIRLINE_HI;
+import static net.ledok.arenas_ld.screen.ArenasParchment.INFO;
+import static net.ledok.arenas_ld.screen.ArenasParchment.INK;
+import static net.ledok.arenas_ld.screen.ArenasParchment.INK_DIM;
+import static net.ledok.arenas_ld.screen.ArenasParchment.INK_MID;
+import static net.ledok.arenas_ld.screen.ArenasParchment.PANEL;
+import static net.ledok.arenas_ld.screen.ArenasParchment.PANEL_2;
+import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG;
+import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG_ALT;
+import static net.ledok.arenas_ld.screen.ArenasParchment.WARN;
 
 public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScreenHandler> {
     private static final int INVITE_DROPDOWN_MAX_HEIGHT = 154;
@@ -94,20 +93,20 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
-            0xFFFFFFFF, 0xFFFFFFFF, 0xFFA0A0A0, INK_DIM, HAIRLINE_HI, 0x80A98BE8,
-            18, 16, 4, true);
+            INK, INK, INK_MID, INK_DIM, HAIRLINE_HI, 0x557A4A1E,
+            18, 16, 4, false);
 
     /** Translucent red kick-button look (fill brightens on hover, DANGER outline). */
     private static final WidgetStyle DANGER_STYLE = new WidgetStyle(
-            new WidgetStyle.Skin.Flat(0x1FE8624A, DANGER, 1, 0),
-            new WidgetStyle.Skin.Flat(0x44E8624A, DANGER, 1, 0),
-            new WidgetStyle.Skin.Flat(0x44E8624A, DANGER, 1, 0),
-            new WidgetStyle.Skin.Flat(0x1FE8624A, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(0x1F8B2F23, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(0x448B2F23, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(0x448B2F23, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(0x1F8B2F23, DANGER, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
-            INK, INK, INK_DIM, INK_DIM, DANGER, 0x80A98BE8,
-            18, 16, 4, true);
+            INK, INK, INK_DIM, INK_DIM, DANGER, 0x557A4A1E,
+            18, 16, 4, false);
 
     private static final WidgetStyle.Skin.Flat CLEAR_SKIN = new WidgetStyle.Skin.Flat(0x00000000, 0, 0, 0);
 
@@ -117,7 +116,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
-            INK_MID, INK_MID, INK_DIM, INK_DIM, 0x00000000, 0x80A98BE8,
+            INK_MID, INK_MID, INK_DIM, INK_DIM, 0x00000000, 0x557A4A1E,
             20, 16, 4, false);
 
     private enum Tab {
@@ -195,8 +194,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
 
     public RaidControllerScreen(RaidControllerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(DESIGN_W, DESIGN_H), Placement.Screen.center());
-        canvas.theme(ArenasUi.THEME);
-        dimBackground(false);
+        canvas.theme(ArenasParchment.THEME);
         fillWindow();
         this.visibleLobbies = new ArrayList<>(handler.getVisibleLobbies());
         this.myInvites = new ArrayList<>(handler.getMyInvites());
@@ -219,11 +217,11 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         Flex root = canvas.add(Flex.column());
         root.sizing(Sizing.fill(), Sizing.fill());
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
-        root.backgroundFill(BG);
 
         Flex shell = root.item(Flex.column());
         shell.sizing(Sizing.fixed(DESIGN_W), Sizing.fixed(DESIGN_H));
-        shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
+        shell.background(ArenasParchment.panel());
+        shell.padding(Insets.of(8)); // keep content off the parchment border art
 
         shell.item(buildHeader());
 
@@ -370,7 +368,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         footer.sizing(Sizing.fill(), Sizing.fixed(34));
         footer.backgroundFill(PANEL_2);
 
-        footerLabel = ArenasUi.label(100, Component.empty(), DANGER);
+        footerLabel = ArenasParchment.label(100, Component.empty(), DANGER);
         footerLabel.sizing(Sizing.expand(), Sizing.content());
         footer.item(footerLabel);
 
@@ -495,7 +493,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
             List<PendingJoinRequest> incoming = myJoinRequests.stream()
                 .filter(r -> r.lobbyId().equals(ownedLobbyId))
                 .toList();
-            contentArea.item(ArenasUi.spacer(8));
+            contentArea.item(ArenasParchment.spacer(8));
             contentArea.item(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.join_requests"), incoming.size()));
             if (incoming.isEmpty()) {
                 contentArea.item(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller.no_join_requests")));
@@ -543,11 +541,11 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         row.item(countdown);
 
         UUID requesterUuid = req.requesterUuid();
-        row.item(ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, 18, () -> {
+        row.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, 18, () -> {
             footerError = null;
             ClientPlayNetworking.send(new RaidAcceptJoinRequestPayload(menu.getBlockPos(), requesterUuid));
         }));
-        row.item(ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, 18, () -> {
+        row.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, 18, () -> {
             footerError = null;
             ClientPlayNetworking.send(new RaidDeclineJoinRequestPayload(menu.getBlockPos(), requesterUuid));
         }));
@@ -561,13 +559,13 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         contentArea.item(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.col.tier")));
         contentArea.item(leaderboardTierControls());
 
-        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(ArenasParchment.spacer(4));
         contentArea.item(leaderboardBanner(leaderboardTier));
 
         List<LeaderboardEntry> entries = new ArrayList<>(topLeaderboards.getOrDefault(leaderboardTier, List.of()));
         entries.sort(Comparator.comparingInt(LeaderboardEntry::timeSeconds));
 
-        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(ArenasParchment.spacer(4));
         contentArea.item(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.ui.section.top_runs"), entries.size()));
 
         Flex list = Flex.column();
@@ -649,7 +647,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
 
         row.item(fixedText(Component.literal(top ? "★1" : ("#" + rank)), 50, top ? color : INK_MID, TextNode.Align.LEFT));
 
-        Label nameLabel = ArenasUi.label(100, Component.literal(entry.playerName()), INK);
+        Label nameLabel = ArenasParchment.label(100, Component.literal(entry.playerName()), INK);
         nameLabel.sizing(Sizing.expand(), Sizing.content());
         row.item(nameLabel);
 
@@ -669,7 +667,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
     // ── Lobbies tab ──────────────────────────────────────────────────────────
 
     private void buildLobbiesContent() {
-        Button create = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.create"), () -> {
+        Button create = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.create"), () -> {
             footerError = null;
             ClientPlayNetworking.send(new RaidCreateLobbyPayload(menu.getBlockPos()));
         });
@@ -721,11 +719,11 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         inviteCountdownLabels.put(invite.lobbyId(), countdown);
         row.item(countdown);
 
-        row.item(ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, 18, () -> {
+        row.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, 18, () -> {
             footerError = null;
             ClientPlayNetworking.send(new RaidAcceptInvitePayload(menu.getBlockPos(), invite.lobbyId()));
         }));
-        row.item(ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, 18, () -> {
+        row.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, 18, () -> {
             footerError = null;
             ClientPlayNetworking.send(new RaidDeclineInvitePayload(menu.getBlockPos(), invite.lobbyId()));
         }));
@@ -770,13 +768,13 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         actionCell.sizing(Sizing.fixed(84), Sizing.content());
         Button actionButton;
         if (inRun) {
-            actionButton = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.running"), 84, 18, () -> {});
+            actionButton = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.running"), 84, 18, () -> {});
             actionButton.enabled(false);
         } else if (isFull) {
-            actionButton = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.full"), 84, 18, () -> {});
+            actionButton = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.full"), 84, 18, () -> {});
             actionButton.enabled(false);
         } else if (lobby.visibility() == LobbyVisibility.PUBLIC) {
-            actionButton = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.join"), 84, 18, () -> {
+            actionButton = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.join"), 84, 18, () -> {
                 footerError = null;
                 ClientPlayNetworking.send(new RaidJoinLobbyPayload(menu.getBlockPos(), lobbyId));
             });
@@ -786,10 +784,10 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
             boolean alreadyRequested = self != null && myJoinRequests.stream()
                 .anyMatch(r -> r.lobbyId().equals(lobbyId) && r.requesterUuid().equals(self));
             if (alreadyRequested) {
-                actionButton = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.pending"), 84, 18, () -> {});
+                actionButton = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.pending"), 84, 18, () -> {});
                 actionButton.enabled(false);
             } else {
-                actionButton = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.request"), 84, 18, () -> {
+                actionButton = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.request"), 84, 18, () -> {
                     footerError = null;
                     ClientPlayNetworking.send(new RaidRequestJoinPayload(menu.getBlockPos(), lobbyId));
                 });
@@ -836,7 +834,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
             queueBanner.spacer();
 
             if (isOwner) {
-                queueBanner.item(ArenasUi.button(Component.translatable("gui.arenas_ld.raid_controller.button.start"), () -> {
+                queueBanner.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.raid_controller.button.start"), () -> {
                     footerError = null;
                     Lobby currentLobby = ownLobby.orElse(null);
                     UUID currentSelf2 = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : UUID.randomUUID();
@@ -859,14 +857,14 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
                     ClientPlayNetworking.send(new RaidStartRunPayload(menu.getBlockPos()));
                 }));
 
-                queueBanner.item(ArenasUi.button(Component.translatable("gui.arenas_ld.raid_controller.button.leave_queue"), () -> {
+                queueBanner.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.raid_controller.button.leave_queue"), () -> {
                     footerError = null;
                     ClientPlayNetworking.send(new RaidLeaveLobbyPayload(menu.getBlockPos()));
                 }));
             }
 
             contentArea.item(queueBanner);
-            contentArea.item(ArenasUi.spacer(4));
+            contentArea.item(ArenasParchment.spacer(4));
         }
 
         summaryOwnerLabel = text(Component.literal(lobby.ownerName()), ACCENT);
@@ -912,20 +910,20 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         }
         contentArea.item(memberList);
 
-        contentArea.item(ArenasUi.spacer(6));
+        contentArea.item(ArenasParchment.spacer(6));
         contentArea.item(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.ui.section.owner_controls"), null));
 
         contentArea.item(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.col.tier")));
         contentArea.item(ownerTierControls(isOwner));
 
-        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(ArenasParchment.spacer(4));
         contentArea.item(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.col.visibility")));
         contentArea.item(ownerVisibilityControls(isOwner));
 
-        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(ArenasParchment.spacer(4));
         contentArea.item(hardcoreControl(isOwner));
 
-        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(ArenasParchment.spacer(4));
         contentArea.item(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.section.invite_player")));
         contentArea.item(ownerInviteControls(isOwner));
 
@@ -934,7 +932,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         boolean allOnline = allOnline(lobby);
         boolean canStart = isOwner && allReady && allOnline && queuePos < 1;
 
-        readyToggleButton = ArenasUi.button(Component.translatable(ready
+        readyToggleButton = ArenasParchment.button(Component.translatable(ready
             ? "gui.arenas_ld.dungeon_controller.button.unready"
             : "gui.arenas_ld.dungeon_controller.button.ready"), () -> {
             footerError = null;
@@ -942,13 +940,13 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         });
         footerActions.item(readyToggleButton);
 
-        leaveLobbyButton = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.leave"), () -> {
+        leaveLobbyButton = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.leave"), () -> {
             footerError = null;
             ClientPlayNetworking.send(new RaidLeaveLobbyPayload(menu.getBlockPos()));
         });
         footerActions.item(leaveLobbyButton);
 
-        Button start = ArenasUi.button(Component.translatable("gui.arenas_ld.raid_controller.button.start"), () -> {
+        Button start = ArenasParchment.button(Component.translatable("gui.arenas_ld.raid_controller.button.start"), () -> {
             footerError = null;
             Lobby currentLobby = ownLobby.orElse(null);
             UUID currentSelf = minecraft != null && minecraft.player != null ? minecraft.player.getUUID() : UUID.randomUUID();
@@ -1118,7 +1116,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         fieldWrap.item(inviteChevron);
         row.item(fieldWrap);
 
-        Button invite = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.invite"), 58, 18, this::sendInvite);
+        Button invite = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.invite"), 58, 18, this::sendInvite);
         invite.enabled(isOwner);
         row.item(invite);
 
@@ -1218,9 +1216,11 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         Flex header = Flex.row().padding(Insets.of(4, 8, 4, 8)).alignItems(Align.CENTER);
         header.sizing(Sizing.fill(), Sizing.content());
         header.backgroundFill(ROW_BG);
-        header.item(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.header"), INK_DIM));
-        header.spacer();
-        header.item(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.available", available), ACCENT));
+        Label headerLabel = ArenasParchment.label(10, Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.header"), INK_DIM)
+            .secondary(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.available", available))
+            .secondaryColor(ACCENT);
+        headerLabel.sizing(Sizing.fill(), Sizing.content());
+        header.item(headerLabel);
         inviteDropdownPanel.item(header);
         inviteDropdownPanel.item(rowDivider(HAIRLINE_HI));
 
@@ -1426,7 +1426,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
                 add(Shapes.rect(0, 0, width, height).stroke(HAIRLINE, 1));
             }
             add(TextNode.of(label).at(width / 2, textY(height)).align(TextNode.Align.CENTER)
-                .color(selected ? 0xFFA0A0A0 : 0xFFFFFFFF).shadow(true));
+                .color(selected ? INK_MID : INK).shadow(false));
         }
 
         @Override
@@ -1482,11 +1482,11 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
     }
 
     private TextNode dimLabel(Component text) {
-        return ArenasUi.text(text, INK_DIM);
+        return ArenasParchment.text(text, INK_DIM);
     }
 
     private TextNode text(Component text, int color) {
-        return ArenasUi.text(text, color);
+        return ArenasParchment.text(text, color);
     }
 
     private Flex sectionHeader(Component title, Integer count) {
@@ -1539,7 +1539,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
     }
 
     private TextNode controlCaption(String caption) {
-        return ArenasUi.text(Component.literal(caption), INK_DIM);
+        return ArenasParchment.text(Component.literal(caption), INK_DIM);
     }
 
     /** Old segment renderer: selected = accent-tinted fill/border/text, otherwise flat PANEL_2 row button. */
@@ -1549,13 +1549,13 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         if (selected) {
             WidgetStyle.Skin.Flat sel = new WidgetStyle.Skin.Flat((accentColor & 0x00FFFFFF) | 0x26000000, accentColor, 1, 0);
             return new WidgetStyle(sel, sel, sel, sel, fieldSkin, fieldFocus, fieldSkin,
-                accentColor, accentColor, accentColor, INK_DIM, accentColor, 0x80A98BE8,
+                accentColor, accentColor, accentColor, INK_DIM, accentColor, 0x557A4A1E,
                 26, 16, 4, false);
         }
         WidgetStyle.Skin.Flat idle = new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0);
         WidgetStyle.Skin.Flat hover = new WidgetStyle.Skin.Flat(ROW_BG, HAIRLINE, 1, 0);
         return new WidgetStyle(idle, hover, hover, idle, fieldSkin, fieldFocus, fieldSkin,
-            INK, INK, INK_DIM, INK_DIM, HAIRLINE, 0x80A98BE8,
+            INK, INK, INK_DIM, INK_DIM, HAIRLINE, 0x557A4A1E,
             26, 16, 4, false);
     }
 
@@ -1585,7 +1585,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
     private Flex infoColumn(String caption, TextNode value, Sizing width) {
         Flex col = Flex.column().gap(3);
         col.sizing(width, Sizing.content());
-        col.item(ArenasUi.text(Component.literal(caption), INK_DIM));
+        col.item(ArenasParchment.text(Component.literal(caption), INK_DIM));
         col.item(value);
         return col;
     }
@@ -1598,13 +1598,13 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
     }
 
     private Label headerCell(String text, Sizing sizing) {
-        Label label = ArenasUi.label(10, Component.literal(text), INK_DIM);
+        Label label = ArenasParchment.label(10, Component.literal(text), INK_DIM);
         label.sizing(sizing, Sizing.content());
         return label;
     }
 
     private Label fixedText(Component text, float width, int color, TextNode.Align alignment) {
-        Label label = ArenasUi.label(width, text, color);
+        Label label = ArenasParchment.label(width, text, color);
         label.align(alignment);
         label.sizing(Sizing.fixed(width), Sizing.content());
         return label;
@@ -1622,7 +1622,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         Flex tag = Flex.row().padding(Insets.of(4, 4, 2, 4)).justify(Justify.CENTER).alignItems(Align.CENTER);
         tag.sizing(Sizing.fixed(width), Sizing.content());
         tag.backgroundFill((color & 0x00FFFFFF) | 0x22000000, (color & 0x00FFFFFF) | 0x55000000, 1);
-        Label label = ArenasUi.label(width, text, color);
+        Label label = ArenasParchment.label(width, text, color);
         label.align(TextNode.Align.CENTER);
         label.sizing(Sizing.expand(), Sizing.content());
         tag.item(label);
@@ -1641,7 +1641,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
     }
 
     private TextNode smallMeta(String text, int color) {
-        return ArenasUi.text(Component.literal(text), color);
+        return ArenasParchment.text(Component.literal(text), color);
     }
 
     private int tierColor(DifficultyTier tier) {
@@ -1878,9 +1878,15 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
     }
 
     private boolean sameLobbyStructure(Lobby previous, Lobby current) {
+        // Settings are part of "structure": the segment buttons and the hardcore switch bake
+        // their selected state into their built nodes, so a tier/visibility/hardcore change
+        // must take the full-rebuild path — the in-place refresh only touches labels.
         return previous.lobbyId().equals(current.lobbyId())
             && previous.ownerUuid().equals(current.ownerUuid())
-            && previous.members().equals(current.members());
+            && previous.members().equals(current.members())
+            && previous.selectedTier() == current.selectedTier()
+            && previous.visibility() == current.visibility()
+            && previous.hardcoreEnabled() == current.hardcoreEnabled();
     }
 
     private Optional<Lobby> resolveLobbyForInvite(PendingInvite invite) {
@@ -1908,10 +1914,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         // The old owo screen swallowed the inventory key entirely (close via × or Esc only).
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
-                && !(input.focusedNode() instanceof TextField)) {
-            return true;
-        }
+        if (ArenasUi.swallowsInventoryKey(input, keyCode, scanCode, modifiers)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 

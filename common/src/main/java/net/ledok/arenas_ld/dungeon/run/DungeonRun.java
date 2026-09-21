@@ -7,7 +7,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
@@ -67,8 +66,6 @@ public final class DungeonRun {
     private int pendingGraceTicks = -1;
     /** Entrance-door block → room lookup for crossing detection; rebuilt lazily, never persisted. */
     @Nullable private transient Map<BlockPos, BlockPos> entranceDetectionCache = null;
-    @Nullable private transient ServerBossEvent dungeonTimeBossBar;
-    @Nullable private transient ServerBossEvent closeTimerBossBar;
 
     // ---- Constructors ----
 
@@ -110,8 +107,6 @@ public final class DungeonRun {
         this.returnPoints = new HashMap<>();
         this.downedPlayers = new HashMap<>();
         this.disconnectedAt = new HashMap<>();
-        this.dungeonTimeBossBar = null;
-        this.closeTimerBossBar = null;
     }
 
     /**
@@ -153,8 +148,6 @@ public final class DungeonRun {
         this.returnPoints = new HashMap<>(returnPoints);
         this.downedPlayers = new HashMap<>(downedPlayers);
         this.disconnectedAt = new HashMap<>(disconnectedAt);
-        this.dungeonTimeBossBar = null;
-        this.closeTimerBossBar = null;
     }
 
     // ---- Public getters ----
@@ -180,8 +173,6 @@ public final class DungeonRun {
     public int closeTimerTicks() { return closeTimerTicks; }
     public int initialCloseTimerTicks() { return initialCloseTimerTicks; }
     public long startTick() { return startTick; }
-    @Nullable public ServerBossEvent getDungeonTimeBossBar() { return dungeonTimeBossBar; }
-    @Nullable public ServerBossEvent getCloseTimerBossBar() { return closeTimerBossBar; }
 
     public Map<UUID, RunParticipant> participants() {
         return Collections.unmodifiableMap(participants);
@@ -209,8 +200,6 @@ public final class DungeonRun {
     void setDungeonTimerTicks(int ticks) { this.dungeonTimerTicks = ticks; }
     void setCloseTimerTicks(int ticks) { this.closeTimerTicks = ticks; }
     void setInitialCloseTimerTicks(int ticks) { this.initialCloseTimerTicks = ticks; }
-    void setDungeonTimeBossBar(@Nullable ServerBossEvent bar) { this.dungeonTimeBossBar = bar; }
-    void setCloseTimerBossBar(@Nullable ServerBossEvent bar) { this.closeTimerBossBar = bar; }
 
     void addParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void updateParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }

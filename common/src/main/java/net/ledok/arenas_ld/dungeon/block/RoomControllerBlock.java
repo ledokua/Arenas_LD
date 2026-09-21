@@ -2,7 +2,7 @@ package net.ledok.arenas_ld.dungeon.block;
 
 import com.mojang.serialization.MapCodec;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
-import net.ledok.arenas_ld.item.LinkerItem;
+import net.ledok.arenas_ld.item.DungeonToolItem;
 import net.minecraft.core.BlockPos;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -42,7 +42,7 @@ public class RoomControllerBlock extends BaseEntityBlock {
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player, BlockHitResult hit) {
-        if (player.getMainHandItem().getItem() instanceof LinkerItem || player.getOffhandItem().getItem() instanceof LinkerItem) {
+        if (player.getMainHandItem().getItem() instanceof DungeonToolItem || player.getOffhandItem().getItem() instanceof DungeonToolItem) {
             return InteractionResult.PASS;
         }
         if (!world.isClientSide) {

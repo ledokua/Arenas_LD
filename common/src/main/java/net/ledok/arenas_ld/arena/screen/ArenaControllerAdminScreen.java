@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.arena.screen;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
-import net.ledok.arenas_ld.arena.packet.ArenaAdminSetBoolPayload;
 import net.ledok.arenas_ld.arena.packet.ArenaAdminSetIntPayload;
 import net.ledok.arenas_ld.arena.packet.ArenaMoveInstancePayload;
 import net.ledok.arenas_ld.arena.packet.ArenaRemoveInstancePayload;
@@ -27,9 +26,9 @@ import net.minecraft.world.entity.player.Inventory;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
-import static net.ledok.arenas_ld.screen.ArenasUi.BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
 import static net.ledok.arenas_ld.screen.ArenasUi.INK;
@@ -44,21 +43,19 @@ public class ArenaControllerAdminScreen extends CanvasHandledScreen<ArenaControl
     private Flex dynamicArea;
     private final Map<String, TextField> intFields = new LinkedHashMap<>();
     private TextField currencyBase, currencyExp, xpBase, xpExp;
-    private int lastInstanceSig = Integer.MIN_VALUE;
+    private Object lastDynamicSig;
 
     public ArenaControllerAdminScreen(ArenaControllerAdminScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         this.pos = handler.getBlockPos();
         canvas.theme(ArenasUi.THEME);
-        dimBackground(false);
         fillWindow();
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         // The old owo screen swallowed the inventory key entirely (close via × or Esc only).
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
-                && !(input.focusedNode() instanceof TextField)) return true;
+        if (ArenasUi.swallowsInventoryKey(input, keyCode, scanCode, modifiers)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -77,7 +74,6 @@ public class ArenaControllerAdminScreen extends CanvasHandledScreen<ArenaControl
         Flex root = canvas.add(Flex.column());
         root.sizing(Sizing.fill(), Sizing.fill());
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
-        root.backgroundFill(BG);
 
         float w = Math.max(480, Math.min(620, canvas.width() - 24));
         float h = Math.max(300, canvas.height() - 24);
@@ -107,8 +103,18 @@ public class ArenaControllerAdminScreen extends CanvasHandledScreen<ArenaControl
     @Override
     protected void onCanvasFrame(float partialTick) {
         ArenaControllerBlockEntity c = controller();
-        int sig = c == null ? 0 : c.getInstances().size() * 31 + c.getLeaderboard().size();
-        if (sig != lastInstanceSig) rebuildDynamic();
+        if (c != null && !dynamicSignature(c).equals(lastDynamicSig)) rebuildDynamic();
+    }
+
+    /**
+     * Everything the instance and leaderboard rows show. Copies, since the client entity refills its
+     * lists in place; the cooldown countdown is zeroed because it changes every tick.
+     */
+    private static Object dynamicSignature(ArenaControllerBlockEntity c) {
+        return List.of(
+            c.getInstances().stream().map(inst -> inst.withStatus(inst.status(), 0)).toList(),
+            Set.copyOf(c.getPendingInstanceRemovals()),
+            List.copyOf(c.getLeaderboard()));
     }
 
     private Flex buildSettings(ArenaControllerBlockEntity c) {
@@ -139,9 +145,6 @@ public class ArenaControllerAdminScreen extends CanvasHandledScreen<ArenaControl
         Flex buttons = Flex.row().gap(6);
         buttons.sizing(Sizing.fill(), Sizing.content());
         buttons.item(ArenasUi.button(Component.translatable("gui.arenas_ld.save"), this::saveSettings));
-        boolean inbox = c.isLootViaInbox();
-        buttons.item(ArenasUi.button(Component.translatable("gui.arenas_ld.arena.loot_via_inbox", inbox ? "ON" : "OFF"),
-            () -> ClientPlayNetworking.send(new ArenaAdminSetBoolPayload(pos, "lootViaInbox", !inbox))));
         box.item(buttons);
         return box;
     }
@@ -150,7 +153,7 @@ public class ArenaControllerAdminScreen extends CanvasHandledScreen<ArenaControl
         if (dynamicArea == null) return;
         ArenaControllerBlockEntity c = controller();
         if (c == null) return;
-        lastInstanceSig = c.getInstances().size() * 31 + c.getLeaderboard().size();
+        lastDynamicSig = dynamicSignature(c);
         dynamicArea.clear();
 
         dynamicArea.item(ArenasUi.spacer(4));
@@ -159,21 +162,20 @@ public class ArenaControllerAdminScreen extends CanvasHandledScreen<ArenaControl
         if (instances.isEmpty()) {
             dynamicArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.arena.no_instances"), INK_DIM));
         }
-        for (int i = 0; i < instances.size(); i++) {
-            ArenaControllerBlockEntity.ArenaInstanceState inst = instances.get(i);
-            int idx = i;
+        for (ArenaControllerBlockEntity.ArenaInstanceState inst : instances) {
             Flex row = Flex.row().gap(4).padding(Insets.of(2, 6, 2, 6)).alignItems(Align.CENTER);
             row.sizing(Sizing.fill(), Sizing.fixed(20));
             row.backgroundFill(ROW_BG);
             BlockPos sp = inst.spawnerPos();
             row.item(ArenasUi.text(Component.literal(sp.toShortString() + "  " + inst.status().name()), INK));
             row.spacer();
+            String dim = inst.dimension().location().toString();
             row.item(ArenasUi.button(Component.literal("▲"), 18, 16,
-                () -> ClientPlayNetworking.send(new ArenaMoveInstancePayload(pos, idx, idx - 1))));
+                () -> ClientPlayNetworking.send(new ArenaMoveInstancePayload(pos, sp, dim, -1))));
             row.item(ArenasUi.button(Component.literal("▼"), 18, 16,
-                () -> ClientPlayNetworking.send(new ArenaMoveInstancePayload(pos, idx, idx + 1))));
+                () -> ClientPlayNetworking.send(new ArenaMoveInstancePayload(pos, sp, dim, 1))));
             row.item(ArenasUi.button(Component.literal("✕"), 18, 16,
-                () -> ClientPlayNetworking.send(new ArenaRemoveInstancePayload(pos, sp, inst.dimension().location().toString()))));
+                () -> ClientPlayNetworking.send(new ArenaRemoveInstancePayload(pos, sp, dim))));
             dynamicArea.item(row);
         }
 

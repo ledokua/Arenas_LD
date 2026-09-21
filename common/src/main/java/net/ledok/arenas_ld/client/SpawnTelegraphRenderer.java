@@ -1,17 +1,10 @@
 package net.ledok.arenas_ld.client;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
@@ -21,7 +14,11 @@ import java.util.List;
 /**
  * Flickering red wireframe boxes over upcoming mob spawn positions, driven by
  * {@link SpawnTelegraphStore} (fed by SpawnTelegraphPayload during a room's grace delay
- * and between waves). Same through-wall rendering as SelectionOverlayRenderer.
+ * and between waves). Same through-wall rendering as SelectionOverlayRenderer, and literally its pass:
+ * the outline mesh needs a matching mode, vertex format, shader and line width to come out thick rather
+ * than hairline, so the whole recipe lives in one place and this draws through it. Outlines only — a
+ * telegraph marks a point a mob will appear at, not a volume, and a tint on every one of them would be
+ * the thing a builder sees instead of the room.
  */
 public final class SpawnTelegraphRenderer {
     private static final float[] TELEGRAPH_COLOR = {0.95f, 0.12f, 0.12f};
@@ -52,25 +49,18 @@ public final class SpawnTelegraphRenderer {
         poseStack.translate(-cam.x, -cam.y, -cam.z);
         Matrix4f matrix = poseStack.last().pose();
 
-        RenderSystem.disableDepthTest();
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.lineWidth(2.0F);
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
-
-        BufferBuilder buffer = Tesselator.getInstance()
-            .begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
-        for (BlockPos pos : positions) {
-            SelectionOverlayRenderer.addBoxEdges(buffer, matrix, pos, TELEGRAPH_COLOR, alpha);
+        SelectionOverlayRenderer.beginOverlayPass();
+        try {
+            BufferBuilder buffer = SelectionOverlayRenderer.beginLines();
+            for (BlockPos pos : positions) {
+                SelectionOverlayRenderer.addBoxEdges(buffer, matrix, pos, TELEGRAPH_COLOR, alpha);
+            }
+            SelectionOverlayRenderer.drawMesh(buffer);
+        } finally {
+            // Unconditional: the pass saves the fog start into a static, so a throw in between would not
+            // just leak depth and blend state for the frame, it would poison the next frame's save.
+            SelectionOverlayRenderer.endOverlayPass();
         }
-        MeshData mesh = buffer.build();
-        if (mesh != null) {
-            BufferUploader.drawWithShader(mesh);
-        }
-
-        RenderSystem.lineWidth(1.0F);
-        RenderSystem.enableDepthTest();
-        RenderSystem.disableBlend();
         poseStack.popPose();
     }
 }

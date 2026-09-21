@@ -27,7 +27,6 @@ public record RaidControllerAdminData(
     int respawnTimeTicks,
     int inviteExpiryTicks,
     int deathTimePenaltyTicks,
-    boolean lootViaInbox,
     String raidName,
     Map<DifficultyTier, RaidTierConfig> tierConfigs,
     Map<BlockPos, InstanceRun> runningInstances,
@@ -67,7 +66,6 @@ public record RaidControllerAdminData(
         buf.writeVarInt(data.respawnTimeTicks());
         buf.writeVarInt(data.inviteExpiryTicks());
         buf.writeVarInt(data.deathTimePenaltyTicks());
-        buf.writeBoolean(data.lootViaInbox());
         buf.writeUtf(data.raidName());
 
         buf.writeVarInt(data.tierConfigs().size());
@@ -116,7 +114,6 @@ public record RaidControllerAdminData(
         int respawnTimeTicks = buf.readVarInt();
         int inviteExpiryTicks = buf.readVarInt();
         int deathTimePenaltyTicks = buf.readVarInt();
-        boolean lootViaInbox = buf.readBoolean();
         String raidName = buf.readUtf();
 
         int tierConfigSize = buf.readVarInt();
@@ -154,7 +151,6 @@ public record RaidControllerAdminData(
             respawnTimeTicks,
             inviteExpiryTicks,
             deathTimePenaltyTicks,
-            lootViaInbox,
             raidName,
             tierConfigs,
             runningInstances,

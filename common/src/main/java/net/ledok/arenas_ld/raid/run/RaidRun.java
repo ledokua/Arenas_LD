@@ -11,7 +11,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
@@ -51,8 +50,6 @@ public final class RaidRun {
     private final Map<UUID, PlayerReturnPoint> returnPoints;
     private final Map<UUID, DownedPlayer> downedPlayers;
     private final Map<UUID, Long> disconnectedAt;
-    @Nullable private transient ServerBossEvent raidTimerBossBar;
-    @Nullable private transient ServerBossEvent closeTimerBossBar;
 
     public RaidRun(
         UUID lobbyId,
@@ -83,8 +80,6 @@ public final class RaidRun {
         this.returnPoints = new HashMap<>();
         this.downedPlayers = new HashMap<>();
         this.disconnectedAt = new HashMap<>();
-        this.raidTimerBossBar = null;
-        this.closeTimerBossBar = null;
     }
 
     RaidRun(
@@ -123,8 +118,6 @@ public final class RaidRun {
         this.returnPoints = new HashMap<>(returnPoints);
         this.downedPlayers = new HashMap<>(downedPlayers);
         this.disconnectedAt = new HashMap<>(disconnectedAt);
-        this.raidTimerBossBar = null;
-        this.closeTimerBossBar = null;
     }
 
     public RaidPhase phase() { return phase; }
@@ -143,8 +136,6 @@ public final class RaidRun {
     public long startTick() { return startTick; }
     @Nullable public UUID bossUuid() { return bossRef == null ? null : bossRef.bossUuid(); }
     @Nullable public ResourceKey<Level> bossDimension() { return bossRef == null ? null : bossRef.bossDimension(); }
-    @Nullable public ServerBossEvent getRaidTimerBossBar() { return raidTimerBossBar; }
-    @Nullable public ServerBossEvent getCloseTimerBossBar() { return closeTimerBossBar; }
 
     public Map<UUID, RunParticipant> participants() {
         return Collections.unmodifiableMap(participants);
@@ -168,8 +159,6 @@ public final class RaidRun {
     void setBossRef(@Nullable UUID bossUuid, @Nullable ResourceKey<Level> bossDimension) {
         this.bossRef = (bossUuid == null || bossDimension == null) ? null : new BossRef(bossUuid, bossDimension);
     }
-    void setRaidTimerBossBar(@Nullable ServerBossEvent bar) { this.raidTimerBossBar = bar; }
-    void setCloseTimerBossBar(@Nullable ServerBossEvent bar) { this.closeTimerBossBar = bar; }
 
     void addParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void updateParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }

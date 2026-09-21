@@ -136,8 +136,6 @@ public class RaidControllerBlockEntity extends BlockEntity
     private int deathTimePenaltyTicks = DEFAULT_DEATH_TIME_PENALTY_TICKS;
     private int disconnectGraceTicks = DEFAULT_DISCONNECT_GRACE_TICKS;
     private int lobbyOfflineTimeoutTicks = DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS;
-    /** When true, per-player loot bundles are delivered to the Economy_LD inbox instead of dropped in the world. */
-    private boolean lootViaInbox = false;
     private String raidName = "";
     /** Per-tier raid configs (health/damage multipliers, time limit, enabled, reward currency). */
     private final Map<DifficultyTier, RaidTierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
@@ -203,7 +201,6 @@ public class RaidControllerBlockEntity extends BlockEntity
         int inviteExpiryTicks,
         int cooldownTicks,
         int closeTimerSeconds,
-        boolean lootViaInbox,
         List<InstanceEntry> instances,
         List<Lobby> lobbies,
         List<UUID> queuedLobbyIds,
@@ -220,7 +217,6 @@ public class RaidControllerBlockEntity extends BlockEntity
             Codec.INT.optionalFieldOf("inviteExpiryTicks", DEFAULT_INVITE_EXPIRY_TICKS).forGetter(State::inviteExpiryTicks),
             Codec.INT.optionalFieldOf("cooldownTicks", DEFAULT_COOLDOWN_TICKS).forGetter(State::cooldownTicks),
             Codec.INT.optionalFieldOf("closeTimerSeconds", DEFAULT_CLOSE_TIMER_SECONDS).forGetter(State::closeTimerSeconds),
-            Codec.BOOL.optionalFieldOf("lootViaInbox", false).forGetter(State::lootViaInbox),
             InstanceEntry.CODEC.listOf().optionalFieldOf("instances", List.of()).forGetter(State::instances),
             Lobby.CODEC.listOf().optionalFieldOf("lobbies", List.of()).forGetter(State::lobbies),
             UUIDUtil.CODEC.listOf().optionalFieldOf("queuedLobbyIds", List.of()).forGetter(State::queuedLobbyIds),
@@ -406,18 +402,6 @@ public class RaidControllerBlockEntity extends BlockEntity
         return true;
     }
 
-    public boolean isLootViaInbox() {
-        return lootViaInbox;
-    }
-
-    public void setLootViaInbox(boolean lootViaInbox) {
-        if (this.lootViaInbox == lootViaInbox) {
-            return;
-        }
-        this.lootViaInbox = lootViaInbox;
-        markDirtyAndSync();
-    }
-
     public String getRaidName() {
         return raidName;
     }
@@ -531,14 +515,18 @@ public class RaidControllerBlockEntity extends BlockEntity
         return false;
     }
 
-    /** Move an instance within the pool from index {@code from} to index {@code to}. */
-    public boolean moveInstance(int from, int to) {
-        if (from < 0 || from >= instances.size() || to < 0 || to >= instances.size()) return false;
-        if (from == to) return false;
-        RaidInstanceState moved = instances.remove(from);
-        instances.add(to, moved);
-        markDirtyAndSync();
-        return true;
+    /** Move an instance one slot up ({@code direction < 0}) or down ({@code direction > 0}) within the pool. */
+    public boolean moveInstance(BlockPos spawnerPos, ResourceKey<Level> dimension, int direction) {
+        for (int from = 0; from < instances.size(); from++) {
+            RaidInstanceState inst = instances.get(from);
+            if (!inst.spawnerPos().equals(spawnerPos) || !inst.dimension().equals(dimension)) continue;
+            int to = from + Integer.signum(direction);
+            if (to == from || to < 0 || to >= instances.size()) return false;
+            instances.add(to, instances.remove(from));
+            markDirtyAndSync();
+            return true;
+        }
+        return false;
     }
 
     private @Nullable RaidInstanceState reserveFreeInstance() {
@@ -1363,7 +1351,6 @@ public class RaidControllerBlockEntity extends BlockEntity
             inviteExpiryTicks,
             cooldownTicks,
             closeTimerSeconds,
-            lootViaInbox,
             instanceEntries,
             new ArrayList<>(lobbies),
             new ArrayList<>(queuedLobbyIds),
@@ -1397,7 +1384,6 @@ public class RaidControllerBlockEntity extends BlockEntity
                     inviteExpiryTicks = state.inviteExpiryTicks();
                     cooldownTicks = state.cooldownTicks();
                     closeTimerSeconds = state.closeTimerSeconds();
-                    lootViaInbox = state.lootViaInbox();
 
                     instances.clear();
                     for (InstanceEntry ie : state.instances()) {
@@ -1613,7 +1599,6 @@ public class RaidControllerBlockEntity extends BlockEntity
             getRespawnTimeTicks(),
             inviteExpiryTicks,
             deathTimePenaltyTicks,
-            lootViaInbox,
             raidName,
             new EnumMap<>(tierConfigs),
             running,

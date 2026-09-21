@@ -4,9 +4,14 @@
   "version": "${version}",
 
   "name": "Arenas_LD",
-  "description": "Mod that adds admin utilities for creating dungeons/raids",
-  "authors": [],
-  "contact": {},
+  "description": "Instanced PvE content built from your own builds: multi-room dungeons, endless wave arenas and raid bosses, with lobbies, parties, difficulty tiers, instances and leaderboards.",
+  "authors": ["LeDok"],
+  "contact": {
+    "homepage": "https://github.com/ledokua/Arenas_LD",
+    "sources": "https://github.com/ledokua/Arenas_LD",
+    "issues": "https://github.com/ledokua/Arenas_LD/issues",
+    "discord": "ledokua"
+  },
 
   "license": "MIT",
   "icon": "assets/arenas_ld/icon.png",
@@ -34,7 +39,7 @@
     "fabric": "*",
     "minecraft": "${minecraft_version}",
     "busylib": "*",
-    "vectorlib": ">=0.2.1"
+    "vectorlib": ">=0.2.6"
   },
   "suggests": {
     "economy_ld": "*"

@@ -17,9 +17,8 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
     private final BlockPos blockPos;
     private List<RoomControllerData.SpawnerEntry> spawners;
     private List<BlockPos> doorPositions;
-    private List<BlockPos> entrancePositions;
     private String roomName;
-    private Optional<BlockPos> respawnPos;
+    private List<BlockPos> respawnPositions;
     private RoomRewardConfig roomReward;
     private RoomObjectiveConfig objective;
     private List<String> knownLootTableIds;
@@ -46,16 +45,12 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
         return List.copyOf(doorPositions);
     }
 
-    public List<BlockPos> getEntrancePositions() {
-        return List.copyOf(entrancePositions);
-    }
-
     public String getRoomName() {
         return roomName;
     }
 
-    public Optional<BlockPos> getRespawnPos() {
-        return respawnPos;
+    public List<BlockPos> getRespawnPositions() {
+        return List.copyOf(respawnPositions);
     }
 
     public RoomRewardConfig getRoomReward() {
@@ -73,9 +68,8 @@ public class RoomControllerScreenHandler extends AbstractContainerMenu {
     public void applyData(RoomControllerData data) {
         this.spawners = List.copyOf(data.spawners());
         this.doorPositions = List.copyOf(data.doorPositions());
-        this.entrancePositions = List.copyOf(data.entrancePositions());
         this.roomName = data.roomName();
-        this.respawnPos = data.respawnPos();
+        this.respawnPositions = List.copyOf(data.respawnPositions());
         this.roomReward = data.roomReward();
         this.objective = data.objective();
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());

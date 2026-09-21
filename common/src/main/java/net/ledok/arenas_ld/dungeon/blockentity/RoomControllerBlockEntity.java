@@ -7,6 +7,7 @@ import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.PhaseBlock;
 import net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig;
 import net.ledok.arenas_ld.dungeon.room.RoomRewardConfig;
+import net.ledok.arenas_ld.dungeon.run.RoomGraph;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.dungeon.screen.RoomControllerData;
 import net.ledok.arenas_ld.dungeon.screen.RoomControllerScreenHandler;
@@ -46,12 +47,14 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     // ---- Fields ----
 
     private final List<BlockPos> spawnerOffsets = new ArrayList<>();
+    /** Doors: PhaseBlock groups by canonical anchor, direction-free. A door linked by this room
+     *  and another room connects them in the {@code RoomGraph}; a door linked only here is a
+     *  boundary door (the start room's spawn-side entrance, or a dead end). Legacy saves'
+     *  separate entrance list is merged into this on load. */
     private final List<BlockPos> doorOffsets = new ArrayList<>();
-    /** Entrance doors: PhaseBlocks players cross to enter this room. A block shared with another
-     *  room's exit door defines a graph edge (that room → this room) for branching dungeons. */
-    private final List<BlockPos> entranceOffsets = new ArrayList<>();
-    /** Single respawn point for this room, relative to the controller. Players downed while this room is active respawn here. */
-    @Nullable private BlockPos respawnOffset = null;
+    /** Respawn points for this room, relative to the controller. Rooms can be entered from any
+     *  door, so several may be placed — entry and downed-player respawns pick the closest one. */
+    private final List<BlockPos> respawnOffsets = new ArrayList<>();
     private final Set<UUID> aliveMobs = new HashSet<>();
     /** Subset of {@link #aliveMobs} spawned by a linked boss spawner. When this room has any and
      *  they've all died, any remaining adds are discarded instead of requiring them to be killed too. */
@@ -114,31 +117,41 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         return Collections.unmodifiableList(doorOffsets);
     }
 
-    public List<BlockPos> getEntrancePositions() {
-        List<BlockPos> absolute = new ArrayList<>(entranceOffsets.size());
-        for (BlockPos entranceOffset : entranceOffsets) {
-            absolute.add(worldPosition.offset(entranceOffset));
+    public List<BlockPos> getRespawnPointOffsets() {
+        return Collections.unmodifiableList(respawnOffsets);
+    }
+
+    public List<BlockPos> getRespawnPositions() {
+        List<BlockPos> absolute = new ArrayList<>(respawnOffsets.size());
+        for (BlockPos offset : respawnOffsets) {
+            absolute.add(worldPosition.offset(offset));
         }
         return Collections.unmodifiableList(absolute);
     }
 
-    public List<BlockPos> getEntranceOffsets() {
-        return Collections.unmodifiableList(entranceOffsets);
-    }
-
-    /** Absolute respawn position for this room, or {@code null} if none is configured. */
+    /** The respawn position closest to {@code near} (squared block distance), or null if none set. */
     @Nullable
-    public BlockPos getRespawnPos() {
-        return respawnOffset == null ? null : worldPosition.offset(respawnOffset);
-    }
-
-    @Nullable
-    public BlockPos getRespawnOffset() {
-        return respawnOffset;
+    public BlockPos closestRespawnPos(BlockPos near) {
+        BlockPos best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (BlockPos offset : respawnOffsets) {
+            BlockPos absolute = worldPosition.offset(offset);
+            double dist = absolute.distSqr(near);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = absolute;
+            }
+        }
+        return best;
     }
 
     public Set<UUID> getAliveMobs() {
         return Collections.unmodifiableSet(aliveMobs);
+    }
+
+    /** Live boss-flagged mobs of the current wave (empty when the wave has none). */
+    public Set<UUID> getBossMobs() {
+        return Collections.unmodifiableSet(bossMobs);
     }
 
     public boolean isActivated() {
@@ -264,15 +277,29 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
     }
 
-    /** Returns true if the door was added (false if already present). */
-    public boolean addDoor(BlockPos absolutePos) {
-        BlockPos doorOffset = absolutePos.subtract(worldPosition);
-        if (doorOffsets.contains(doorOffset)) {
-            return false;
+    /** Toggles the exit door containing this phase block; returns true when it is now linked. */
+    public boolean toggleDoor(BlockPos absolutePos) {
+        return toggleDoorAnchor(doorOffsets, absolutePos);
+    }
+
+    /**
+     * Doors are stored by their group's canonical anchor, not the block the builder clicked:
+     * the clicked phase block is flood-filled to its whole connected door and
+     * {@link RoomGraph#canonicalAnchor} picks the representative. Clicking any block of the door —
+     * from this room or the one on the other side — therefore resolves to the same stored position.
+     * Clicking a block of an already-linked door unlinks the whole door (entries from older saves
+     * that stored the clicked block instead of the anchor are matched through the group too).
+     */
+    private boolean toggleDoorAnchor(List<BlockPos> offsets, BlockPos absolutePos) {
+        Set<BlockPos> group = level != null
+            ? RoomGraph.expandDoorGroup(level, absolutePos)
+            : Set.of(absolutePos);
+        boolean wasLinked = offsets.removeIf(offset -> group.contains(worldPosition.offset(offset)));
+        if (!wasLinked) {
+            offsets.add(RoomGraph.canonicalAnchor(group).subtract(worldPosition));
         }
-        doorOffsets.add(doorOffset);
         markDirtyAndSync();
-        return true;
+        return !wasLinked;
     }
 
     /** Returns true if the door was removed (false if not present). */
@@ -292,38 +319,28 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
     }
 
-    /** Returns true if the entrance door was added (false if already present). */
-    public boolean addEntranceDoor(BlockPos absolutePos) {
-        BlockPos entranceOffset = absolutePos.subtract(worldPosition);
-        if (entranceOffsets.contains(entranceOffset)) {
+    /** Returns true if the respawn point was added (false if already present). */
+    public boolean addRespawnPointOffset(BlockPos offset) {
+        if (respawnOffsets.contains(offset)) {
             return false;
         }
-        entranceOffsets.add(entranceOffset);
+        respawnOffsets.add(offset);
         markDirtyAndSync();
         return true;
     }
 
-    /** Returns true if the entrance door was removed (false if not present). */
-    public boolean removeEntranceDoor(BlockPos absolutePos) {
-        BlockPos entranceOffset = absolutePos.subtract(worldPosition);
-        boolean removed = entranceOffsets.remove(entranceOffset);
+    /** Returns true if the respawn point was removed (false if not present). */
+    public boolean removeRespawnPointOffset(BlockPos offset) {
+        boolean removed = respawnOffsets.remove(offset);
         if (removed) {
             markDirtyAndSync();
         }
         return removed;
     }
 
-    public void clearEntranceDoors() {
-        if (!entranceOffsets.isEmpty()) {
-            entranceOffsets.clear();
-            markDirtyAndSync();
-        }
-    }
-
-    public void setRespawnPos(@Nullable BlockPos absolutePos) {
-        BlockPos newRespawnOffset = absolutePos == null ? null : absolutePos.subtract(worldPosition);
-        if (!Objects.equals(respawnOffset, newRespawnOffset)) {
-            this.respawnOffset = newRespawnOffset;
+    public void clearRespawnPoints() {
+        if (!respawnOffsets.isEmpty()) {
+            respawnOffsets.clear();
             markDirtyAndSync();
         }
     }
@@ -765,9 +782,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     }
 
     /**
-     * Open the room's door by setting the phase block's SOLID property to false.
-     * No-op if no door is set, the door position isn't loaded, or the block at that position
-     * isn't a PhaseBlock. Legacy (linear) path: opens fully invisible.
+     * Open all of the room's doors fully (invisible). Legacy (linear) path: doors there are
+     * plain "opens on clear" exits with no graph semantics.
      */
     public void openDoor(ServerLevel world) {
         for (BlockPos doorOffset : doorOffsets) {
@@ -775,42 +791,19 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
     }
 
-    /**
-     * Close all of the room's doors by setting their phase blocks' SOLID property to true.
-     * Same no-op conditions as {@link #openDoor(ServerLevel)}, per door.
-     */
-    public void closeDoor(ServerLevel world) {
+    /** Close every door of this room. Called on lock-in and reset. */
+    public void closeAllDoors(ServerLevel world) {
         for (BlockPos doorOffset : doorOffsets) {
             setDoorState(world, worldPosition.offset(doorOffset), true, false);
         }
     }
 
-    /** Open this room's entrance doors ARMED (orange): passable, but this room isn't cleared yet. */
-    public void openEntranceDoorsArmed(ServerLevel world) {
-        for (BlockPos entranceOffset : entranceOffsets) {
-            setDoorState(world, worldPosition.offset(entranceOffset), false, true);
-        }
-    }
-
     /**
-     * Open every door of this room when it clears: entrances turn fully invisible (both sides
-     * beaten), exits open ARMED (orange) because the rooms beyond aren't cleared yet.
+     * Set one door's state by any block of its group (branching lifecycle decides open/armed
+     * per door from the graph: partner cleared → invisible, partner pending → armed orange).
      */
-    public void openAllDoors(ServerLevel world) {
-        for (BlockPos doorOffset : doorOffsets) {
-            setDoorState(world, worldPosition.offset(doorOffset), false, true);
-        }
-        for (BlockPos entranceOffset : entranceOffsets) {
-            setDoorState(world, worldPosition.offset(entranceOffset), false, false);
-        }
-    }
-
-    /** Close every door of this room — exits and entrances. Called on lock-in and reset. */
-    public void closeAllDoors(ServerLevel world) {
-        closeDoor(world);
-        for (BlockPos entranceOffset : entranceOffsets) {
-            setDoorState(world, worldPosition.offset(entranceOffset), true, false);
-        }
+    public void setDoorGroupState(ServerLevel world, BlockPos doorAbsolute, boolean solid, boolean armed) {
+        setDoorState(world, doorAbsolute, solid, armed);
     }
 
     private void setDoorState(ServerLevel world, BlockPos doorAbsolute, boolean solid, boolean armed) {
@@ -903,7 +896,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     private record State(
         List<BlockPos> spawnerOffsets,
         List<BlockPos> doorOffsets,
-        Optional<BlockPos> respawnOffset,
+        RespawnPoints respawnPoints,
         Set<UUID> aliveMobs,
         Set<UUID> bossMobs,
         boolean activated,
@@ -921,7 +914,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.listOf().fieldOf("spawnerOffsets").forGetter(State::spawnerOffsets),
             BlockPos.CODEC.listOf().optionalFieldOf("doorOffsets", List.of()).forGetter(State::doorOffsets),
-            BlockPos.CODEC.optionalFieldOf("respawnOffset").forGetter(State::respawnOffset),
+            RespawnPoints.MAP_CODEC.forGetter(State::respawnPoints),
             UUIDUtil.CODEC.listOf()
                 .xmap((List<UUID> list) -> (Set<UUID>) new HashSet<>(list),
                       (Set<UUID> set) -> new ArrayList<>(set))
@@ -944,6 +937,16 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         ).apply(i, State::new));
     }
 
+    /** Respawn points, nested as a flattened MapCodec because the State codec is at the 16-field
+     *  cap: reads the pre-rework single "respawnOffset" alongside the list for old saves. */
+    private record RespawnPoints(Optional<BlockPos> legacySingle, List<BlockPos> offsets) {
+        static final com.mojang.serialization.MapCodec<RespawnPoints> MAP_CODEC =
+            RecordCodecBuilder.mapCodec(i -> i.group(
+                BlockPos.CODEC.optionalFieldOf("respawnOffset").forGetter(RespawnPoints::legacySingle),
+                BlockPos.CODEC.listOf().optionalFieldOf("respawnOffsets", List.of()).forGetter(RespawnPoints::offsets)
+            ).apply(i, RespawnPoints::new));
+    }
+
     /** Objective runtime state, nested because the State codec is at the 16-field cap. */
     private record ObjectiveRuntime(int surviveTicksRemaining, Optional<UUID> protectTargetUuid) {
         static final ObjectiveRuntime EMPTY = new ObjectiveRuntime(-1, Optional.empty());
@@ -957,8 +960,9 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
         State state = new State(spawnerOffsets, doorOffsets,
-            Optional.ofNullable(respawnOffset), aliveMobs, bossMobs, activated, cleared, roomName,
-            waveNumbers, currentWaveIndex, nextWaveDelayTicks, bossInCurrentWave, roomReward, entranceOffsets,
+            new RespawnPoints(Optional.empty(), respawnOffsets), aliveMobs, bossMobs, activated, cleared, roomName,
+            waveNumbers, currentWaveIndex, nextWaveDelayTicks, bossInCurrentWave, roomReward,
+            List.of() /* legacy entranceOffsets — merged into doorOffsets since the undirected-door rework */,
             objective, new ObjectiveRuntime(surviveTicksRemaining, Optional.ofNullable(protectTargetUuid)));
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
@@ -978,7 +982,21 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     spawnerOffsets.addAll(state.spawnerOffsets());
                     doorOffsets.clear();
                     doorOffsets.addAll(state.doorOffsets());
-                    respawnOffset = state.respawnOffset().orElse(null);
+                    // Pre-rework saves kept entrance doors in a second list; doors are
+                    // direction-free now, so fold them in (positions, not groups — group-level
+                    // dedupe happens wherever doors are consumed).
+                    for (BlockPos legacyEntrance : state.entranceOffsets()) {
+                        if (!doorOffsets.contains(legacyEntrance)) {
+                            doorOffsets.add(legacyEntrance);
+                        }
+                    }
+                    respawnOffsets.clear();
+                    respawnOffsets.addAll(state.respawnPoints().offsets());
+                    state.respawnPoints().legacySingle().ifPresent(legacy -> {
+                        if (!respawnOffsets.contains(legacy)) {
+                            respawnOffsets.add(legacy);
+                        }
+                    });
                     aliveMobs.clear();
                     aliveMobs.addAll(state.aliveMobs());
                     bossMobs.clear();
@@ -992,8 +1010,6 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     nextWaveDelayTicks = state.nextWaveDelayTicks();
                     bossInCurrentWave = state.bossInCurrentWave();
                     roomReward = state.roomReward();
-                    entranceOffsets.clear();
-                    entranceOffsets.addAll(state.entranceOffsets());
                     objective = state.objective();
                     surviveTicksRemaining = state.objectiveRuntime().surviveTicksRemaining();
                     protectTargetUuid = state.objectiveRuntime().protectTargetUuid().orElse(null);
@@ -1038,8 +1054,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                 entries.add(new RoomControllerData.SpawnerEntry(absolutePos, 1, false, true));
             }
         }
-        return new RoomControllerData(worldPosition, entries, getDoorPositions(), getEntrancePositions(),
-            roomName, Optional.ofNullable(getRespawnPos()), roomReward, objective, enumerateLootTables());
+        return new RoomControllerData(worldPosition, entries, getDoorPositions(),
+            roomName, getRespawnPositions(), roomReward, objective, enumerateLootTables());
     }
 
     /** Sorted loot table ids for the reward screen's autocomplete; empty when called client-side. */

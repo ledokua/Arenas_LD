@@ -7,134 +7,149 @@ import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 
 /**
- * Door-derived directed graph of a dungeon's rooms. Edge A→B exists when a block of one of A's
- * exit-door groups coincides with a block of one of B's entrance-door groups (builders link the
- * same PhaseBlock from both sides; groups are flood-filled so multi-block doors match on any
- * block). Deliberately standalone so future features (e.g. dynamically generated room maps) can
- * build on {@link #edges()} without touching the run lifecycle.
+ * Undirected door graph of a dungeon's rooms. A door is a connected group of PhaseBlocks
+ * (flood-filled, so linking any block of a multi-block doorway means the whole doorway) and
+ * belongs to the rooms that linked it — usually two (a connection), sometimes one (a boundary
+ * door: the spawn-side entrance of the start room, or a dead end). Doors carry no direction:
+ * whichever side clears first opens the door armed toward the other, and crossing it activates
+ * the uncleared side. Deliberately standalone so future features (validation, map views) can
+ * build on {@link #doors()} without touching the run lifecycle.
  */
 public final class RoomGraph {
 
-    public record Edge(BlockPos fromRoom, BlockPos toRoom) {
+    /**
+     * One door: its full block group, canonical anchor (lowest x,y,z block — the identity every
+     * room's link resolves to), and the rooms that linked it. More than two owning rooms is a
+     * builder error (warned at build).
+     */
+    public record Door(BlockPos anchor, Set<BlockPos> blocks, List<BlockPos> rooms) {
+        /** The room on the other side, or null for a boundary door (spawn-side or dead end). */
+        @Nullable
+        public BlockPos partnerOf(BlockPos room) {
+            for (BlockPos other : rooms) {
+                if (!other.equals(room)) {
+                    return other;
+                }
+            }
+            return null;
+        }
     }
 
     private final List<BlockPos> roomPositions;
-    private final Map<BlockPos, Set<BlockPos>> entranceGroupBlocks;
-    private final List<Edge> edges;
-    private final boolean anyEntranceDoors;
+    private final Map<BlockPos, Door> doorsByAnchor;
 
-    private RoomGraph(List<BlockPos> roomPositions, Map<BlockPos, Set<BlockPos>> entranceGroupBlocks,
-                      List<Edge> edges, boolean anyEntranceDoors) {
+    private RoomGraph(List<BlockPos> roomPositions, Map<BlockPos, Door> doorsByAnchor) {
         this.roomPositions = roomPositions;
-        this.entranceGroupBlocks = entranceGroupBlocks;
-        this.edges = edges;
-        this.anyEntranceDoors = anyEntranceDoors;
+        this.doorsByAnchor = doorsByAnchor;
     }
 
     public static RoomGraph build(ServerLevel world, DungeonBossSpawnerBlockEntity dbs) {
         List<BlockPos> roomPositions = new ArrayList<>();
-        Map<BlockPos, Set<BlockPos>> exitBlocks = new HashMap<>();
-        Map<BlockPos, Set<BlockPos>> entranceBlocks = new HashMap<>();
-        boolean anyEntrances = false;
+        // LinkedHashMap: door iteration order follows discovery order, keeping logs/UI stable.
+        Map<BlockPos, Door> doorsByAnchor = new LinkedHashMap<>();
 
         for (BlockPos roomPos : dbs.getRooms()) {
             if (!(world.getBlockEntity(roomPos) instanceof RoomControllerBlockEntity room)) {
                 continue;
             }
             roomPositions.add(roomPos);
-            exitBlocks.put(roomPos, expandAnchors(world, room.getDoorPositions()));
-            Set<BlockPos> entrances = expandAnchors(world, room.getEntrancePositions());
-            entranceBlocks.put(roomPos, entrances);
-            anyEntrances |= !entrances.isEmpty();
-        }
-
-        List<Edge> edges = new ArrayList<>();
-        for (BlockPos from : roomPositions) {
-            Set<BlockPos> exits = exitBlocks.get(from);
-            if (exits.isEmpty()) continue;
-            for (BlockPos to : roomPositions) {
-                if (from.equals(to)) continue;
-                if (!Collections.disjoint(exits, entranceBlocks.get(to))) {
-                    edges.add(new Edge(from, to));
+            Set<BlockPos> seen = new HashSet<>();
+            for (BlockPos anchor : room.getDoorPositions()) {
+                if (seen.contains(anchor)) {
+                    continue; // two stored anchors of the same group (legacy data)
+                }
+                Set<BlockPos> group = expandDoorGroup(world, anchor);
+                seen.addAll(group);
+                BlockPos key = canonicalAnchor(group);
+                Door existing = doorsByAnchor.get(key);
+                if (existing == null) {
+                    List<BlockPos> owners = new ArrayList<>(2);
+                    owners.add(roomPos);
+                    doorsByAnchor.put(key, new Door(key, group, owners));
+                } else if (!existing.rooms().contains(roomPos)) {
+                    existing.rooms().add(roomPos);
+                    if (existing.rooms().size() > 2) {
+                        ArenasLdMod.LOGGER.warn(
+                            "RoomGraph: door {} is linked by {} rooms ({}); a door connects at most two",
+                            key, existing.rooms().size(), existing.rooms());
+                    }
                 }
             }
         }
-        return new RoomGraph(List.copyOf(roomPositions), Map.copyOf(entranceBlocks),
-            List.copyOf(edges), anyEntrances);
-    }
-
-    /** True when at least one room has entrance doors — i.e. the dungeon uses branching mode. */
-    public boolean hasAnyEntranceDoors() {
-        return anyEntranceDoors;
+        return new RoomGraph(List.copyOf(roomPositions), doorsByAnchor);
     }
 
     public List<BlockPos> roomPositions() {
         return roomPositions;
     }
 
-    public List<Edge> edges() {
-        return edges;
+    public java.util.Collection<Door> doors() {
+        return doorsByAnchor.values();
     }
 
-    public List<BlockPos> successors(BlockPos roomPos) {
-        List<BlockPos> out = new ArrayList<>();
-        for (Edge edge : edges) {
-            if (edge.fromRoom().equals(roomPos)) {
-                out.add(edge.toRoom());
+    public List<Door> doorsOf(BlockPos roomPos) {
+        List<Door> out = new ArrayList<>();
+        for (Door door : doorsByAnchor.values()) {
+            if (door.rooms().contains(roomPos)) {
+                out.add(door);
             }
         }
         return out;
     }
 
     /**
-     * Per-tick crossing-detection lookup: every entrance-door block of rooms passing
-     * {@code eligible} (lifecycle passes: not activated && not cleared), mapped to the room
-     * it lets into. A block claimed by two rooms' entrances is a builder error — first wins,
-     * with a warning.
+     * Per-tick crossing-detection lookup: every door block mapped to the one room passing
+     * {@code eligible} (lifecycle passes: not activated && not cleared) that owns the door.
+     * A door whose owners are both still eligible is skipped — it is closed (neither side has
+     * cleared), so it cannot be crossed and mapping it would be an arbitrary pick.
      */
     public Map<BlockPos, BlockPos> buildEntranceDetectionMap(Predicate<BlockPos> eligible) {
         Map<BlockPos, BlockPos> detection = new HashMap<>();
-        for (BlockPos roomPos : roomPositions) {
-            if (!eligible.test(roomPos)) continue;
-            for (BlockPos doorBlock : entranceGroupBlocks.get(roomPos)) {
-                BlockPos previous = detection.putIfAbsent(doorBlock, roomPos);
-                if (previous != null && !previous.equals(roomPos)) {
-                    ArenasLdMod.LOGGER.warn(
-                        "RoomGraph: door block {} is an entrance of both {} and {}; using the first",
-                        doorBlock, previous, roomPos);
+        for (Door door : doorsByAnchor.values()) {
+            BlockPos eligibleRoom = null;
+            boolean ambiguous = false;
+            for (BlockPos roomPos : door.rooms()) {
+                if (!eligible.test(roomPos)) {
+                    continue;
                 }
+                if (eligibleRoom != null) {
+                    ambiguous = true;
+                    break;
+                }
+                eligibleRoom = roomPos;
+            }
+            if (eligibleRoom == null || ambiguous) {
+                continue;
+            }
+            for (BlockPos doorBlock : door.blocks()) {
+                detection.put(doorBlock, eligibleRoom);
             }
         }
         return detection;
     }
 
-    private static Set<BlockPos> expandAnchors(ServerLevel world, List<BlockPos> anchors) {
-        Set<BlockPos> union = new HashSet<>();
-        for (BlockPos anchor : anchors) {
-            if (union.contains(anchor)) continue;
-            union.addAll(expandDoorGroup(world, anchor));
-        }
-        return union;
-    }
-
     /**
      * All PhaseBlocks connected to the anchor, mirroring {@link PhaseBlockEntity#propagateState}'s
      * 6-neighbor flood fill, so multi-block doors detect a crossing on any of their blocks.
-     * Capped as a backstop against runaway phase-block walls.
+     * Capped as a backstop against runaway phase-block walls. Takes a plain {@link Level} so the
+     * client-side selection overlay can expand door groups from synced block entities too.
      */
-    public static Set<BlockPos> expandDoorGroup(ServerLevel world, BlockPos anchor) {
+    public static Set<BlockPos> expandDoorGroup(Level world, BlockPos anchor) {
         Set<BlockPos> group = new HashSet<>();
         ArrayDeque<BlockPos> queue = new ArrayDeque<>();
         if (world.isLoaded(anchor) && world.getBlockEntity(anchor) instanceof PhaseBlockEntity) {
@@ -156,5 +171,19 @@ public final class RoomGraph {
             }
         }
         return group;
+    }
+
+    /**
+     * Deterministic representative of a door group: its lowest (x, y, z) block. Rooms store this
+     * anchor instead of the block the builder happened to click, so linking <em>any</em> block of a
+     * multi-block door from either side resolves to the same position — builders never have to
+     * remember which phase block is the door's "parent".
+     */
+    public static BlockPos canonicalAnchor(Set<BlockPos> group) {
+        return group.stream()
+            .min(Comparator.<BlockPos>comparingInt(BlockPos::getX)
+                .thenComparingInt(BlockPos::getY)
+                .thenComparingInt(BlockPos::getZ))
+            .orElseThrow();
     }
 }

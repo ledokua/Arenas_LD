@@ -13,10 +13,11 @@ import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
-import net.ledok.arenas_ld.screen.ArenasUi;
+import net.ledok.arenas_ld.screen.ArenasParchment;
 import net.ledok.arenas_ld.screen.ForcedGuiScale;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.arenas_ld.util.InstanceStatus;
+import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.vectorlib.client.canvas.CanvasNode;
 import net.ledok.vectorlib.client.canvas.Rect;
 import net.ledok.vectorlib.client.canvas.Shapes;
@@ -30,7 +31,6 @@ import net.ledok.vectorlib.client.canvas.layout.Sizing;
 import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.Label;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
-import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.vectorlib.client.canvas.widget.UiSounds;
 import net.ledok.vectorlib.client.canvas.widget.Widget;
 import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
@@ -57,22 +57,21 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 
-import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
-import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
-import static net.ledok.arenas_ld.screen.ArenasUi.BG;
-import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
-import static net.ledok.arenas_ld.screen.ArenasUi.GOOD;
-import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
-import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
-import static net.ledok.arenas_ld.screen.ArenasUi.INFO;
-import static net.ledok.arenas_ld.screen.ArenasUi.INK;
-import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
-import static net.ledok.arenas_ld.screen.ArenasUi.INK_MID;
-import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
-import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
-import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
-import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
-import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
+import static net.ledok.arenas_ld.screen.ArenasParchment.ACCENT;
+import static net.ledok.arenas_ld.screen.ArenasParchment.ACCENT_DARK;
+import static net.ledok.arenas_ld.screen.ArenasParchment.DANGER;
+import static net.ledok.arenas_ld.screen.ArenasParchment.GOOD;
+import static net.ledok.arenas_ld.screen.ArenasParchment.HAIRLINE;
+import static net.ledok.arenas_ld.screen.ArenasParchment.HAIRLINE_HI;
+import static net.ledok.arenas_ld.screen.ArenasParchment.INFO;
+import static net.ledok.arenas_ld.screen.ArenasParchment.INK;
+import static net.ledok.arenas_ld.screen.ArenasParchment.INK_DIM;
+import static net.ledok.arenas_ld.screen.ArenasParchment.INK_MID;
+import static net.ledok.arenas_ld.screen.ArenasParchment.PANEL;
+import static net.ledok.arenas_ld.screen.ArenasParchment.PANEL_2;
+import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG;
+import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG_ALT;
+import static net.ledok.arenas_ld.screen.ArenasParchment.WARN;
 
 /**
  * Player lobby view for the arena controller, styled to match the dungeon and raid controller
@@ -101,20 +100,20 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
-            0xFFFFFFFF, 0xFFFFFFFF, 0xFFA0A0A0, INK_DIM, HAIRLINE, 0x80A98BE8,
-            18, 16, 4, true);
+            INK, INK, INK_MID, INK_DIM, HAIRLINE, 0x557A4A1E,
+            18, 16, 4, false);
 
     /** Translucent red kick-button look (fill brightens on hover, DANGER outline). */
     private static final WidgetStyle DANGER_STYLE = new WidgetStyle(
-            new WidgetStyle.Skin.Flat(0x1FE8624A, DANGER, 1, 0),
-            new WidgetStyle.Skin.Flat(0x44E8624A, DANGER, 1, 0),
-            new WidgetStyle.Skin.Flat(0x44E8624A, DANGER, 1, 0),
-            new WidgetStyle.Skin.Flat(0x1FE8624A, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(0x1F8B2F23, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(0x448B2F23, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(0x448B2F23, DANGER, 1, 0),
+            new WidgetStyle.Skin.Flat(0x1F8B2F23, DANGER, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
-            INK, INK, INK_DIM, INK_DIM, DANGER, 0x80A98BE8,
-            18, 16, 4, true);
+            INK, INK, INK_DIM, INK_DIM, DANGER, 0x557A4A1E,
+            18, 16, 4, false);
 
     /** Header "×" close button: PANEL fill, ROW_BG on hover, HAIRLINE_HI outline. */
     private static final WidgetStyle CLOSE_STYLE = new WidgetStyle(
@@ -125,8 +124,8 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
-            INK, INK, INK_DIM, INK_DIM, ACCENT, 0x80A98BE8,
-            18, 16, 4, true);
+            INK, INK, INK_DIM, INK_DIM, ACCENT, 0x557A4A1E,
+            18, 16, 4, false);
 
     /** Invite-field ▼/▲ chevron: bare INK_MID glyph over the field's PANEL_2 background. */
     private static final WidgetStyle CHEVRON_STYLE = new WidgetStyle(
@@ -137,7 +136,7 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
-            INK_MID, INK_MID, INK_MID, INK_MID, ACCENT, 0x80A98BE8,
+            INK_MID, INK_MID, INK_MID, INK_MID, ACCENT, 0x557A4A1E,
             18, 16, 4, false);
 
     private enum Tab { LOBBIES, MY_LOBBY, LEADERBOARD, INVITES }
@@ -194,8 +193,7 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
     public ArenaControllerScreen(ArenaControllerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(DESIGN_W, DESIGN_H), Placement.Screen.center());
         this.pos = handler.getBlockPos();
-        canvas.theme(ArenasUi.THEME);
-        dimBackground(false);
+        canvas.theme(ArenasParchment.THEME);
         fillWindow();
     }
 
@@ -220,8 +218,7 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         // The old owo screen swallowed the inventory key entirely (close via × or Esc only).
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
-                && !(input.focusedNode() instanceof TextField)) return true;
+        if (ArenasUi.swallowsInventoryKey(input, keyCode, scanCode, modifiers)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -388,11 +385,11 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
         Flex root = canvas.add(Flex.column());
         root.sizing(Sizing.fill(), Sizing.fill());
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
-        root.backgroundFill(BG);
 
         Flex shell = root.item(Flex.column());
         shell.sizing(Sizing.fixed(DESIGN_W), Sizing.fixed(DESIGN_H));
-        shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
+        shell.background(ArenasParchment.panel());
+        shell.padding(Insets.of(8)); // keep content off the parchment border art
 
         shell.item(buildHeader());
 
@@ -570,7 +567,7 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
         footer.sizing(Sizing.fill(), Sizing.fixed(34));
         footer.backgroundFill(PANEL_2);
 
-        footerLabel = ArenasUi.label(100, Component.empty(), DANGER);
+        footerLabel = ArenasParchment.label(100, Component.empty(), DANGER);
         footerLabel.sizing(Sizing.expand(), Sizing.content());
         footer.item(footerLabel);
 
@@ -866,7 +863,7 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
         }
         row.item(nameCell);
 
-        Label connectionLabel = ArenasUi.label(84,
+        Label connectionLabel = ArenasParchment.label(84,
             Component.literal(online ? "● " : "○ ").append(Component.translatable(online ? "gui.arenas_ld.dungeon_controller.ui.member.online" : "gui.arenas_ld.dungeon_controller.ui.member.offline")),
             online ? GOOD : DANGER);
         row.item(connectionLabel);
@@ -980,7 +977,7 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
         fieldWrap.item(inviteChevron);
         row.item(fieldWrap);
 
-        Button invite = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.invite"), 58, 18, this::sendInvite);
+        Button invite = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.invite"), 58, 18, this::sendInvite);
         invite.enabled(isOwner);
         row.item(invite);
         section.item(row);
@@ -1074,9 +1071,11 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
         Flex header = Flex.row().padding(Insets.of(4, 8, 4, 8)).alignItems(Align.CENTER);
         header.sizing(Sizing.fill(), Sizing.content());
         header.backgroundFill(ROW_BG);
-        header.item(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.header"), INK_DIM));
-        header.spacer();
-        header.item(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.available", available), ACCENT));
+        Label headerLabel = ArenasParchment.label(10, Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.header"), INK_DIM)
+            .secondary(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.available", available))
+            .secondaryColor(ACCENT);
+        headerLabel.sizing(Sizing.fill(), Sizing.content());
+        header.item(headerLabel);
         inviteDropdownPanel.item(header);
         inviteDropdownPanel.item(rowDivider(HAIRLINE_HI));
 
@@ -1289,19 +1288,19 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
         row.sizing(Sizing.fill(), Sizing.content());
         row.backgroundFill(top ? ((ACCENT & 0x00FFFFFF) | 0x1A000000) : ROW_BG);
 
-        Label rankLabel = ArenasUi.label(50, Component.literal(top ? "★1" : ("#" + rank)), top ? ACCENT : INK_MID);
+        Label rankLabel = ArenasParchment.label(50, Component.literal(top ? "★1" : ("#" + rank)), top ? ACCENT : INK_MID);
         row.item(rankLabel);
 
-        Label nameLabel = ArenasUi.label(100, Component.literal(entry.playerName()), INK);
+        Label nameLabel = ArenasParchment.label(100, Component.literal(entry.playerName()), INK);
         nameLabel.sizing(Sizing.expand(), Sizing.content());
         row.item(nameLabel);
 
-        Label whenLabel = ArenasUi.label(44, Component.literal(
+        Label whenLabel = ArenasParchment.label(44, Component.literal(
             net.ledok.arenas_ld.screen.RelativeTime.ago(entry.recordedAtEpochMillis())), INK_MID);
         whenLabel.align(TextNode.Align.RIGHT);
         row.item(whenLabel);
 
-        Label waveLabel = ArenasUi.label(64, Component.translatable("gui.arenas_ld.arena.wave_n", entry.timeSeconds()), top ? ACCENT : INK_MID);
+        Label waveLabel = ArenasParchment.label(64, Component.translatable("gui.arenas_ld.arena.wave_n", entry.timeSeconds()), top ? ACCENT : INK_MID);
         waveLabel.align(TextNode.Align.RIGHT);
         row.item(waveLabel);
         return row;
@@ -1374,13 +1373,13 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
         inviteCountdownLabels.put(invite.lobbyId(), countdown);
         row.item(countdown);
 
-        Button accept = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, 18, () -> {
+        Button accept = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, 18, () -> {
             footerError = null;
             send(new ArenaLobbyTargetPayload(pos, "accept_invite", invite.lobbyId()));
         });
         row.item(accept);
 
-        Button decline = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, 18, () -> {
+        Button decline = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, 18, () -> {
             footerError = null;
             send(new ArenaLobbyTargetPayload(pos, "decline_invite", invite.lobbyId()));
         });
@@ -1419,13 +1418,13 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
         row.item(countdown);
 
         UUID requesterUuid = req.requesterUuid();
-        Button accept = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, 18, () -> {
+        Button accept = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, 18, () -> {
             footerError = null;
             send(new ArenaLobbyTargetPayload(pos, "accept_request", requesterUuid));
         });
         row.item(accept);
 
-        Button decline = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, 18, () -> {
+        Button decline = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, 18, () -> {
             footerError = null;
             send(new ArenaLobbyTargetPayload(pos, "decline_request", requesterUuid));
         });
@@ -1461,9 +1460,9 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
         ClientPlayNetworking.send(payload);
     }
 
-    /** Content-width accent button, 18 px tall — the old owo smallButton renderer lives in ArenasUi.WIDGETS. */
+    /** Content-width accent button, 18 px tall — the old owo smallButton renderer lives in ArenasParchment.WIDGETS. */
     private Button smallButton(Component text, Runnable action) {
-        return ArenasUi.button(text, action);
+        return ArenasParchment.button(text, action);
     }
 
     private Button dangerButton(Component text, float width, Runnable action) {
@@ -1493,7 +1492,7 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
-            selected ? accentColor : INK, selected ? accentColor : INK, INK_DIM, INK_DIM, accentColor, 0x80A98BE8,
+            selected ? accentColor : INK, selected ? accentColor : INK, INK_DIM, INK_DIM, accentColor, 0x557A4A1E,
             26, 16, 4, false);
     }
 
@@ -1559,11 +1558,11 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
     }
 
     private TextNode dimLabel(Component text) {
-        return ArenasUi.text(text, INK_DIM);
+        return ArenasParchment.text(text, INK_DIM);
     }
 
     private TextNode text(Component text, int color) {
-        return ArenasUi.text(text, color);
+        return ArenasParchment.text(text, color);
     }
 
     private Flex sectionHeader(Component title, Integer count) {
@@ -1604,25 +1603,25 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
     }
 
     private TextNode controlCaption(String caption) {
-        return ArenasUi.text(Component.literal(caption), INK_DIM);
+        return ArenasParchment.text(Component.literal(caption), INK_DIM);
     }
 
     private Flex infoColumn(String caption, TextNode value, Sizing width) {
         Flex col = Flex.column().gap(3);
         col.sizing(width, Sizing.content());
-        col.item(ArenasUi.text(Component.literal(caption), INK_DIM));
+        col.item(ArenasParchment.text(Component.literal(caption), INK_DIM));
         col.item(value);
         return col;
     }
 
     private Label headerCell(String text, Sizing sizing) {
-        Label label = ArenasUi.label(10, Component.literal(text), INK_DIM);
+        Label label = ArenasParchment.label(10, Component.literal(text), INK_DIM);
         label.sizing(sizing, Sizing.content());
         return label;
     }
 
     private Label fixedText(Component text, float width, int color, TextNode.Align alignment) {
-        Label label = ArenasUi.label(width, text, color);
+        Label label = ArenasParchment.label(width, text, color);
         label.align(alignment);
         return label;
     }
@@ -1639,7 +1638,7 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
         Flex tag = Flex.row().padding(Insets.of(4, 4, 2, 4)).justify(Justify.CENTER).alignItems(Align.CENTER);
         tag.sizing(Sizing.fixed(width), Sizing.content());
         tag.backgroundFill((color & 0x00FFFFFF) | 0x22000000, (color & 0x00FFFFFF) | 0x55000000, 1);
-        Label label = ArenasUi.label(100, text, color);
+        Label label = ArenasParchment.label(100, text, color);
         label.align(TextNode.Align.CENTER);
         label.sizing(Sizing.expand(), Sizing.content());
         tag.item(label);
@@ -1658,7 +1657,7 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
     }
 
     private TextNode smallMeta(String text, int color) {
-        return ArenasUi.text(Component.literal(text), color);
+        return ArenasParchment.text(Component.literal(text), color);
     }
 
     private int visibilityColor(LobbyVisibility visibility) {
@@ -1686,7 +1685,7 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
     }
 
     private Flex spacer(int px) {
-        return ArenasUi.spacer(px);
+        return ArenasParchment.spacer(px);
     }
 
     private Optional<Lobby> resolveLobbyForInvite(PendingInvite invite) {

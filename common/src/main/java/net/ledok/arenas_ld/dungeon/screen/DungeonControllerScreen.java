@@ -23,9 +23,10 @@ import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
-import net.ledok.arenas_ld.screen.ArenasUi;
+import net.ledok.arenas_ld.screen.ArenasParchment;
 import net.ledok.arenas_ld.screen.ForcedGuiScale;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
+import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.vectorlib.client.canvas.CanvasNode;
 import net.ledok.vectorlib.client.canvas.Shapes;
 import net.ledok.vectorlib.client.canvas.TextNode;
@@ -38,7 +39,6 @@ import net.ledok.vectorlib.client.canvas.layout.Sizing;
 import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.Label;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
-import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.vectorlib.client.canvas.widget.UiSounds;
 import net.ledok.vectorlib.client.canvas.widget.Widget;
 import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
@@ -58,22 +58,21 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
-import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
-import static net.ledok.arenas_ld.screen.ArenasUi.BG;
-import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
-import static net.ledok.arenas_ld.screen.ArenasUi.GOOD;
-import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
-import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
-import static net.ledok.arenas_ld.screen.ArenasUi.INFO;
-import static net.ledok.arenas_ld.screen.ArenasUi.INK;
-import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
-import static net.ledok.arenas_ld.screen.ArenasUi.INK_MID;
-import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
-import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
-import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
-import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
-import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
+import static net.ledok.arenas_ld.screen.ArenasParchment.ACCENT;
+import static net.ledok.arenas_ld.screen.ArenasParchment.ACCENT_DARK;
+import static net.ledok.arenas_ld.screen.ArenasParchment.DANGER;
+import static net.ledok.arenas_ld.screen.ArenasParchment.GOOD;
+import static net.ledok.arenas_ld.screen.ArenasParchment.HAIRLINE;
+import static net.ledok.arenas_ld.screen.ArenasParchment.HAIRLINE_HI;
+import static net.ledok.arenas_ld.screen.ArenasParchment.INFO;
+import static net.ledok.arenas_ld.screen.ArenasParchment.INK;
+import static net.ledok.arenas_ld.screen.ArenasParchment.INK_DIM;
+import static net.ledok.arenas_ld.screen.ArenasParchment.INK_MID;
+import static net.ledok.arenas_ld.screen.ArenasParchment.PANEL;
+import static net.ledok.arenas_ld.screen.ArenasParchment.PANEL_2;
+import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG;
+import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG_ALT;
+import static net.ledok.arenas_ld.screen.ArenasParchment.WARN;
 
 public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControllerScreenHandler> {
     private static final int INVITE_DROPDOWN_MAX_HEIGHT = 154;
@@ -92,8 +91,8 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
-            0xFFFFFFFF, 0xFFFFFFFF, 0xFFA0A0A0, INK_DIM, HAIRLINE_HI, 0x80A98BE8,
-            18, 16, 4, true);
+            INK, INK, INK_MID, INK_DIM, HAIRLINE_HI, 0x557A4A1E,
+            18, 16, 4, false);
 
     /** Kick button look: translucent red fill that deepens on hover, DANGER border. */
     private static final WidgetStyle DANGER_STYLE = new WidgetStyle(
@@ -104,8 +103,8 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, ACCENT, 1, 0),
             new WidgetStyle.Skin.Flat(PANEL_2, HAIRLINE, 1, 0),
-            DANGER, DANGER, INK_DIM, INK_DIM, DANGER, 0x80A98BE8,
-            18, 16, 4, true);
+            DANGER, DANGER, INK_DIM, INK_DIM, DANGER, 0x557A4A1E,
+            18, 16, 4, false);
 
     /** Chevron (▲/▼) button: bare glyph, no fill or border — the owo screen custom-rendered just the glyph. */
     private static final WidgetStyle CHEVRON_STYLE = new WidgetStyle(
@@ -116,7 +115,7 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
             new WidgetStyle.Skin.Flat(0x00000000, 0, 0, 0),
             new WidgetStyle.Skin.Flat(0x00000000, 0, 0, 0),
             new WidgetStyle.Skin.Flat(0x00000000, 0, 0, 0),
-            INK_MID, INK_MID, INK_MID, INK_DIM, 0x00000000, 0x80A98BE8,
+            INK_MID, INK_MID, INK_MID, INK_DIM, 0x00000000, 0x557A4A1E,
             20, 20, 4, false);
 
     private enum Tab {
@@ -198,8 +197,7 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
         this.topLeaderboards = handler.getTopLeaderboards();
         this.snapshotServerTick = handler.getServerGameTick();
         this.snapshotEpochMs = System.currentTimeMillis();
-        canvas.theme(ArenasUi.THEME);
-        dimBackground(false);
+        canvas.theme(ArenasParchment.THEME);
         fillWindow();
     }
 
@@ -224,8 +222,7 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         // The old owo screen swallowed the inventory key entirely (close via × or Esc only).
-        if (minecraft != null && minecraft.options.keyInventory.matches(keyCode, scanCode)
-                && !(input.focusedNode() instanceof TextField)) return true;
+        if (ArenasUi.swallowsInventoryKey(input, keyCode, scanCode, modifiers)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -239,11 +236,11 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
         Flex root = canvas.add(Flex.column());
         root.sizing(Sizing.fill(), Sizing.fill());
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
-        root.backgroundFill(BG);
 
         Flex shell = root.item(Flex.column());
         shell.sizing(Sizing.fixed(DESIGN_W), Sizing.fixed(DESIGN_H));
-        shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
+        shell.background(ArenasParchment.panel());
+        shell.padding(Insets.of(8)); // keep content off the parchment border art
 
         shell.item(buildHeader());
         shell.item(buildTabs());
@@ -317,7 +314,7 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
 
         Flex titleLine = Flex.row().gap(8).alignItems(Align.CENTER);
         titleLine.sizing(Sizing.content(), Sizing.content());
-        titleLine.item(ArenasUi.text(Component.translatable("container.arenas_ld.dungeon_controller"), INK));
+        titleLine.item(ArenasParchment.text(Component.translatable("container.arenas_ld.dungeon_controller"), INK));
         titleLine.item(statusBadge());
         info.item(titleLine);
 
@@ -434,7 +431,7 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
                 add(Shapes.rect(0, 0, width, height).stroke(HAIRLINE, 1));
             }
             add(TextNode.of(label).at(width / 2, textY(height)).align(TextNode.Align.CENTER)
-                .color(enabled ? 0xFFFFFFFF : 0xFFA0A0A0).shadow(true));
+                .color(enabled ? INK : INK_MID).shadow(false));
         }
 
         @Override
@@ -523,7 +520,7 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
             List<PendingJoinRequest> incoming = myJoinRequests.stream()
                 .filter(r -> r.lobbyId().equals(ownedLobbyId))
                 .toList();
-            contentArea.item(ArenasUi.spacer(8));
+            contentArea.item(ArenasParchment.spacer(8));
             contentArea.item(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.join_requests"), incoming.size()));
             if (incoming.isEmpty()) {
                 contentArea.item(dimLabel(Component.translatable("gui.arenas_ld.dungeon_controller.no_join_requests")));
@@ -588,13 +585,13 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
         contentArea.item(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.col.tier")));
         contentArea.item(leaderboardTierControls());
 
-        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(ArenasParchment.spacer(4));
         contentArea.item(leaderboardBanner(leaderboardTier));
 
         List<LeaderboardEntry> entries = new ArrayList<>(topLeaderboards.getOrDefault(leaderboardTier, List.of()));
         entries.sort(Comparator.comparingInt(LeaderboardEntry::timeSeconds));
 
-        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(ArenasParchment.spacer(4));
         contentArea.item(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.ui.section.top_runs"), entries.size()));
 
         Flex list = Flex.column();
@@ -674,11 +671,11 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
         row.sizing(Sizing.fill(), Sizing.content());
         row.backgroundFill(top ? ((color & 0x00FFFFFF) | 0x1A000000) : ROW_BG);
 
-        Label rankLabel = ArenasUi.label(50, Component.literal(top ? "★1" : ("#" + rank)), top ? color : INK_MID);
+        Label rankLabel = ArenasParchment.label(50, Component.literal(top ? "★1" : ("#" + rank)), top ? color : INK_MID);
         rankLabel.sizing(Sizing.fixed(50), Sizing.content());
         row.item(rankLabel);
 
-        Label nameLabel = ArenasUi.label(100, Component.literal(entry.playerName()), INK);
+        Label nameLabel = ArenasParchment.label(100, Component.literal(entry.playerName()), INK);
         nameLabel.sizing(Sizing.expand(), Sizing.content());
         row.item(nameLabel);
 
@@ -857,7 +854,7 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
                 queueBanner.item(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.queue.eta", formatClock(etaSeconds)), INK_MID));
             }
             contentArea.item(queueBanner);
-            contentArea.item(ArenasUi.spacer(4));
+            contentArea.item(ArenasParchment.spacer(4));
         }
 
         summaryOwnerLabel = text(Component.literal(lobby.ownerName()), ACCENT);
@@ -903,20 +900,20 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
         }
         contentArea.item(memberList);
 
-        contentArea.item(ArenasUi.spacer(6));
+        contentArea.item(ArenasParchment.spacer(6));
         contentArea.item(sectionHeader(Component.translatable("gui.arenas_ld.dungeon_controller.ui.section.owner_controls"), null));
 
         contentArea.item(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.col.tier")));
         contentArea.item(ownerTierControls(isOwner));
 
-        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(ArenasParchment.spacer(4));
         contentArea.item(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.col.visibility")));
         contentArea.item(ownerVisibilityControls(isOwner));
 
-        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(ArenasParchment.spacer(4));
         contentArea.item(hardcoreControl(isOwner));
 
-        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(ArenasParchment.spacer(4));
         contentArea.item(controlCaption(tr("gui.arenas_ld.dungeon_controller.ui.section.invite_player")));
         contentArea.item(ownerInviteControls(isOwner));
 
@@ -994,7 +991,7 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
         }
         row.item(nameCell);
 
-        Label connectionLabel = ArenasUi.label(84,
+        Label connectionLabel = ArenasParchment.label(84,
             Component.literal(online ? "● " : "○ ").append(Component.translatable(online ? "gui.arenas_ld.dungeon_controller.ui.member.online" : "gui.arenas_ld.dungeon_controller.ui.member.offline")),
             online ? GOOD : DANGER);
         connectionLabel.sizing(Sizing.fixed(84), Sizing.content());
@@ -1072,6 +1069,7 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
                 ClientPlayNetworking.send(new SetLobbyHardcorePayload(menu.getBlockPos(), !currentHardcore));
             });
         toggle.enabled(isOwner);
+        toggle.bind(() -> ownLobby.map(Lobby::hardcoreEnabled).orElse(false));
         row.item(toggle);
         return row;
     }
@@ -1197,9 +1195,11 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
         Flex header = Flex.row().padding(Insets.of(4, 8, 4, 8)).alignItems(Align.CENTER);
         header.sizing(Sizing.fill(), Sizing.content());
         header.backgroundFill(ROW_BG);
-        header.item(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.header"), INK_DIM));
-        header.spacer();
-        header.item(text(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.available", available), ACCENT));
+        Label headerLabel = ArenasParchment.label(10, Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.header"), INK_DIM)
+            .secondary(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.available", available))
+            .secondaryColor(ACCENT);
+        headerLabel.sizing(Sizing.fill(), Sizing.content());
+        header.item(headerLabel);
         inviteDropdownPanel.item(header);
         inviteDropdownPanel.item(rowDivider(HAIRLINE_HI));
 
@@ -1386,20 +1386,20 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
 
     /** Content-width accent button, 18px tall — the owo smallButton. */
     private Button smallButton(Component text, Runnable action) {
-        return ArenasUi.button(text, action);
+        return ArenasParchment.button(text, action);
     }
 
     /** Fixed-width accent button, 18px tall. */
     private Button smallButton(Component text, float width, Runnable action) {
-        return ArenasUi.button(text, width, 18, action);
+        return ArenasParchment.button(text, width, 18, action);
     }
 
     private TextNode dimLabel(Component text) {
-        return ArenasUi.text(text, INK_DIM);
+        return ArenasParchment.text(text, INK_DIM);
     }
 
     private TextNode text(Component text, int color) {
-        return ArenasUi.text(text, color);
+        return ArenasParchment.text(text, color);
     }
 
     private Flex sectionHeader(Component title, Integer count) {
@@ -1452,12 +1452,13 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
     }
 
     private TextNode controlCaption(String caption) {
-        return ArenasUi.text(Component.literal(caption), INK_DIM);
+        return ArenasParchment.text(Component.literal(caption), INK_DIM);
     }
 
     private SegmentButton segmentButton(String label, int accentColor, boolean active, java.util.function.BooleanSupplier selected, Runnable action) {
         SegmentButton button = new SegmentButton(label, accentColor, selected, action);
         button.enabled(active);
+        button.bind(selected::getAsBoolean); // repaint the moment the server flips the selection
         return button;
     }
 
@@ -1569,7 +1570,7 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
     private Flex infoColumn(String caption, TextNode value, Sizing width) {
         Flex col = Flex.column().gap(3);
         col.sizing(width, Sizing.content());
-        col.item(ArenasUi.text(Component.literal(caption), INK_DIM));
+        col.item(ArenasParchment.text(Component.literal(caption), INK_DIM));
         col.item(value);
         return col;
     }
@@ -1582,13 +1583,13 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
     }
 
     private Label headerCell(String text, Sizing sizing) {
-        Label label = ArenasUi.label(100, Component.literal(text), INK_DIM);
+        Label label = ArenasParchment.label(100, Component.literal(text), INK_DIM);
         label.sizing(sizing, Sizing.content());
         return label;
     }
 
     private Label fixedText(Component text, float width, int color, TextNode.Align alignment) {
-        Label label = ArenasUi.label(width, text, color);
+        Label label = ArenasParchment.label(width, text, color);
         label.align(alignment);
         label.sizing(Sizing.fixed(width), Sizing.content());
         return label;
@@ -1623,7 +1624,7 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
     }
 
     private TextNode smallMeta(String text, int color) {
-        return ArenasUi.text(Component.literal(text), color);
+        return ArenasParchment.text(Component.literal(text), color);
     }
 
     private int tierColor(DifficultyTier tier) {
@@ -1888,9 +1889,15 @@ public class DungeonControllerScreen extends CanvasHandledScreen<DungeonControll
     }
 
     private boolean sameLobbyStructure(Lobby previous, Lobby current) {
+        // Settings are part of "structure": the segment buttons and the hardcore switch bake
+        // their selected state into their built nodes, so a tier/visibility/hardcore change
+        // must take the full-rebuild path — the in-place refresh only touches labels.
         return previous.lobbyId().equals(current.lobbyId())
             && previous.ownerUuid().equals(current.ownerUuid())
-            && previous.members().equals(current.members());
+            && previous.members().equals(current.members())
+            && previous.selectedTier() == current.selectedTier()
+            && previous.visibility() == current.visibility()
+            && previous.hardcoreEnabled() == current.hardcoreEnabled();
     }
 
     private Optional<Lobby> resolveLobbyForInvite(PendingInvite invite) {
