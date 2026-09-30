@@ -363,10 +363,8 @@ public final class ArenaRunLifecycle {
         applyScaledAttributes(world, living, mobData, scaleFactor);
         EntityEquipmentHelper.applyAllEquipment(living, mobData.equipment);
         living.heal(living.getMaxHealth());
-        // Owned by the run: never let vanilla despawn arena mobs.
-        if (living instanceof net.minecraft.world.entity.Mob mob) {
-            mob.setPersistenceRequired();
-        }
+        // Owned by the run: never let vanilla despawn or convert arena mobs.
+        EntityEquipmentHelper.markRunMob(living);
         assignTeam(world, spawner, living);
 
         BlockPos origin = run.spawnerPos();
@@ -482,14 +480,18 @@ public final class ArenaRunLifecycle {
 
         Map<UUID, List<ItemStack>> perPlayerLoot = new HashMap<>();
         for (MobArenaRewardData reward : valid) {
-            for (int i = 0; i < reward.rolls * multiplier; i++) {
-                if (reward.perPlayer) {
-                    for (ServerPlayer player : players) {
-                        perPlayerLoot.computeIfAbsent(player.getUUID(), k -> new ArrayList<>())
-                            .addAll(RewardDelivery.rollLoot(world, reward.lootTableId, player, player.position()));
-                    }
-                } else {
-                    // Communal rolls keep the old behavior: scattered on the arena floor for anyone.
+            if (reward.perPlayer) {
+                // LuckPerms arena_loot_rolls multiplies each player's own rolls on per-player rows.
+                for (ServerPlayer player : players) {
+                    int rolls = reward.rolls * multiplier * net.ledok.arenas_ld.util.EndRewardPerks.forPlayer(
+                        player.getUUID(), net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA).lootRolls();
+                    perPlayerLoot.computeIfAbsent(player.getUUID(), k -> new ArrayList<>())
+                        .addAll(RewardDelivery.rollLoot(world, reward.lootTableId, player, player.position(), rolls));
+                }
+            } else {
+                // Communal rolls keep the old behavior: scattered on the arena floor for anyone.
+                // Rolled once for the whole party, so per-player perks don't apply here.
+                for (int i = 0; i < reward.rolls * multiplier; i++) {
                     ServerPlayer player = players.get(world.random.nextInt(players.size()));
                     rollLootTableToWorld(world, run, reward.lootTableId, player);
                 }
@@ -691,19 +693,24 @@ public final class ArenaRunLifecycle {
         boolean skillsLoaded = FabricLoader.getInstance().isModLoaded("puffish_skills");
 
         for (UUID uuid : run.lootEligibleUuids()) {
-            RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "ARENA_REWARD");
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            // LuckPerms currency/XP multipliers, after the hardcore ×2; defaults when offline.
+            net.ledok.arenas_ld.util.EndRewardPerks perks = net.ledok.arenas_ld.util.EndRewardPerks.forPlayer(
+                player != null ? uuid : null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA);
+            long playerCurrency = perks.scaleCurrency(currency);
+            int playerXp = perks.scaleXp(xp);
+            RewardDelivery.giveCurrency(world.getServer(), uuid, playerCurrency, "ARENA_REWARD");
             if (player == null) {
                 continue;
             }
             int grantedXp = 0;
-            if (xp > 0 && skillsLoaded) {
-                PuffishSkillsCompat.addExperience(player, xp);
-                grantedXp = xp;
+            if (playerXp > 0 && skillsLoaded) {
+                PuffishSkillsCompat.addExperience(player, playerXp);
+                grantedXp = playerXp;
             }
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.arena.summary", waves, currency, xp));
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.arena.summary", waves, playerCurrency, playerXp));
             RewardDelivery.notify(player, net.ledok.arenas_ld.packet.LootRewardPayload.Source.ARENA_SUMMARY,
-                java.util.List.of(), RewardDelivery.displayableCurrency(currency), grantedXp);
+                java.util.List.of(), RewardDelivery.displayableCurrency(playerCurrency), grantedXp);
         }
     }
 

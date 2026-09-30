@@ -24,6 +24,7 @@ import net.ledok.arenas_ld.dungeon.packet.RequestJoinPayload;
 import net.ledok.arenas_ld.dungeon.packet.KickFromLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.LeaveLobbyPayload;
 import net.ledok.arenas_ld.dungeon.packet.MoveDungeonInstancePayload;
+import net.ledok.arenas_ld.dungeon.packet.MobSpawnerSetNamePayload;
 import net.ledok.arenas_ld.dungeon.packet.MobSpawnerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.RemoveDungeonInstancePayload;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
@@ -145,6 +146,67 @@ public final class SpawnerPacketHandlers {
 
                     DungeonToolItem.Mode mode = DungeonToolItem.Mode.values()[newMode];
                     context.player().sendSystemMessage(net.minecraft.network.chat.Component.translatable("message.arenas_ld.linker.mode_changed", mode.getName()));
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(ModPackets.SetDungeonToolSpawnerPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                ItemStack stack = payload.mainHand() ? player.getMainHandItem() : player.getOffhandItem();
+                if (!(stack.getItem() instanceof DungeonToolItem)) {
+                    return;
+                }
+                DungeonToolDataComponent data = stack.getOrDefault(DataComponentRegistry.DUNGEON_TOOL_DATA, DungeonToolDataComponent.DEFAULT);
+                RoomControllerBlockEntity room = DungeonToolItem.sourceRoom(player.level(), data);
+                if (room == null || !room.getSpawnerPositions().contains(payload.spawnerPos())
+                        || !DungeonToolItem.Mode.MOB_SPAWN_POSITION.isValidSource(player.level().getBlockEntity(payload.spawnerPos()))) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_tool.pick_spawner"));
+                    return;
+                }
+                stack.set(DataComponentRegistry.DUNGEON_TOOL_DATA, data
+                    .withSpawner(payload.spawnerPos())
+                    .withMode(DungeonToolItem.Mode.MOB_SPAWN_POSITION.ordinal()));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawner_selected", payload.spawnerPos().toShortString()));
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(ModPackets.OpenBlockMenuPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    // The equipment editor relies on this reply to leave its screen — never leave it hanging.
+                    player.closeContainer();
+                    return;
+                }
+                BlockEntity be = player.level().getBlockEntity(payload.pos());
+                // Only the spawner screens: the tool screen's gear buttons and the equipment
+                // editor's way back both land on a spawner's own menu.
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity
+                        || be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity
+                        || be instanceof RaidBossSpawnerBlockEntity) {
+                    player.openMenu((net.minecraft.world.MenuProvider) be);
+                } else {
+                    // The block is gone (or never was a spawner): close whatever screen asked.
+                    player.closeContainer();
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(MobSpawnerSetNamePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity spawner) {
+                    spawner.setSpawnerName(payload.name());
+                    markDirtyAndSync(world, spawner);
+                    broadcastMobSpawnerSnapshot(player, spawner);
                 }
             });
         });
@@ -299,7 +361,8 @@ public final class SpawnerPacketHandlers {
                         objective.type(), Math.clamp(objective.surviveSeconds(), 1, 3600),
                         Math.clamp(objective.surviveWaveIntervalSeconds(), 5, 600),
                         protectMobId, objective.protectStationary(),
-                        room.getObjective().protectOffset(), List.copyOf(protectAttributes)));
+                        room.getObjective().protectOffset(), List.copyOf(protectAttributes),
+                        Math.clamp(objective.entryPercent(), 1, 100)));
                     markDirtyAndSync(world, room);
                     broadcastRoomControllerSnapshot(player, room);
                 }

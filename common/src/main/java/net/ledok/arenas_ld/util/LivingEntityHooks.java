@@ -10,9 +10,12 @@ import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.Explosion;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.scores.PlayerTeam;
 
 import java.util.Locale;
 
@@ -101,6 +104,50 @@ public final class LivingEntityHooks {
      */
     public static boolean suppressNaturalLoot(LivingEntity entity) {
         return entity.getTags().contains(EntityEquipmentHelper.NO_NATURAL_LOOT_TAG);
+    }
+
+    /**
+     * Whether a vanilla mob conversion (zombie → drowned, skeleton → stray, zombie-villager
+     * curing, …) must be cancelled for this mob. Runs track their mobs by UUID, and conversion
+     * replaces the entity: the tracked UUID vanishes (falsely counting a kill) and an untracked,
+     * unscaled copy is left behind that room resets never discard. Driven by
+     * {@code MobMixin#convertTo} on both loaders.
+     */
+    public static boolean blockMobConversion(Mob mob) {
+        return mob.getTags().contains(EntityEquipmentHelper.RUN_MOB_TAG);
+    }
+
+    /**
+     * Whether explosion damage to {@code target} must be suppressed because the explosion's
+     * (indirect) source is an ally on a no-friendly-fire team — the explosion counterpart of
+     * {@code ProjectileMixin}'s skeleton-arrow check, so a run creeper never blows up its wave
+     * mates. Driven by {@code ExplosionDamageCalculatorMixin} on both loaders.
+     */
+    public static boolean suppressExplosionFriendlyFire(Explosion explosion, Entity target) {
+        LivingEntity source = explosion.getIndirectSourceEntity();
+        if (source == null || source == target || !source.isAlliedTo(target)) {
+            return false;
+        }
+        return source.getTeam() instanceof PlayerTeam team && !team.isAllowFriendlyFire();
+    }
+
+    /**
+     * Whether {@code explosion}'s block destruction must be suppressed because a run-spawned mob
+     * caused it (creeper, ghast fireball, wither skull, …): dungeon and arena builds must survive
+     * their own encounters. Filtering at shouldBlockExplode keeps the server's to-blow list empty,
+     * so clients never predict-destroy blocks either. Driven by {@code EntityMixin}.
+     */
+    public static boolean suppressExplosionBlockDamage(Explosion explosion) {
+        LivingEntity source = explosion.getIndirectSourceEntity();
+        return source != null && source.getTags().contains(EntityEquipmentHelper.RUN_MOB_TAG);
+    }
+
+    /**
+     * Whether this mob's block-griefing AI (enderman block take/place) must be disabled because
+     * the mob belongs to a run. Driven by the {@code Enderman*BlockGoalMixin}s.
+     */
+    public static boolean suppressBlockGriefing(Mob mob) {
+        return mob.getTags().contains(EntityEquipmentHelper.RUN_MOB_TAG);
     }
 
     /**

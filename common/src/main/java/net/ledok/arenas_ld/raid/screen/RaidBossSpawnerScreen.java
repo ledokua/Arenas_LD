@@ -13,7 +13,7 @@ import net.ledok.vectorlib.client.canvas.layout.Sizing;
 import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.Label;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
-import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.arenas_ld.screen.FitCanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -40,7 +40,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
  * shows the linked respawn-point count, and opens the mob attributes /
  * equipment sub-screens.
  */
-public class RaidBossSpawnerScreen extends CanvasHandledScreen<RaidBossSpawnerScreenHandler> {
+public class RaidBossSpawnerScreen extends FitCanvasHandledScreen<RaidBossSpawnerScreenHandler> {
     private String mobIdValue = "";
 
     private Flex contentArea;
@@ -216,7 +216,7 @@ public class RaidBossSpawnerScreen extends CanvasHandledScreen<RaidBossSpawnerSc
                 minecraft.player.getInventory(),
                 new net.ledok.arenas_ld.screen.MobAttributesData(menu.blockEntity.getBlockPos())),
             minecraft.player.getInventory(),
-            Component.translatable("gui.arenas_ld.boss_attributes")));
+            Component.translatable("gui.arenas_ld.boss_attributes")).returnTo(this));
     }
 
     private void openEquipmentScreen() {

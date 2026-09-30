@@ -387,7 +387,13 @@ public final class SelectionOverlayRenderer {
          *  are the most numerous boxes on screen and white washes out over sand, snow or open sky. The
          *  fill leans green-side of gold for the same reason ENTRANCE leans red-side of it. Most
          *  numerous also means most stacked, which is what {@link #POINT_FILL_ALPHA} is sized for. */
-        MOB_SPAWN(1.00f, 0.95f, 0.20f, 0.85f, 0.90f, 0.00f, POINT_FILL_ALPHA, -0.08f);     // yellow
+        MOB_SPAWN(1.00f, 0.95f, 0.20f, 0.85f, 0.90f, 0.00f, POINT_FILL_ALPHA, -0.08f),     // yellow
+        /** A spawn position of a room's spawner other than the picked acting one. Red so the two are
+         *  told apart by hue, not only by the dim tier: full-strength yellow is what the next click
+         *  edits, red belongs to the other spawners. Never any mode's own kind, so it always sits in
+         *  the dim tier and ranks by inset — one step deeper than MOB_SPAWN, so a block shared by two
+         *  spawners shows both outlines instead of stacking them. */
+        OTHER_MOB_SPAWN(1.00f, 0.28f, 0.22f, 0.95f, 0.12f, 0.08f, POINT_FILL_ALPHA, -0.12f); // red
 
         private final float[] color;
         private final float[] fillColor;
@@ -421,6 +427,7 @@ public final class SelectionOverlayRenderer {
             }
             return INSET_FILL_PRIORITY + Math.round(-inset / INSET_STEP);
         }
+
     }
 
     /** How many rounds {@link #resolveFills} has to run. Derived, so a new kind cannot be forgotten. */
@@ -809,11 +816,23 @@ public final class SelectionOverlayRenderer {
         if (be == null && mc.level.isLoaded(sourcePos)) {
             return;
         }
+        // A room source in MOB_SPAWN_POSITION mode acts through its picked spawner. The room's
+        // full overlay stays — doors, respawn points, every linked spawner and its spawn
+        // positions — and the picked spawner gets a second gold selection on top of it (added
+        // after the room's own, below), marking where world clicks land.
+        BlockPos pickedPos = null;
+        if (DungeonToolItem.selectedMode(data) == DungeonToolItem.Mode.MOB_SPAWN_POSITION
+                && be instanceof net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity room) {
+            BlockEntity picked = DungeonToolItem.resolveRoomSpawner(mc.level, room, data);
+            if (picked != null) {
+                pickedPos = picked.getBlockPos();
+            }
+        }
         List<Box> boxes = overlay.boxes();
         List<Fill> fills = overlay.fills();
         if (be != null) {
             Sink sink = new Sink(mc, DungeonToolItem.selectedMode(data), boxes, fills);
-            collectAttachments(sink, sourcePos, be);
+            collectAttachments(sink, sourcePos, be, pickedPos);
             // The selection keeps its mode-agnostic attachments, so a mode that owns none of them (any
             // controller outside LINK mode, for one) would leave the whole overlay dimmed, which reads as
             // a lost selection. Drop the dimming instead. Must run before the gold boxes are appended.
@@ -833,6 +852,15 @@ public final class SelectionOverlayRenderer {
             SELECTION_FILL_PRIORITY, 0));
         boxes.add(new Box(sourcePos, sourcePos, MAIN_COLOR, ALPHA, 0.0f));
         boxes.add(new Box(sourcePos, sourcePos, MAIN_COLOR, ALPHA, outset));
+        // The acting spawner gets the same doubled-gold treatment as the source: both are
+        // selected — the room as the tool's source, the spawner as where clicks apply.
+        if (pickedPos != null) {
+            float pickedOutset = selectionOutset(cam, pickedPos);
+            fills.add(new Fill(pickedPos, ALL_FACES, MAIN_FILL_COLOR, ALPHA, VOLUME_FILL_ALPHA,
+                SELECTION_FILL_PRIORITY, 0));
+            boxes.add(new Box(pickedPos, pickedPos, MAIN_COLOR, ALPHA, 0.0f));
+            boxes.add(new Box(pickedPos, pickedPos, MAIN_COLOR, ALPHA, pickedOutset));
+        }
         resolveFills(fills);
     }
 
@@ -1022,7 +1050,8 @@ public final class SelectionOverlayRenderer {
      * which is known to be in the player's dimension; links that carry their own dimension are filtered
      * against it, since controller instances and entrances may point at another one.
      */
-    private static void collectAttachments(Sink out, BlockPos sourcePos, BlockEntity be) {
+    private static void collectAttachments(Sink out, BlockPos sourcePos, BlockEntity be,
+                                           @Nullable BlockPos pickedSpawner) {
         Minecraft mc = out.mc();
         if (be instanceof DungeonControllerBlockEntity controller) {
             for (BlockPos instance : controller.getInstances()) {
@@ -1059,7 +1088,14 @@ public final class SelectionOverlayRenderer {
             for (BlockPos spawnerOffset : room.getSpawnerOffsets()) {
                 BlockPos spawnerPos = sourcePos.offset(spawnerOffset);
                 out.add(Kind.LINK, spawnerPos);
-                out.addOffsets(Kind.MOB_SPAWN, spawnerPos, linkedSpawnOffsets(mc, spawnerPos));
+                // With an acting spawner picked, its spawn positions keep the full-strength
+                // yellow the mode edits; every other spawner's turn red (and, never being the
+                // mode's own kind, sit in the dim tier), so the two are unmistakable.
+                if (pickedSpawner == null || spawnerPos.equals(pickedSpawner)) {
+                    out.addOffsets(Kind.MOB_SPAWN, spawnerPos, linkedSpawnOffsets(mc, spawnerPos));
+                } else {
+                    out.addOffsets(Kind.OTHER_MOB_SPAWN, spawnerPos, linkedSpawnOffsets(mc, spawnerPos));
+                }
             }
             for (Bounds door : doorGroups(mc, sourcePos, room.getDoorOffsets())) {
                 out.addDoor(door);

@@ -66,6 +66,14 @@ public final class DungeonRun {
     private int pendingGraceTicks = -1;
     /** Entrance-door block → room lookup for crossing detection; rebuilt lazily, never persisted. */
     @Nullable private transient Map<BlockPos, BlockPos> entranceDetectionCache = null;
+    /** While EXPLORING: each player's most recently touched entrance door's room. A room locks in
+     *  once enough players registered on it. Never persisted — players re-touch after a reload. */
+    private final transient Map<UUID, BlockPos> roomEntryRegistrations = new HashMap<>();
+    /** Explore-HUD "Waiting players x/y" cache; quotas are only re-evaluated when a registration
+     *  changes or the heartbeat fires, not every tick. */
+    private transient int entryWaitingCount = 0;
+    private transient int entryWaitingRequired = 1;
+    private transient int entryEvalHeartbeatTicks = 0;
 
     // ---- Constructors ----
 
@@ -197,6 +205,22 @@ public final class DungeonRun {
     void setPendingGraceTicks(int ticks) { this.pendingGraceTicks = ticks; }
     void setEntranceDetectionCache(@Nullable Map<BlockPos, BlockPos> cache) { this.entranceDetectionCache = cache; }
     void invalidateEntranceDetectionCache() { this.entranceDetectionCache = null; }
+    /** Mutable on purpose: the lifecycle registers, re-registers, prunes and clears in place. */
+    Map<UUID, BlockPos> roomEntryRegistrations() { return roomEntryRegistrations; }
+    int entryWaitingCount() { return entryWaitingCount; }
+    int entryWaitingRequired() { return entryWaitingRequired; }
+    void setEntryWaiting(int count, int required) {
+        this.entryWaitingCount = count;
+        this.entryWaitingRequired = required;
+    }
+    /** True once a second, so quota changes with no door touches (a logout, say) still land. */
+    boolean entryEvalHeartbeat() {
+        if (--entryEvalHeartbeatTicks <= 0) {
+            entryEvalHeartbeatTicks = 20;
+            return true;
+        }
+        return false;
+    }
     void setDungeonTimerTicks(int ticks) { this.dungeonTimerTicks = ticks; }
     void setCloseTimerTicks(int ticks) { this.closeTimerTicks = ticks; }
     void setInitialCloseTimerTicks(int ticks) { this.initialCloseTimerTicks = ticks; }

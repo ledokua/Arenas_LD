@@ -82,6 +82,8 @@ public class ArenasLdClient {
                 context.client().execute(() -> net.ledok.arenas_ld.client.hud.RunTimerHud.onPayload(payload)));
         ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.packet.LootRewardPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> net.ledok.arenas_ld.client.hud.LootRevealHud.onPayload(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.packet.LootHudClearPayload.TYPE, (payload, context) ->
+                context.client().execute(net.ledok.arenas_ld.client.hud.LootRevealHud::clear));
 
         ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> {

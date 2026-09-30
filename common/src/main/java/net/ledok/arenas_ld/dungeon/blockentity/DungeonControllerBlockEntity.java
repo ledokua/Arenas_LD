@@ -40,6 +40,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -473,6 +474,11 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (findLobbyByMember(playerUuid).isPresent()) {
             return Optional.empty();
         }
+        DifficultyTier defaultTier = defaultEnabledTier();
+        if (defaultTier == null) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.lobby.no_tiers_enabled"));
+            return Optional.empty();
+        }
 
         UUID lobbyId = UUID.randomUUID();
         String playerName = player.getGameProfile().getName();
@@ -487,7 +493,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             members,
             memberNames,
             Set.of(),
-            DifficultyTier.NORMAL,
+            defaultTier,
             false,
             LobbyVisibility.PUBLIC,
             LobbyStatus.FORMING,
@@ -619,13 +625,32 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         return true;
     }
 
+    /** Whether the builder left this tier selectable in the lobby. */
+    private boolean isTierEnabled(DifficultyTier tier) {
+        return tierConfigs.getOrDefault(tier, TierConfig.defaultFor(tier)).enabled();
+    }
+
+    /** The tier a new lobby starts on: NORMAL when enabled, else the first enabled tier,
+     *  or {@code null} when every tier is disabled (no lobby can be created then). */
+    private @Nullable DifficultyTier defaultEnabledTier() {
+        if (isTierEnabled(DifficultyTier.NORMAL)) {
+            return DifficultyTier.NORMAL;
+        }
+        for (DifficultyTier tier : DifficultyTier.values()) {
+            if (isTierEnabled(tier)) {
+                return tier;
+            }
+        }
+        return null;
+    }
+
     public boolean setLobbyTier(ServerPlayer player, DifficultyTier tier) {
         Optional<Lobby> lobbyOpt = findLobbyByMember(player.getUUID());
         if (lobbyOpt.isEmpty()) return false;
         Lobby lobby = lobbyOpt.get();
         if (!lobby.isOwner(player.getUUID())) return false;
         if (lobby.status() == LobbyStatus.IN_RUN) return false;
-        if (!tierConfigs.getOrDefault(tier, TierConfig.defaultFor(tier)).enabled()) return false;
+        if (!isTierEnabled(tier)) return false;
         replaceLobby(lobby.withTier(tier));
         return true;
     }
@@ -673,6 +698,11 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (lobby.members().size() > maxPartySize) return Optional.empty();
         if (!lobby.allReady()) return Optional.empty();
         if (!allMembersOnline(player, lobby)) return Optional.empty();
+        // The builder may have disabled the tier while the lobby was forming.
+        if (!isTierEnabled(lobby.selectedTier())) {
+            notifyLobbyMembers(lobby, Component.translatable("message.arenas_ld.lobby.tier_disabled"));
+            return Optional.empty();
+        }
 
         Optional<BlockPos> available = firstAvailableInstance();
         boolean isFront = queuedLobbyIds.isEmpty() || queuedLobbyIds.get(0).equals(lobby.lobbyId());

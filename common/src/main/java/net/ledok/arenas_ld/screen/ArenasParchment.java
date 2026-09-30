@@ -26,6 +26,19 @@ import java.util.function.Function;
  * {@link ArenasUi} palette.
  */
 public final class ArenasParchment {
+
+    /**
+     * Vanilla-like shell sizing for the parchment lobby screens: the shell is at most its design
+     * size and shrinks with the window (the content scroll absorbs lost height) instead of the
+     * old approach of forcing the whole GUI scale while the screen was open. The floor keeps the
+     * layout from imploding on absurd scale/window combinations — below it the shell simply
+     * overflows and clips, exactly like a vanilla chest screen does there.
+     */
+    public static void sizeShell(Flex shell, float canvasW, float canvasH, int designW, int designH) {
+        int w = (int) Math.max(320, Math.min(designW, canvasW - 8));
+        int h = (int) Math.max(240, Math.min(designH, canvasH - 8));
+        shell.sizing(Sizing.fixed(w), Sizing.fixed(h));
+    }
     private ArenasParchment() {}
 
     // Parchment palette: paper surfaces, brown inks. Same token roles as ArenasUi.

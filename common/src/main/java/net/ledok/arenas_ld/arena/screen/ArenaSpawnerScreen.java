@@ -22,7 +22,7 @@ import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.Label;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
 import net.ledok.vectorlib.client.canvas.widget.TextField;
-import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.arenas_ld.screen.FitCanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -45,7 +45,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 
 /** Config editor for the arena spawner: combat/timing/cadence settings, mob list, and per-wave rewards. */
-public class ArenaSpawnerScreen extends CanvasHandledScreen<ArenaSpawnerScreenHandler> {
+public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScreenHandler> {
     private final BlockPos pos;
     private Flex mobsArea;
     private Flex rewardsArea;

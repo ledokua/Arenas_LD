@@ -18,6 +18,7 @@ from. Built on VectorLib for the UI.
 [Arenas](#arenas) · [The wave loop](#the-wave-loop) · [Scaling](#scaling) ·
 [Raids](#raids) · [Tier scaling](#tier-scaling) ·
 [Lobbies, parties and instances](#lobbies-parties-and-instances) · [Rewards and loot](#rewards-and-loot) ·
+[LuckPerms reward perks](#luckperms-reward-perks) ·
 [Commands](#commands) · [Config](#config) · [File locations](#file-locations) ·
 [Compatibility](#compatibility) · [License](#license)
 
@@ -96,7 +97,7 @@ a creative player can remove one.
 | **Dungeon Controller** | `arenas_ld:dungeon_controller` | The block players click. Owns lobbies, the queue, instances, difficulty tiers, leaderboards and every timing setting, and ticks every run it started. |
 | **Dungeon Boss Spawner** | `arenas_ld:dungeon_boss_spawner` | One per dungeon *instance*: holds that copy's room list, the party's entrance and the Start/Final markers. It also carries a mob definition, but that is used only when the same block is *additionally* linked into a room as that room's boss (Room Controller → Dungeon Boss Spawner) — there is no dungeon-level boss that appears on its own. |
 | **Room Controller** | `arenas_ld:room_controller` | One per room: its spawners, its doors, its respawn points, its objective, its name and its clear reward. |
-| **Mob Spawner** | `arenas_ld:mob_spawner` | A room's wave enemies — mob id, count, wave number, spawn positions, attributes, equipment. |
+| **Mob Spawner** | `arenas_ld:mob_spawner` | A room's wave enemies — name (its label in the Dungeon Tool's spawner list), mob id, count, wave number, spawn positions, attributes, equipment. |
 | **Phase Block** | `arenas_ld:phase_block` | Doorways. A connected clump of them is one door. |
 | **Raid Controller** | `arenas_ld:raid_controller` | The raid equivalent of the Dungeon Controller. |
 | **Raid Boss Spawner** | `arenas_ld:raid_boss_spawner` | One raid instance: the boss, its entrance and its respawn points. |
@@ -126,9 +127,16 @@ holding the item can change its mode.
 - **Right-click in air** (with nothing in reach) opens **Dungeon Tool — Mode**, grouped into
   *Linking*, *Doors* and *Positions*. **Shift + scroll** cycles modes with the tool in the main hand.
   **Shift + right-click in air** clears the selected source.
+- **With a Room Controller selected, the mode picker also lists the room's linked spawners** (by the
+  name given on the spawner's screen, or coordinates). Picking one makes it the room's *acting
+  spawner*: the tool switches to *Mob spawn position* and world clicks edit that spawner's spawn
+  positions without walking over to it — reopen the picker to switch spawners. The **⚙** button on a
+  row opens that spawner's settings screen, as if the block were right-clicked.
 - Every mode is two clicks: **select a source block, then apply at a target**. Clicking a block that
   is a valid source for the current mode always re-selects it instead of applying, so you can chain
-  selections without clearing.
+  selections without clearing. The one exception: in *Mob spawn position* mode, clicking a spawner
+  that is linked to the selected room picks it as the room's acting spawner and keeps the room
+  selected.
 - The mode and the selection live on the item stack, so two tools can hold two different selections.
 - **Holding it suppresses block screens.** Right-clicking any mod block with the tool in either hand
   performs the tool action. Put it away to configure a block. The one exception is the **Raid
@@ -142,11 +150,12 @@ holding the item can change its mode.
 
   | Color | What it marks |
   |---|---|
-  | Gold, doubled outline | the selected block itself (the outer line widens with distance so it stays readable) |
+  | Gold, doubled outline | the selected block itself (the outer line widens with distance so it stays readable); a room's acting spawner is marked the same way, on top of the room's overlay |
   | Green | a linked block: an instance, a room, a room's spawner |
   | Azure / rose | the Start room / the Final room of a Dungeon Boss Spawner |
   | Violet | a door, boxed as its whole connected Phase Block group rather than the block you clicked (a second, inset box means the stored anchor is no longer a Phase Block — a broken link) |
-  | Yellow | a mob or boss spawn position |
+  | Yellow | a mob or boss spawn position; with an acting spawner picked, only that spawner's positions are yellow |
+| Red | a spawn position of one of the room's *other* spawners while an acting spawner is picked, dimmed |
   | Cyan | a respawn point |
   | Orange | the entrance |
   | Magenta | a PROTECT objective's target position |
@@ -164,7 +173,7 @@ holding the item can change its mode.
 |---|---|---|
 | **Link structures** | Dungeon / Raid / Arena Controller, Dungeon Boss Spawner, Room Controller | The (source, target) pair decides the relationship — nothing to pick. |
 | **Door** | Room Controller | Links the clicked Phase Block's whole connected group to that room; clicking an already-linked door unlinks it. |
-| **Mob spawn position** | Mob Spawner, Dungeon Boss Spawner, Raid Boss Spawner | **Mob Spawner**: toggles one of a list of positions on top of the clicked block (and bumps *Count* by ±1). **Dungeon / Raid Boss Spawner**: a single position — a new click replaces it, clicking the same block clears it. |
+| **Mob spawn position** | Mob Spawner, Dungeon Boss Spawner, Raid Boss Spawner, Room Controller (through its acting spawner) | **Mob Spawner**: toggles one of a list of positions on top of the clicked block (and bumps *Count* by ±1). **Dungeon / Raid Boss Spawner**: a single position — a new click replaces it, clicking the same block clears it. **Room Controller**: applies to the acting spawner picked in the tool screen's list. |
 | **Entrance position** | Dungeon Boss Spawner, Raid Boss Spawner, Arena Spawner | Sets where the party lands. Always replaces, never toggles. |
 | **Respawn position** | Room Controller, Raid Boss Spawner, Arena Spawner | Toggles one respawn point on top of the clicked block. |
 | **Protect target position** | Room Controller | Sets (or clears) where a PROTECT objective's target spawns. |
@@ -177,15 +186,17 @@ The six link pairs, and nothing else:
 | Raid Controller | Raid Boss Spawner | registers a raid instance |
 | Arena Controller | Arena Spawner | registers an arena instance |
 | Dungeon Boss Spawner | Room Controller | adds a room to the dungeon |
-| Room Controller | Mob Spawner | adds wave enemies to the room |
-| Room Controller | Dungeon Boss Spawner | adds a boss to that room |
+| Room Controller | Mob Spawner | adds wave enemies to the room; clicking a linked one unlinks it |
+| Room Controller | Dungeon Boss Spawner | adds a boss to that room; clicking a linked one unlinks it |
 
 **Click order is the whole disambiguation** for the last two rows against the fourth: the same two
 blocks mean two different things depending on which you select first.
 
-**Link mode never unlinks.** Remove an instance, a room or a spawner from the owning block's screen
-(*Remove* / *×* / *Clear All*). Door, Mob spawn position, Respawn position and Protect position are
-the modes that toggle on a second click.
+**Link mode unlinks a room's spawners on a second click**, like doors: with the room selected,
+clicking an already-linked Mob Spawner or Dungeon Boss Spawner removes it from the room. Instances
+and a boss spawner's rooms still only come off from the owning block's screen (*Remove* / *×* /
+*Clear All*). Door, Mob spawn position, Respawn position and Protect position also toggle on a
+second click.
 
 **Dimensions.** A controller may link an instance in another dimension, and an entrance may be in
 another dimension — the dimension is stored with the position. Everything else is stored as an offset
@@ -240,6 +251,13 @@ another moves it. Marked rooms show green **START** / red **FINAL** badges.
 
 - **Branching (door graph)** — active as soon as **either** marker is set. The party explores; the
   door graph decides everything; clearing the Final room wins. Room list order is cosmetic.
+  A room doesn't lock in on the first touch: touching an entrance door registers you on that room
+  (touching another room's door re-registers you) and gives you a glowing outline so the party can
+  see who waits where; the room starts once its **Required players %** share of the online party is
+  registered on it (set per room in the Room Controller's Objective section, default 25% — 2 players
+  in a 5-8 player party; parties of 4 or fewer enter on the first touch). While short of the quota
+  the HUD shows *Waiting players 1/2* next to the rooms-cleared line, and the glow ends when the
+  room locks in. Turning back after touching a door does not unregister you.
 - **Legacy (linear)** — a dungeon with **no** markers at all walks the room list by index: clear room
   1, open its doors, move to room 2, and so on; the last room in the list wins. This is the only mode
   where room order matters, and it exists for dungeons built before markers.
@@ -300,7 +318,17 @@ is exactly the pre-objective behavior.
 - Every spawned mob gets the tier × party health multiplier applied to its configured
   `minecraft:generic.max_health` attribute — nothing else, and nothing at all if the spawner has no
   attribute rows — is healed to full, is marked persistence-required so vanilla never despawns it,
-  and joins a shared no-friendly-fire scoreboard team.
+  and joins a shared no-friendly-fire scoreboard team. Vanilla mob conversions (zombie → drowned,
+  skeleton → stray, zombie-villager curing…) are blocked for every run-spawned mob: conversion would
+  replace the entity, falsely counting a kill and leaving an untracked, unscaled copy behind.
+- When 15% or less of the current wave is left alive (10 mobs → the last one), the stragglers start
+  glowing so the party can find them. Each wave counts separately — the next wave's spawn resets the
+  threshold. SURVIVE rooms never glow (their timer clears the room either way).
+- Run mobs never wreck the run: their explosions (creepers, ghast fireballs, wither skulls…) hurt no
+  teammate on the shared no-friendly-fire team (mob projectiles like skeleton arrows already respect
+  it) and destroy no blocks, and run endermen neither pick up nor place blocks. (A wither boss chewing through walls
+  after being hit, zombies breaking doors and similar griefing are vanilla `mobGriefing` behaviors
+  this does not touch.)
 - **A room holds a list of respawn points, not one.** Both room entry and downed-player revives pick
   the point **closest to the player's own position**, so a party split across two doors enters on both
   sides. With no respawn point set, the player who crossed the door stays put and everyone else is
@@ -543,14 +571,17 @@ and `minecraft:generic.attack_damage` 15.
 ### Boss gear and attributes
 
 The shared **Attributes** editor is a list of attribute id + value rows (values are absolute, not
-multipliers). The shared **Equipment** editor has six ghost slots — Head, Chest, Legs, Feet, Main Hand,
+multipliers). **Save** applies without closing, so you can keep editing; **×** or **Esc** goes back
+to the spawner screen that opened the editor — the same back-navigation the Equipment editor and the
+room's Rewards screen use. The shared **Equipment** editor has six ghost slots — Head, Chest, Legs, Feet, Main Hand,
 Off Hand — each with its own 0–100 % spawn chance rolled independently, plus an **Enable drops**
 toggle. Clicking a slot with an item on the cursor stamps a template without consuming your item.
 
 **Configured gear never drops** — its drop chance is forced to 0. *Enable drops* controls something
 else: the mob's own natural loot table (bones, rotten flesh…), canceled when it is off.
 
-On spawn the boss is healed to full, marked persistence-required, and put on a no-friendly-fire team.
+On spawn the boss is healed to full, marked persistence-required (and protected from vanilla mob
+conversions), and put on a no-friendly-fire team.
 
 ### Tier scaling
 
@@ -617,7 +648,10 @@ second and fourth carrying a live count. The raid and arena screens add a strip 
 above the tabs (FREE green, RUNNING amber, COOLDOWN red with seconds left); the dungeon lobby screen
 has no instance strip, so its pool is only visible on the admin screen.
 
-- **Create Lobby** makes one owned by you, defaulting to Normal difficulty, hardcore off, PUBLIC.
+- **Create Lobby** makes one owned by you — hardcore off, PUBLIC, defaulting to Normal difficulty
+  (or the first enabled tier when Normal is disabled; with every tier disabled no lobby can be
+  created). Disabled tiers can't be picked, and Start re-checks the selected tier in case an
+  admin disabled it while the lobby was forming. The same rules apply to raid lobbies.
 - **Visibility**: PUBLIC (a JOIN button), FRIENDS (a REQUEST the owner accepts or declines), PRIVATE
   (invisible in the browser, invite only). FRIENDS has no actual friend system behind it — the only
   difference is the request step.
@@ -672,8 +706,13 @@ queue.
 ## Rewards and loot
 
 Rewards are shown as an animated popup under the run HUD — item cards in their rarity frames, tagged
-`inbox` or `dropped` when the item did not fit, then a currency line and an XP line. Headings read
-Dungeon Reward, Room Cleared, Raid Reward, Wave Reward or Arena Reward.
+`inbox` or `dropped` when the item did not fit, then a currency line and an XP line. A room reward's
+status effects get cards of their own, split off with `Items:` / `Effects:` captions: the effect icon
+in a frame colored by category (beneficial green, harmful red), the level as a numeral on the sprite
+(Regeneration **II**), and the duration below (`5:00`, or `∞`). Headings read
+Dungeon Reward, Room Cleared, Raid Reward, Wave Reward or Arena Reward. The popup holds for about
+12 seconds — but entering the next room dismisses it (and anything queued behind it) at once, so a
+bonus room's reward never clutters the screen once a fight is starting.
 
 **Where a reward actually lands**: into the player's inventory first; overflow to the Economy_LD inbox
 when that mod is present, otherwise dropped at their feet. A winner who is offline gets everything
@@ -708,6 +747,36 @@ online participant, delivered to their inventory) or **one** (communal: rolled o
 the arena floor). Communal drops are **deleted when the next wave starts**, along with every other
 dropped item in the battle radius — use per-player rows for loot that must not be missed. Arena mobs
 also default to suppressed natural drops, so all arena loot is expected to come from these rows.
+
+### LuckPerms reward perks
+
+With [LuckPerms](https://luckperms.net) installed, meta values on a player (usually set on a group)
+boost their rewards from a raid win, a dungeon completion and the mob arena. Per-room dungeon rewards
+are never affected.
+
+| Meta key | Type | Default | Range | Effect |
+|---|---|---|---|---|
+| `arenas_ld.raid_loot_rolls` | integer | 1 | 1–10 | How many times the raid tier's per-player loot table rolls; all results are delivered together. |
+| `arenas_ld.dungeon_loot_rolls` | integer | 1 | 1–10 | The same for the dungeon tier's completion loot table. |
+| `arenas_ld.arena_loot_rolls` | integer | 1 | 1–10 | Multiplies the player's rolls on every **per-player** (*each*) wave reward row — a row with `rolls 2` rolls 4 times at value 2, on top of the hardcore ×2. Communal (*one*) rows are rolled once for the whole party and stay unchanged. |
+| `arenas_ld.currency_multiplier` | decimal | 1.0 | 0–10 | Currency × this, rounded (`1.1` = +10%). Applied after the hardcore ×2, so both stack. Raid win, dungeon completion and the arena's end-of-run summary. |
+| `arenas_ld.xp_multiplier` | decimal | 1.0 | 0–10 | Skill XP × this, rounded (`1.25` = +25%), at the same three payouts. |
+
+A missing or unparseable value, or a value outside its range, falls back to (or is clamped into) the
+default range. The popup shows the boosted amounts. Example for a `prime` group:
+
+```
+lp group prime meta set arenas_ld.raid_loot_rolls 2
+lp group prime meta set arenas_ld.dungeon_loot_rolls 2
+lp group prime meta set arenas_ld.arena_loot_rolls 2
+lp group prime meta set arenas_ld.currency_multiplier 1.1
+lp group prime meta set arenas_ld.xp_multiplier 1.1
+```
+
+**Offline winners get the defaults.** LuckPerms only has online players loaded, so a loot-eligible
+player who is offline at payout (their reward goes through the Economy_LD inbox) receives one roll and
+unmultiplied currency. Arena wave rows only pay online players anyway. Without LuckPerms every player
+simply gets the defaults.
 
 ## Commands
 
@@ -769,6 +838,7 @@ above survive it.
 | [BusyLib](https://github.com/ledokua/BusyLib) | yes | The cross-mod "player is busy" flag that stops a player being in two activities at once. **Not bundled**, and it has no published release yet — build it from source (`./gradlew build`) and drop the jar in the server's `mods/` folder next to Arenas_LD. |
 | Economy_LD | optional | Currency rewards and the inbox that delivers loot to offline players or a full inventory. Without it, currency is skipped silently and an offline player's items are logged and lost. |
 | [Pufferfish's Skills](https://modrinth.com/mod/pufferfishs-skills) | optional | Skill XP on tier and room rewards. Every call is guarded, so the XP part of a reward is simply skipped when absent. |
+| [LuckPerms](https://luckperms.net) | optional | [Reward perks](#luckperms-reward-perks) from player/group meta: extra loot rolls and currency / XP multipliers for raids, dungeons and the mob arena. Same API on Fabric and NeoForge; without it everyone gets the defaults. |
 
 Both jars are side `BOTH` and load on client and server. The Fabric jar pins Minecraft to exactly
 1.21.1; the NeoForge jar accepts `[1.21.1,1.22)`. Java 21.

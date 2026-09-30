@@ -26,7 +26,6 @@ import net.ledok.arenas_ld.raid.packet.RaidStartRunPayload;
 import net.ledok.arenas_ld.raid.packet.RaidToggleReadyPayload;
 import net.ledok.arenas_ld.raid.screen.RaidControllerData.RaidInstanceState;
 import net.ledok.arenas_ld.screen.ArenasParchment;
-import net.ledok.arenas_ld.screen.ForcedGuiScale;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.arenas_ld.util.InstanceStatus;
 import net.ledok.arenas_ld.screen.ArenasUi;
@@ -44,7 +43,7 @@ import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
 import net.ledok.vectorlib.client.canvas.widget.UiSounds;
 import net.ledok.vectorlib.client.canvas.widget.Widget;
 import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
-import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.arenas_ld.screen.FitCanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -76,13 +75,12 @@ import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG_ALT;
 import static net.ledok.arenas_ld.screen.ArenasParchment.WARN;
 
-public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScreenHandler> {
+public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerScreenHandler> {
     private static final int INVITE_DROPDOWN_MAX_HEIGHT = 154;
     // Design (forced-integer-GUI-scale) shell size; keeps the shell a fixed size and the font crisp
     // regardless of window size, matching the shop/AH screens in Economy_LD.
     private static final int DESIGN_W = 560;
     private static final int DESIGN_H = 480;
-    private final ForcedGuiScale guiScale = new ForcedGuiScale(DESIGN_W, DESIGN_H);
 
     /** Close-button look: PANEL fill (ROW_BG on hover), HAIRLINE_HI outline — the old × renderer. */
     private static final WidgetStyle CLOSE_STYLE = new WidgetStyle(
@@ -196,6 +194,9 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         super(handler, inventory, title, VectorCanvas.create(DESIGN_W, DESIGN_H), Placement.Screen.center());
         canvas.theme(ArenasParchment.THEME);
         fillWindow();
+        // Lobby rows are fixed-badge columns ~540 px wide: below this the whole panel
+        // scales down instead of the badges sliding over the owner column.
+        minLogicalWidth(DESIGN_W + 8);
         this.visibleLobbies = new ArrayList<>(handler.getVisibleLobbies());
         this.myInvites = new ArrayList<>(handler.getMyInvites());
         this.myJoinRequests = new ArrayList<>(handler.getMyJoinRequests());
@@ -219,7 +220,7 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
 
         Flex shell = root.item(Flex.column());
-        shell.sizing(Sizing.fixed(DESIGN_W), Sizing.fixed(DESIGN_H));
+        ArenasParchment.sizeShell(shell, canvas.width(), canvas.height(), DESIGN_W, DESIGN_H);
         shell.background(ArenasParchment.panel());
         shell.padding(Insets.of(8)); // keep content off the parchment border art
 
@@ -1029,15 +1030,23 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
 
     private Flex ownerTierControls(boolean isOwner) {
         DifficultyTier current = ownLobby.map(Lobby::selectedTier).orElse(null);
-        Button easy = segmentButton("EASY", tierColor(DifficultyTier.EASY), isOwner, current == DifficultyTier.EASY,
+        Button easy = segmentButton("EASY", tierColor(DifficultyTier.EASY),
+            isOwner && isTierEnabled(DifficultyTier.EASY), current == DifficultyTier.EASY,
             () -> ClientPlayNetworking.send(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.EASY)));
-        Button normal = segmentButton("NORMAL", tierColor(DifficultyTier.NORMAL), isOwner, current == DifficultyTier.NORMAL,
+        Button normal = segmentButton("NORMAL", tierColor(DifficultyTier.NORMAL),
+            isOwner && isTierEnabled(DifficultyTier.NORMAL), current == DifficultyTier.NORMAL,
             () -> ClientPlayNetworking.send(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
-        Button hard = segmentButton("HARD", tierColor(DifficultyTier.HARD), isOwner, current == DifficultyTier.HARD,
+        Button hard = segmentButton("HARD", tierColor(DifficultyTier.HARD),
+            isOwner && isTierEnabled(DifficultyTier.HARD), current == DifficultyTier.HARD,
             () -> ClientPlayNetworking.send(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
-        Button nightmare = segmentButton("NIGHTMARE", tierColor(DifficultyTier.NIGHTMARE), isOwner, current == DifficultyTier.NIGHTMARE,
+        Button nightmare = segmentButton("NIGHTMARE", tierColor(DifficultyTier.NIGHTMARE),
+            isOwner && isTierEnabled(DifficultyTier.NIGHTMARE), current == DifficultyTier.NIGHTMARE,
             () -> ClientPlayNetworking.send(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NIGHTMARE)));
         return segmentedControl(easy, normal, hard, nightmare);
+    }
+
+    private boolean isTierEnabled(DifficultyTier tier) {
+        return menu.getEnabledTiers().contains(tier);
     }
 
     private Flex ownerVisibilityControls(boolean isOwner) {
@@ -1918,21 +1927,4 @@ public class RaidControllerScreen extends CanvasHandledScreen<RaidControllerScre
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    @Override
-    protected void init() {
-        if (this.minecraft != null) {
-            this.guiScale.apply(this.minecraft);
-            this.width = this.minecraft.getWindow().getGuiScaledWidth();
-            this.height = this.minecraft.getWindow().getGuiScaledHeight();
-        }
-        super.init();
-    }
-
-    @Override
-    public void removed() {
-        if (this.minecraft != null) {
-            this.guiScale.restore(this.minecraft);
-        }
-        super.removed();
-    }
 }

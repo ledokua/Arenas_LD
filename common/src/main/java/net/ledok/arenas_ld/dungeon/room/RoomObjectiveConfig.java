@@ -33,7 +33,10 @@ import java.util.Optional;
  */
 public record RoomObjectiveConfig(Type type, int surviveSeconds, int surviveWaveIntervalSeconds,
                                   String protectMobId, boolean protectStationary, Optional<BlockPos> protectOffset,
-                                  List<AttributeData> protectAttributes) {
+                                  List<AttributeData> protectAttributes, int entryPercent) {
+
+    /** Default share of the online party that must register on the room's doors to lock it in. */
+    public static final int DEFAULT_ENTRY_PERCENT = 25;
 
     public enum Type implements StringRepresentable {
         KILL_ALL("kill_all"),
@@ -56,7 +59,8 @@ public record RoomObjectiveConfig(Type type, int surviveSeconds, int surviveWave
     }
 
     public static final RoomObjectiveConfig DEFAULT =
-        new RoomObjectiveConfig(Type.KILL_ALL, 60, 15, "minecraft:villager", true, Optional.empty(), List.of());
+        new RoomObjectiveConfig(Type.KILL_ALL, 60, 15, "minecraft:villager", true, Optional.empty(), List.of(),
+            DEFAULT_ENTRY_PERCENT);
 
     public static final Codec<RoomObjectiveConfig> CODEC = RecordCodecBuilder.create(i -> i.group(
         Type.CODEC.optionalFieldOf("type", Type.KILL_ALL).forGetter(RoomObjectiveConfig::type),
@@ -65,12 +69,18 @@ public record RoomObjectiveConfig(Type type, int surviveSeconds, int surviveWave
         Codec.STRING.optionalFieldOf("protectMobId", "minecraft:villager").forGetter(RoomObjectiveConfig::protectMobId),
         Codec.BOOL.optionalFieldOf("protectStationary", true).forGetter(RoomObjectiveConfig::protectStationary),
         BlockPos.CODEC.optionalFieldOf("protectOffset").forGetter(RoomObjectiveConfig::protectOffset),
-        AttributeData.CODEC.listOf().optionalFieldOf("protectAttributes", List.of()).forGetter(RoomObjectiveConfig::protectAttributes)
+        AttributeData.CODEC.listOf().optionalFieldOf("protectAttributes", List.of()).forGetter(RoomObjectiveConfig::protectAttributes),
+        Codec.INT.optionalFieldOf("entryPercent", DEFAULT_ENTRY_PERCENT).forGetter(RoomObjectiveConfig::entryPercent)
     ).apply(i, RoomObjectiveConfig::new));
 
     public RoomObjectiveConfig withProtectOffset(Optional<BlockPos> newOffset) {
         return new RoomObjectiveConfig(type, surviveSeconds, surviveWaveIntervalSeconds,
-            protectMobId, protectStationary, newOffset, protectAttributes);
+            protectMobId, protectStationary, newOffset, protectAttributes, entryPercent);
+    }
+
+    /** {@link #entryPercent} guarded against out-of-range values from old saves or raw NBT. */
+    public int clampedEntryPercent() {
+        return Math.clamp(entryPercent, 1, 100);
     }
 
     // NBT-via-CODEC, same wire approach as RoomRewardConfig; composes into both

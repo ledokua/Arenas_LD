@@ -64,6 +64,10 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
     private final List<Integer> waveNumbers = new ArrayList<>();
     private int currentWaveIndex = 0;
     private int nextWaveDelayTicks = -1; // -1 = no countdown running
+    /** How many mobs the current wave spawned, for the low-wave glow threshold. 0 = no wave yet. */
+    private int currentWaveSize = 0;
+    /** Below this fraction of {@link #currentWaveSize} alive, the stragglers get the glow. */
+    private static final double GLOW_FRACTION = 0.15;
     /** True while the current wave has a boss spawn; when all of the wave's bosses die,
      *  its remaining adds are discarded instead of requiring them to be killed too. */
     private boolean bossInCurrentWave = false;
@@ -260,6 +264,15 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         return true;
     }
 
+    /** Toggles the spawner link, like doors: returns true when now linked, false when unlinked. */
+    public boolean toggleSpawner(BlockPos absolutePos) {
+        if (removeSpawner(absolutePos)) {
+            return false;
+        }
+        addSpawner(absolutePos);
+        return true;
+    }
+
     /** Returns true if the spawner was removed (false if not present). */
     public boolean removeSpawner(BlockPos absolutePos) {
         BlockPos spawnerOffset = absolutePos.subtract(worldPosition);
@@ -366,6 +379,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         waveNumbers.clear();
         currentWaveIndex = 0;
         nextWaveDelayTicks = -1;
+        currentWaveSize = 0;
         bossInCurrentWave = false;
         surviveTicksRemaining = -1;
         protectTargetUuid = null;
@@ -525,7 +539,34 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     worldPosition, absolutePos, be == null ? "null" : be.getClass().getSimpleName());
             }
         }
+        if (!spawned.isEmpty()) {
+            currentWaveSize = spawned.size();
+        }
         return spawned;
+    }
+
+    /**
+     * When {@link #GLOW_FRACTION} or less of the current wave is left alive (10 mobs → the last
+     * one), the stragglers get a permanent glow so the party can find them. Per wave — the next
+     * wave's spawn resets the threshold. SURVIVE rooms never reach this (the timer clears them,
+     * leftovers don't need hunting down).
+     */
+    private void tickLowWaveGlow(ServerLevel world) {
+        if (aliveMobs.isEmpty() || currentWaveSize <= 0) {
+            return;
+        }
+        int threshold = Math.max(1, (int) Math.floor(currentWaveSize * GLOW_FRACTION));
+        if (aliveMobs.size() > threshold) {
+            return;
+        }
+        for (UUID uuid : aliveMobs) {
+            if (world.getEntity(uuid) instanceof LivingEntity living
+                && !living.hasEffect(net.minecraft.world.effect.MobEffects.GLOWING)) {
+                living.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.GLOWING,
+                    net.minecraft.world.effect.MobEffectInstance.INFINITE_DURATION, 0, false, false));
+            }
+        }
     }
 
     /**
@@ -553,6 +594,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             }
             return tickSurviveSchedule(world, tier, partyHealthMultiplier);
         }
+        tickLowWaveGlow(world);
         if (!aliveMobs.isEmpty() || isOnFinalWave()) {
             nextWaveDelayTicks = -1;
             return List.of();
@@ -645,11 +687,9 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
         // Deliberately NOT on the arenas_dungeon mob team (wave mobs must be able to hurt it);
         // the run lifecycle adds it to the party's no-friendly-fire team so players can't.
-        if (living instanceof net.minecraft.world.entity.Mob mob) {
-            mob.setPersistenceRequired();
-            if (objective.protectStationary()) {
-                mob.setNoAi(true);
-            }
+        net.ledok.arenas_ld.util.EntityEquipmentHelper.markRunMob(living);
+        if (objective.protectStationary() && living instanceof net.minecraft.world.entity.Mob mob) {
+            mob.setNoAi(true);
         }
         // Configured attributes are absolute — the target isn't scaled by tier or party size.
         net.ledok.arenas_ld.util.EntityEquipmentHelper.applyScaledAttributes(
@@ -947,12 +987,14 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             ).apply(i, RespawnPoints::new));
     }
 
-    /** Objective runtime state, nested because the State codec is at the 16-field cap. */
-    private record ObjectiveRuntime(int surviveTicksRemaining, Optional<UUID> protectTargetUuid) {
-        static final ObjectiveRuntime EMPTY = new ObjectiveRuntime(-1, Optional.empty());
+    /** Objective and wave runtime state, nested because the State codec is at the 16-field cap. */
+    private record ObjectiveRuntime(int surviveTicksRemaining, Optional<UUID> protectTargetUuid,
+                                    int currentWaveSize) {
+        static final ObjectiveRuntime EMPTY = new ObjectiveRuntime(-1, Optional.empty(), 0);
         static final Codec<ObjectiveRuntime> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.optionalFieldOf("surviveTicksRemaining", -1).forGetter(ObjectiveRuntime::surviveTicksRemaining),
-            UUIDUtil.CODEC.optionalFieldOf("protectTargetUuid").forGetter(ObjectiveRuntime::protectTargetUuid)
+            UUIDUtil.CODEC.optionalFieldOf("protectTargetUuid").forGetter(ObjectiveRuntime::protectTargetUuid),
+            Codec.INT.optionalFieldOf("currentWaveSize", 0).forGetter(ObjectiveRuntime::currentWaveSize)
         ).apply(i, ObjectiveRuntime::new));
     }
 
@@ -963,7 +1005,8 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
             new RespawnPoints(Optional.empty(), respawnOffsets), aliveMobs, bossMobs, activated, cleared, roomName,
             waveNumbers, currentWaveIndex, nextWaveDelayTicks, bossInCurrentWave, roomReward,
             List.of() /* legacy entranceOffsets — merged into doorOffsets since the undirected-door rework */,
-            objective, new ObjectiveRuntime(surviveTicksRemaining, Optional.ofNullable(protectTargetUuid)));
+            objective, new ObjectiveRuntime(surviveTicksRemaining, Optional.ofNullable(protectTargetUuid),
+                currentWaveSize));
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save RoomController at {}: {}", worldPosition, err))
@@ -1013,6 +1056,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
                     objective = state.objective();
                     surviveTicksRemaining = state.objectiveRuntime().surviveTicksRemaining();
                     protectTargetUuid = state.objectiveRuntime().protectTargetUuid().orElse(null);
+                    currentWaveSize = state.objectiveRuntime().currentWaveSize();
                 });
         }
     }

@@ -40,8 +40,10 @@ public class DungeonBossSpawnerScreenHandler extends AbstractContainerMenu {
 
     @Override
     public boolean stillValid(Player player) {
+        // No distance clause: the Dungeon Tool's gear button opens this screen from anywhere in
+        // the room. The screen is op-gated and every mutation re-checks permission server-side;
+        // only the block ceasing to exist closes it.
         BlockPos pos = data.blockPos();
-        return player.level().getBlockEntity(pos) instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity
-            && player.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) <= 64;
+        return player.level().getBlockEntity(pos) instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity;
     }
 }

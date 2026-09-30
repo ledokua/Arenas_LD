@@ -4,6 +4,7 @@ import net.ledok.arenas_ld.packet.LootRewardPayload;
 import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.vectorlib.client.canvas.CanvasGroup;
 import net.ledok.vectorlib.client.canvas.Colors;
+import net.ledok.vectorlib.client.canvas.ImageNode;
 import net.ledok.vectorlib.client.canvas.ItemStackNode;
 import net.ledok.vectorlib.client.canvas.ShapeNode;
 import net.ledok.vectorlib.client.canvas.Shapes;
@@ -14,8 +15,10 @@ import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
@@ -36,7 +39,9 @@ public final class LootRevealHud {
     private static final long CARD_STAGGER_MS = 130;
     private static final long CARD_POP_MS = 220;
     private static final long COUNT_UP_MS = 700;
-    private static final long HOLD_MS = 3200;
+    /** Long on purpose: builders asked for 10-15 s to look the loot over. A new room entering
+     *  battle cuts it short via {@link net.ledok.arenas_ld.packet.LootHudClearPayload}. */
+    private static final long HOLD_MS = 12_000;
     private static final long EXIT_MS = 250;
 
     private static final ArrayDeque<LootRewardPayload> QUEUE = new ArrayDeque<>();
@@ -54,7 +59,8 @@ public final class LootRevealHud {
     }
 
     public static void onPayload(LootRewardPayload payload) {
-        if (payload.items().isEmpty() && payload.currency() <= 0L && payload.skillXp() <= 0) {
+        if (payload.items().isEmpty() && payload.effects().isEmpty()
+            && payload.currency() <= 0L && payload.skillXp() <= 0) {
             return;
         }
         QUEUE.addLast(payload);
@@ -133,10 +139,24 @@ public final class LootRevealHud {
         cardGroups.clear();
         currencyText = null;
 
-        int cards = payload.items().size();
-        float rowW = cards > 0 ? cards * CARD + (cards - 1) * GAP : 0;
+        int itemCount = payload.items().size();
+        int effectCount = payload.effects().size();
+        int cards = itemCount + effectCount;
+        // With effects in the popup, the row gets "Items:"/"Effects:" captions; an
+        // items-only reward keeps the plain card row.
+        boolean labeled = effectCount > 0;
+        var font = Minecraft.getInstance().font;
+        Component itemsLabel = Component.translatable("hud.arenas_ld.loot.items");
+        Component effectsLabel = Component.translatable("hud.arenas_ld.loot.effects");
+        float itemsLabelW = labeled && itemCount > 0 ? font.width(itemsLabel) + 5 : 0;
+        float effectsLabelW = labeled ? font.width(effectsLabel) + 5 : 0;
+        float itemsW = itemCount > 0 ? itemCount * CARD + (itemCount - 1) * GAP : 0;
+        float effectsW = effectCount > 0 ? effectCount * CARD + (effectCount - 1) * GAP : 0;
+        float sectionGap = itemCount > 0 && effectCount > 0 ? 14 : 0;
+        float rowW = itemsLabelW + itemsW + sectionGap + effectsLabelW + effectsW;
         float width = Math.max(170, rowW + 20);
-        boolean anyTag = payload.items().stream()
+        // Effect cards always show their duration below, so they need the tall text offset.
+        boolean anyTag = effectCount > 0 || payload.items().stream()
             .anyMatch(e -> e.destination() != LootRewardPayload.Destination.INVENTORY);
         float textY = cards > 0 ? CARDS_Y + CARD + (anyTag ? 13 : 4) : CARDS_Y;
         float height = textY + (payload.currency() > 0 ? 15 : 0) + (payload.skillXp() > 0 ? 12 : 0) + 2;
@@ -149,10 +169,31 @@ public final class LootRevealHud {
         header.at(width / 2, 0);
 
         float x = (width - rowW) / 2;
+        if (labeled && itemCount > 0) {
+            canvas.add(TextNode.of(itemsLabel).color(ArenasUi.INK_MID).shadow(true))
+                .at(x, CARDS_Y + 11);
+            x += itemsLabelW;
+        }
         for (LootRewardPayload.Entry entry : payload.items()) {
             CanvasGroup group = canvas.add(CanvasGroup.create());
             group.at(x, CARDS_Y);
             buildCard(group, entry);
+            group.visible(false);
+            cardGroups.add(group);
+            x += CARD + GAP;
+        }
+        if (labeled) {
+            if (itemCount > 0) {
+                x += sectionGap - GAP; // drop the item row's trailing gap
+            }
+            canvas.add(TextNode.of(effectsLabel).color(ArenasUi.INK_MID).shadow(true))
+                .at(x, CARDS_Y + 11);
+            x += effectsLabelW;
+        }
+        for (MobEffectInstance effect : payload.effects()) {
+            CanvasGroup group = canvas.add(CanvasGroup.create());
+            group.at(x, CARDS_Y);
+            buildEffectCard(group, effect);
             group.visible(false);
             cardGroups.add(group);
             x += CARD + GAP;
@@ -198,6 +239,51 @@ public final class LootRevealHud {
                 .color(inbox ? ArenasUi.INFO : ArenasUi.WARN).shadow(true).align(TextNode.Align.CENTER));
             tag.at(CARD / 2, CARD + 3);
         }
+    }
+
+    /** An effect reward card: category-colored frame, effect icon, level numeral, duration below. */
+    private static void buildEffectCard(CanvasGroup group, MobEffectInstance effect) {
+        int frame = switch (effect.getEffect().value().getCategory()) {
+            case BENEFICIAL -> ArenasUi.GOOD;
+            case HARMFUL -> ArenasUi.DANGER;
+            default -> ArenasUi.HAIRLINE_HI;
+        };
+        ShapeNode bg = group.add(Shapes.roundRect(0, 0, CARD, CARD, 4)
+            .fill(Colors.withAlpha(ArenasUi.ROW_BG, 0xE6)));
+        bg.stroke(frame, 1.5f);
+
+        effect.getEffect().unwrapKey().ifPresent(key -> {
+            ResourceLocation id = key.location();
+            ResourceLocation texture = ResourceLocation.fromNamespaceAndPath(
+                id.getNamespace(), "textures/mob_effect/" + id.getPath() + ".png");
+            group.add(ImageNode.of(texture, (CARD - 22) / 2, (CARD - 22) / 2, 22, 22, 18, 18));
+        });
+
+        int level = effect.getAmplifier() + 1;
+        if (level > 1) {
+            TextNode levelText = group.add(TextNode.of(levelNumeral(level))
+                .color(ArenasUi.INK).shadow(true).align(TextNode.Align.RIGHT));
+            levelText.at(CARD - 2, CARD - 10);
+        }
+
+        TextNode duration = group.add(TextNode.of(formatDuration(effect))
+            .color(ArenasUi.INK_MID).shadow(true).align(TextNode.Align.CENTER));
+        duration.at(CARD / 2, CARD + 3);
+    }
+
+    /** "II" for level 2, like enchantments; plain digits past X where vanilla has no numeral. */
+    private static Component levelNumeral(int level) {
+        return level <= 10 ? Component.translatable("enchantment.level." + level)
+            : Component.literal(String.valueOf(level));
+    }
+
+    /** m:ss like the inventory's effect list; "∞" for infinite effects. */
+    private static Component formatDuration(MobEffectInstance effect) {
+        if (effect.isInfiniteDuration()) {
+            return Component.literal("∞");
+        }
+        int seconds = effect.getDuration() / 20;
+        return Component.literal(String.format("%d:%02d", seconds / 60, seconds % 60));
     }
 
     private static Component headerFor(LootRewardPayload.Source source) {

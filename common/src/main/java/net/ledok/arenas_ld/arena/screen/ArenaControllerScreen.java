@@ -14,7 +14,6 @@ import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.screen.ArenasParchment;
-import net.ledok.arenas_ld.screen.ForcedGuiScale;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.arenas_ld.util.InstanceStatus;
 import net.ledok.arenas_ld.screen.ArenasUi;
@@ -34,7 +33,7 @@ import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
 import net.ledok.vectorlib.client.canvas.widget.UiSounds;
 import net.ledok.vectorlib.client.canvas.widget.Widget;
 import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
-import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.arenas_ld.screen.FitCanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -83,13 +82,12 @@ import static net.ledok.arenas_ld.screen.ArenasParchment.WARN;
  * the lobby state signature changes. There are no difficulty tiers; the leaderboard is keyed on the
  * deepest wave reached. Ignores the inventory key so "E" does not close the screen.
  */
-public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerScreenHandler> {
+public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControllerScreenHandler> {
     private static final int INVITE_DROPDOWN_MAX_HEIGHT = 154;
     // Design (forced-integer-GUI-scale) shell size; keeps the shell a fixed size and the font crisp
     // regardless of window size, matching the shop/AH screens in Economy_LD.
     private static final int DESIGN_W = 560;
     private static final int DESIGN_H = 480;
-    private final ForcedGuiScale guiScale = new ForcedGuiScale(DESIGN_W, DESIGN_H);
 
     /** Flat tab look: PANEL_2 idle, ROW_BG on hover, PANEL + ACCENT outline when selected (= disabled). */
     private static final WidgetStyle TAB_STYLE = new WidgetStyle(
@@ -195,25 +193,11 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
         this.pos = handler.getBlockPos();
         canvas.theme(ArenasParchment.THEME);
         fillWindow();
+        // Lobby rows are fixed-badge columns ~540 px wide: below this the whole panel
+        // scales down instead of the badges sliding over the owner column.
+        minLogicalWidth(DESIGN_W + 8);
     }
 
-    @Override
-    protected void init() {
-        if (this.minecraft != null) {
-            this.guiScale.apply(this.minecraft);
-            this.width = this.minecraft.getWindow().getGuiScaledWidth();
-            this.height = this.minecraft.getWindow().getGuiScaledHeight();
-        }
-        super.init();
-    }
-
-    @Override
-    public void removed() {
-        if (this.minecraft != null) {
-            this.guiScale.restore(this.minecraft);
-        }
-        super.removed();
-    }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
@@ -387,7 +371,7 @@ public class ArenaControllerScreen extends CanvasHandledScreen<ArenaControllerSc
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
 
         Flex shell = root.item(Flex.column());
-        shell.sizing(Sizing.fixed(DESIGN_W), Sizing.fixed(DESIGN_H));
+        ArenasParchment.sizeShell(shell, canvas.width(), canvas.height(), DESIGN_W, DESIGN_H);
         shell.background(ArenasParchment.panel());
         shell.padding(Insets.of(8)); // keep content off the parchment border art
 

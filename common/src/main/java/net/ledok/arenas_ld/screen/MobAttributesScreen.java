@@ -11,11 +11,12 @@ import net.ledok.vectorlib.client.canvas.layout.Insets;
 import net.ledok.vectorlib.client.canvas.layout.Justify;
 import net.ledok.vectorlib.client.canvas.layout.Sizing;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
-import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +25,7 @@ import java.util.function.Consumer;
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
 import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
+import static net.ledok.arenas_ld.screen.ArenasUi.GOOD;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
 import static net.ledok.arenas_ld.screen.ArenasUi.INK;
@@ -37,7 +39,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
  * the parent screens, ignores the inventory ("E") key so it can't be closed
  * mid-edit.
  */
-public class MobAttributesScreen extends CanvasHandledScreen<MobAttributesScreenHandler> {
+public class MobAttributesScreen extends FitCanvasHandledScreen<MobAttributesScreenHandler> {
     // Working model — raw strings so mid-edit values survive add/remove rebuilds.
     private final List<String> ids = new ArrayList<>();
     private final List<String> values = new ArrayList<>();
@@ -47,6 +49,9 @@ public class MobAttributesScreen extends CanvasHandledScreen<MobAttributesScreen
     private TextNode footerLabel;
     private String footerError;
 
+    /** The screen that opened this editor; × and Esc return to it instead of closing everything. */
+    @Nullable private Screen returnTo;
+
     // One attribute-ID dropdown open at a time across the rows.
     private final IdSuggestionDropdown.Group idDropdowns = new IdSuggestionDropdown.Group();
 
@@ -54,6 +59,22 @@ public class MobAttributesScreen extends CanvasHandledScreen<MobAttributesScreen
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         canvas.theme(ArenasUi.THEME);
         fillWindow();
+    }
+
+    /** Fluent: closing this editor (× or Esc) goes back to the given screen. */
+    public MobAttributesScreen returnTo(Screen screen) {
+        this.returnTo = screen;
+        return this;
+    }
+
+    @Override
+    public void onClose() {
+        if (returnTo != null && minecraft != null) {
+            // The parent shares this menu's container id, so the server-side menu stays open.
+            minecraft.setScreen(returnTo);
+            return;
+        }
+        super.onClose();
     }
 
     /**
@@ -162,6 +183,7 @@ public class MobAttributesScreen extends CanvasHandledScreen<MobAttributesScreen
             contentArea.item(attributeRow(i));
         }
 
+        footerLabel.color(DANGER);
         footerLabel.text(footerError != null ? Component.literal(footerError) : Component.empty());
     }
 
@@ -224,7 +246,11 @@ public class MobAttributesScreen extends CanvasHandledScreen<MobAttributesScreen
 
         ClientPlayNetworking.send(new ModPackets.UpdateAttributesPayload(
             menu.blockEntity.getBlockPos(), updated));
-        this.onClose();
+        // Stays open for further edits; × or Esc goes back. The notice clears on the next rebuild.
+        footerError = null;
+        rebuildUi();
+        footerLabel.color(GOOD);
+        footerLabel.text(Component.translatable("gui.arenas_ld.saved"));
     }
 
     // ── UI helpers (shared styling with the spawner screens) ──────────────────

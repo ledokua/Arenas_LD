@@ -207,10 +207,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         EntityEquipmentHelper.applyAllEquipment(living, entityDefinition.equipment());
 
         living.heal(living.getMaxHealth());
-        // Owned by the run: never let vanilla despawn the boss.
-        if (living instanceof net.minecraft.world.entity.Mob persistentMob) {
-            persistentMob.setPersistenceRequired();
-        }
+        // Owned by the run: never let vanilla despawn or convert the boss.
+        EntityEquipmentHelper.markRunMob(living);
 
         Vec3 spawnPos = EntityEquipmentHelper.resolveBossSpawnPos(worldPosition, entityDefinition.spawnOffsets());
         living.moveTo(spawnPos.x, spawnPos.y, spawnPos.z, world.random.nextFloat() * 360.0F, 0.0F);

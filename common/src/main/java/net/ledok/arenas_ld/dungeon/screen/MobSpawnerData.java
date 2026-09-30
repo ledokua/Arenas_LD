@@ -7,7 +7,7 @@ import net.minecraft.network.codec.StreamCodec;
 import java.util.ArrayList;
 import java.util.List;
 
-public record MobSpawnerData(BlockPos blockPos, String mobId, int spawnCount, int wave, List<BlockPos> spawnOffsets) {
+public record MobSpawnerData(BlockPos blockPos, String mobId, int spawnCount, int wave, List<BlockPos> spawnOffsets, String name) {
     public static final StreamCodec<RegistryFriendlyByteBuf, MobSpawnerData> STREAM_CODEC = StreamCodec.of(
         (buf, data) -> {
             buf.writeBlockPos(data.blockPos);
@@ -18,6 +18,7 @@ public record MobSpawnerData(BlockPos blockPos, String mobId, int spawnCount, in
             for (BlockPos pos : data.spawnOffsets) {
                 buf.writeBlockPos(pos);
             }
+            buf.writeUtf(data.name);
         },
         buf -> {
             BlockPos blockPos = buf.readBlockPos();
@@ -29,7 +30,8 @@ public record MobSpawnerData(BlockPos blockPos, String mobId, int spawnCount, in
             for (int i = 0; i < offsetCount; i++) {
                 offsets.add(buf.readBlockPos());
             }
-            return new MobSpawnerData(blockPos, mobId, spawnCount, wave, offsets);
+            String name = buf.readUtf();
+            return new MobSpawnerData(blockPos, mobId, spawnCount, wave, offsets, name);
         }
     );
 }

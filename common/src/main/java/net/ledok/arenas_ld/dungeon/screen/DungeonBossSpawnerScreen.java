@@ -21,7 +21,7 @@ import net.ledok.vectorlib.client.canvas.widget.Label;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
 import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
-import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.arenas_ld.screen.FitCanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.core.BlockPos;
@@ -46,7 +46,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
 import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
 
-public class DungeonBossSpawnerScreen extends CanvasHandledScreen<DungeonBossSpawnerScreenHandler> {
+public class DungeonBossSpawnerScreen extends FitCanvasHandledScreen<DungeonBossSpawnerScreenHandler> {
 
     /** The old translucent danger-button renderer: faint DANGER fill, stronger on hover, DANGER outline. */
     private static final WidgetStyle DANGER_STYLE = new WidgetStyle(
@@ -340,7 +340,7 @@ public class DungeonBossSpawnerScreen extends CanvasHandledScreen<DungeonBossSpa
         minecraft.setScreen(new MobAttributesScreen(
             new MobAttributesScreenHandler(menu.containerId, minecraft.player.getInventory(), new MobAttributesData(menu.getBlockPos())),
             minecraft.player.getInventory(),
-            Component.translatable("gui.arenas_ld.boss_attributes")));
+            Component.translatable("gui.arenas_ld.boss_attributes")).returnTo(this));
     }
 
     private void openEquipmentScreen() {

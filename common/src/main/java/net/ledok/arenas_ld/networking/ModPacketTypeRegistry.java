@@ -84,6 +84,9 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload.TYPE, net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(CycleDungeonToolModePayload.TYPE, CycleDungeonToolModePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(SetDungeonToolModePayload.TYPE, SetDungeonToolModePayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.networking.ModPackets.SetDungeonToolSpawnerPayload.TYPE, net.ledok.arenas_ld.networking.ModPackets.SetDungeonToolSpawnerPayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.networking.ModPackets.OpenBlockMenuPayload.TYPE, net.ledok.arenas_ld.networking.ModPackets.OpenBlockMenuPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(net.ledok.arenas_ld.dungeon.packet.MobSpawnerSetNamePayload.TYPE, net.ledok.arenas_ld.dungeon.packet.MobSpawnerSetNamePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomRemoveSpawnerPayload.TYPE, RoomRemoveSpawnerPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomClearSpawnersPayload.TYPE, RoomClearSpawnersPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RoomClearDoorPayload.TYPE, RoomClearDoorPayload.STREAM_CODEC);
@@ -181,6 +184,7 @@ final class ModPacketTypeRegistry {
         PayloadTypeRegistry.playS2C().register(DungeonControllerAdminSnapshotPayload.TYPE, DungeonControllerAdminSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RaidControllerAdminSnapshotPayload.TYPE, RaidControllerAdminSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(net.ledok.arenas_ld.packet.LootRewardPayload.TYPE, net.ledok.arenas_ld.packet.LootRewardPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(net.ledok.arenas_ld.packet.LootHudClearPayload.TYPE, net.ledok.arenas_ld.packet.LootHudClearPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(net.ledok.arenas_ld.packet.RunHudPayload.TYPE, net.ledok.arenas_ld.packet.RunHudPayload.STREAM_CODEC);
     }
 }

@@ -14,7 +14,6 @@ import net.ledok.vectorlib.client.canvas.layout.Sizing;
 import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.vectorlib.client.canvas.widget.Widget;
-import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -42,7 +41,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
  * {@code gameMode.handleInventoryMouseClick}, so the ghost-stamp logic in
  * {@link EquipmentScreenHandler#clicked} runs on both sides exactly as before.
  */
-public class EquipmentScreen extends CanvasHandledScreen<EquipmentScreenHandler> {
+public class EquipmentScreen extends FitCanvasHandledScreen<EquipmentScreenHandler> {
     private static final int SLOT_BG = 0xFF1D2530;
     private static final int SLOT_BG_HOVER = 0xFF2A3542;
 
@@ -66,6 +65,17 @@ public class EquipmentScreen extends CanvasHandledScreen<EquipmentScreenHandler>
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (ArenasUi.swallowsInventoryKey(input, keyCode, scanCode, modifiers)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    /**
+     * ×, Esc, and Save all go back to the spawner screen that opened this editor. Equipment is a
+     * real server menu that replaced that screen's menu, so "back" is a server round trip: the
+     * server reopens the owning block's own menu and swaps the screens (or closes the container
+     * if the block is gone).
+     */
+    @Override
+    public void onClose() {
+        ClientPlayNetworking.send(new ModPackets.OpenBlockMenuPayload(menu.blockEntity.getBlockPos()));
     }
 
     /** Never interpret an off-panel click as "throw the carried item out". */

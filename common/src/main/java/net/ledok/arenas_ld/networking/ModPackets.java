@@ -264,6 +264,45 @@ public class ModPackets {
         }
     }
 
+    /**
+     * Picks a spawner from the Dungeon Tool screen's list (source must be a room the spawner is
+     * linked to). The server stores it as the tool's acting spawner and switches the tool to
+     * MOB_SPAWN_POSITION, so world clicks edit that spawner's spawn positions while the room
+     * selection (and its list) is kept.
+     */
+    public record SetDungeonToolSpawnerPayload(BlockPos spawnerPos, boolean mainHand) implements CustomPacketPayload {
+        public static final CustomPacketPayload.Type<SetDungeonToolSpawnerPayload> TYPE = new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "set_dungeon_tool_spawner"));
+        public static final StreamCodec<FriendlyByteBuf, SetDungeonToolSpawnerPayload> CODEC = StreamCodec.of(
+                (buf, payload) -> {
+                    buf.writeBlockPos(payload.spawnerPos());
+                    buf.writeBoolean(payload.mainHand());
+                },
+                (buf) -> new SetDungeonToolSpawnerPayload(buf.readBlockPos(), buf.readBoolean())
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Asks the server to open the given block's own menu, as if the block were right-clicked:
+     * the Dungeon Tool screen's per-spawner gear button, and the equipment editor's way back to
+     * the spawner screen that opened it. The server re-checks permission and block type.
+     */
+    public record OpenBlockMenuPayload(BlockPos pos) implements CustomPacketPayload {
+        public static final Type<OpenBlockMenuPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "open_block_menu"));
+        public static final StreamCodec<FriendlyByteBuf, OpenBlockMenuPayload> STREAM_CODEC = StreamCodec.of(
+                (buf, payload) -> buf.writeBlockPos(payload.pos()),
+                buf -> new OpenBlockMenuPayload(buf.readBlockPos()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
 
     public record DungeonControllerActionPayload(BlockPos pos, int action) implements CustomPacketPayload {
         public static final Type<DungeonControllerActionPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "dungeon_controller_action"));

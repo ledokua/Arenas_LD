@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.ledok.arenas_ld.dungeon.packet.MobSpawnerSetNamePayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
 import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
@@ -17,7 +18,7 @@ import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
 import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
-import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.arenas_ld.screen.FitCanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -41,7 +42,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
 import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
 
-public class MobSpawnerScreen extends CanvasHandledScreen<MobSpawnerScreenHandler> {
+public class MobSpawnerScreen extends FitCanvasHandledScreen<MobSpawnerScreenHandler> {
 
     private static final int POS_ROW_HEIGHT = 20;
     private static final int POS_MAX_VISIBLE = 6;
@@ -59,6 +60,7 @@ public class MobSpawnerScreen extends CanvasHandledScreen<MobSpawnerScreenHandle
             16, 16, 4, true);
 
     private IdSuggestionDropdown.Field mobIdField;
+    private TextField nameField;
     private TextField spawnCountField;
     private TextField waveField;
     private Flex positionsList;
@@ -147,6 +149,12 @@ public class MobSpawnerScreen extends CanvasHandledScreen<MobSpawnerScreenHandle
         Flex content = Flex.column().gap(8).padding(Insets.of(10));
         content.sizing(Sizing.fill(), Sizing.content());
 
+        // NAME (label shown in the Dungeon Tool's spawner list)
+        content.item(sectionCaption(tr("gui.arenas_ld.mob_spawner.ui.name")));
+        content.item(buildNameRow());
+
+        content.item(ArenasUi.hairline());
+
         // MOB ID
         content.item(sectionCaption(tr("gui.arenas_ld.mob_spawner.ui.mob_id")));
         content.item(buildMobIdSection());
@@ -213,6 +221,25 @@ public class MobSpawnerScreen extends CanvasHandledScreen<MobSpawnerScreenHandle
         content.item(actions);
 
         return content;
+    }
+
+    private Flex buildNameRow() {
+        Flex fieldRow = Flex.row().alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
+
+        Flex accent = Flex.column();
+        accent.sizing(Sizing.fixed(2), Sizing.fill());
+        accent.backgroundFill(ACCENT);
+        fieldRow.item(accent);
+
+        nameField = ArenasUi.textField(100, menu.getName(), 48);
+        nameField.sizing(Sizing.expand(), Sizing.fixed(18));
+        fieldRow.item(nameField);
+
+        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.set_name"), 64, 18,
+            () -> ClientPlayNetworking.send(new MobSpawnerSetNamePayload(menu.getBlockPos(), nameField.text()))));
+        return fieldRow;
     }
 
     private Flex buildCountStepper() {
@@ -390,7 +417,7 @@ public class MobSpawnerScreen extends CanvasHandledScreen<MobSpawnerScreenHandle
                 new MobAttributesScreenHandler(menu.containerId, minecraft.player.getInventory(), new MobAttributesData(menu.getBlockPos())),
                 minecraft.player.getInventory(),
                 Component.translatable("gui.arenas_ld.mob_attributes")
-            ));
+            ).returnTo(this));
         }
     }
 
@@ -405,6 +432,9 @@ public class MobSpawnerScreen extends CanvasHandledScreen<MobSpawnerScreenHandle
 
     public void applyData(MobSpawnerData data) {
         menu.applyData(data);
+        if (nameField != null) {
+            nameField.text(menu.getName());
+        }
         if (mobIdField != null) {
             mobIdField.text(menu.getMobId());
             mobIdField.notifyChanged();

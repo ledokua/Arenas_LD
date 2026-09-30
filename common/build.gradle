@@ -25,6 +25,10 @@ dependencies {
     // Puffish Skills compat (reflection-free direct API use, compile only)
     modCompileOnly("net.puffish:skillsmod:0.16.5+1.21:fabric")
 
+    // LuckPerms meta for end-of-run reward perks (optional; LuckPermsCompat guards every call,
+    // and its NeoForge build exposes the same API, so the common compat covers both loaders).
+    compileOnly "net.luckperms:api:5.4"
+
     // BusyLib is accessed via reflection at runtime (BusyStateCompat); the only
     // compile-time use is the BusyReasons.IN_DUNGEON constant, which javac inlines.
     modCompileOnly fileTree(

@@ -33,6 +33,7 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
     private long serverGameTick;
     private Set<UUID> busyPlayers;
     private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
+    private Set<DifficultyTier> enabledTiers;
 
     /** Client-side constructor — called when opening screen from packet data. */
     public RaidControllerScreenHandler(int syncId, Inventory playerInventory, RaidControllerData data) {
@@ -57,6 +58,7 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         this.serverGameTick = 0L;
         this.busyPlayers = Set.of();
         this.topLeaderboards = Map.of();
+        this.enabledTiers = Set.of(DifficultyTier.values());
     }
 
     public BlockPos getPos() {
@@ -116,6 +118,11 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         return Map.copyOf(topLeaderboards);
     }
 
+    /** Tiers the builder left selectable; the screen disables the others in the picker. */
+    public Set<DifficultyTier> getEnabledTiers() {
+        return enabledTiers;
+    }
+
     public void applyData(RaidControllerData data) {
         this.visibleLobbies = List.copyOf(data.visibleLobbies());
         this.ownLobby = data.ownLobby();
@@ -129,6 +136,7 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         this.serverGameTick = data.serverGameTick();
         this.busyPlayers = Set.copyOf(data.busyPlayers());
         this.topLeaderboards = Map.copyOf(data.topLeaderboards());
+        this.enabledTiers = Set.copyOf(data.enabledTiers());
     }
 
     @Override

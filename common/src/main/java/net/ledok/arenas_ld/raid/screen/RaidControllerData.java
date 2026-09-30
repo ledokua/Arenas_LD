@@ -35,7 +35,8 @@ public record RaidControllerData(
     int respawnTimeTicks,
     long serverGameTick,
     Set<UUID> busyPlayers,
-    Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards
+    Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards,
+    Set<DifficultyTier> enabledTiers
 ) {
     /**
      * Flat data representation of a single raid instance, suitable for sending to the client.
@@ -98,6 +99,11 @@ public record RaidControllerData(
             for (LeaderboardEntry entry : entries) {
                 writeTag(buf, (CompoundTag) LeaderboardEntry.CODEC.encodeStart(NbtOps.INSTANCE, entry).getOrThrow());
             }
+        }
+
+        buf.writeVarInt(data.enabledTiers().size());
+        for (DifficultyTier tier : data.enabledTiers()) {
+            DifficultyTier.STREAM_CODEC.encode(buf, tier);
         }
     }
 
@@ -165,9 +171,16 @@ public record RaidControllerData(
             topLeaderboards.put(tier, entries);
         }
 
+        int enabledCount = buf.readVarInt();
+        Set<DifficultyTier> enabledTiers = new HashSet<>(enabledCount);
+        for (int i = 0; i < enabledCount; i++) {
+            enabledTiers.add(DifficultyTier.STREAM_CODEC.decode(buf));
+        }
+
         return new RaidControllerData(
             blockPos, visible, own, invites, joinReqs, instances,
-            queuePosition, estimatedWaitSeconds, maxPartySize, respawnTimeTicks, serverGameTick, busyPlayers, topLeaderboards
+            queuePosition, estimatedWaitSeconds, maxPartySize, respawnTimeTicks, serverGameTick, busyPlayers,
+            topLeaderboards, enabledTiers
         );
     }
 

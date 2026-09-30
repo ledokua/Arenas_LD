@@ -233,10 +233,8 @@ public final class RaidRunLifecycle {
             EntityEquipmentHelper.applyAllEquipment(livingBoss, entityDefinition.equipment());
 
             livingBoss.heal(livingBoss.getMaxHealth());
-            // Owned by the run: never let vanilla despawn the boss.
-            if (livingBoss instanceof net.minecraft.world.entity.Mob mob) {
-                mob.setPersistenceRequired();
-            }
+            // Owned by the run: never let vanilla despawn or convert the boss.
+            EntityEquipmentHelper.markRunMob(livingBoss);
             String groupId = spawner.getGroupId();
             String teamName = groupId == null || groupId.isBlank() ? "arenas_ld" : groupId;
             Scoreboard scoreboard = world.getScoreboard();
@@ -398,29 +396,34 @@ public final class RaidRunLifecycle {
 
         for (UUID uuid : rewardIds) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            // LuckPerms perks (extra rolls, currency/XP multipliers); defaults when offline.
+            net.ledok.arenas_ld.util.EndRewardPerks perks = net.ledok.arenas_ld.util.EndRewardPerks.forPlayer(
+                player != null ? uuid : null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.RAID);
             List<ItemStack> loot = net.ledok.arenas_ld.util.RewardDelivery.rollLoot(world, perPlayerLoot, player,
-                player != null ? player.position() : Vec3.atCenterOf(run.spawnerPos()));
+                player != null ? player.position() : Vec3.atCenterOf(run.spawnerPos()), perks.lootRolls());
+            long currency = perks.scaleCurrency(rewardPerPlayer);
 
             if (player == null) {
                 // Offline but loot-eligible: the reward still lands via the economy inbox.
                 net.ledok.arenas_ld.util.RewardDelivery.giveStacksOffline(uuid, loot, "RAID_LOOT");
-                net.ledok.arenas_ld.util.RewardDelivery.giveCurrency(world.getServer(), uuid, rewardPerPlayer, "RAID_REWARD");
+                net.ledok.arenas_ld.util.RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "RAID_REWARD");
                 continue;
             }
 
             List<net.ledok.arenas_ld.packet.LootRewardPayload.Entry> delivered =
                 net.ledok.arenas_ld.util.RewardDelivery.giveStacks(player, loot, "RAID_LOOT");
-            net.ledok.arenas_ld.util.RewardDelivery.giveCurrency(world.getServer(), uuid, rewardPerPlayer, "RAID_REWARD");
+            net.ledok.arenas_ld.util.RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "RAID_REWARD");
 
             int grantedXp = 0;
-            if (xpReward > 0 && puffishLoaded) {
-                PuffishSkillsCompat.addExperience(player, xpReward);
-                grantedXp = xpReward;
+            int scaledXp = perks.scaleXp(xpReward);
+            if (scaledXp > 0 && puffishLoaded) {
+                PuffishSkillsCompat.addExperience(player, scaledXp);
+                grantedXp = scaledXp;
             }
 
             net.ledok.arenas_ld.util.RewardDelivery.notify(player,
                 net.ledok.arenas_ld.packet.LootRewardPayload.Source.RAID_WIN, delivered,
-                net.ledok.arenas_ld.util.RewardDelivery.displayableCurrency(rewardPerPlayer), grantedXp);
+                net.ledok.arenas_ld.util.RewardDelivery.displayableCurrency(currency), grantedXp);
         }
 
         enterClosing(world, controller, run);

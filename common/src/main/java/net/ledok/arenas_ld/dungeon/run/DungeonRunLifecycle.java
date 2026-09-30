@@ -323,17 +323,40 @@ public final class DungeonRunLifecycle {
                         && !room.isActivated() && !room.isCleared());
                 run.setEntranceDetectionCache(detection);
             }
-            for (UUID uuid : run.activeParticipantUuids()) {
+            // Touching an entrance door registers the player on that room (touching another
+            // room's door later re-registers them) and marks them glowing so the rest of the
+            // party can see who waits where; the room locks in once its configured share of
+            // the online party is registered on it. A player who touches a door and turns back
+            // stays registered — there is no room geometry to tell "inside" from "outside".
+            Map<UUID, BlockPos> registrations = run.roomEntryRegistrations();
+            Set<UUID> active = run.activeParticipantUuids();
+            boolean changed = false;
+            for (var it = registrations.entrySet().iterator(); it.hasNext(); ) {
+                var entry = it.next();
+                if (!active.contains(entry.getKey())) {
+                    setEntryGlow(world, entry.getKey(), false);
+                    it.remove();
+                    changed = true;
+                }
+            }
+            int online = 0;
+            for (UUID uuid : active) {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
                 if (player == null || player.level() != world) continue;
+                online++;
                 BlockPos hit = detection.get(player.blockPosition());
                 if (hit == null) {
                     hit = detection.get(BlockPos.containing(player.getEyePosition()));
                 }
-                if (hit != null) {
-                    beginRoomEntry(world, run, hit, player);
-                    break; // one room per run; next tick we're PENDING
+                if (hit != null && !hit.equals(registrations.put(uuid, hit))) {
+                    changed = true;
+                    setEntryGlow(world, uuid, true);
                 }
+            }
+            // Quotas are cheap but not free: re-evaluate on registration changes and on the
+            // 1 s heartbeat (which catches quota shifts with no door touches — a logout, say).
+            if (changed || run.entryEvalHeartbeat()) {
+                evaluateRoomEntry(world, run, registrations, online);
             }
             sendRunHud(world, run, exploreHudLabel(run, dbs), net.ledok.arenas_ld.packet.RunHudPayload.NO_BOSS_HP);
             return;
@@ -403,6 +426,16 @@ public final class DungeonRunLifecycle {
         // Lock-in. A door shared with a cleared neighbor closes behind the party — intended.
         room.closeAllDoors(world);
 
+        // A lingering loot popup (a bonus room's reward, say) leaves the screen now: the next
+        // fight is starting and the popup's long hold exists for the calm between rooms.
+        for (UUID uuid : run.participants().keySet()) {
+            ServerPlayer participant = world.getServer().getPlayerList().getPlayer(uuid);
+            if (participant != null) {
+                net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(
+                    participant, net.ledok.arenas_ld.packet.LootHudClearPayload.INSTANCE);
+            }
+        }
+
         // Rooms can be entered from any side: each player teleports to the respawn point
         // nearest their own position, so a party split across two doors enters on both sides.
         boolean hasRespawns = !room.getRespawnPointOffsets().isEmpty();
@@ -466,9 +499,89 @@ public final class DungeonRunLifecycle {
         }
     }
 
+    /**
+     * Re-evaluates per-room entry quotas: locks in a room that reached its configured share of
+     * the online party (each room's own {@code entryPercent}, rounded up, at least 1) and
+     * otherwise caches the fullest room's numbers for the HUD's "Waiting players x/y" line.
+     */
+    private static void evaluateRoomEntry(ServerLevel world, DungeonRun run,
+                                          Map<UUID, BlockPos> registrations, int online) {
+        Map<BlockPos, Integer> counts = new HashMap<>();
+        for (BlockPos roomPos : registrations.values()) {
+            counts.merge(roomPos, 1, Integer::sum);
+        }
+        int bestCount = 0;
+        int bestRequired = 1;
+        for (Map.Entry<BlockPos, Integer> entry : counts.entrySet()) {
+            int percent = world.getBlockEntity(entry.getKey()) instanceof RoomControllerBlockEntity room
+                ? room.getObjective().clampedEntryPercent()
+                : net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig.DEFAULT_ENTRY_PERCENT;
+            int required = Math.max(1, (int) Math.ceil(online * percent / 100.0));
+            if (entry.getValue() >= required) {
+                ServerPlayer enterer = pickEnterer(world, registrations, entry.getKey());
+                if (enterer != null) {
+                    clearEntryRegistrations(world, run);
+                    beginRoomEntry(world, run, entry.getKey(), enterer);
+                    return;
+                }
+            }
+            if (entry.getValue() > bestCount) {
+                bestCount = entry.getValue();
+                bestRequired = required;
+            }
+        }
+        run.setEntryWaiting(bestCount, bestRequired);
+    }
+
+    /** Clears all door registrations and the waiting HUD numbers, removing each player's glow. */
+    private static void clearEntryRegistrations(ServerLevel world, DungeonRun run) {
+        for (UUID uuid : run.roomEntryRegistrations().keySet()) {
+            setEntryGlow(world, uuid, false);
+        }
+        run.roomEntryRegistrations().clear();
+        run.setEntryWaiting(0, 1);
+    }
+
+    /** The waiting-at-a-door glow: outline only, no particles, gone once the room locks in. */
+    private static void setEntryGlow(ServerLevel world, UUID uuid, boolean on) {
+        ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+        if (player == null) {
+            return;
+        }
+        if (on) {
+            if (!player.hasEffect(net.minecraft.world.effect.MobEffects.GLOWING)) {
+                player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.GLOWING,
+                    net.minecraft.world.effect.MobEffectInstance.INFINITE_DURATION, 0, false, false));
+            }
+        } else {
+            player.removeEffect(net.minecraft.world.effect.MobEffects.GLOWING);
+        }
+    }
+
+    /** The registered player to anchor the room entry on — the gather point when the room has
+     *  no respawn points. Null only if every player registered on the room is offline. */
+    @Nullable
+    private static ServerPlayer pickEnterer(ServerLevel world, Map<UUID, BlockPos> registrations,
+                                            BlockPos roomPos) {
+        for (Map.Entry<UUID, BlockPos> entry : registrations.entrySet()) {
+            if (!roomPos.equals(entry.getValue())) continue;
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
+            if (player != null && player.level() == world) {
+                return player;
+            }
+        }
+        return null;
+    }
+
     private static Component exploreHudLabel(DungeonRun run, DungeonBossSpawnerBlockEntity dbs) {
-        return Component.translatable("hud.arenas_ld.dungeon.explore",
+        Component base = Component.translatable("hud.arenas_ld.dungeon.explore",
             run.clearedRooms().size(), dbs.getRooms().size());
+        if (run.entryWaitingRequired() > 1 && run.entryWaitingCount() > 0) {
+            return base.copy().append(" · ").append(Component.translatable(
+                "hud.arenas_ld.dungeon.waiting", run.entryWaitingCount(), run.entryWaitingRequired()));
+        }
+        return base;
     }
 
     /**
@@ -551,13 +664,17 @@ public final class DungeonRunLifecycle {
             PlayerStatsStore.get(world.getServer()).recordWin(uuid, PlayerStatsStore.Mode.DUNGEON);
 
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            // LuckPerms perks (extra rolls, currency/XP multipliers); defaults when offline.
+            net.ledok.arenas_ld.util.EndRewardPerks perks = net.ledok.arenas_ld.util.EndRewardPerks.forPlayer(
+                player != null ? uuid : null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.DUNGEON);
             List<ItemStack> loot = RewardDelivery.rollLoot(world, lootTableId, player,
-                player != null ? player.position() : Vec3.atCenterOf(run.dbsPos()));
+                player != null ? player.position() : Vec3.atCenterOf(run.dbsPos()), perks.lootRolls());
+            long currency = perks.scaleCurrency(rewardPerPlayer);
 
             if (player == null) {
                 // Offline but loot-eligible: the reward still lands via the economy inbox.
                 RewardDelivery.giveStacksOffline(uuid, loot, "DUNGEON_LOOT");
-                RewardDelivery.giveCurrency(world.getServer(), uuid, rewardPerPlayer, "DUNGEON_REWARD");
+                RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "DUNGEON_REWARD");
                 continue;
             }
 
@@ -568,16 +685,17 @@ public final class DungeonRunLifecycle {
 
             List<net.ledok.arenas_ld.packet.LootRewardPayload.Entry> delivered =
                 RewardDelivery.giveStacks(player, loot, "DUNGEON_LOOT");
-            RewardDelivery.giveCurrency(world.getServer(), uuid, rewardPerPlayer, "DUNGEON_REWARD");
+            RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "DUNGEON_REWARD");
 
             int grantedXp = 0;
-            if (xpReward > 0 && puffishLoaded) {
-                net.ledok.arenas_ld.compat.PuffishSkillsCompat.addExperience(player, xpReward);
-                grantedXp = xpReward;
+            int scaledXp = perks.scaleXp(xpReward);
+            if (scaledXp > 0 && puffishLoaded) {
+                net.ledok.arenas_ld.compat.PuffishSkillsCompat.addExperience(player, scaledXp);
+                grantedXp = scaledXp;
             }
 
             RewardDelivery.notify(player, net.ledok.arenas_ld.packet.LootRewardPayload.Source.DUNGEON_WIN,
-                delivered, RewardDelivery.displayableCurrency(rewardPerPlayer), grantedXp);
+                delivered, RewardDelivery.displayableCurrency(currency), grantedXp);
         }
 
         clearRunEffects(world, run);
@@ -966,7 +1084,7 @@ public final class DungeonRunLifecycle {
             }
 
             RewardDelivery.notify(player, net.ledok.arenas_ld.packet.LootRewardPayload.Source.ROOM_CLEAR,
-                delivered, RewardDelivery.displayableCurrency(reward.currency()), grantedXp);
+                delivered, effectInstances, RewardDelivery.displayableCurrency(reward.currency()), grantedXp);
         }
 
         executeRewardCommands(world, run, room, reward.commands());

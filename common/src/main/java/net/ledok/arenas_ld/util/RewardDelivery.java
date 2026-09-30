@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
@@ -64,6 +65,16 @@ public final class RewardDelivery {
             }
         }
         return rolled;
+    }
+
+    /** Rolls {@code lootTableId} {@code rolls} times (at least once) and returns all the results together. */
+    public static List<ItemStack> rollLoot(ServerLevel world, String lootTableId,
+                                           @Nullable ServerPlayer player, Vec3 origin, int rolls) {
+        List<ItemStack> all = new ArrayList<>();
+        for (int i = 0; i < Math.max(1, rolls); i++) {
+            all.addAll(rollLoot(world, lootTableId, player, origin));
+        }
+        return all;
     }
 
     /**
@@ -137,9 +148,17 @@ public final class RewardDelivery {
     /** Sends the loot-reveal popup for what this player just received. Skips fully empty rewards. */
     public static void notify(ServerPlayer player, LootRewardPayload.Source source,
                               List<LootRewardPayload.Entry> items, long currency, int skillXp) {
-        if (items.isEmpty() && currency <= 0L && skillXp <= 0) {
+        notify(player, source, items, List.of(), currency, skillXp);
+    }
+
+    /** As {@link #notify(ServerPlayer, LootRewardPayload.Source, List, long, int)}, with granted
+     *  status effects shown as their own cards (icon, level, duration) in the popup. */
+    public static void notify(ServerPlayer player, LootRewardPayload.Source source,
+                              List<LootRewardPayload.Entry> items, List<MobEffectInstance> effects,
+                              long currency, int skillXp) {
+        if (items.isEmpty() && effects.isEmpty() && currency <= 0L && skillXp <= 0) {
             return;
         }
-        ServerPlayNetworking.send(player, new LootRewardPayload(source, items, currency, skillXp));
+        ServerPlayNetworking.send(player, new LootRewardPayload(source, items, effects, currency, skillXp));
     }
 }

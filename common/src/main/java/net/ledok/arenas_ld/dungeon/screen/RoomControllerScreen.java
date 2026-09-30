@@ -22,7 +22,7 @@ import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.Label;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
 import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
-import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.arenas_ld.screen.FitCanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.ConfirmScreen;
@@ -48,7 +48,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
 import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
 
-public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScreenHandler> {
+public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerScreenHandler> {
 
     /** Selected segment of the objective-type selector (old owo renderer: accent fill, accent border). */
     private static final WidgetStyle SEGMENT_ON = new WidgetStyle(
@@ -91,6 +91,7 @@ public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScre
     private List<BlockPos> respawnPositions = List.of();
     private String roomNameInput = "";
     private RoomObjectiveConfig.Type objectiveType = RoomObjectiveConfig.Type.KILL_ALL;
+    private int entryPercentInput = RoomObjectiveConfig.DEFAULT_ENTRY_PERCENT;
     private int surviveSecondsInput = 60;
     private int surviveIntervalInput = 15;
     private String protectMobIdInput = "minecraft:villager";
@@ -204,6 +205,8 @@ public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScre
         contentArea.item(sectionLabel(Component.translatable("gui.arenas_ld.room_controller.section.objective")));
         contentArea.item(ArenasUi.spacer(2));
         contentArea.item(buildObjectiveTypeRow());
+        contentArea.item(ArenasUi.spacer(2));
+        contentArea.item(buildEntryPercentRow());
         if (objectiveType == RoomObjectiveConfig.Type.SURVIVE) {
             contentArea.item(ArenasUi.spacer(2));
             contentArea.item(buildSurviveSecondsRow());
@@ -343,6 +346,34 @@ public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScre
             }
         });
         fieldRow.item(intervalField);
+
+        fieldRow.spacer();
+
+        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.set_time"), 64, 18,
+            () -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)))));
+        return fieldRow;
+    }
+
+    /** Share of the online party that must touch this room's doors before it locks in (1-100%).
+     *  A short field on purpose — the value never exceeds three digits. */
+    private Flex buildEntryPercentRow() {
+        Flex fieldRow = Flex.row().gap(6).alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
+
+        fieldRow.item(accentBar());
+
+        fieldRow.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.objective.entry_percent"), INK_MID));
+
+        IdSuggestionDropdown.Field field = IdSuggestionDropdown.textBox(36, String.valueOf(entryPercentInput), 3);
+        field.size(36, 18);
+        field.changeListeners.add(v -> {
+            try {
+                entryPercentInput = Math.clamp(Integer.parseInt(v.trim()), 1, 100);
+            } catch (NumberFormatException ignored) {
+            }
+        });
+        fieldRow.item(field);
 
         fieldRow.spacer();
 
@@ -587,6 +618,7 @@ public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScre
         respawnPositions = menu.getRespawnPositions();
         roomNameInput = menu.getRoomName();
         objectiveType = menu.getObjective().type();
+        entryPercentInput = menu.getObjective().clampedEntryPercent();
         surviveSecondsInput = menu.getObjective().surviveSeconds();
         surviveIntervalInput = menu.getObjective().surviveWaveIntervalSeconds();
         protectMobIdInput = menu.getObjective().protectMobId();
@@ -599,7 +631,8 @@ public class RoomControllerScreen extends CanvasHandledScreen<RoomControllerScre
      *  (set with the Configurator) and ignored by the handler, so it's sent empty. */
     private RoomObjectiveConfig editedObjective(RoomObjectiveConfig.Type type) {
         return new RoomObjectiveConfig(type, surviveSecondsInput, surviveIntervalInput,
-            protectMobIdInput, protectStationaryInput, Optional.empty(), List.copyOf(protectAttributesInput));
+            protectMobIdInput, protectStationaryInput, Optional.empty(), List.copyOf(protectAttributesInput),
+            entryPercentInput);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

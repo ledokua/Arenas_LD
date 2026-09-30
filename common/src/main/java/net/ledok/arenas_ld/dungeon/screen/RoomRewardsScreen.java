@@ -17,7 +17,7 @@ import net.ledok.vectorlib.client.canvas.widget.Label;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
 import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
-import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.arenas_ld.screen.FitCanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -49,7 +49,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
  * Room clear reward editor, opened from the Room Controller screen's "Rewards" button.
  * Shares the parent's menu instance, so it edits the same server-synced snapshot.
  */
-public class RoomRewardsScreen extends CanvasHandledScreen<RoomControllerScreenHandler> {
+public class RoomRewardsScreen extends FitCanvasHandledScreen<RoomControllerScreenHandler> {
 
     /** Stepper − / + buttons (old owo renderer: panel fill, hairline border, row highlight on hover). */
     private static final WidgetStyle STEP_STYLE = new WidgetStyle(
@@ -415,6 +415,12 @@ public class RoomRewardsScreen extends CanvasHandledScreen<RoomControllerScreenH
             xpValue,
             List.copyOf(commandsEdit)
         )));
+    }
+
+    /** × and Esc go back to the room screen instead of closing the whole UI, like the ← button. */
+    @Override
+    public void onClose() {
+        returnToRoomScreen();
     }
 
     private void returnToRoomScreen() {

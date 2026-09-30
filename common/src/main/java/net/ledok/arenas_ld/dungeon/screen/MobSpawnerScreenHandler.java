@@ -15,6 +15,7 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
     private int spawnCount;
     private int wave;
     private List<BlockPos> spawnOffsets;
+    private String name;
 
     public MobSpawnerScreenHandler(int syncId, Inventory playerInventory, MobSpawnerData data) {
         super(ModScreenHandlers.MOB_SPAWNER_SCREEN_HANDLER, syncId);
@@ -23,6 +24,7 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
         this.spawnCount = data.spawnCount();
         this.wave = data.wave();
         this.spawnOffsets = data.spawnOffsets();
+        this.name = data.name();
     }
 
     public MobSpawnerScreenHandler(int syncId, Inventory playerInventory, net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity blockEntity) {
@@ -31,7 +33,8 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
             blockEntity.getEntityDefinition().mobId(),
             blockEntity.getEntityDefinition().spawnCount(),
             blockEntity.getEntityDefinition().wave(),
-            blockEntity.getEntityDefinition().spawnOffsets()
+            blockEntity.getEntityDefinition().spawnOffsets(),
+            blockEntity.getSpawnerName()
         ));
     }
 
@@ -55,11 +58,16 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
         return spawnOffsets;
     }
 
+    public String getName() {
+        return name;
+    }
+
     public void applyData(MobSpawnerData data) {
         this.mobId = data.mobId();
         this.spawnCount = data.spawnCount();
         this.wave = data.wave();
         this.spawnOffsets = data.spawnOffsets();
+        this.name = data.name();
     }
 
     @Override
@@ -69,7 +77,9 @@ public class MobSpawnerScreenHandler extends AbstractContainerMenu {
 
     @Override
     public boolean stillValid(Player player) {
-        return player.level().getBlockEntity(blockPos) instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity
-            && player.distanceToSqr(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5) <= 64;
+        // No distance clause: the Dungeon Tool's gear button opens this screen from anywhere in
+        // the room. The screen is op-gated and every mutation re-checks permission server-side;
+        // only the block ceasing to exist closes it.
+        return player.level().getBlockEntity(blockPos) instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity;
     }
 }

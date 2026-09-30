@@ -612,13 +612,18 @@ public class RaidControllerBlockEntity extends BlockEntity
         UUID uuid = player.getUUID();
         String name = player.getGameProfile().getName();
         if (getLobbyByMember(uuid) != null) return false;
+        DifficultyTier defaultTier = defaultEnabledTier();
+        if (defaultTier == null) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.lobby.no_tiers_enabled"));
+            return false;
+        }
         Set<UUID> members = new HashSet<>();
         members.add(uuid);
         Map<UUID, String> memberNames = new HashMap<>();
         memberNames.put(uuid, name);
         Lobby lobby = new Lobby(
             UUID.randomUUID(), uuid, name, members, memberNames,
-            Set.of(), DifficultyTier.NORMAL, false,
+            Set.of(), defaultTier, false,
             net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility.PUBLIC, net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.FORMING,
             level != null ? level.getGameTime() : 0L
         );
@@ -762,9 +767,29 @@ public class RaidControllerBlockEntity extends BlockEntity
         Lobby lobby = getLobbyByMember(player.getUUID());
         if (lobby == null || !lobby.isOwner(player.getUUID())) return false;
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
+        if (!isTierEnabled(tier)) return false;
         replaceLobby(lobby.withTier(tier));
         markDirtyAndSync();
         return true;
+    }
+
+    /** Whether the builder left this tier selectable in the lobby. */
+    private boolean isTierEnabled(DifficultyTier tier) {
+        return tierConfigs.getOrDefault(tier, RaidTierConfig.defaultFor(tier)).enabled();
+    }
+
+    /** The tier a new lobby starts on: NORMAL when enabled, else the first enabled tier,
+     *  or {@code null} when every tier is disabled (no lobby can be created then). */
+    private @Nullable DifficultyTier defaultEnabledTier() {
+        if (isTierEnabled(DifficultyTier.NORMAL)) {
+            return DifficultyTier.NORMAL;
+        }
+        for (DifficultyTier tier : DifficultyTier.values()) {
+            if (isTierEnabled(tier)) {
+                return tier;
+            }
+        }
+        return null;
     }
 
     public boolean setHardcore(ServerPlayer player, boolean hardcore) {
@@ -906,6 +931,11 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
         if (!(level instanceof ServerLevel serverLevel)) return false;
+        // The builder may have disabled the tier while the lobby was forming.
+        if (!isTierEnabled(lobby.selectedTier())) {
+            notifyLobbyMembers(lobby, Component.translatable("message.arenas_ld.lobby.tier_disabled"));
+            return false;
+        }
 
         boolean isFront = queuedLobbyIds.isEmpty() || queuedLobbyIds.get(0).equals(lobby.lobbyId());
         boolean free = hasAnyFreeInstance();
@@ -1534,6 +1564,13 @@ public class RaidControllerBlockEntity extends BlockEntity
 
         long serverTick = level != null ? level.getGameTime() : 0L;
 
+        Set<DifficultyTier> enabledTiers = new HashSet<>();
+        for (DifficultyTier tier : DifficultyTier.values()) {
+            if (isTierEnabled(tier)) {
+                enabledTiers.add(tier);
+            }
+        }
+
         return new RaidControllerData(
             worldPosition,
             visible,
@@ -1547,7 +1584,8 @@ public class RaidControllerBlockEntity extends BlockEntity
             getRespawnTimeTicks(),
             serverTick,
             busyPlayers,
-            topLeaderboards
+            topLeaderboards,
+            enabledTiers
         );
     }
 

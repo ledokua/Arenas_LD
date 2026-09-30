@@ -27,7 +27,30 @@ public final class EntityEquipmentHelper {
      */
     public static final String NO_NATURAL_LOOT_TAG = "arenas_ld_no_loot";
 
+    /**
+     * Scoreboard tag marking a mob spawned and tracked by a run (dungeon room, arena wave, raid
+     * boss, protect target). Runs track mobs by UUID, so {@code MobMixin} cancels vanilla
+     * conversions (zombie → drowned, skeleton → stray, …) for tagged mobs — conversion replaces
+     * the entity, which would falsely count a kill and leave an untracked, unscaled copy behind.
+     */
+    public static final String RUN_MOB_TAG = "arenas_ld_run_mob";
+
     private EntityEquipmentHelper() {
+    }
+
+    /** Mark {@code entity} as run-owned: vanilla must neither despawn nor convert it. */
+    public static void markRunMob(LivingEntity entity) {
+        entity.addTag(RUN_MOB_TAG);
+        if (entity instanceof Mob mob) {
+            mob.setPersistenceRequired();
+        }
+        // The one piece of finalizeSpawn the spawners need: /summon runs finalizeSpawn, which
+        // for a warden sets this dig cooldown — without it a fresh warden burrows away the
+        // moment it spawns. Full finalizeSpawn is deliberately not called (it rolls random
+        // vanilla gear and baby chances over the configured equipment).
+        if (entity instanceof net.minecraft.world.entity.monster.warden.Warden) {
+            net.minecraft.world.entity.monster.warden.WardenAi.setDigCooldown(entity);
+        }
     }
 
     /**

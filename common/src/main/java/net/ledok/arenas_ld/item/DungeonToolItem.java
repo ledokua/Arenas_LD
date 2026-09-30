@@ -195,10 +195,11 @@ public class DungeonToolItem extends Item {
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.linker.room_spawner.wrong_blocks"));
                 return InteractionResult.SUCCESS;
             }
-            boolean added = room.addSpawner(pos);
+            // Toggle, like doors: clicking an already-linked spawner unlinks it.
+            boolean linked = room.toggleSpawner(pos);
             player.sendSystemMessage(Component.translatable(
-                added ? "message.arenas_ld.linker.room_spawner.added"
-                    : "message.arenas_ld.linker.room_spawner.duplicate"));
+                linked ? "message.arenas_ld.linker.room_spawner.added"
+                    : "message.arenas_ld.linker.room_spawner.removed"));
             return InteractionResult.SUCCESS;
         }
         return null;
@@ -264,8 +265,18 @@ public class DungeonToolItem extends Item {
                                              BlockEntity clickedBlockEntity, DungeonToolDataComponent data) {
         Mode currentMode = selectedMode(data);
 
-        // Clicking a valid source for the current mode always (re)selects it.
+        // Clicking a valid source for the current mode always (re)selects it — except a spawner
+        // that is linked to the currently selected room in MOB_SPAWN_POSITION mode: that picks it
+        // as the room's acting spawner (same as picking it in the tool screen's list), keeping the
+        // room selection and its spawner list.
         if (currentMode.isValidSource(clickedBlockEntity)) {
+            if (currentMode == Mode.MOB_SPAWN_POSITION
+                    && sourceRoom(world, data) instanceof RoomControllerBlockEntity room
+                    && room.getSpawnerPositions().contains(clickedPos)) {
+                stack.set(DataComponentRegistry.DUNGEON_TOOL_DATA, data.withSpawner(clickedPos));
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawner_selected", clickedPos.toShortString()));
+                return InteractionResult.SUCCESS;
+            }
             selectSource(stack, clickedPos, world.dimension(), data);
             player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawner_selected", clickedPos.toShortString()));
             return InteractionResult.SUCCESS;
@@ -293,6 +304,19 @@ public class DungeonToolItem extends Item {
             stack.set(DataComponentRegistry.DUNGEON_TOOL_DATA, data.withoutSource());
             return InteractionResult.FAIL;
         }
+        // A room source in MOB_SPAWN_POSITION mode acts through its picked spawner (chosen in the
+        // tool screen's list or by clicking a linked spawner), so builders edit any of the room's
+        // spawners without reselecting the tool's source.
+        if (currentMode == Mode.MOB_SPAWN_POSITION && sourceBlockEntity instanceof RoomControllerBlockEntity room) {
+            BlockEntity picked = resolveRoomSpawner(sourceWorld, room, data);
+            if (picked == null) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_tool.pick_spawner"));
+                return InteractionResult.FAIL;
+            }
+            sourcePos = picked.getBlockPos();
+            sourceBlockEntity = picked;
+        }
+
         // Selection survives mode switches, so re-validate against the current mode with a
         // mode-specific hint instead of silently no-opping.
         if (!currentMode.isValidSource(sourceBlockEntity)) {
@@ -464,5 +488,32 @@ public class DungeonToolItem extends Item {
 
     private static void selectSource(ItemStack stack, BlockPos pos, ResourceKey<Level> dimension, DungeonToolDataComponent data) {
         stack.set(DataComponentRegistry.DUNGEON_TOOL_DATA, data.withSource(pos, dimension));
+    }
+
+    /** The tool's source as a room controller in the given world, or null. */
+    @Nullable
+    public static RoomControllerBlockEntity sourceRoom(Level world, DungeonToolDataComponent data) {
+        if (data.sourcePos().isEmpty() || data.sourceDimension().isEmpty()
+                || !data.sourceDimension().get().equals(world.dimension())) {
+            return null;
+        }
+        return world.getBlockEntity(data.sourcePos().get()) instanceof RoomControllerBlockEntity room ? room : null;
+    }
+
+    /**
+     * The room's picked spawner as a live, still-linked spawner block entity, or null when none
+     * is picked, the link was removed, or the block is gone.
+     */
+    @Nullable
+    public static BlockEntity resolveRoomSpawner(Level world, RoomControllerBlockEntity room, DungeonToolDataComponent data) {
+        if (data.spawnerPos().isEmpty()) {
+            return null;
+        }
+        BlockPos pos = data.spawnerPos().get();
+        if (!room.getSpawnerPositions().contains(pos)) {
+            return null;
+        }
+        BlockEntity be = world.getBlockEntity(pos);
+        return Mode.MOB_SPAWN_POSITION.isValidSource(be) ? be : null;
     }
 }

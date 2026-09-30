@@ -10,6 +10,7 @@ import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.Label;
 import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.vectorlib.client.canvas.widget.WidgetStyle;
+import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
@@ -20,6 +21,16 @@ import net.minecraft.network.chat.Component;
  */
 public final class ArenasUi {
     private ArenasUi() {}
+
+    /**
+     * Center placement that shrinks the canvas to fit the GUI-scaled window, never enlarging it:
+     * 1:1 and pixel-crisp whenever the design fits (any GUI scale where it does), a fractional
+     * fit factor only as the fallback when the window is smaller than the design.
+     */
+    public static Placement.Screen fitCenter(float canvasW, float canvasH, float guiW, float guiH) {
+        float scale = Math.min(1f, Math.min(guiW / Math.max(1f, canvasW), guiH / Math.max(1f, canvasH)));
+        return Placement.Screen.center().scale(scale);
+    }
 
     // Shared dark palette (identical to the pre-VectorLib owo screens).
     public static final int BG          = 0xFF070E14;

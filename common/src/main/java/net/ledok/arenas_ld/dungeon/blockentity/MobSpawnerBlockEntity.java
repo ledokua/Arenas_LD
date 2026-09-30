@@ -41,9 +41,23 @@ import java.util.Optional;
 public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvider, EquipmentProvider, ExtendedScreenHandlerFactory<MobSpawnerData> {
 
     private EntityDefinition entityDefinition = EntityDefinition.DEFAULT;
+    /** Builder-facing label, like the room name: shown in the Dungeon Tool's spawner list. */
+    private String spawnerName = "";
 
     public MobSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.MOB_SPAWNER_BLOCK_ENTITY, pos, state);
+    }
+
+    public String getSpawnerName() {
+        return spawnerName;
+    }
+
+    public void setSpawnerName(String name) {
+        String trimmed = name == null ? "" : name.trim();
+        if (!this.spawnerName.equals(trimmed)) {
+            this.spawnerName = trimmed;
+            setChanged();
+        }
     }
 
     public EntityDefinition getEntityDefinition() {
@@ -77,10 +91,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
 
     private static final Codec<State> STATE_CODEC =
         RecordCodecBuilder.create(i -> i.group(
-            EntityDefinition.CODEC.fieldOf("entity").forGetter(State::entity)
+            EntityDefinition.CODEC.fieldOf("entity").forGetter(State::entity),
+            Codec.STRING.optionalFieldOf("name", "").forGetter(State::name)
         ).apply(i, State::new));
 
-    private record State(EntityDefinition entity) {}
+    private record State(EntityDefinition entity, String name) {}
 
     /**
      * Spawn all mobs for this spawner (spawnCount mobs distributed across spawnOffsets),
@@ -113,10 +128,9 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
 
             living.heal(living.getMaxHealth());
             // Owned by the run: never let vanilla despawn these (e.g. when the solo player goes
-            // SPECTATOR on down, mobs would otherwise hard-despawn and the room would falsely clear).
-            if (living instanceof net.minecraft.world.entity.Mob persistentMob) {
-                persistentMob.setPersistenceRequired();
-            }
+            // SPECTATOR on down, mobs would otherwise hard-despawn and the room would falsely
+            // clear) nor convert them (zombie → drowned would swap the tracked UUID).
+            EntityEquipmentHelper.markRunMob(living);
 
             double spawnX, spawnY, spawnZ;
             if (offsets.isEmpty()) {
@@ -152,7 +166,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
-        STATE_CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), new State(entityDefinition))
+        STATE_CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), new State(entityDefinition, spawnerName))
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save MobSpawner at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
@@ -165,7 +179,10 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
             STATE_CODEC.parse(registries.createSerializationContext(NbtOps.INSTANCE), nbt.get("State"))
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                     "Failed to load MobSpawner at {}: {}", worldPosition, err))
-                .ifPresent(state -> this.entityDefinition = state.entity());
+                .ifPresent(state -> {
+                    this.entityDefinition = state.entity();
+                    this.spawnerName = state.name();
+                });
         }
     }
 
@@ -192,6 +209,6 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
 
     @Override
     public MobSpawnerData getScreenOpeningData(ServerPlayer player) {
-        return new MobSpawnerData(worldPosition, entityDefinition.mobId(), entityDefinition.spawnCount(), entityDefinition.wave(), entityDefinition.spawnOffsets());
+        return new MobSpawnerData(worldPosition, entityDefinition.mobId(), entityDefinition.spawnCount(), entityDefinition.wave(), entityDefinition.spawnOffsets(), spawnerName);
     }
 }

@@ -17,7 +17,7 @@ import net.ledok.vectorlib.client.canvas.layout.Sizing;
 import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
 import net.ledok.vectorlib.client.canvas.widget.TextField;
-import net.ledok.vectorlib.client.presentation.CanvasHandledScreen;
+import net.ledok.arenas_ld.screen.FitCanvasHandledScreen;
 import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -38,7 +38,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 
 /** Admin/config view for the arena controller. Reads the client-synced controller; edits via packets. */
-public class ArenaControllerAdminScreen extends CanvasHandledScreen<ArenaControllerAdminScreenHandler> {
+public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaControllerAdminScreenHandler> {
     private final BlockPos pos;
     private Flex dynamicArea;
     private final Map<String, TextField> intFields = new LinkedHashMap<>();

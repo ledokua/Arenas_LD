@@ -5,6 +5,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
@@ -12,10 +13,12 @@ import java.util.List;
 
 /**
  * S2C: everything one player just earned from a run event, for the loot-reveal HUD popup.
- * Items carry where they actually landed so the popup can tag overflow ("&rarr; inbox").
+ * Items carry where they actually landed so the popup can tag overflow ("&rarr; inbox");
+ * effects are shown as cards of their own with level and duration.
  * Sent only to online players; offline rewards go through the economy inbox silently.
  */
-public record LootRewardPayload(Source source, List<Entry> items, long currency, int skillXp)
+public record LootRewardPayload(Source source, List<Entry> items, List<MobEffectInstance> effects,
+                                long currency, int skillXp)
     implements CustomPacketPayload {
 
     /** Which run event produced the reward; the popup uses it for its heading line. */
@@ -38,6 +41,9 @@ public record LootRewardPayload(Source source, List<Entry> items, long currency,
     /** Cards beyond this are dropped from the popup (delivery itself is unaffected). */
     public static final int MAX_ENTRIES = 32;
 
+    /** Effect cards beyond this are dropped from the popup (the effects are still applied). */
+    public static final int MAX_EFFECTS = 16;
+
     public static final Type<LootRewardPayload> TYPE =
         new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "loot_reward"));
 
@@ -54,6 +60,13 @@ public record LootRewardPayload(Source source, List<Entry> items, long currency,
             ItemStack.STREAM_CODEC.encode(buf, entry.stack());
             buf.writeByte(entry.destination().ordinal());
         }
+        List<MobEffectInstance> effects = payload.effects.size() > MAX_EFFECTS
+            ? payload.effects.subList(0, MAX_EFFECTS)
+            : payload.effects;
+        buf.writeVarInt(effects.size());
+        for (MobEffectInstance effect : effects) {
+            MobEffectInstance.STREAM_CODEC.encode(buf, effect);
+        }
         buf.writeVarLong(payload.currency);
         buf.writeVarInt(payload.skillXp);
     }
@@ -67,9 +80,14 @@ public record LootRewardPayload(Source source, List<Entry> items, long currency,
             Destination destination = Destination.VALUES[Math.floorMod(buf.readByte(), Destination.VALUES.length)];
             items.add(new Entry(stack, destination));
         }
+        int effectCount = Math.min(buf.readVarInt(), MAX_EFFECTS);
+        List<MobEffectInstance> effects = new ArrayList<>(Math.max(0, effectCount));
+        for (int i = 0; i < effectCount; i++) {
+            effects.add(MobEffectInstance.STREAM_CODEC.decode(buf));
+        }
         long currency = buf.readVarLong();
         int skillXp = buf.readVarInt();
-        return new LootRewardPayload(source, items, currency, skillXp);
+        return new LootRewardPayload(source, items, effects, currency, skillXp);
     }
 
     @Override
