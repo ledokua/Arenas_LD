@@ -216,6 +216,8 @@ public final class RaidRunLifecycle {
             run.addParticipant(new RunParticipant(
                 p.getUUID(), p.getGameProfile().getName(), ParticipantStatus.ACTIVE, now));
             run.setReturnPoint(p.getUUID(), PlayerReturnPoint.capture(p));
+            // Everyone is online now; the snapshot pays an offline winner their perks later.
+            net.ledok.arenas_ld.util.EndRewardPerks.snapshot(run.perkSnapshots(), p.getUUID(), net.ledok.arenas_ld.util.EndRewardPerks.Mode.RAID);
             PlayerStatsStore.get(world.getServer()).recordRunStart(p.getUUID(), PlayerStatsStore.Mode.RAID);
         }
         if (raidTimeTicks > 0) {
@@ -396,9 +398,10 @@ public final class RaidRunLifecycle {
 
         for (UUID uuid : rewardIds) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            // LuckPerms perks (extra rolls, currency/XP multipliers); defaults when offline.
-            net.ledok.arenas_ld.util.EndRewardPerks perks = net.ledok.arenas_ld.util.EndRewardPerks.forPlayer(
-                player != null ? uuid : null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.RAID);
+            // LuckPerms perks (extra rolls, currency/XP multipliers): live when online, else the
+            // run-start snapshot.
+            net.ledok.arenas_ld.util.EndRewardPerks perks = net.ledok.arenas_ld.util.EndRewardPerks.resolve(
+                run.perkSnapshots(), uuid, player != null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.RAID);
             List<ItemStack> loot = net.ledok.arenas_ld.util.RewardDelivery.rollLoot(world, perPlayerLoot, player,
                 player != null ? player.position() : Vec3.atCenterOf(run.spawnerPos()), perks.lootRolls());
             long currency = perks.scaleCurrency(rewardPerPlayer);

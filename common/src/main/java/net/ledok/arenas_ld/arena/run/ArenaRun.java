@@ -59,6 +59,8 @@ public final class ArenaRun {
     private int initialCloseTimerTicks;
 
     private final Set<UUID> aliveMobs;
+    /** LuckPerms reward perks captured while each player was online in this run (see EndRewardPerks). */
+    private final Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots = new HashMap<>();
     private final Map<UUID, RunParticipant> participants;
     private final Map<UUID, PlayerReturnPoint> returnPoints;
     private final Map<UUID, DownedPlayer> downedPlayers;
@@ -192,6 +194,8 @@ public final class ArenaRun {
     void removeAliveMob(UUID uuid) { aliveMobs.remove(uuid); }
     void clearAliveMobs() { aliveMobs.clear(); }
 
+    /** Mutable on purpose: the lifecycle snapshots at run start and refreshes at payout. */
+    public Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots() { return perkSnapshots; }
     void addParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void updateParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void removeParticipant(UUID uuid) { participants.remove(uuid); }
@@ -268,7 +272,8 @@ public final class ArenaRun {
         ).apply(i, ArenaRunTimers::new));
     }
 
-    public static final Codec<ArenaRun> CODEC = RecordCodecBuilder.create(instance ->
+    /** The original fields — a flattened map codec, so the saved layout is unchanged; DFU caps group() at 16. */
+    private static final com.mojang.serialization.MapCodec<ArenaRun> BASE_CODEC = RecordCodecBuilder.mapCodec(instance ->
         instance.group(
             ArenaPhase.CODEC.fieldOf("phase").forGetter(ArenaRun::phase),
             ArenaOutcome.CODEC.fieldOf("outcome").forGetter(ArenaRun::outcome),
@@ -294,5 +299,15 @@ public final class ArenaRun {
                 .optionalFieldOf("disconnectedAt", Map.of()).forGetter(ArenaRun::disconnectedAt),
             Codec.DOUBLE.optionalFieldOf("partyHealthMultiplier", 1.0).forGetter(ArenaRun::partyHealthMultiplier)
         ).apply(instance, ArenaRun::new)
+    );
+
+    public static final Codec<ArenaRun> CODEC = RecordCodecBuilder.create(instance ->
+        instance.group(
+            BASE_CODEC.forGetter(run -> run),
+            net.ledok.arenas_ld.util.EndRewardPerks.SNAPSHOT_CODEC.optionalFieldOf("perkSnapshots", Map.of()).forGetter(ArenaRun::perkSnapshots)
+        ).apply(instance, (run, perkSnapshots) -> {
+            run.perkSnapshots.putAll(perkSnapshots);
+            return run;
+        })
     );
 }

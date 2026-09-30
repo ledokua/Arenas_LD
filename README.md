@@ -773,10 +773,12 @@ lp group prime meta set arenas_ld.currency_multiplier 1.1
 lp group prime meta set arenas_ld.xp_multiplier 1.1
 ```
 
-**Offline winners get the defaults.** LuckPerms only has online players loaded, so a loot-eligible
-player who is offline at payout (their reward goes through the Economy_LD inbox) receives one roll and
-unmultiplied currency. Arena wave rows only pay online players anyway. Without LuckPerms every player
-simply gets the defaults.
+**Offline winners keep their perks.** LuckPerms only has online players loaded, so each run
+snapshots every player's perks when it starts (everyone is online then) and saves the snapshot with the
+run, so it survives a restart. A loot-eligible player who is offline at payout (their reward goes
+through the Economy_LD inbox) is paid with that snapshot; an online player always uses their current
+values. A rank bought mid-run applies if the player is online at payout, but not if they log off
+before it. Without LuckPerms every player simply gets the defaults.
 
 ## Commands
 

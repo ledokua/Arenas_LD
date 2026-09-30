@@ -131,6 +131,8 @@ public final class DungeonRunLifecycle {
                 world.getGameTime()
             ));
             run.setReturnPoint(uuid, PlayerReturnPoint.capture(player));
+            // Everyone is online now; the snapshot pays an offline winner their perks later.
+            net.ledok.arenas_ld.util.EndRewardPerks.snapshot(run.perkSnapshots(), uuid, net.ledok.arenas_ld.util.EndRewardPerks.Mode.DUNGEON);
             ArenasLdMod.DUNGEON_MANAGER.registerParticipant(uuid, run);
             BusyStateCompat.setBusy(uuid, BUSY_REASON);
             addToPartyTeam(world, run, player);
@@ -664,9 +666,10 @@ public final class DungeonRunLifecycle {
             PlayerStatsStore.get(world.getServer()).recordWin(uuid, PlayerStatsStore.Mode.DUNGEON);
 
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            // LuckPerms perks (extra rolls, currency/XP multipliers); defaults when offline.
-            net.ledok.arenas_ld.util.EndRewardPerks perks = net.ledok.arenas_ld.util.EndRewardPerks.forPlayer(
-                player != null ? uuid : null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.DUNGEON);
+            // LuckPerms perks (extra rolls, currency/XP multipliers): live when online, else the
+            // run-start snapshot.
+            net.ledok.arenas_ld.util.EndRewardPerks perks = net.ledok.arenas_ld.util.EndRewardPerks.resolve(
+                run.perkSnapshots(), uuid, player != null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.DUNGEON);
             List<ItemStack> loot = RewardDelivery.rollLoot(world, lootTableId, player,
                 player != null ? player.position() : Vec3.atCenterOf(run.dbsPos()), perks.lootRolls());
             long currency = perks.scaleCurrency(rewardPerPlayer);

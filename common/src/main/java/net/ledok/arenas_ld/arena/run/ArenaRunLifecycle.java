@@ -79,6 +79,8 @@ public final class ArenaRunLifecycle {
                 player.gameMode.getGameModeForPlayer()));
             run.addParticipant(new RunParticipant(player.getUUID(), player.getGameProfile().getName(),
                 ParticipantStatus.ACTIVE, now));
+            // Everyone is online now; the snapshot pays an offline player their summary perks later.
+            net.ledok.arenas_ld.util.EndRewardPerks.snapshot(run.perkSnapshots(), player.getUUID(), net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA);
             net.ledok.arenas_ld.util.PlayerStatsStore.get(world.getServer())
                 .recordRunStart(player.getUUID(), net.ledok.arenas_ld.util.PlayerStatsStore.Mode.ARENA);
             player.setGameMode(GameType.SURVIVAL);
@@ -483,8 +485,8 @@ public final class ArenaRunLifecycle {
             if (reward.perPlayer) {
                 // LuckPerms arena_loot_rolls multiplies each player's own rolls on per-player rows.
                 for (ServerPlayer player : players) {
-                    int rolls = reward.rolls * multiplier * net.ledok.arenas_ld.util.EndRewardPerks.forPlayer(
-                        player.getUUID(), net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA).lootRolls();
+                    int rolls = reward.rolls * multiplier * net.ledok.arenas_ld.util.EndRewardPerks.resolve(
+                        run.perkSnapshots(), player.getUUID(), true, net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA).lootRolls();
                     perPlayerLoot.computeIfAbsent(player.getUUID(), k -> new ArrayList<>())
                         .addAll(RewardDelivery.rollLoot(world, reward.lootTableId, player, player.position(), rolls));
                 }
@@ -694,9 +696,10 @@ public final class ArenaRunLifecycle {
 
         for (UUID uuid : run.lootEligibleUuids()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            // LuckPerms currency/XP multipliers, after the hardcore ×2; defaults when offline.
-            net.ledok.arenas_ld.util.EndRewardPerks perks = net.ledok.arenas_ld.util.EndRewardPerks.forPlayer(
-                player != null ? uuid : null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA);
+            // LuckPerms currency/XP multipliers, after the hardcore ×2: live when online, else the
+            // run-start snapshot.
+            net.ledok.arenas_ld.util.EndRewardPerks perks = net.ledok.arenas_ld.util.EndRewardPerks.resolve(
+                run.perkSnapshots(), uuid, player != null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA);
             long playerCurrency = perks.scaleCurrency(currency);
             int playerXp = perks.scaleXp(xp);
             RewardDelivery.giveCurrency(world.getServer(), uuid, playerCurrency, "ARENA_REWARD");

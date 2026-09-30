@@ -52,6 +52,8 @@ public final class DungeonRun {
     private int closeTimerTicks;
     private int initialCloseTimerTicks;
     private final long startTick;
+    /** LuckPerms reward perks captured while each player was online in this run (see EndRewardPerks). */
+    private final Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots = new HashMap<>();
     private final Map<UUID, RunParticipant> participants;
     private final Map<UUID, PlayerReturnPoint> returnPoints;
     private final Map<UUID, DownedPlayer> downedPlayers;
@@ -225,6 +227,8 @@ public final class DungeonRun {
     void setCloseTimerTicks(int ticks) { this.closeTimerTicks = ticks; }
     void setInitialCloseTimerTicks(int ticks) { this.initialCloseTimerTicks = ticks; }
 
+    /** Mutable on purpose: the lifecycle snapshots at run start and refreshes at payout. */
+    public Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots() { return perkSnapshots; }
     void addParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void updateParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void removeParticipant(UUID uuid) { participants.remove(uuid); }
@@ -320,10 +324,12 @@ public final class DungeonRun {
         instance.group(
             BASE_CODEC.forGetter(run -> run),
             Codec.DOUBLE.optionalFieldOf("partyHealthMultiplier", 1.0).forGetter(DungeonRun::partyHealthMultiplier),
-            RoomProgress.CODEC.optionalFieldOf("roomProgress", RoomProgress.EMPTY).forGetter(DungeonRun::snapshotRoomProgress)
-        ).apply(instance, (run, partyHealthMultiplier, roomProgress) -> {
+            RoomProgress.CODEC.optionalFieldOf("roomProgress", RoomProgress.EMPTY).forGetter(DungeonRun::snapshotRoomProgress),
+            net.ledok.arenas_ld.util.EndRewardPerks.SNAPSHOT_CODEC.optionalFieldOf("perkSnapshots", Map.of()).forGetter(DungeonRun::perkSnapshots)
+        ).apply(instance, (run, partyHealthMultiplier, roomProgress, perkSnapshots) -> {
             run.setPartyHealthMultiplier(partyHealthMultiplier);
             run.applyRoomProgress(roomProgress);
+            run.perkSnapshots.putAll(perkSnapshots);
             return run;
         })
     );
