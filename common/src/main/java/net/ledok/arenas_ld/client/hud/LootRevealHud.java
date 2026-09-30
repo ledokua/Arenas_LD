@@ -36,6 +36,10 @@ public final class LootRevealHud {
     private static final float CARD = 30;
     private static final float GAP = 6;
     private static final float CARDS_Y = 13;
+    /** Vertical gap between wrapped rows when no card carries a tag line below it. */
+    private static final float ROW_GAP = 6;
+    /** Horizontal gap between the Items and Effects sections on a single line. */
+    private static final float SECTION_GAP = 14;
     private static final long CARD_STAGGER_MS = 130;
     private static final long CARD_POP_MS = 220;
     private static final long COUNT_UP_MS = 700;
@@ -142,23 +146,96 @@ public final class LootRevealHud {
         int itemCount = payload.items().size();
         int effectCount = payload.effects().size();
         int cards = itemCount + effectCount;
-        // With effects in the popup, the row gets "Items:"/"Effects:" captions; an
+        // With effects in the popup, each section gets an "Items:"/"Effects:" caption; an
         // items-only reward keeps the plain card row.
         boolean labeled = effectCount > 0;
         var font = Minecraft.getInstance().font;
-        Component itemsLabel = Component.translatable("hud.arenas_ld.loot.items");
-        Component effectsLabel = Component.translatable("hud.arenas_ld.loot.effects");
-        float itemsLabelW = labeled && itemCount > 0 ? font.width(itemsLabel) + 5 : 0;
-        float effectsLabelW = labeled ? font.width(effectsLabel) + 5 : 0;
-        float itemsW = itemCount > 0 ? itemCount * CARD + (itemCount - 1) * GAP : 0;
-        float effectsW = effectCount > 0 ? effectCount * CARD + (effectCount - 1) * GAP : 0;
-        float sectionGap = itemCount > 0 && effectCount > 0 ? 14 : 0;
-        float rowW = itemsLabelW + itemsW + sectionGap + effectsLabelW + effectsW;
-        float width = Math.max(170, rowW + 20);
+        List<Section> sections = new ArrayList<>(2);
+        if (itemCount > 0) {
+            Component label = labeled ? Component.translatable("hud.arenas_ld.loot.items") : null;
+            List<java.util.function.Consumer<CanvasGroup>> builders = new ArrayList<>(itemCount);
+            for (LootRewardPayload.Entry entry : payload.items()) {
+                builders.add(group -> buildCard(group, entry));
+            }
+            sections.add(new Section(label, label == null ? 0 : font.width(label) + 5, builders));
+        }
+        if (effectCount > 0) {
+            Component label = Component.translatable("hud.arenas_ld.loot.effects");
+            List<java.util.function.Consumer<CanvasGroup>> builders = new ArrayList<>(effectCount);
+            for (MobEffectInstance effect : payload.effects()) {
+                builders.add(group -> buildEffectCard(group, effect));
+            }
+            sections.add(new Section(label, font.width(label) + 5, builders));
+        }
+
         // Effect cards always show their duration below, so they need the tall text offset.
         boolean anyTag = effectCount > 0 || payload.items().stream()
             .anyMatch(e -> e.destination() != LootRewardPayload.Destination.INVENTORY);
-        float textY = cards > 0 ? CARDS_Y + CARD + (anyTag ? 13 : 4) : CARDS_Y;
+        float rowStride = CARD + (anyTag ? 13 : ROW_GAP);
+        // Rows never run off the screen: at GUI scale 3+ a big reward wraps onto centered rows.
+        float maxRowW = Math.max(CARD, Minecraft.getInstance().getWindow().getGuiScaledWidth() - 24);
+
+        List<Placed> placed = new ArrayList<>();
+        List<Placed> labels = new ArrayList<>();
+        float inlineW = 0;
+        for (Section section : sections) {
+            inlineW += section.labelW() + cardsWidth(section.cards().size());
+        }
+        inlineW += sections.size() > 1 ? SECTION_GAP : 0;
+        int rows;
+        float contentW;
+        if (inlineW <= maxRowW) {
+            // Everything fits on one line: "Items: [..]  Effects: [..]" side by side.
+            rows = cards > 0 ? 1 : 0;
+            contentW = inlineW;
+            float x = 0;
+            for (Section section : sections) {
+                if (section.label() != null) {
+                    labels.add(new Placed(section.label(), null, x, 0));
+                    x += section.labelW();
+                }
+                for (var builder : section.cards()) {
+                    placed.add(new Placed(null, builder, x, 0));
+                    x += CARD + GAP;
+                }
+                x += SECTION_GAP - GAP;
+            }
+        } else {
+            // Sections stack; each wraps into rows centered under its card area.
+            rows = 0;
+            contentW = 0;
+            List<float[]> sectionSpans = new ArrayList<>(); // [labelW, areaW] per section, for centering
+            for (Section section : sections) {
+                int perRow = Math.max(1, (int) ((maxRowW - section.labelW() + GAP) / (CARD + GAP)));
+                float areaW = cardsWidth(Math.min(perRow, section.cards().size()));
+                contentW = Math.max(contentW, section.labelW() + areaW);
+                sectionSpans.add(new float[]{section.labelW(), areaW});
+            }
+            for (int si = 0; si < sections.size(); si++) {
+                Section section = sections.get(si);
+                float labelW = sectionSpans.get(si)[0];
+                float areaW = sectionSpans.get(si)[1];
+                float blockX = (contentW - (labelW + areaW)) / 2;
+                int perRow = Math.max(1, (int) ((maxRowW - labelW + GAP) / (CARD + GAP)));
+                if (section.label() != null) {
+                    labels.add(new Placed(section.label(), null, blockX, rows * rowStride));
+                }
+                List<java.util.function.Consumer<CanvasGroup>> list = section.cards();
+                for (int from = 0; from < list.size(); from += perRow) {
+                    int to = Math.min(list.size(), from + perRow);
+                    float rowW = cardsWidth(to - from);
+                    float x = blockX + labelW + (areaW - rowW) / 2;
+                    for (int i = from; i < to; i++) {
+                        placed.add(new Placed(null, list.get(i), x, rows * rowStride));
+                        x += CARD + GAP;
+                    }
+                    rows++;
+                }
+            }
+        }
+
+        float width = Math.max(170, contentW + 20);
+        float textY = rows > 0 ? CARDS_Y + (rows - 1) * rowStride + CARD + (anyTag ? 13 : 4) : CARDS_Y;
         float height = textY + (payload.currency() > 0 ? 15 : 0) + (payload.skillXp() > 0 ? 12 : 0) + 2;
 
         canvas = VectorCanvas.create(width, height);
@@ -168,35 +245,17 @@ public final class LootRevealHud {
             .color(ArenasUi.INK_MID).shadow(true).align(TextNode.Align.CENTER));
         header.at(width / 2, 0);
 
-        float x = (width - rowW) / 2;
-        if (labeled && itemCount > 0) {
-            canvas.add(TextNode.of(itemsLabel).color(ArenasUi.INK_MID).shadow(true))
-                .at(x, CARDS_Y + 11);
-            x += itemsLabelW;
+        float originX = (width - contentW) / 2;
+        for (Placed label : labels) {
+            canvas.add(TextNode.of(label.label()).color(ArenasUi.INK_MID).shadow(true))
+                .at(originX + label.x(), CARDS_Y + label.y() + 11);
         }
-        for (LootRewardPayload.Entry entry : payload.items()) {
+        for (Placed card : placed) {
             CanvasGroup group = canvas.add(CanvasGroup.create());
-            group.at(x, CARDS_Y);
-            buildCard(group, entry);
+            group.at(originX + card.x(), CARDS_Y + card.y());
+            card.builder().accept(group);
             group.visible(false);
             cardGroups.add(group);
-            x += CARD + GAP;
-        }
-        if (labeled) {
-            if (itemCount > 0) {
-                x += sectionGap - GAP; // drop the item row's trailing gap
-            }
-            canvas.add(TextNode.of(effectsLabel).color(ArenasUi.INK_MID).shadow(true))
-                .at(x, CARDS_Y + 11);
-            x += effectsLabelW;
-        }
-        for (MobEffectInstance effect : payload.effects()) {
-            CanvasGroup group = canvas.add(CanvasGroup.create());
-            group.at(x, CARDS_Y);
-            buildEffectCard(group, effect);
-            group.visible(false);
-            cardGroups.add(group);
-            x += CARD + GAP;
         }
 
         float y = textY;
@@ -215,6 +274,18 @@ public final class LootRevealHud {
 
         // Sits below the run-timer bar's full footprint (its canvas is 50 tall + 6 margin).
         handle = CanvasOverlay.show(canvas, Placement.Screen.top(62));
+    }
+
+    /** A captioned run of cards (items or effects); {@code label} is null for an uncaptioned run. */
+    private record Section(@Nullable Component label, float labelW,
+                           List<java.util.function.Consumer<CanvasGroup>> cards) {}
+
+    /** A card builder or a caption at an offset from the content origin. */
+    private record Placed(@Nullable Component label, java.util.function.Consumer<CanvasGroup> builder,
+                          float x, float y) {}
+
+    private static float cardsWidth(int count) {
+        return count > 0 ? count * CARD + (count - 1) * GAP : 0;
     }
 
     private static void buildCard(CanvasGroup group, LootRewardPayload.Entry entry) {

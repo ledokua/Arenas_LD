@@ -159,6 +159,7 @@ public final class RewardDelivery {
         if (items.isEmpty() && effects.isEmpty() && currency <= 0L && skillXp <= 0) {
             return;
         }
-        ArenasNetwork.sendToPlayer(player, new LootRewardPayload(source, items, effects, currency, skillXp));
+        ArenasNetwork.sendToPlayer(player,
+            new LootRewardPayload(source, LootRewardPayload.mergeStacks(items), effects, currency, skillXp));
     }
 }

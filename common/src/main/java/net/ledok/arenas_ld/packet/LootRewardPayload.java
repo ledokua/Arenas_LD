@@ -38,6 +38,32 @@ public record LootRewardPayload(Source source, List<Entry> items, List<MobEffect
     public record Entry(ItemStack stack, Destination destination) {
     }
 
+    /**
+     * One card per distinct item: stacks with the same item, the same components (NBT) and the
+     * same destination are summed, so repeated rolls read "Purpur Block x8" rather than four x2
+     * cards. The summed count may exceed the item's max stack size; it only drives the label.
+     */
+    public static List<Entry> mergeStacks(List<Entry> entries) {
+        List<Entry> merged = new ArrayList<>(entries.size());
+        outer:
+        for (Entry entry : entries) {
+            if (entry.stack().isEmpty()) {
+                continue;
+            }
+            for (int i = 0; i < merged.size(); i++) {
+                Entry existing = merged.get(i);
+                if (existing.destination() == entry.destination()
+                    && ItemStack.isSameItemSameComponents(existing.stack(), entry.stack())) {
+                    merged.set(i, new Entry(existing.stack().copyWithCount(
+                        existing.stack().getCount() + entry.stack().getCount()), existing.destination()));
+                    continue outer;
+                }
+            }
+            merged.add(new Entry(entry.stack().copy(), entry.destination()));
+        }
+        return merged;
+    }
+
     /** Cards beyond this are dropped from the popup (delivery itself is unaffected). */
     public static final int MAX_ENTRIES = 32;
 
