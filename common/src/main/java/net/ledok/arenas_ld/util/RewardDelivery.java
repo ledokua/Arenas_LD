@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.util;
 
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.packet.LootRewardPayload;
 import net.minecraft.core.registries.Registries;
@@ -21,6 +20,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 /**
  * Rolls run-reward loot tables and delivers the results with one policy everywhere:
@@ -159,6 +159,6 @@ public final class RewardDelivery {
         if (items.isEmpty() && effects.isEmpty() && currency <= 0L && skillXp <= 0) {
             return;
         }
-        ServerPlayNetworking.send(player, new LootRewardPayload(source, items, effects, currency, skillXp));
+        ArenasNetwork.sendToPlayer(player, new LootRewardPayload(source, items, effects, currency, skillXp));
     }
 }

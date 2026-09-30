@@ -125,5 +125,8 @@ gradle-app.setting
 
 # Dev run directories (per-module)
 /neoforge/run/
+# GameTest run: keep only the empty template the smoke test loads
+/neoforge/run-gametest/*
+!/neoforge/run-gametest/gameteststructures/
 /fabric/run/
 /common/run/

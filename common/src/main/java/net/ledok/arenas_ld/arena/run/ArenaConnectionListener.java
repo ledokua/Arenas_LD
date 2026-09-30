@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.arena.run;
 
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.run.RunParticipant;
 import net.ledok.arenas_ld.util.ServerTaskScheduler;
@@ -9,6 +8,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.UUID;
+import net.ledok.arenas_ld.platform.ArenasEvents;
 
 /**
  * Routes player logout/login events into the arena run lifecycle, which owns the disconnect
@@ -21,10 +21,10 @@ public final class ArenaConnectionListener {
     }
 
     public static void register() {
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
-            RunRef ref = findRun(server, handler.player.getUUID(), false);
+        ArenasEvents.PLAYER_DISCONNECT.add((disconnecting, server) -> {
+            RunRef ref = findRun(server, disconnecting.getUUID(), false);
             if (ref != null) {
-                ArenaRunLifecycle.handlePlayerDisconnect(ref.world(), ref.controller(), ref.run(), handler.player);
+                ArenaRunLifecycle.handlePlayerDisconnect(ref.world(), ref.controller(), ref.run(), disconnecting);
             }
         });
 
@@ -32,8 +32,8 @@ public final class ArenaConnectionListener {
         // return point (grace expired while they were offline, but the run is still going).
         // Deferred to the next tick: reconnect handling may teleport, which must not happen
         // from inside the JOIN event (mid placeNewPlayer).
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            UUID uuid = handler.player.getUUID();
+        ArenasEvents.PLAYER_JOIN.add((joining, server) -> {
+            UUID uuid = joining.getUUID();
             ServerTaskScheduler.nextTick(s -> {
                 ServerPlayer player = s.getPlayerList().getPlayer(uuid);
                 if (player == null) return;

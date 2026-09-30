@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
@@ -72,6 +71,7 @@ import static net.ledok.arenas_ld.screen.ArenasParchment.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG_ALT;
 import static net.ledok.arenas_ld.screen.ArenasParchment.WARN;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonControllerScreenHandler> {
     private static final int INVITE_DROPDOWN_MAX_HEIGHT = 154;
@@ -554,12 +554,12 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
         UUID requesterUuid = req.requesterUuid();
         row.item(smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new AcceptJoinRequestPayload(menu.getBlockPos(), requesterUuid));
+            ArenasNetwork.sendToServer(new AcceptJoinRequestPayload(menu.getBlockPos(), requesterUuid));
         }));
 
         row.item(smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new DeclineJoinRequestPayload(menu.getBlockPos(), requesterUuid));
+            ArenasNetwork.sendToServer(new DeclineJoinRequestPayload(menu.getBlockPos(), requesterUuid));
         }));
 
         return row;
@@ -681,7 +681,7 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
     private void buildLobbiesContent() {
         Button create = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.create"), () -> {
             footerError = null;
-            ClientPlayNetworking.send(new CreateLobbyPayload(menu.getBlockPos()));
+            ArenasNetwork.sendToServer(new CreateLobbyPayload(menu.getBlockPos()));
         });
         create.enabled(ownLobby.isEmpty());
         contentArea.item(sectionHeaderWithAction(Component.translatable("gui.arenas_ld.dungeon_controller.public_lobbies"), visibleLobbies.size(), create));
@@ -733,12 +733,12 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
 
         row.item(smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new AcceptInvitePayload(menu.getBlockPos(), invite.lobbyId()));
+            ArenasNetwork.sendToServer(new AcceptInvitePayload(menu.getBlockPos(), invite.lobbyId()));
         }));
 
         row.item(smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new DeclineInvitePayload(menu.getBlockPos(), invite.lobbyId()));
+            ArenasNetwork.sendToServer(new DeclineInvitePayload(menu.getBlockPos(), invite.lobbyId()));
         }));
 
         return row;
@@ -789,7 +789,7 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
         } else if (lobby.visibility() == LobbyVisibility.PUBLIC) {
             actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.join"), () -> {
                 footerError = null;
-                ClientPlayNetworking.send(new JoinLobbyPayload(menu.getBlockPos(), lobbyId));
+                ArenasNetwork.sendToServer(new JoinLobbyPayload(menu.getBlockPos(), lobbyId));
             });
             actionButton.enabled(!isMine && ownLobby.isEmpty());
         } else {
@@ -802,7 +802,7 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
             } else {
                 actionButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.request"), () -> {
                     footerError = null;
-                    ClientPlayNetworking.send(new RequestJoinPayload(menu.getBlockPos(), lobbyId));
+                    ArenasNetwork.sendToServer(new RequestJoinPayload(menu.getBlockPos(), lobbyId));
                 });
                 actionButton.enabled(!isMine && ownLobby.isEmpty());
             }
@@ -910,13 +910,13 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
             ? "gui.arenas_ld.dungeon_controller.button.unready"
             : "gui.arenas_ld.dungeon_controller.button.ready"), () -> {
             footerError = null;
-            ClientPlayNetworking.send(new ToggleReadyPayload(menu.getBlockPos()));
+            ArenasNetwork.sendToServer(new ToggleReadyPayload(menu.getBlockPos()));
         });
         footerActions.item(readyToggleButton);
 
         leaveLobbyButton = smallButton(Component.translatable("gui.arenas_ld.dungeon_controller.button.leave"), () -> {
             footerError = null;
-            ClientPlayNetworking.send(new LeaveLobbyPayload(menu.getBlockPos()));
+            ArenasNetwork.sendToServer(new LeaveLobbyPayload(menu.getBlockPos()));
         });
         footerActions.item(leaveLobbyButton);
 
@@ -943,7 +943,7 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
                 footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.all_online_required").getString();
                 return;
             }
-            ClientPlayNetworking.send(new StartRunPayload(menu.getBlockPos()));
+            ArenasNetwork.sendToServer(new StartRunPayload(menu.getBlockPos()));
         });
         start.enabled(canStart);
         startRunButton = start;
@@ -988,7 +988,7 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
         if (isOwner && !isLobbyOwner) {
             kickButton = dangerButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.kick"), 54, () -> {
                 footerError = null;
-                ClientPlayNetworking.send(new KickFromLobbyPayload(menu.getBlockPos(), member));
+                ArenasNetwork.sendToServer(new KickFromLobbyPayload(menu.getBlockPos(), member));
             });
             row.item(kickButton);
         } else {
@@ -1003,16 +1003,16 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
     private Flex ownerTierControls(boolean isOwner) {
         SegmentButton easy = segmentButton("EASY", tierColor(DifficultyTier.EASY), isOwner && isTierEnabled(DifficultyTier.EASY),
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.EASY,
-            () -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.EASY)));
+            () -> ArenasNetwork.sendToServer(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.EASY)));
         SegmentButton normal = segmentButton("NORMAL", tierColor(DifficultyTier.NORMAL), isOwner && isTierEnabled(DifficultyTier.NORMAL),
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NORMAL,
-            () -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
+            () -> ArenasNetwork.sendToServer(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
         SegmentButton hard = segmentButton("HARD", tierColor(DifficultyTier.HARD), isOwner && isTierEnabled(DifficultyTier.HARD),
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.HARD,
-            () -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
+            () -> ArenasNetwork.sendToServer(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
         SegmentButton nightmare = segmentButton("NIGHTMARE", tierColor(DifficultyTier.NIGHTMARE), isOwner && isTierEnabled(DifficultyTier.NIGHTMARE),
             () -> ownLobby.map(Lobby::selectedTier).orElse(null) == DifficultyTier.NIGHTMARE,
-            () -> ClientPlayNetworking.send(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NIGHTMARE)));
+            () -> ArenasNetwork.sendToServer(new SetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NIGHTMARE)));
         return segmentedControl(easy, normal, hard, nightmare);
     }
 
@@ -1024,13 +1024,13 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
     private Flex ownerVisibilityControls(boolean isOwner) {
         SegmentButton pub = segmentButton("PUBLIC", visibilityColor(LobbyVisibility.PUBLIC), isOwner,
             () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.PUBLIC,
-            () -> ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PUBLIC)));
+            () -> ArenasNetwork.sendToServer(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PUBLIC)));
         SegmentButton fr = segmentButton("FRIENDS", visibilityColor(LobbyVisibility.FRIENDS), isOwner,
             () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.FRIENDS,
-            () -> ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.FRIENDS)));
+            () -> ArenasNetwork.sendToServer(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.FRIENDS)));
         SegmentButton pr = segmentButton("PRIVATE", visibilityColor(LobbyVisibility.PRIVATE), isOwner,
             () -> ownLobby.map(Lobby::visibility).orElse(null) == LobbyVisibility.PRIVATE,
-            () -> ClientPlayNetworking.send(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PRIVATE)));
+            () -> ArenasNetwork.sendToServer(new SetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PRIVATE)));
         return segmentedControl(pub, fr, pr);
     }
 
@@ -1050,7 +1050,7 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
             () -> {
                 footerError = null;
                 boolean currentHardcore = ownLobby.map(Lobby::hardcoreEnabled).orElse(false);
-                ClientPlayNetworking.send(new SetLobbyHardcorePayload(menu.getBlockPos(), !currentHardcore));
+                ArenasNetwork.sendToServer(new SetLobbyHardcorePayload(menu.getBlockPos(), !currentHardcore));
             });
         toggle.enabled(isOwner);
         toggle.bind(() -> ownLobby.map(Lobby::hardcoreEnabled).orElse(false));
@@ -1122,7 +1122,7 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
             footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.invitee_not_found").getString();
             return;
         }
-        ClientPlayNetworking.send(new InvitePlayerPayload(menu.getBlockPos(), invitee));
+        ArenasNetwork.sendToServer(new InvitePlayerPayload(menu.getBlockPos(), invitee));
         inviteInput = "";
         if (inviteField != null) {
             inviteField.text("");
@@ -1223,7 +1223,7 @@ public class DungeonControllerScreen extends FitCanvasHandledScreen<DungeonContr
         InviteCandidateRow row = new InviteCandidateRow("@" + candidate.name(), statusText,
             candidate.selectable() ? GOOD : WARN, candidate.selectable(), () -> {
             footerError = null;
-            ClientPlayNetworking.send(new InvitePlayerPayload(menu.getBlockPos(), candidate.uuid()));
+            ArenasNetwork.sendToServer(new InvitePlayerPayload(menu.getBlockPos(), candidate.uuid()));
             inviteInput = "";
             if (inviteField != null) {
                 inviteField.text("");

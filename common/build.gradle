@@ -1,5 +1,7 @@
-// Loader-agnostic code, written against vanilla (Mojmap), Fabric API (provided on
-// NeoForge at runtime by the Forgified Fabric API) and VectorLib-common.
+// Loader-agnostic code, written against vanilla (Mojmap) and VectorLib-common only.
+// Loader APIs are reached through net.ledok.arenas_ld.platform (ArenasPlatform service,
+// ArenasNetwork, ArenasEvents), implemented by the fabric and neoforge modules. Fabric API
+// is deliberately NOT on this classpath, so a direct use fails to compile.
 plugins {
     id 'fabric-loom'
 }
@@ -11,11 +13,8 @@ base {
 dependencies {
     minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
     mappings loom.officialMojangMappings()
+    // Only for the Mixin annotations the common mixins compile against.
     modImplementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
-
-    // Fabric API is used directly as the common API layer; on NeoForge it is
-    // provided at runtime by the Forgified Fabric API.
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_version}"
 
     // VectorLib canvas UI (replaces owo-lib). The common artifact is the unremapped
     // Mojmap jar, matching this module's mappings; each loader module bundles the
@@ -44,6 +43,7 @@ dependencies {
 }
 
 loom {
+    accessWidenerPath = file("src/main/resources/arenas_ld.accesswidener")
     runs {
         client { ideConfigGenerated = false }
         server { ideConfigGenerated = false }

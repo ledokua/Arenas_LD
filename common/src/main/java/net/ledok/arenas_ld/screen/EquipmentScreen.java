@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.util.EquipmentData;
 import net.ledok.vectorlib.client.canvas.ItemStackNode;
@@ -30,6 +29,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.INK;
 import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
 import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
 import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 /**
  * VectorLib editor for a mob's equipment: six <em>ghost</em> item slots (drag/click an item to stamp a
@@ -75,7 +75,7 @@ public class EquipmentScreen extends FitCanvasHandledScreen<EquipmentScreenHandl
      */
     @Override
     public void onClose() {
-        ClientPlayNetworking.send(new ModPackets.OpenBlockMenuPayload(menu.blockEntity.getBlockPos()));
+        ArenasNetwork.sendToServer(new ModPackets.OpenBlockMenuPayload(menu.blockEntity.getBlockPos()));
     }
 
     /** Never interpret an off-panel click as "throw the carried item out". */
@@ -210,7 +210,7 @@ public class EquipmentScreen extends FitCanvasHandledScreen<EquipmentScreenHandl
     private void onSave() {
         ItemStack[] items = menu.currentItems();
         EquipmentData data = new EquipmentData(items, chances, dropChance);
-        ClientPlayNetworking.send(new ModPackets.UpdateEquipmentPayload(menu.blockEntity.getBlockPos(), data));
+        ArenasNetwork.sendToServer(new ModPackets.UpdateEquipmentPayload(menu.blockEntity.getBlockPos(), data));
         this.onClose();
     }
 

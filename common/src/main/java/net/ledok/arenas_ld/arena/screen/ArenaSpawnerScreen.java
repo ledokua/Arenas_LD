@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.arena.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.arena.packet.ArenaSpawnerMobsPayload;
 import net.ledok.arenas_ld.arena.packet.ArenaSpawnerRewardsPayload;
@@ -43,6 +42,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
 import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
 import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 /** Config editor for the arena spawner: combat/timing/cadence settings, mob list, and per-wave rewards. */
 public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScreenHandler> {
@@ -238,12 +238,12 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
     private void save() {
         List<String> objNames = new ArrayList<>();
         for (ObjectiveType t : objectives) objNames.add(t.name());
-        ClientPlayNetworking.send(new ArenaSpawnerSettingsPayload(pos,
+        ArenasNetwork.sendToServer(new ArenaSpawnerSettingsPayload(pos,
             si("battleRadius", 64), si("spawnDistance", 8), sd("attributeScale", 0.1), si("entityHighlightTime", 0),
             si("waveTimer", 120), si("additionalTime", 5), si("timeBetweenWaves", 10), si("prepareTime", 10),
             si("bossWaveAdditionalTime", 60), si("bossEveryN", 5), si("eliteEveryN", 3), si("objectiveEveryN", 7), objNames));
-        ClientPlayNetworking.send(new ArenaSpawnerMobsPayload(pos, new ArrayList<>(mobs)));
-        ClientPlayNetworking.send(new ArenaSpawnerRewardsPayload(pos, new ArrayList<>(rewards)));
+        ArenasNetwork.sendToServer(new ArenaSpawnerMobsPayload(pos, new ArrayList<>(mobs)));
+        ArenasNetwork.sendToServer(new ArenaSpawnerRewardsPayload(pos, new ArrayList<>(rewards)));
     }
 
     private int si(String key, int def) {

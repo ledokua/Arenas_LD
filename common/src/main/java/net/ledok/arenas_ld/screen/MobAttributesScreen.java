@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.util.AttributeData;
 import net.ledok.vectorlib.client.canvas.TextNode;
@@ -32,6 +31,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.INK;
 import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
 import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
 import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 /**
  * VectorLib editor for a mob's attribute list (id + value rows). Opened from the
@@ -244,7 +244,7 @@ public class MobAttributesScreen extends FitCanvasHandledScreen<MobAttributesScr
             updated.add(new AttributeData(id, value, maxValues.get(i)));
         }
 
-        ClientPlayNetworking.send(new ModPackets.UpdateAttributesPayload(
+        ArenasNetwork.sendToServer(new ModPackets.UpdateAttributesPayload(
             menu.blockEntity.getBlockPos(), updated));
         // Stays open for further edits; × or Esc goes back. The notice clears on the next rebuild.
         footerError = null;

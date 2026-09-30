@@ -13,6 +13,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
+import net.ledok.arenas_ld.platform.ArenasMenus;
 
 /**
  * Passive arena anchor block. No ticker — the arena controller drives active runs via
@@ -53,7 +54,7 @@ public class ArenaSpawnerBlock extends BaseEntityBlock {
                 return InteractionResult.FAIL;
             }
             if (world.getBlockEntity(pos) instanceof ArenaSpawnerBlockEntity spawner) {
-                player.openMenu(spawner);
+                ArenasMenus.open(player, spawner);
                 return InteractionResult.CONSUME;
             }
         }

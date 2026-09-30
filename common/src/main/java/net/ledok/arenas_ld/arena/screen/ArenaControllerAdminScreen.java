@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.arena.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.arena.packet.ArenaAdminSetIntPayload;
 import net.ledok.arenas_ld.arena.packet.ArenaMoveInstancePayload;
@@ -36,6 +35,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
 import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
 import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 /** Admin/config view for the arena controller. Reads the client-synced controller; edits via packets. */
 public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaControllerAdminScreenHandler> {
@@ -171,11 +171,11 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
             row.spacer();
             String dim = inst.dimension().location().toString();
             row.item(ArenasUi.button(Component.literal("▲"), 18, 16,
-                () -> ClientPlayNetworking.send(new ArenaMoveInstancePayload(pos, sp, dim, -1))));
+                () -> ArenasNetwork.sendToServer(new ArenaMoveInstancePayload(pos, sp, dim, -1))));
             row.item(ArenasUi.button(Component.literal("▼"), 18, 16,
-                () -> ClientPlayNetworking.send(new ArenaMoveInstancePayload(pos, sp, dim, 1))));
+                () -> ArenasNetwork.sendToServer(new ArenaMoveInstancePayload(pos, sp, dim, 1))));
             row.item(ArenasUi.button(Component.literal("✕"), 18, 16,
-                () -> ClientPlayNetworking.send(new ArenaRemoveInstancePayload(pos, sp, dim))));
+                () -> ArenasNetwork.sendToServer(new ArenaRemoveInstancePayload(pos, sp, dim))));
             dynamicArea.item(row);
         }
 
@@ -195,11 +195,11 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
     private void saveSettings() {
         intFields.forEach((key, field) -> {
             try {
-                ClientPlayNetworking.send(new ArenaAdminSetIntPayload(pos, key, Integer.parseInt(field.text().trim())));
+                ArenasNetwork.sendToServer(new ArenaAdminSetIntPayload(pos, key, Integer.parseInt(field.text().trim())));
             } catch (NumberFormatException ignored) {}
         });
         try {
-            ClientPlayNetworking.send(new ArenaSetRewardCurvePayload(pos,
+            ArenasNetwork.sendToServer(new ArenaSetRewardCurvePayload(pos,
                 Double.parseDouble(currencyBase.text().trim()),
                 Double.parseDouble(currencyExp.text().trim()),
                 Double.parseDouble(xpBase.text().trim()),

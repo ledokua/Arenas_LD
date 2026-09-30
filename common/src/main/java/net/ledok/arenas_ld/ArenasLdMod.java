@@ -1,7 +1,5 @@
 package net.ledok.arenas_ld;
 
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.ledok.arenas_ld.config.ArenasLdConfig;
 import net.ledok.arenas_ld.dungeon.manager.DungeonManager;
 import net.ledok.arenas_ld.dungeon.run.DungeonConnectionListener;
@@ -12,6 +10,7 @@ import net.ledok.arenas_ld.screen.ModScreenHandlers;
 import net.ledok.arenas_ld.util.BossDataComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.ledok.arenas_ld.platform.ArenasEvents;
 
 public class ArenasLdMod {
     public static final String MOD_ID = "arenas_ld";
@@ -21,7 +20,8 @@ public class ArenasLdMod {
     public static final DungeonManager DUNGEON_MANAGER = new DungeonManager();
     public static final ArenasLdConfig CONFIG = ArenasLdConfig.load();
 
-    /** Full Fabric-style init: content registration plus runtime wiring. */
+    /** Full Fabric-style init: content registration plus runtime wiring. Loader events and packets
+     *  are only recorded here (ArenasEvents, ArenasNetwork); the loader glue wires them. */
     public static void init() {
         registerContent();
         initRuntime();
@@ -52,7 +52,7 @@ public class ArenasLdMod {
         CommandRegistry.initialize();
         net.ledok.arenas_ld.util.ServerTaskScheduler.register();
         RAID_BOSS_MANAGER.initialize();
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> DUNGEON_MANAGER.clearForServerStop());
+        ArenasEvents.SERVER_STOPPING.add(server -> DUNGEON_MANAGER.clearForServerStop());
         DungeonConnectionListener.register();
         net.ledok.arenas_ld.arena.run.ArenaConnectionListener.register();
         net.ledok.arenas_ld.util.RunItemRestrictions.register();

@@ -1,7 +1,5 @@
 package net.ledok.arenas_ld.networking;
 
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.raid.run.RaidDifficulty;

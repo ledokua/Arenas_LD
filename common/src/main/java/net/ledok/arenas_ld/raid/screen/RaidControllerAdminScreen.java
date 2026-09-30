@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.raid.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.raid.packet.RaidMoveInstancePayload;
 import net.ledok.arenas_ld.raid.packet.RaidRemoveInstancePayload;
@@ -61,6 +60,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
 import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidControllerAdminScreenHandler> {
 
@@ -439,14 +439,14 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
 
         Button up = ArenasUi.button(Component.literal("↑"), 22, 18, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new RaidMoveInstancePayload(menu.getBlockPos(), pos, entry.dimension(), -1));
+            ArenasNetwork.sendToServer(new RaidMoveInstancePayload(menu.getBlockPos(), pos, entry.dimension(), -1));
         });
         up.enabled(index > 0);
         row.item(up);
 
         Button down = ArenasUi.button(Component.literal("↓"), 22, 18, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new RaidMoveInstancePayload(menu.getBlockPos(), pos, entry.dimension(), 1));
+            ArenasNetwork.sendToServer(new RaidMoveInstancePayload(menu.getBlockPos(), pos, entry.dimension(), 1));
         });
         down.enabled(index < instances.size() - 1);
         row.item(down);
@@ -457,12 +457,12 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         if (pending) {
             action = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.action.cancel"), 64, 18, () -> {
                 footerError = null;
-                ClientPlayNetworking.send(new RaidRemoveInstancePayload(menu.getBlockPos(), pos, dimension));
+                ArenasNetwork.sendToServer(new RaidRemoveInstancePayload(menu.getBlockPos(), pos, dimension));
             });
         } else {
             action = dangerButton(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.action.remove"), 64, () -> {
                 footerError = null;
-                ClientPlayNetworking.send(new RaidRemoveInstancePayload(menu.getBlockPos(), pos, dimension));
+                ArenasNetwork.sendToServer(new RaidRemoveInstancePayload(menu.getBlockPos(), pos, dimension));
             });
         }
         row.item(action);
@@ -984,13 +984,13 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         }
 
         footerError = null;
-        ClientPlayNetworking.send(new RaidSetNamePayload(menu.getBlockPos(), nameInput == null ? "" : nameInput));
-        ClientPlayNetworking.send(new RaidSetCooldownTicksPayload(menu.getBlockPos(), cooldown * 20));
-        ClientPlayNetworking.send(new RaidSetCloseTimerSecondsPayload(menu.getBlockPos(), close));
-        ClientPlayNetworking.send(new RaidSetMaxPartySizePayload(menu.getBlockPos(), maxParty));
-        ClientPlayNetworking.send(new RaidSetInviteExpiryTicksPayload(menu.getBlockPos(), invite * 20));
-        ClientPlayNetworking.send(new RaidSetRespawnTimeTicksPayload(menu.getBlockPos(), respawn));
-        ClientPlayNetworking.send(new RaidSetDeathTimePenaltyPayload(menu.getBlockPos(), death * 20));
+        ArenasNetwork.sendToServer(new RaidSetNamePayload(menu.getBlockPos(), nameInput == null ? "" : nameInput));
+        ArenasNetwork.sendToServer(new RaidSetCooldownTicksPayload(menu.getBlockPos(), cooldown * 20));
+        ArenasNetwork.sendToServer(new RaidSetCloseTimerSecondsPayload(menu.getBlockPos(), close));
+        ArenasNetwork.sendToServer(new RaidSetMaxPartySizePayload(menu.getBlockPos(), maxParty));
+        ArenasNetwork.sendToServer(new RaidSetInviteExpiryTicksPayload(menu.getBlockPos(), invite * 20));
+        ArenasNetwork.sendToServer(new RaidSetRespawnTimeTicksPayload(menu.getBlockPos(), respawn));
+        ArenasNetwork.sendToServer(new RaidSetDeathTimePenaltyPayload(menu.getBlockPos(), death * 20));
     }
 
     private void applyTier(DifficultyTier tier) {
@@ -1017,7 +1017,7 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
             Math.max(0, xp), Math.max(0, regen), hpScale);
         tierConfigs.put(tier, updated);
         footerError = null;
-        ClientPlayNetworking.send(new RaidSetTierConfigPayload(menu.getBlockPos(), tier, updated));
+        ArenasNetwork.sendToServer(new RaidSetTierConfigPayload(menu.getBlockPos(), tier, updated));
     }
 
     private Long parseLong(String value) {

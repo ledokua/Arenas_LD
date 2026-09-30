@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.DbsClearRoomsPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsMoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsRemoveRoomPayload;
@@ -45,6 +44,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
 import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 public class DungeonBossSpawnerScreen extends FitCanvasHandledScreen<DungeonBossSpawnerScreenHandler> {
 
@@ -207,7 +207,7 @@ public class DungeonBossSpawnerScreen extends FitCanvasHandledScreen<DungeonBoss
                     if (minecraft == null) return;
                     minecraft.setScreen(new ConfirmScreen(ok -> {
                         minecraft.setScreen(this);
-                        if (ok) ClientPlayNetworking.send(new DbsClearRoomsPayload(menu.getBlockPos()));
+                        if (ok) ArenasNetwork.sendToServer(new DbsClearRoomsPayload(menu.getBlockPos()));
                     }, Component.translatable("gui.arenas_ld.room_controller.confirm.clear_title"),
                        Component.translatable("gui.arenas_ld.dbs.clear_rooms_confirm")));
                 });
@@ -271,27 +271,27 @@ public class DungeonBossSpawnerScreen extends FitCanvasHandledScreen<DungeonBoss
         }
 
         Button markStart = ArenasUi.button(Component.literal("S"), 20, 18, () ->
-            ClientPlayNetworking.send(new net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload(menu.getBlockPos(), room, false)));
+            ArenasNetwork.sendToServer(new net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload(menu.getBlockPos(), room, false)));
         markStart.tooltip(Component.translatable("gui.arenas_ld.dbs.room_marker.start"));
         row.item(markStart);
 
         Button markFinal = ArenasUi.button(Component.literal("F"), 20, 18, () ->
-            ClientPlayNetworking.send(new net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload(menu.getBlockPos(), room, true)));
+            ArenasNetwork.sendToServer(new net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload(menu.getBlockPos(), room, true)));
         markFinal.tooltip(Component.translatable("gui.arenas_ld.dbs.room_marker.final"));
         row.item(markFinal);
 
         Button up = ArenasUi.button(Component.literal("↑"), 20, 18, () ->
-            ClientPlayNetworking.send(new DbsMoveRoomPayload(menu.getBlockPos(), index, Math.max(0, index - 1))));
+            ArenasNetwork.sendToServer(new DbsMoveRoomPayload(menu.getBlockPos(), index, Math.max(0, index - 1))));
         up.enabled(index > 0);
         row.item(up);
 
         Button down = ArenasUi.button(Component.literal("↓"), 20, 18, () ->
-            ClientPlayNetworking.send(new DbsMoveRoomPayload(menu.getBlockPos(), index, Math.min(rooms.size() - 1, index + 1))));
+            ArenasNetwork.sendToServer(new DbsMoveRoomPayload(menu.getBlockPos(), index, Math.min(rooms.size() - 1, index + 1))));
         down.enabled(index < rooms.size() - 1);
         row.item(down);
 
         row.item(ArenasUi.button(Component.literal("×"), 20, 18, () ->
-            ClientPlayNetworking.send(new DbsRemoveRoomPayload(menu.getBlockPos(), room))));
+            ArenasNetwork.sendToServer(new DbsRemoveRoomPayload(menu.getBlockPos(), room))));
 
         return row;
     }
@@ -332,7 +332,7 @@ public class DungeonBossSpawnerScreen extends FitCanvasHandledScreen<DungeonBoss
     }
 
     private void applyMobId() {
-        ClientPlayNetworking.send(new UpdateDbsEntityDefPayload(menu.getBlockPos(), mobIdValue, waveValue));
+        ArenasNetwork.sendToServer(new UpdateDbsEntityDefPayload(menu.getBlockPos(), mobIdValue, waveValue));
     }
 
     private void openAttributesScreen() {
@@ -344,7 +344,7 @@ public class DungeonBossSpawnerScreen extends FitCanvasHandledScreen<DungeonBoss
     }
 
     private void openEquipmentScreen() {
-        net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+        net.ledok.arenas_ld.platform.ArenasNetwork.sendToServer(
             new net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload(menu.getBlockPos()));
     }
 

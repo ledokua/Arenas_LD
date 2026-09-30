@@ -1,7 +1,5 @@
 package net.ledok.arenas_ld.client;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
 import net.ledok.arenas_ld.dungeon.packet.DungeonBossSpawnerSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.DungeonControllerAdminSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.DungeonControllerSnapshotPayload;
@@ -54,9 +52,12 @@ public class ArenasLdClient {
         registrar.register(ModScreenHandlers.ARENA_SPAWNER_SCREEN_HANDLER, net.ledok.arenas_ld.arena.screen.ArenaSpawnerScreen::new);
     }
 
-    public static void init() {
-        BlockRenderLayerMap.INSTANCE.putBlock(BlockRegistry.PHASE_BLOCK, RenderType.translucent());
+    /** Block render layers: Fabric passes BlockRenderLayerMap, NeoForge ItemBlockRenderTypes. */
+    public static void registerRenderLayers(java.util.function.BiConsumer<net.minecraft.world.level.block.Block, RenderType> sink) {
+        sink.accept(BlockRegistry.PHASE_BLOCK, RenderType.translucent());
+    }
 
+    public static void init() {
         SelectionOverlayRenderer.register();
         SpawnTelegraphRenderer.register();
 
@@ -78,41 +79,41 @@ public class ArenasLdClient {
         ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.client.hud.RunTimerHud::clear);
         ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.client.hud.LootRevealHud::clear);
 
-        ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.packet.RunHudPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RunHudPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> net.ledok.arenas_ld.client.hud.RunTimerHud.onPayload(payload)));
-        ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.packet.LootRewardPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.LootRewardPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> net.ledok.arenas_ld.client.hud.LootRevealHud.onPayload(payload)));
-        ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.packet.LootHudClearPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.LootHudClearPayload.TYPE, (payload, context) ->
                 context.client().execute(net.ledok.arenas_ld.client.hud.LootRevealHud::clear));
 
-        ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> {
                     if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen screen
                             && screen.matchesController(payload.controllerPos())) {
                         screen.onClose();
                     }
                 }));
-        ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> {
                     if (Minecraft.getInstance().screen instanceof RaidControllerScreen screen
                             && screen.matchesController(payload.controllerPos())) {
                         screen.onClose();
                     }
                 }));
-        ClientPlayNetworking.registerGlobalReceiver(DungeonControllerSnapshotPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(DungeonControllerSnapshotPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> {
                     if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen screen
                             && screen.matchesController(payload.data().blockPos())) {
                         screen.applyData(payload.data());
                     }
                 }));
-        ClientPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.SpawnTelegraphPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.dungeon.packet.SpawnTelegraphPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (context.client().level != null) {
                     SpawnTelegraphStore.set(payload.positions(), payload.durationTicks(), context.client().level.getGameTime());
                 }
             }));
-        ClientPlayNetworking.registerGlobalReceiver(RoomControllerSnapshotPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(RoomControllerSnapshotPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.RoomControllerScreen screen
                     && screen.matchesController(payload.data().blockPos())) {
@@ -122,42 +123,42 @@ public class ArenasLdClient {
                     rewardsScreen.applyData(payload.data());
                 }
             }));
-        ClientPlayNetworking.registerGlobalReceiver(MobSpawnerSnapshotPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(MobSpawnerSnapshotPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.MobSpawnerScreen screen
                     && screen.matchesSpawner(payload.data().blockPos())) {
                     screen.applyData(payload.data());
                 }
             }));
-        ClientPlayNetworking.registerGlobalReceiver(DungeonBossSpawnerSnapshotPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(DungeonBossSpawnerSnapshotPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerScreen screen
                     && screen.matchesSpawner(payload.data().blockPos())) {
                     screen.applyData(payload.data());
                 }
             }));
-        ClientPlayNetworking.registerGlobalReceiver(DungeonControllerAdminSnapshotPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(DungeonControllerAdminSnapshotPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreen screen
                     && screen.matchesController(payload.data().blockPos())) {
                     screen.applyData(payload.data());
                 }
             }));
-        ClientPlayNetworking.registerGlobalReceiver(ModPackets.RaidControllerInfoPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(ModPackets.RaidControllerInfoPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof RaidControllerScreen screen
                         && payload.pos().equals(screen.getMenu().getPos())) {
                     screen.applyServerInfo(payload);
                 }
             }));
-        ClientPlayNetworking.registerGlobalReceiver(RaidControllerAdminSnapshotPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(RaidControllerAdminSnapshotPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof RaidControllerAdminScreen screen
                         && screen.matchesController(payload.data().blockPos())) {
                     screen.applyData(payload.data());
                 }
             }));
-        ClientPlayNetworking.registerGlobalReceiver(RaidControllerSnapshotPayload.TYPE, (payload, context) ->
+        ArenasClientNetwork.registerReceiver(RaidControllerSnapshotPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof RaidControllerScreen screen
                         && payload.data().blockPos().equals(screen.getMenu().getPos())) {

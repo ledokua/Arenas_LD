@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.dungeon.blockentity;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
@@ -53,8 +52,9 @@ import java.util.Iterator;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Optional;
+import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
-public class DungeonControllerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<DungeonControllerData> {
+public class DungeonControllerBlockEntity extends BlockEntity implements ExtendedMenuProvider<DungeonControllerData> {
     private static final int DEFAULT_COOLDOWN_TICKS = 5 * 60 * 20;
     /** How long the front queued lobby keeps priority on a free instance before it rotates to the next. */
     private static final int QUEUE_PRIORITY_TIMEOUT_TICKS = 20 * 20;
@@ -847,7 +847,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             return;
         }
         for (ServerPlayer target : serverLevel.getServer().getPlayerList().getPlayers()) {
-            net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(target,
+            net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(target,
                 new net.ledok.arenas_ld.dungeon.packet.DungeonControllerSnapshotPayload(getScreenOpeningData(target)));
         }
     }
@@ -1038,6 +1038,11 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             topLeaderboards.put(tier, top);
         }
         return new DungeonControllerData(worldPosition, visible, own, myInvites, myJoinRequests, maxPartySize, tierConfigs, player.serverLevel().getGameTime(), busyPlayers, topLeaderboards, getQueuePosition(playerUuid), getEstimatedWaitSeconds());
+    }
+
+    @Override
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, DungeonControllerData> openingDataCodec() {
+        return DungeonControllerData.STREAM_CODEC;
     }
 
     @Override

@@ -1,8 +1,5 @@
 package net.ledok.arenas_ld.util;
 
-import net.fabricmc.fabric.api.event.player.UseBlockCallback;
-import net.fabricmc.fabric.api.event.player.UseEntityCallback;
-import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.arena.run.ArenaRun;
@@ -13,9 +10,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.item.ItemStack;
+import net.ledok.arenas_ld.platform.ArenasEvents;
 
 /**
  * Blocks the use of blacklisted items ({@link RunItemBlacklist}) while a player is inside an active
@@ -26,24 +22,10 @@ public final class RunItemRestrictions {
     private RunItemRestrictions() {}
 
     public static void register() {
-        UseItemCallback.EVENT.register((player, world, hand) -> {
-            if (player instanceof ServerPlayer serverPlayer && blockBlacklisted(serverPlayer, hand)) {
-                return InteractionResultHolder.fail(player.getItemInHand(hand));
-            }
-            return InteractionResultHolder.pass(player.getItemInHand(hand));
-        });
-        UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
-            if (player instanceof ServerPlayer serverPlayer && blockBlacklisted(serverPlayer, hand)) {
-                return InteractionResult.FAIL;
-            }
-            return InteractionResult.PASS;
-        });
-        UseEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
-            if (player instanceof ServerPlayer serverPlayer && blockBlacklisted(serverPlayer, hand)) {
-                return InteractionResult.FAIL;
-            }
-            return InteractionResult.PASS;
-        });
+        // One check for all three right-click paths (item in the air, on a block, on an entity);
+        // the loader glue cancels the interaction with FAIL when it returns true.
+        ArenasEvents.USE_BLOCKED.add((player, hand) ->
+            player instanceof ServerPlayer serverPlayer && blockBlacklisted(serverPlayer, hand));
     }
 
     /** True (and notifies the player) if a blacklisted item is being used while in a run. */

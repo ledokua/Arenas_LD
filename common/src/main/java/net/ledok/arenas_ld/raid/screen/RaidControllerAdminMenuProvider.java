@@ -1,14 +1,14 @@
 package net.ledok.arenas_ld.raid.screen;
 
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
-public class RaidControllerAdminMenuProvider implements ExtendedScreenHandlerFactory<RaidControllerAdminData> {
+public class RaidControllerAdminMenuProvider implements ExtendedMenuProvider<RaidControllerAdminData> {
     private final RaidControllerBlockEntity controller;
 
     public RaidControllerAdminMenuProvider(RaidControllerBlockEntity controller) {
@@ -23,6 +23,11 @@ public class RaidControllerAdminMenuProvider implements ExtendedScreenHandlerFac
     @Override
     public RaidControllerAdminData getScreenOpeningData(ServerPlayer player) {
         return controller.buildAdminData();
+    }
+
+    @Override
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, RaidControllerAdminData> openingDataCodec() {
+        return RaidControllerAdminData.STREAM_CODEC;
     }
 
     @Override

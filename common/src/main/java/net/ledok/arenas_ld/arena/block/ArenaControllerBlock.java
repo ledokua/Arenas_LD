@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
+import net.ledok.arenas_ld.platform.ArenasMenus;
 
 /**
  * Arena controller block. Mirrors {@link net.ledok.arenas_ld.raid.block.RaidControllerBlock}: a
@@ -52,7 +53,7 @@ public class ArenaControllerBlock extends BaseEntityBlock {
             return InteractionResult.PASS;
         }
         if (!world.isClientSide && world.getBlockEntity(pos) instanceof ArenaControllerBlockEntity controller) {
-            player.openMenu(controller);
+            ArenasMenus.open(player, controller);
             return InteractionResult.CONSUME;
         }
         return InteractionResult.SUCCESS;

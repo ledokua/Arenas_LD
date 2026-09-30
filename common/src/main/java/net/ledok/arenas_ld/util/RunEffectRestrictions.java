@@ -1,12 +1,12 @@
 package net.ledok.arenas_ld.util;
 
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.Holder;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffect;
 
 import java.util.List;
+import net.ledok.arenas_ld.platform.ArenasEvents;
 
 /**
  * Strips blacklisted potion/mob effects ({@link RunEffectBlacklist}) from players who are in an
@@ -21,7 +21,7 @@ public final class RunEffectRestrictions {
     private RunEffectRestrictions() {}
 
     public static void register() {
-        ServerTickEvents.END_SERVER_TICK.register(RunEffectRestrictions::onServerTick);
+        ArenasEvents.SERVER_TICK_END.add(RunEffectRestrictions::onServerTick);
     }
 
     private static void onServerTick(MinecraftServer server) {

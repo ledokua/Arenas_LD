@@ -29,6 +29,8 @@
     ]
   },
 
+  "accessWidener": "arenas_ld.accesswidener",
+
   "mixins": [
     "arenas_ld.mixins.json",
     "arenas_ld_fabric.mixins.json"

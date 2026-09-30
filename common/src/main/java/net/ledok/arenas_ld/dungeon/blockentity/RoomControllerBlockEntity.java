@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.dungeon.blockentity;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.block.PhaseBlock;
 import net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig;
@@ -41,8 +40,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Iterator;
+import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
-public class RoomControllerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<RoomControllerData> {
+public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMenuProvider<RoomControllerData> {
 
     // ---- Fields ----
 
@@ -1100,6 +1100,11 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedSc
         }
         return new RoomControllerData(worldPosition, entries, getDoorPositions(),
             roomName, getRespawnPositions(), roomReward, objective, enumerateLootTables());
+    }
+
+    @Override
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, RoomControllerData> openingDataCodec() {
+        return RoomControllerData.STREAM_CODEC;
     }
 
     /** Sorted loot table ids for the reward screen's autocomplete; empty when called client-side. */

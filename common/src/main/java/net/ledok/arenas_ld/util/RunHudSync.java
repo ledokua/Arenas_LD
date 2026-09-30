@@ -1,11 +1,11 @@
 package net.ledok.arenas_ld.util;
 
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.packet.RunHudPayload;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.UUID;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 /**
  * Pushes {@link RunHudPayload} timer-bar state to run participants. The lifecycles call
@@ -33,7 +33,7 @@ public final class RunHudSync {
         for (UUID uuid : uuids) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
             if (player != null) {
-                ServerPlayNetworking.send(player, payload);
+                ArenasNetwork.sendToPlayer(player, payload);
             }
         }
     }
@@ -45,6 +45,6 @@ public final class RunHudSync {
 
     /** Clears the bar for one player (e.g. when they are removed from a run mid-flight). */
     public static void hide(ServerPlayer player) {
-        ServerPlayNetworking.send(player, RunHudPayload.HIDDEN);
+        ArenasNetwork.sendToPlayer(player, RunHudPayload.HIDDEN);
     }
 }

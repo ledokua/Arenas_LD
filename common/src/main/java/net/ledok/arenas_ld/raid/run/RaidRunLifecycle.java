@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.raid.run;
 
-import net.fabricmc.loader.api.FabricLoader;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.dungeon.blockentity.EntityDefinition;
@@ -45,6 +44,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import net.ledok.arenas_ld.platform.ArenasPlatform;
 
 /**
  * Static lifecycle helpers for {@link RaidRun}. Mirrors {@link net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle}.
@@ -392,7 +392,7 @@ public final class RaidRunLifecycle {
             rewardPerPlayer *= 2;
         }
         String perPlayerLoot = tierCfg.perPlayerLootTable();
-        boolean puffishLoaded = FabricLoader.getInstance().isModLoaded("puffish_skills");
+        boolean puffishLoaded = ArenasPlatform.INSTANCE.isModLoaded("puffish_skills");
 
         for (UUID uuid : rewardIds) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);

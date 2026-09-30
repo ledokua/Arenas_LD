@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.registry;
 
-import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -15,7 +14,9 @@ public class ModCreativeModeTabs {
     public static final ResourceKey<CreativeModeTab> ARENAS_LD_TAB = ResourceKey.create(Registries.CREATIVE_MODE_TAB, ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "arenas_ld_tab"));
 
     public static void initialize() {
-        RegistryBridge.register(BuiltInRegistries.CREATIVE_MODE_TAB, ARENAS_LD_TAB.location(), FabricItemGroup.builder()
+        RegistryBridge.register(BuiltInRegistries.CREATIVE_MODE_TAB, ARENAS_LD_TAB.location(),
+                // Row/column are placeholders: both loaders re-place modded tabs (Fabric pages, NeoForge sorting).
+                CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
                 .title(Component.translatable("creativetab.arenas_ld_tab"))
                 .icon(() -> ItemRegistry.DUNGEON_TOOL.getDefaultInstance())
                 .displayItems((displayContext, entries) -> {

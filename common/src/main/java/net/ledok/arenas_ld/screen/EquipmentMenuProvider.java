@@ -1,18 +1,18 @@
 package net.ledok.arenas_ld.screen;
 
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
 /**
  * Opens the equipment editor as a real, server-synced menu (required for the interactive ghost
  * slots). Built from any {@link net.ledok.arenas_ld.util.EquipmentProvider} block entity.
  */
-public class EquipmentMenuProvider implements ExtendedScreenHandlerFactory<EquipmentScreenData> {
+public class EquipmentMenuProvider implements ExtendedMenuProvider<EquipmentScreenData> {
     private final BlockEntity blockEntity;
 
     public EquipmentMenuProvider(BlockEntity blockEntity) {
@@ -27,6 +27,11 @@ public class EquipmentMenuProvider implements ExtendedScreenHandlerFactory<Equip
     @Override
     public EquipmentScreenData getScreenOpeningData(ServerPlayer player) {
         return new EquipmentScreenData(blockEntity.getBlockPos());
+    }
+
+    @Override
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, EquipmentScreenData> openingDataCodec() {
+        return EquipmentScreenData.STREAM_CODEC;
     }
 
     @Override

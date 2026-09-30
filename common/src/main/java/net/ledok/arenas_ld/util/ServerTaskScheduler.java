@@ -1,7 +1,5 @@
 package net.ledok.arenas_ld.util;
 
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.minecraft.server.MinecraftServer;
 
@@ -10,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
 import java.util.function.Consumer;
+import net.ledok.arenas_ld.platform.ArenasEvents;
 
 /**
  * Runs tasks at the end of the NEXT server tick. Unlike {@link MinecraftServer#execute},
@@ -25,7 +24,7 @@ public final class ServerTaskScheduler {
     }
 
     public static void register() {
-        ServerTickEvents.END_SERVER_TICK.register(server -> {
+        ArenasEvents.SERVER_TICK_END.add(server -> {
             if (NEXT_TICK.isEmpty()) {
                 return;
             }
@@ -40,7 +39,7 @@ public final class ServerTaskScheduler {
                 }
             }
         });
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> NEXT_TICK.clear());
+        ArenasEvents.SERVER_STOPPED.add(server -> NEXT_TICK.clear());
     }
 
     /** Queues a task for the end of the next server tick. Server thread only. */

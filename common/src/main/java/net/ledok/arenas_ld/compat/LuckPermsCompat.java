@@ -1,10 +1,10 @@
 package net.ledok.arenas_ld.compat;
 
-import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.UUID;
+import net.ledok.arenas_ld.platform.ArenasPlatform;
 
 /**
  * Optional LuckPerms meta reads; everything answers "unset" without the mod. LuckPerms only has
@@ -12,7 +12,7 @@ import java.util.UUID;
  */
 public final class LuckPermsCompat {
 
-    private static final boolean LOADED = FabricLoader.getInstance().isModLoaded("luckperms");
+    private static final boolean LOADED = ArenasPlatform.INSTANCE.isModLoaded("luckperms");
 
     private LuckPermsCompat() {
     }

@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.raid.blockentity;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
@@ -55,9 +54,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
 public class RaidControllerBlockEntity extends BlockEntity
-    implements ExtendedScreenHandlerFactory<RaidControllerData> {
+    implements ExtendedMenuProvider<RaidControllerData> {
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Inner types
@@ -1205,7 +1205,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             return;
         }
         for (ServerPlayer target : serverLevel.getServer().getPlayerList().getPlayers()) {
-            net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(target,
+            net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(target,
                 new net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload(getScreenOpeningData(target)));
         }
     }
@@ -1283,7 +1283,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload closePayload =
             new net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload(worldPosition);
         for (ServerPlayer p : players) {
-            net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(p, closePayload);
+            net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(p, closePayload);
         }
 
         markDirtyAndSync();
@@ -1490,6 +1490,11 @@ public class RaidControllerBlockEntity extends BlockEntity
     @Override
     public RaidControllerData getScreenOpeningData(ServerPlayer player) {
         return buildDataFor(player);
+    }
+
+    @Override
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, RaidControllerData> openingDataCodec() {
+        return RaidControllerData.STREAM_CODEC;
     }
 
     private RaidControllerData buildDataFor(ServerPlayer player) {

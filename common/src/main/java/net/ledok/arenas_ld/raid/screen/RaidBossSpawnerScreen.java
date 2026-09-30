@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.raid.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
@@ -32,6 +31,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
 import static net.ledok.arenas_ld.screen.ArenasUi.INK_MID;
 import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
 import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 /**
  * Minimal admin view for a raid boss spawner. The spawner is now a passive arena:
@@ -201,7 +201,7 @@ public class RaidBossSpawnerScreen extends FitCanvasHandledScreen<RaidBossSpawne
     }
 
     private void onSave() {
-        ClientPlayNetworking.send(new ModPackets.UpdateBossSpawnerPayload(
+        ArenasNetwork.sendToServer(new ModPackets.UpdateBossSpawnerPayload(
             menu.blockEntity.getBlockPos(),
             mobIdValue
         ));
@@ -220,7 +220,7 @@ public class RaidBossSpawnerScreen extends FitCanvasHandledScreen<RaidBossSpawne
     }
 
     private void openEquipmentScreen() {
-        ClientPlayNetworking.send(
+        ArenasNetwork.sendToServer(
             new ModPackets.OpenEquipmentEditorPayload(menu.blockEntity.getBlockPos()));
     }
 

@@ -31,6 +31,8 @@ public final class ArenasLdModNeoForge {
             registrySink.onRegister(event);
         });
         NeoForgeLivingEntityHandlers.register();
+        // Packets and events the common code recorded in initRuntime.
+        NeoForgeArenasWiring.register(modBus);
         if (FMLEnvironment.dist == Dist.CLIENT) {
             ArenasLdClientNeoForge.register(modBus);
         }

@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.networking;
 
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
@@ -69,13 +68,15 @@ import java.util.List;
 import java.util.UUID;
 
 import static net.ledok.arenas_ld.networking.ModPackets.*;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
+import net.ledok.arenas_ld.platform.ArenasMenus;
 
 public final class SpawnerPacketHandlers {
     private SpawnerPacketHandlers() {
     }
 
     static void register() {
-        ServerPlayNetworking.registerGlobalReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 Level world = context.player().level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
@@ -86,7 +87,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(UpdateAttributesPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(UpdateAttributesPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 Level world = context.player().level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
@@ -97,7 +98,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(UpdateEquipmentPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(UpdateEquipmentPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 Level world = context.player().level();
                 BlockEntity be = world.getBlockEntity(payload.pos());
@@ -108,17 +109,17 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 BlockEntity be = player.level().getBlockEntity(payload.pos());
                 if (be instanceof EquipmentProvider) {
-                    player.openMenu(new net.ledok.arenas_ld.screen.EquipmentMenuProvider(be));
+                    ArenasMenus.open(player, new net.ledok.arenas_ld.screen.EquipmentMenuProvider(be));
                 }
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(CycleDungeonToolModePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(CycleDungeonToolModePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ItemStack stack = context.player().getMainHandItem();
                 if (stack.getItem() instanceof DungeonToolItem) {
@@ -133,7 +134,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(SetDungeonToolModePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(SetDungeonToolModePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ItemStack stack = payload.mainHand()
                     ? context.player().getMainHandItem()
@@ -150,7 +151,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(ModPackets.SetDungeonToolSpawnerPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(ModPackets.SetDungeonToolSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 ItemStack stack = payload.mainHand() ? player.getMainHandItem() : player.getOffhandItem();
@@ -171,7 +172,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(ModPackets.OpenBlockMenuPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(ModPackets.OpenBlockMenuPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -186,7 +187,7 @@ public final class SpawnerPacketHandlers {
                 if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity
                         || be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity
                         || be instanceof RaidBossSpawnerBlockEntity) {
-                    player.openMenu((net.minecraft.world.MenuProvider) be);
+                    ArenasMenus.open(player, (net.minecraft.world.MenuProvider) be);
                 } else {
                     // The block is gone (or never was a spawner): close whatever screen asked.
                     player.closeContainer();
@@ -194,7 +195,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(MobSpawnerSetNamePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(MobSpawnerSetNamePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -211,7 +212,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(RoomRemoveSpawnerPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(RoomRemoveSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -228,7 +229,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(RoomClearSpawnersPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(RoomClearSpawnersPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -245,7 +246,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(RoomClearDoorPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(RoomClearDoorPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -262,7 +263,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.RoomSetNamePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.dungeon.packet.RoomSetNamePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -279,7 +280,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(RoomResetPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(RoomResetPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -296,7 +297,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(RoomClearRespawnPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(RoomClearRespawnPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -313,7 +314,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.RoomSetRewardPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.dungeon.packet.RoomSetRewardPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -330,7 +331,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.RoomSetObjectivePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.dungeon.packet.RoomSetObjectivePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -369,7 +370,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.RoomClearProtectPosPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.dungeon.packet.RoomClearProtectPosPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -386,7 +387,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(UpdateMobSpawnerEntityDefPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(UpdateMobSpawnerEntityDefPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -407,7 +408,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(UpdateDbsEntityDefPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(UpdateDbsEntityDefPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -424,7 +425,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(DbsRemoveRoomPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(DbsRemoveRoomPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -441,7 +442,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(DbsMoveRoomPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(DbsMoveRoomPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -458,7 +459,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -475,7 +476,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(DbsClearRoomsPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(DbsClearRoomsPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -492,7 +493,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(CreateLobbyPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(CreateLobbyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -505,7 +506,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(JoinLobbyPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(JoinLobbyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -518,7 +519,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(InvitePlayerPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(InvitePlayerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -539,7 +540,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(AcceptInvitePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(AcceptInvitePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -552,7 +553,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(DeclineInvitePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(DeclineInvitePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -565,7 +566,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(RequestJoinPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(RequestJoinPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -578,7 +579,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(AcceptJoinRequestPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(AcceptJoinRequestPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -591,7 +592,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(DeclineJoinRequestPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(DeclineJoinRequestPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -604,7 +605,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(LeaveLobbyPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(LeaveLobbyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -617,7 +618,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(KickFromLobbyPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(KickFromLobbyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -630,7 +631,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(SetLobbyTierPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(SetLobbyTierPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -643,7 +644,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(SetLobbyHardcorePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(SetLobbyHardcorePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -656,7 +657,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(SetLobbyVisibilityPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(SetLobbyVisibilityPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -669,7 +670,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(ToggleReadyPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(ToggleReadyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -680,7 +681,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(StartRunPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(StartRunPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 Level world = player.level();
@@ -691,7 +692,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(AddDungeonInstancePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(AddDungeonInstancePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -709,7 +710,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(RemoveDungeonInstancePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(RemoveDungeonInstancePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -730,7 +731,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(MoveDungeonInstancePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(MoveDungeonInstancePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -746,7 +747,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(SetCooldownTicksPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(SetCooldownTicksPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -766,7 +767,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(SetCloseTimerSecondsPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(SetCloseTimerSecondsPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -786,7 +787,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(SetMaxPartySizePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(SetMaxPartySizePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -806,7 +807,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -822,7 +823,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(SetRespawnTimeTicksPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(SetRespawnTimeTicksPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -842,7 +843,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(SetDeathTimePenaltyPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(SetDeathTimePenaltyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -862,7 +863,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(SetHpScalePerPlayerPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(SetHpScalePerPlayerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -882,7 +883,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(SetInviteExpiryTicksPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(SetInviteExpiryTicksPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -902,7 +903,7 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(SetTierConfigPayload.TYPE, (payload, context) -> {
+        ArenasNetwork.registerServerReceiver(SetTierConfigPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
@@ -929,7 +930,7 @@ public final class SpawnerPacketHandlers {
             return;
         }
         for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
-            ServerPlayNetworking.send(target, new DungeonControllerSnapshotPayload(controller.getScreenOpeningData(target)));
+            ArenasNetwork.sendToPlayer(target, new DungeonControllerSnapshotPayload(controller.getScreenOpeningData(target)));
         }
     }
 
@@ -993,7 +994,7 @@ public final class SpawnerPacketHandlers {
             for (UUID memberUuid : party) {
                 ServerPlayer member = serverLevel.getServer().getPlayerList().getPlayer(memberUuid);
                 if (member != null) {
-                    ServerPlayNetworking.send(member, closePayload);
+                    ArenasNetwork.sendToPlayer(member, closePayload);
                 }
             }
         });
@@ -1066,7 +1067,7 @@ public final class SpawnerPacketHandlers {
             return;
         }
         for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
-            ServerPlayNetworking.send(target, new RoomControllerSnapshotPayload(room.getScreenOpeningData(target)));
+            ArenasNetwork.sendToPlayer(target, new RoomControllerSnapshotPayload(room.getScreenOpeningData(target)));
         }
     }
 
@@ -1078,7 +1079,7 @@ public final class SpawnerPacketHandlers {
             return;
         }
         for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
-            ServerPlayNetworking.send(target, new MobSpawnerSnapshotPayload(spawner.getScreenOpeningData(target)));
+            ArenasNetwork.sendToPlayer(target, new MobSpawnerSnapshotPayload(spawner.getScreenOpeningData(target)));
         }
     }
 
@@ -1090,7 +1091,7 @@ public final class SpawnerPacketHandlers {
             return;
         }
         for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
-            ServerPlayNetworking.send(target, new DungeonBossSpawnerSnapshotPayload(spawner.getScreenOpeningData(target)));
+            ArenasNetwork.sendToPlayer(target, new DungeonBossSpawnerSnapshotPayload(spawner.getScreenOpeningData(target)));
         }
     }
 
@@ -1104,7 +1105,7 @@ public final class SpawnerPacketHandlers {
         net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminMenuProvider provider =
             new net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminMenuProvider(controller);
         for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
-            ServerPlayNetworking.send(target, new DungeonControllerAdminSnapshotPayload(provider.getScreenOpeningData(target)));
+            ArenasNetwork.sendToPlayer(target, new DungeonControllerAdminSnapshotPayload(provider.getScreenOpeningData(target)));
         }
     }
 }

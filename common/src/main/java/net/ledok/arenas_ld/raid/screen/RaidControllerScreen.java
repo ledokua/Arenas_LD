@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.raid.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
@@ -74,6 +73,7 @@ import static net.ledok.arenas_ld.screen.ArenasParchment.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG_ALT;
 import static net.ledok.arenas_ld.screen.ArenasParchment.WARN;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerScreenHandler> {
     private static final int INVITE_DROPDOWN_MAX_HEIGHT = 154;
@@ -544,11 +544,11 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
         UUID requesterUuid = req.requesterUuid();
         row.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, 18, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new RaidAcceptJoinRequestPayload(menu.getBlockPos(), requesterUuid));
+            ArenasNetwork.sendToServer(new RaidAcceptJoinRequestPayload(menu.getBlockPos(), requesterUuid));
         }));
         row.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, 18, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new RaidDeclineJoinRequestPayload(menu.getBlockPos(), requesterUuid));
+            ArenasNetwork.sendToServer(new RaidDeclineJoinRequestPayload(menu.getBlockPos(), requesterUuid));
         }));
 
         return row;
@@ -670,7 +670,7 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
     private void buildLobbiesContent() {
         Button create = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.create"), () -> {
             footerError = null;
-            ClientPlayNetworking.send(new RaidCreateLobbyPayload(menu.getBlockPos()));
+            ArenasNetwork.sendToServer(new RaidCreateLobbyPayload(menu.getBlockPos()));
         });
         create.enabled(ownLobby.isEmpty());
         contentArea.item(sectionHeaderWithAction(Component.translatable("gui.arenas_ld.dungeon_controller.public_lobbies"), visibleLobbies.size(), create));
@@ -722,11 +722,11 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
 
         row.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, 18, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new RaidAcceptInvitePayload(menu.getBlockPos(), invite.lobbyId()));
+            ArenasNetwork.sendToServer(new RaidAcceptInvitePayload(menu.getBlockPos(), invite.lobbyId()));
         }));
         row.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, 18, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new RaidDeclineInvitePayload(menu.getBlockPos(), invite.lobbyId()));
+            ArenasNetwork.sendToServer(new RaidDeclineInvitePayload(menu.getBlockPos(), invite.lobbyId()));
         }));
 
         return row;
@@ -777,7 +777,7 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
         } else if (lobby.visibility() == LobbyVisibility.PUBLIC) {
             actionButton = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.join"), 84, 18, () -> {
                 footerError = null;
-                ClientPlayNetworking.send(new RaidJoinLobbyPayload(menu.getBlockPos(), lobbyId));
+                ArenasNetwork.sendToServer(new RaidJoinLobbyPayload(menu.getBlockPos(), lobbyId));
             });
             actionButton.enabled(!isMine && ownLobby.isEmpty());
         } else {
@@ -790,7 +790,7 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
             } else {
                 actionButton = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.request"), 84, 18, () -> {
                     footerError = null;
-                    ClientPlayNetworking.send(new RaidRequestJoinPayload(menu.getBlockPos(), lobbyId));
+                    ArenasNetwork.sendToServer(new RaidRequestJoinPayload(menu.getBlockPos(), lobbyId));
                 });
                 actionButton.enabled(!isMine && ownLobby.isEmpty());
             }
@@ -855,12 +855,12 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
                         rebuildUi();
                         return;
                     }
-                    ClientPlayNetworking.send(new RaidStartRunPayload(menu.getBlockPos()));
+                    ArenasNetwork.sendToServer(new RaidStartRunPayload(menu.getBlockPos()));
                 }));
 
                 queueBanner.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.raid_controller.button.leave_queue"), () -> {
                     footerError = null;
-                    ClientPlayNetworking.send(new RaidLeaveLobbyPayload(menu.getBlockPos()));
+                    ArenasNetwork.sendToServer(new RaidLeaveLobbyPayload(menu.getBlockPos()));
                 }));
             }
 
@@ -937,13 +937,13 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
             ? "gui.arenas_ld.dungeon_controller.button.unready"
             : "gui.arenas_ld.dungeon_controller.button.ready"), () -> {
             footerError = null;
-            ClientPlayNetworking.send(new RaidToggleReadyPayload(menu.getBlockPos()));
+            ArenasNetwork.sendToServer(new RaidToggleReadyPayload(menu.getBlockPos()));
         });
         footerActions.item(readyToggleButton);
 
         leaveLobbyButton = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.leave"), () -> {
             footerError = null;
-            ClientPlayNetworking.send(new RaidLeaveLobbyPayload(menu.getBlockPos()));
+            ArenasNetwork.sendToServer(new RaidLeaveLobbyPayload(menu.getBlockPos()));
         });
         footerActions.item(leaveLobbyButton);
 
@@ -970,7 +970,7 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
                 footerError = Component.translatable("gui.arenas_ld.raid_controller.error.all_online_required").getString();
                 return;
             }
-            ClientPlayNetworking.send(new RaidStartRunPayload(menu.getBlockPos()));
+            ArenasNetwork.sendToServer(new RaidStartRunPayload(menu.getBlockPos()));
         });
         start.enabled(canStart);
         startRunButton = start;
@@ -1014,7 +1014,7 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
         if (isOwner && !isLobbyOwner) {
             kickButton = dangerButton(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.kick"), 54, () -> {
                 footerError = null;
-                ClientPlayNetworking.send(new RaidKickFromLobbyPayload(menu.getBlockPos(), member));
+                ArenasNetwork.sendToServer(new RaidKickFromLobbyPayload(menu.getBlockPos(), member));
             });
             row.item(kickButton);
         } else {
@@ -1032,16 +1032,16 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
         DifficultyTier current = ownLobby.map(Lobby::selectedTier).orElse(null);
         Button easy = segmentButton("EASY", tierColor(DifficultyTier.EASY),
             isOwner && isTierEnabled(DifficultyTier.EASY), current == DifficultyTier.EASY,
-            () -> ClientPlayNetworking.send(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.EASY)));
+            () -> ArenasNetwork.sendToServer(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.EASY)));
         Button normal = segmentButton("NORMAL", tierColor(DifficultyTier.NORMAL),
             isOwner && isTierEnabled(DifficultyTier.NORMAL), current == DifficultyTier.NORMAL,
-            () -> ClientPlayNetworking.send(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
+            () -> ArenasNetwork.sendToServer(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
         Button hard = segmentButton("HARD", tierColor(DifficultyTier.HARD),
             isOwner && isTierEnabled(DifficultyTier.HARD), current == DifficultyTier.HARD,
-            () -> ClientPlayNetworking.send(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
+            () -> ArenasNetwork.sendToServer(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
         Button nightmare = segmentButton("NIGHTMARE", tierColor(DifficultyTier.NIGHTMARE),
             isOwner && isTierEnabled(DifficultyTier.NIGHTMARE), current == DifficultyTier.NIGHTMARE,
-            () -> ClientPlayNetworking.send(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NIGHTMARE)));
+            () -> ArenasNetwork.sendToServer(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NIGHTMARE)));
         return segmentedControl(easy, normal, hard, nightmare);
     }
 
@@ -1052,11 +1052,11 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
     private Flex ownerVisibilityControls(boolean isOwner) {
         LobbyVisibility current = ownLobby.map(Lobby::visibility).orElse(null);
         Button pub = segmentButton("PUBLIC", visibilityColor(LobbyVisibility.PUBLIC), isOwner, current == LobbyVisibility.PUBLIC,
-            () -> ClientPlayNetworking.send(new RaidSetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PUBLIC)));
+            () -> ArenasNetwork.sendToServer(new RaidSetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PUBLIC)));
         Button fr = segmentButton("FRIENDS", visibilityColor(LobbyVisibility.FRIENDS), isOwner, current == LobbyVisibility.FRIENDS,
-            () -> ClientPlayNetworking.send(new RaidSetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.FRIENDS)));
+            () -> ArenasNetwork.sendToServer(new RaidSetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.FRIENDS)));
         Button pr = segmentButton("PRIVATE", visibilityColor(LobbyVisibility.PRIVATE), isOwner, current == LobbyVisibility.PRIVATE,
-            () -> ClientPlayNetworking.send(new RaidSetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PRIVATE)));
+            () -> ArenasNetwork.sendToServer(new RaidSetLobbyVisibilityPayload(menu.getBlockPos(), LobbyVisibility.PRIVATE)));
         return segmentedControl(pub, fr, pr);
     }
 
@@ -1076,7 +1076,7 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
             () -> {
                 footerError = null;
                 boolean currentHardcore = ownLobby.map(Lobby::hardcoreEnabled).orElse(false);
-                ClientPlayNetworking.send(new RaidSetLobbyHardcorePayload(menu.getBlockPos(), !currentHardcore));
+                ArenasNetwork.sendToServer(new RaidSetLobbyHardcorePayload(menu.getBlockPos(), !currentHardcore));
             });
         toggle.enabled(isOwner);
         row.item(toggle);
@@ -1146,7 +1146,7 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
             footerError = Component.translatable("gui.arenas_ld.dungeon_controller.error.invitee_not_found").getString();
             return;
         }
-        ClientPlayNetworking.send(new RaidInvitePlayerPayload(menu.getBlockPos(), invitee));
+        ArenasNetwork.sendToServer(new RaidInvitePlayerPayload(menu.getBlockPos(), invitee));
         inviteInput = "";
         if (inviteField != null) {
             inviteField.text("");
@@ -1262,7 +1262,7 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
     private CandidateRow inviteCandidateRow(InviteCandidate candidate) {
         CandidateRow row = new CandidateRow(candidate, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new RaidInvitePlayerPayload(menu.getBlockPos(), candidate.uuid()));
+            ArenasNetwork.sendToServer(new RaidInvitePlayerPayload(menu.getBlockPos(), candidate.uuid()));
             inviteInput = "";
             if (inviteField != null) {
                 inviteField.text("");

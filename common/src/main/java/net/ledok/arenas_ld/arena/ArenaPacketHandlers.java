@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.arena;
 
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.arena.run.ObjectiveType;
@@ -31,6 +30,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 /**
  * Server-side receivers for arena controller actions. Mirrors
@@ -41,7 +41,7 @@ public final class ArenaPacketHandlers {
     private ArenaPacketHandlers() {}
 
     public static void register() {
-        ServerPlayNetworking.registerGlobalReceiver(ArenaLobbyActionPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(ArenaLobbyActionPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 ArenaControllerBlockEntity c = findController(player, payload.controllerPos());
@@ -58,7 +58,7 @@ public final class ArenaPacketHandlers {
                 }
             }));
 
-        ServerPlayNetworking.registerGlobalReceiver(ArenaLobbyTargetPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(ArenaLobbyTargetPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 ArenaControllerBlockEntity c = findController(player, payload.controllerPos());
@@ -76,7 +76,7 @@ public final class ArenaPacketHandlers {
                 }
             }));
 
-        ServerPlayNetworking.registerGlobalReceiver(ArenaSetVisibilityPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(ArenaSetVisibilityPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 ArenaControllerBlockEntity c = findController(player, payload.controllerPos());
@@ -86,7 +86,7 @@ public final class ArenaPacketHandlers {
                 c.setVisibility(player, vis);
             }));
 
-        ServerPlayNetworking.registerGlobalReceiver(ArenaSetHardcorePayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(ArenaSetHardcorePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 ArenaControllerBlockEntity c = findController(player, payload.controllerPos());
@@ -94,7 +94,7 @@ public final class ArenaPacketHandlers {
             }));
 
         // ── Admin ──────────────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(ArenaAdminSetIntPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(ArenaAdminSetIntPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!isAdmin(player)) return;
@@ -117,7 +117,7 @@ public final class ArenaPacketHandlers {
                 }
             }));
 
-        ServerPlayNetworking.registerGlobalReceiver(ArenaAdminSetBoolPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(ArenaAdminSetBoolPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!isAdmin(player)) return;
@@ -126,7 +126,7 @@ public final class ArenaPacketHandlers {
                 // No bool keys currently handled.
             }));
 
-        ServerPlayNetworking.registerGlobalReceiver(ArenaSetRewardCurvePayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(ArenaSetRewardCurvePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!isAdmin(player)) return;
@@ -134,7 +134,7 @@ public final class ArenaPacketHandlers {
                 if (c != null) c.setRewardCurve(payload.currencyBase(), payload.currencyExp(), payload.xpBase(), payload.xpExp());
             }));
 
-        ServerPlayNetworking.registerGlobalReceiver(ArenaMoveInstancePayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(ArenaMoveInstancePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!isAdmin(player)) return;
@@ -142,7 +142,7 @@ public final class ArenaPacketHandlers {
                 if (c != null) c.moveInstance(payload.spawnerPos(), parseDimension(payload.dimension()), payload.direction());
             }));
 
-        ServerPlayNetworking.registerGlobalReceiver(ArenaRemoveInstancePayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(ArenaRemoveInstancePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!isAdmin(player)) return;
@@ -153,7 +153,7 @@ public final class ArenaPacketHandlers {
             }));
 
         // ── Spawner config ──────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(ArenaSpawnerSettingsPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(ArenaSpawnerSettingsPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!isAdmin(player)) return;
@@ -178,7 +178,7 @@ public final class ArenaPacketHandlers {
                 s.setEnabledObjectives(objs);
             }));
 
-        ServerPlayNetworking.registerGlobalReceiver(ArenaSpawnerMobsPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(ArenaSpawnerMobsPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!isAdmin(player)) return;
@@ -186,7 +186,7 @@ public final class ArenaPacketHandlers {
                 if (s != null) s.setMobs(payload.mobs());
             }));
 
-        ServerPlayNetworking.registerGlobalReceiver(ArenaSpawnerRewardsPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(ArenaSpawnerRewardsPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!isAdmin(player)) return;

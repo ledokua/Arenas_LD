@@ -48,6 +48,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
 /**
  * Controller for the wave-survival arena. Mirrors
@@ -58,7 +59,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * non-linear reward curve used by the end-of-run summary.
  */
 public class ArenaControllerBlockEntity extends BlockEntity
-    implements net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory<net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData> {
+    implements ExtendedMenuProvider<net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData> {
 
     public record ControllerKey(BlockPos pos, ResourceKey<Level> dimension) {}
 
@@ -945,5 +946,10 @@ public class ArenaControllerBlockEntity extends BlockEntity
     @Override
     public net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData getScreenOpeningData(ServerPlayer player) {
         return new net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData(worldPosition);
+    }
+
+    @Override
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData> openingDataCodec() {
+        return net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData.CODEC;
     }
 }

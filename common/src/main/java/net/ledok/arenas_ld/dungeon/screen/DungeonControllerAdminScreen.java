@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.MoveDungeonInstancePayload;
 import net.ledok.arenas_ld.dungeon.packet.RemoveDungeonInstancePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetCloseTimerSecondsPayload;
@@ -58,6 +57,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.PANEL;
 import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<DungeonControllerAdminScreenHandler> {
 
@@ -443,14 +443,14 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
 
         Button up = ArenasUi.button(Component.literal("↑"), 22, 18, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), pos, -1));
+            ArenasNetwork.sendToServer(new MoveDungeonInstancePayload(menu.getBlockPos(), pos, -1));
         });
         up.enabled(index > 0);
         row.item(up);
 
         Button down = ArenasUi.button(Component.literal("↓"), 22, 18, () -> {
             footerError = null;
-            ClientPlayNetworking.send(new MoveDungeonInstancePayload(menu.getBlockPos(), pos, 1));
+            ArenasNetwork.sendToServer(new MoveDungeonInstancePayload(menu.getBlockPos(), pos, 1));
         });
         down.enabled(index < instances.size() - 1);
         row.item(down);
@@ -460,12 +460,12 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         if (pending) {
             action = ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.action.cancel"), 64, 18, () -> {
                 footerError = null;
-                ClientPlayNetworking.send(new RemoveDungeonInstancePayload(menu.getBlockPos(), pos));
+                ArenasNetwork.sendToServer(new RemoveDungeonInstancePayload(menu.getBlockPos(), pos));
             });
         } else {
             action = dangerButton(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.action.remove"), 64, () -> {
                 footerError = null;
-                ClientPlayNetworking.send(new RemoveDungeonInstancePayload(menu.getBlockPos(), pos));
+                ArenasNetwork.sendToServer(new RemoveDungeonInstancePayload(menu.getBlockPos(), pos));
             });
         }
         row.item(action);
@@ -989,14 +989,14 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         }
 
         footerError = null;
-        ClientPlayNetworking.send(new net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload(menu.getBlockPos(), nameInput == null ? "" : nameInput));
-        ClientPlayNetworking.send(new SetCooldownTicksPayload(menu.getBlockPos(), cooldown * 20));
-        ClientPlayNetworking.send(new SetCloseTimerSecondsPayload(menu.getBlockPos(), close));
-        ClientPlayNetworking.send(new SetMaxPartySizePayload(menu.getBlockPos(), maxParty));
-        ClientPlayNetworking.send(new SetInviteExpiryTicksPayload(menu.getBlockPos(), invite * 20));
-        ClientPlayNetworking.send(new SetRespawnTimeTicksPayload(menu.getBlockPos(), respawn));
-        ClientPlayNetworking.send(new SetDeathTimePenaltyPayload(menu.getBlockPos(), death * 20));
-        ClientPlayNetworking.send(new net.ledok.arenas_ld.dungeon.packet.SetHpScalePerPlayerPayload(menu.getBlockPos(), hpScalePct / 100.0));
+        ArenasNetwork.sendToServer(new net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload(menu.getBlockPos(), nameInput == null ? "" : nameInput));
+        ArenasNetwork.sendToServer(new SetCooldownTicksPayload(menu.getBlockPos(), cooldown * 20));
+        ArenasNetwork.sendToServer(new SetCloseTimerSecondsPayload(menu.getBlockPos(), close));
+        ArenasNetwork.sendToServer(new SetMaxPartySizePayload(menu.getBlockPos(), maxParty));
+        ArenasNetwork.sendToServer(new SetInviteExpiryTicksPayload(menu.getBlockPos(), invite * 20));
+        ArenasNetwork.sendToServer(new SetRespawnTimeTicksPayload(menu.getBlockPos(), respawn));
+        ArenasNetwork.sendToServer(new SetDeathTimePenaltyPayload(menu.getBlockPos(), death * 20));
+        ArenasNetwork.sendToServer(new net.ledok.arenas_ld.dungeon.packet.SetHpScalePerPlayerPayload(menu.getBlockPos(), hpScalePct / 100.0));
     }
 
     private void applyTier(DifficultyTier tier) {
@@ -1018,7 +1018,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         TierConfig updated = new TierConfig(health, damage, loot, time, enabled, Math.max(0L, reward), Math.max(0, xp));
         tierConfigs.put(tier, updated);
         footerError = null;
-        ClientPlayNetworking.send(new SetTierConfigPayload(menu.getBlockPos(), tier, updated));
+        ArenasNetwork.sendToServer(new SetTierConfigPayload(menu.getBlockPos(), tier, updated));
     }
 
     private Long parseLong(String value) {

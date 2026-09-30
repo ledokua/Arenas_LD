@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.dungeon.blockentity;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.dungeon.screen.MobSpawnerData;
 import net.ledok.arenas_ld.dungeon.screen.MobSpawnerScreenHandler;
@@ -37,8 +36,9 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
-public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvider, EquipmentProvider, ExtendedScreenHandlerFactory<MobSpawnerData> {
+public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvider, EquipmentProvider, ExtendedMenuProvider<MobSpawnerData> {
 
     private EntityDefinition entityDefinition = EntityDefinition.DEFAULT;
     /** Builder-facing label, like the room name: shown in the Dungeon Tool's spawner list. */
@@ -210,5 +210,10 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
     @Override
     public MobSpawnerData getScreenOpeningData(ServerPlayer player) {
         return new MobSpawnerData(worldPosition, entityDefinition.mobId(), entityDefinition.spawnCount(), entityDefinition.wave(), entityDefinition.spawnOffsets(), spawnerName);
+    }
+
+    @Override
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, MobSpawnerData> openingDataCodec() {
+        return MobSpawnerData.STREAM_CODEC;
     }
 }

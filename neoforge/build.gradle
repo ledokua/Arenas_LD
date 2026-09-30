@@ -1,11 +1,7 @@
-// NeoForge glue: @Mod entrypoints and event bridging. The common code is written
-// against Fabric API, provided at runtime by the Forgified Fabric API (Sinytra).
+// NeoForge glue: @Mod entrypoint, the ArenasPlatform service, and the drains that wire the common
+// code's recorded packets (ArenasNetwork) and event listeners (ArenasEvents) into NeoForge.
 plugins {
     id 'net.neoforged.moddev'
-}
-
-repositories {
-    maven { name = 'Sinytra'; url = 'https://maven.su5ed.dev/releases' }
 }
 
 base {
@@ -26,6 +22,13 @@ neoForge {
             server()
             gameDirectory = project.file('run-server')
         }
+        // Headless smoke test of the platform layer (./gradlew :neoforge:runGameTestServer).
+        // Loads the empty template from run-gametest/gameteststructures; no EULA needed.
+        gameTestServer {
+            type = "gameTestServer"
+            gameDirectory = project.file('run-gametest')
+            systemProperty 'neoforge.enabledGameTestNamespaces', 'arenas_ld'
+        }
     }
 
     mods {
@@ -38,10 +41,6 @@ neoForge {
 
 dependencies {
     compileOnly project(path: ':common', configuration: 'namedElements')
-
-    // Forgified Fabric API - provides the Fabric API surface the common module
-    // is written against.
-    implementation "org.sinytra.forgified-fabric-api:forgified-fabric-api:${rootProject.ffapi_version}"
 
     // VectorLib canvas UI (replaces owo-lib). Dev runtime classpath (FML finds mod
     // jars on it) + jar-in-jar for the release jar.

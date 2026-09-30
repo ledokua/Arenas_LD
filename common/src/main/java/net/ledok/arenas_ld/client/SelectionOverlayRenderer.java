@@ -8,8 +8,7 @@ import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+import net.ledok.arenas_ld.client.ArenasClientEvents.WorldRenderContext;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.block.entity.PhaseBlockEntity;
@@ -66,8 +65,8 @@ import java.util.Set;
  * sorting but submission order, so the order is the design: a door's bright violet edge has to win over
  * its own tint or the door stops reading as a door. Both passes are hand-driven ({@link Tesselator} into
  * {@link BufferUploader}) rather than routed through a {@link net.minecraft.client.renderer.RenderType},
- * because {@link WorldRenderEvents#AFTER_TRANSLUCENT} runs after vanilla has flushed its buffer source —
- * {@code context.consumers()} is null there by design — and because a see-through type cannot be built
+ * because the after-translucent hook ({@link ArenasClientEvents#AFTER_TRANSLUCENT}) runs after vanilla has flushed its buffer source —
+ * so the hook deliberately offers no buffer source — and because a see-through type cannot be built
  * from vanilla's shards anyway: {@code RenderStateShard.NO_DEPTH_TEST} is a literal no-op in 1.21.1
  * (both its setup and its clear short-circuit on {@code func == 519}), so a render type declaring it
  * silently inherits whatever depth state the previous stage happened to leave behind.
@@ -447,7 +446,7 @@ public final class SelectionOverlayRenderer {
     }
 
     public static void register() {
-        WorldRenderEvents.AFTER_TRANSLUCENT.register(SelectionOverlayRenderer::render);
+        ArenasClientEvents.AFTER_TRANSLUCENT.add(SelectionOverlayRenderer::render);
     }
 
     /**

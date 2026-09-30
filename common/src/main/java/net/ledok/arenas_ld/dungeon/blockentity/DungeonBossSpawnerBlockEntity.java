@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.dungeon.blockentity;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerData;
 import net.ledok.arenas_ld.dungeon.screen.DungeonBossSpawnerScreenHandler;
@@ -40,8 +39,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
-public class DungeonBossSpawnerBlockEntity extends BlockEntity implements AttributeProvider, EquipmentProvider, ExtendedScreenHandlerFactory<DungeonBossSpawnerData> {
+public class DungeonBossSpawnerBlockEntity extends BlockEntity implements AttributeProvider, EquipmentProvider, ExtendedMenuProvider<DungeonBossSpawnerData> {
 
     private EntityDefinition entityDefinition = EntityDefinition.DEFAULT.withMobId("minecraft:zombie");
     private BlockPos entranceOffset = BlockPos.ZERO;
@@ -299,5 +299,10 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         return new DungeonBossSpawnerData(worldPosition, entityDefinition.mobId(), entityDefinition.wave(),
             getRooms(), getRoomNames(),
             Optional.ofNullable(getAbsoluteStartRoomPos()), Optional.ofNullable(getAbsoluteFinalRoomPos()));
+    }
+
+    @Override
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, DungeonBossSpawnerData> openingDataCodec() {
+        return DungeonBossSpawnerData.STREAM_CODEC;
     }
 }

@@ -25,6 +25,8 @@ import java.util.UUID;
 
 import static net.minecraft.commands.Commands.argument;
 import static net.minecraft.commands.Commands.literal;
+import net.ledok.arenas_ld.platform.ArenasMenus;
+import net.ledok.arenas_ld.platform.ArenasEvents;
 
 public class CommandRegistry {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
@@ -47,15 +49,15 @@ public class CommandRegistry {
                     }
                     var be = player.level().getBlockEntity(hit.getBlockPos());
                     if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity dungeon) {
-                        player.openMenu(new DungeonControllerAdminMenuProvider(dungeon));
+                        ArenasMenus.open(player, new DungeonControllerAdminMenuProvider(dungeon));
                         return 1;
                     }
                     if (be instanceof net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity raid) {
-                        player.openMenu(new RaidControllerAdminMenuProvider(raid));
+                        ArenasMenus.open(player, new RaidControllerAdminMenuProvider(raid));
                         return 1;
                     }
                     if (be instanceof net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity arena) {
-                        player.openMenu(new net.ledok.arenas_ld.arena.screen.ArenaControllerAdminMenuProvider(arena));
+                        ArenasMenus.open(player, new net.ledok.arenas_ld.arena.screen.ArenaControllerAdminMenuProvider(arena));
                         return 1;
                     }
                     context.getSource().sendFailure(Component.translatable("gui.arenas_ld.admin.failure.no_controller"));
@@ -137,7 +139,7 @@ public class CommandRegistry {
             switch (action) {
                 case "ready" -> SpawnerPacketHandlers.performToggleReady(player, controller);
                 case "start" -> SpawnerPacketHandlers.performStartRun(player, controller);
-                case "open" -> player.openMenu(controller);
+                case "open" -> ArenasMenus.open(player, controller);
                 case "accept" -> {
                     controller.acceptInvite(player, lobbyId);
                     controller.setChanged();
@@ -156,7 +158,7 @@ public class CommandRegistry {
             switch (action) {
                 case "ready" -> net.ledok.arenas_ld.raid.RaidPacketHandlers.performToggleReadyRaid(player, raid);
                 case "start" -> net.ledok.arenas_ld.raid.RaidPacketHandlers.performStartRaid(player, raid);
-                case "open" -> player.openMenu(raid);
+                case "open" -> ArenasMenus.open(player, raid);
                 case "accept" -> {
                     raid.acceptInvite(player, lobbyId);
                     net.ledok.arenas_ld.raid.RaidPacketHandlers.broadcastRaidControllerSnapshot(player, raid);
@@ -173,7 +175,7 @@ public class CommandRegistry {
             switch (action) {
                 case "ready" -> arena.toggleReady(player);
                 case "start" -> arena.startRun(player);
-                case "open" -> player.openMenu(arena);
+                case "open" -> ArenasMenus.open(player, arena);
                 case "accept" -> arena.acceptInvite(player, lobbyId);
                 case "decline" -> arena.declineInvite(player, lobbyId);
                 default -> { return 0; }
@@ -185,8 +187,6 @@ public class CommandRegistry {
     }
 
     public static void initialize() {
-        net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            register(dispatcher);
-        });
+        ArenasEvents.REGISTER_COMMANDS.add(CommandRegistry::register);
     }
 }

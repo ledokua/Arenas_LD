@@ -2,16 +2,16 @@ package net.ledok.arenas_ld.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import net.fabricmc.loader.api.FabricLoader;
 import net.ledok.arenas_ld.ArenasLdMod;
 
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Path;
+import net.ledok.arenas_ld.platform.ArenasPlatform;
 
 public class ArenasLdConfig {
-    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve(ArenasLdMod.MOD_ID + ".json");
+    private static final Path CONFIG_PATH = ArenasPlatform.INSTANCE.configDir().resolve(ArenasLdMod.MOD_ID + ".json");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static ArenasLdConfig instance;
 

@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
+import net.ledok.arenas_ld.platform.ArenasMenus;
 
 public class DungeonControllerBlock extends BaseEntityBlock {
     public static final MapCodec<DungeonControllerBlock> CODEC = simpleCodec(DungeonControllerBlock::new);
@@ -57,7 +58,7 @@ public class DungeonControllerBlock extends BaseEntityBlock {
         if (!world.isClientSide) {
             BlockEntity be = world.getBlockEntity(pos);
             if (be instanceof DungeonControllerBlockEntity controller) {
-                player.openMenu(controller);
+                ArenasMenus.open(player, controller);
                 return InteractionResult.CONSUME;
             }
         }

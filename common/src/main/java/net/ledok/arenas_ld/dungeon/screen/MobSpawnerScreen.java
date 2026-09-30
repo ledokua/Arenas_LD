@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.MobSpawnerSetNamePayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateMobSpawnerEntityDefPayload;
 import net.ledok.arenas_ld.screen.ArenasUi;
@@ -41,6 +40,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
 import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 public class MobSpawnerScreen extends FitCanvasHandledScreen<MobSpawnerScreenHandler> {
 
@@ -238,7 +238,7 @@ public class MobSpawnerScreen extends FitCanvasHandledScreen<MobSpawnerScreenHan
         fieldRow.item(nameField);
 
         fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.set_name"), 64, 18,
-            () -> ClientPlayNetworking.send(new MobSpawnerSetNamePayload(menu.getBlockPos(), nameField.text()))));
+            () -> ArenasNetwork.sendToServer(new MobSpawnerSetNamePayload(menu.getBlockPos(), nameField.text()))));
         return fieldRow;
     }
 
@@ -402,7 +402,7 @@ public class MobSpawnerScreen extends FitCanvasHandledScreen<MobSpawnerScreenHan
     }
 
     private void sendApply() {
-        ClientPlayNetworking.send(new UpdateMobSpawnerEntityDefPayload(
+        ArenasNetwork.sendToServer(new UpdateMobSpawnerEntityDefPayload(
             menu.getBlockPos(),
             mobIdField.text(),
             spawnCount,
@@ -422,7 +422,7 @@ public class MobSpawnerScreen extends FitCanvasHandledScreen<MobSpawnerScreenHan
     }
 
     private void openEquipmentScreen() {
-        net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+        net.ledok.arenas_ld.platform.ArenasNetwork.sendToServer(
             new net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload(menu.getBlockPos()));
     }
 

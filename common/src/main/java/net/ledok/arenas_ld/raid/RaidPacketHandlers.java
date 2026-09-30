@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.raid;
 
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
@@ -51,6 +50,7 @@ import java.util.UUID;
 
 import net.ledok.arenas_ld.networking.ModPackets;
 import static net.ledok.arenas_ld.networking.ModPackets.*;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 public final class RaidPacketHandlers {
     private RaidPacketHandlers() {}
@@ -58,7 +58,7 @@ public final class RaidPacketHandlers {
     public static void register() {
 
         // ── Create Lobby ──────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidCreateLobbyPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidCreateLobbyPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (isPlayerBusy(player)) {
@@ -74,7 +74,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Leave Lobby ───────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidLeaveLobbyPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidLeaveLobbyPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -85,7 +85,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Start Raid ────────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidStartRunPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidStartRunPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (isPlayerBusy(player)) {
@@ -100,7 +100,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Invite Player ─────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidInvitePlayerPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidInvitePlayerPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -118,7 +118,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Accept Invite ─────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidAcceptInvitePayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidAcceptInvitePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (isPlayerBusy(player)) {
@@ -134,7 +134,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Decline Invite ────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidDeclineInvitePayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidDeclineInvitePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findControllerByLobbyId(player.server, payload.lobbyId());
@@ -145,7 +145,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Kick Player ───────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidKickFromLobbyPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidKickFromLobbyPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -156,7 +156,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Set Tier ──────────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetLobbyTierPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidSetLobbyTierPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -167,7 +167,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Set Hardcore ──────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetLobbyHardcorePayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidSetLobbyHardcorePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -178,7 +178,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Set Visibility ────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetLobbyVisibilityPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidSetLobbyVisibilityPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -189,7 +189,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Toggle Ready ──────────────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidToggleReadyPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidToggleReadyPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -199,7 +199,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Raid Name ──────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(net.ledok.arenas_ld.raid.packet.RaidSetNamePayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.raid.packet.RaidSetNamePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -211,7 +211,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Join Lobby (PUBLIC) ───────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidJoinLobbyPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidJoinLobbyPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (isPlayerBusy(player)) {
@@ -226,7 +226,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Request Join (FRIENDS) ────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidRequestJoinPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidRequestJoinPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (isPlayerBusy(player)) {
@@ -241,7 +241,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Accept Join Request ───────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidAcceptJoinRequestPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidAcceptJoinRequestPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -252,7 +252,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Decline Join Request ──────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidDeclineJoinRequestPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidDeclineJoinRequestPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
@@ -263,7 +263,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Respawn Time ───────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetRespawnTimeTicksPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidSetRespawnTimeTicksPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -275,7 +275,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Max Party Size ─────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetMaxPartySizePayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidSetMaxPartySizePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -287,7 +287,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Remove Instance ────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidRemoveInstancePayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidRemoveInstancePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -301,7 +301,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Move Instance ──────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidMoveInstancePayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidMoveInstancePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -315,7 +315,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Cooldown ───────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetCooldownTicksPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidSetCooldownTicksPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -327,7 +327,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Close Timer ────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetCloseTimerSecondsPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidSetCloseTimerSecondsPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -339,7 +339,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Invite Expiry ──────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetInviteExpiryTicksPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidSetInviteExpiryTicksPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -351,7 +351,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Tier Config ────────────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetTierConfigPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidSetTierConfigPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -363,7 +363,7 @@ public final class RaidPacketHandlers {
         );
 
         // ── Admin: Set Death Time Penalty ─────────────────────────────────────
-        ServerPlayNetworking.registerGlobalReceiver(RaidSetDeathTimePenaltyPayload.TYPE, (payload, context) ->
+        ArenasNetwork.registerServerReceiver(RaidSetDeathTimePenaltyPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
@@ -460,9 +460,9 @@ public final class RaidPacketHandlers {
         net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload adminSnap =
             new net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload(controller.buildAdminData());
         for (net.minecraft.server.level.ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
-            ServerPlayNetworking.send(target, new RaidControllerSnapshotPayload(controller.getScreenOpeningData(target)));
+            ArenasNetwork.sendToPlayer(target, new RaidControllerSnapshotPayload(controller.getScreenOpeningData(target)));
             if (target.hasPermissions(2)) {
-                ServerPlayNetworking.send(target, adminSnap);
+                ArenasNetwork.sendToPlayer(target, adminSnap);
             }
         }
     }

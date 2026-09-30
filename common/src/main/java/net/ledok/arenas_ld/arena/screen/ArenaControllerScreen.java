@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.arena.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity.ArenaInstanceState;
 import net.ledok.arenas_ld.arena.packet.ArenaLobbyActionPayload;
@@ -71,6 +70,7 @@ import static net.ledok.arenas_ld.screen.ArenasParchment.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasParchment.ROW_BG_ALT;
 import static net.ledok.arenas_ld.screen.ArenasParchment.WARN;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 /**
  * Player lobby view for the arena controller, styled to match the dungeon and raid controller
@@ -1441,7 +1441,7 @@ public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControlle
     // ── Widgets & helpers ─────────────────────────────────────────────────────────
 
     private void send(CustomPacketPayload payload) {
-        ClientPlayNetworking.send(payload);
+        ArenasNetwork.sendToServer(payload);
     }
 
     /** Content-width accent button, 18 px tall — the old owo smallButton renderer lives in ArenasParchment.WIDGETS. */

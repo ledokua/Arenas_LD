@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearDoorPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearProtectPosPayload;
 import net.ledok.arenas_ld.dungeon.packet.RoomClearRespawnPayload;
@@ -47,6 +46,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
 import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerScreenHandler> {
 
@@ -263,7 +263,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
                     if (minecraft == null) return;
                     minecraft.setScreen(new ConfirmScreen(ok -> {
                         minecraft.setScreen(this);
-                        if (ok) ClientPlayNetworking.send(new RoomClearSpawnersPayload(menu.getBlockPos()));
+                        if (ok) ArenasNetwork.sendToServer(new RoomClearSpawnersPayload(menu.getBlockPos()));
                     }, Component.translatable("gui.arenas_ld.room_controller.confirm.clear_title"),
                        Component.translatable("gui.arenas_ld.room_controller.confirm.clear_message")));
                 }));
@@ -275,7 +275,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
                 if (minecraft == null) return;
                 minecraft.setScreen(new ConfirmScreen(ok -> {
                     minecraft.setScreen(this);
-                    if (ok) ClientPlayNetworking.send(new RoomResetPayload(menu.getBlockPos()));
+                    if (ok) ArenasNetwork.sendToServer(new RoomResetPayload(menu.getBlockPos()));
                 }, Component.translatable("gui.arenas_ld.room_controller.confirm.reset_title"),
                    Component.translatable("gui.arenas_ld.room_controller.confirm.reset_message")));
             }));
@@ -295,7 +295,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
         fieldRow.item(field);
 
         fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.set_name"), 64, 18,
-            () -> ClientPlayNetworking.send(new RoomSetNamePayload(menu.getBlockPos(), roomNameInput == null ? "" : roomNameInput))));
+            () -> ArenasNetwork.sendToServer(new RoomSetNamePayload(menu.getBlockPos(), roomNameInput == null ? "" : roomNameInput))));
         return fieldRow;
     }
 
@@ -311,7 +311,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
     private Button objectiveTypeButton(RoomObjectiveConfig.Type type) {
         Button button = ArenasUi.button(
             Component.translatable("gui.arenas_ld.room_controller.objective." + type.getSerializedName()),
-            () -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(type))));
+            () -> ArenasNetwork.sendToServer(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(type))));
         button.style(objectiveType == type ? SEGMENT_ON : SEGMENT_OFF);
         return button;
     }
@@ -350,7 +350,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
         fieldRow.spacer();
 
         fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.set_time"), 64, 18,
-            () -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)))));
+            () -> ArenasNetwork.sendToServer(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)))));
         return fieldRow;
     }
 
@@ -378,7 +378,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
         fieldRow.spacer();
 
         fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.set_time"), 64, 18,
-            () -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)))));
+            () -> ArenasNetwork.sendToServer(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)))));
         return fieldRow;
     }
 
@@ -403,7 +403,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
         fieldRow.item(dropdown.chevron());
 
         fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.set_time"), 64, 18,
-            () -> ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)))));
+            () -> ArenasNetwork.sendToServer(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)))));
 
         container.item(fieldRow);
         container.item(dropdown.panel());
@@ -438,11 +438,11 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
                 : "gui.arenas_ld.room_controller.objective.stationary_off"),
             () -> {
                 protectStationaryInput = !protectStationaryInput;
-                ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)));
+                ArenasNetwork.sendToServer(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)));
             }));
 
         Button clearPos = ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.clear_respawn"),
-            () -> ClientPlayNetworking.send(new RoomClearProtectPosPayload(menu.getBlockPos())));
+            () -> ArenasNetwork.sendToServer(new RoomClearProtectPosPayload(menu.getBlockPos())));
         clearPos.enabled(protectOffset.isPresent());
         posRow.item(clearPos);
 
@@ -463,7 +463,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
         int capturedIndex = index;
         row.item(ArenasUi.button(Component.literal("×"), 20, 16, () -> {
             protectAttributesInput.remove(capturedIndex);
-            ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)));
+            ArenasNetwork.sendToServer(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)));
         }));
         return row;
     }
@@ -518,7 +518,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
         protectAttributesInput.add(new net.ledok.arenas_ld.util.AttributeData(id, value));
         newAttrIdInput = "";
         newAttrValueInput = "";
-        ClientPlayNetworking.send(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)));
+        ArenasNetwork.sendToServer(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)));
     }
 
     private static String formatAttrValue(double value) {
@@ -547,7 +547,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
         row.spacer();
 
         row.item(contentButton(Component.translatable("gui.arenas_ld.room_controller.button.remove"), 16,
-            () -> ClientPlayNetworking.send(new RoomRemoveSpawnerPayload(menu.getBlockPos(), entry.pos()))));
+            () -> ArenasNetwork.sendToServer(new RoomRemoveSpawnerPayload(menu.getBlockPos(), entry.pos()))));
         return row;
     }
 
@@ -567,7 +567,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
         row.spacer();
 
         Button clearDoor = ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.clear_door"),
-            () -> ClientPlayNetworking.send(new RoomClearDoorPayload(menu.getBlockPos())));
+            () -> ArenasNetwork.sendToServer(new RoomClearDoorPayload(menu.getBlockPos())));
         clearDoor.enabled(!doorPositions.isEmpty());
         row.item(clearDoor);
         return row;
@@ -589,7 +589,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
         row.spacer();
 
         Button clear = ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.clear_respawn"),
-            () -> ClientPlayNetworking.send(new RoomClearRespawnPayload(menu.getBlockPos())));
+            () -> ArenasNetwork.sendToServer(new RoomClearRespawnPayload(menu.getBlockPos())));
         clear.enabled(!respawnPositions.isEmpty());
         row.item(clear);
         return row;

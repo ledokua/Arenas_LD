@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
+import net.ledok.arenas_ld.platform.ArenasMenus;
 
 public class RaidControllerBlock extends BaseEntityBlock {
     public static final MapCodec<RaidControllerBlock> CODEC = simpleCodec(RaidControllerBlock::new);
@@ -54,7 +55,7 @@ public class RaidControllerBlock extends BaseEntityBlock {
         if (!level.isClientSide) {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof RaidControllerBlockEntity controller && player instanceof ServerPlayer serverPlayer) {
-                serverPlayer.openMenu(controller);
+                ArenasMenus.open(serverPlayer, controller);
             }
         }
         return InteractionResult.SUCCESS;

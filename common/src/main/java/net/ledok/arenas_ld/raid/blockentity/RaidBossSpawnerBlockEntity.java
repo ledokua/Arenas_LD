@@ -2,7 +2,6 @@ package net.ledok.arenas_ld.raid.blockentity;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.dungeon.blockentity.EntityDefinition;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
@@ -41,8 +40,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
-public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedScreenHandlerFactory<RaidBossSpawnerData>, AttributeProvider, EquipmentProvider {
+public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedMenuProvider<RaidBossSpawnerData>, AttributeProvider, EquipmentProvider {
     // --- Config (arena geometry + mob definition only) ---
     private String groupId = "";
     private BlockPos entranceOffset = BlockPos.ZERO;
@@ -310,5 +310,10 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedS
     @Override
     public RaidBossSpawnerData getScreenOpeningData(ServerPlayer player) {
         return new RaidBossSpawnerData(this.worldPosition);
+    }
+
+    @Override
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, RaidBossSpawnerData> openingDataCodec() {
+        return RaidBossSpawnerData.CODEC;
     }
 }

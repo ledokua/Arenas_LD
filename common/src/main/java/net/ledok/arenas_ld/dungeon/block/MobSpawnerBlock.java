@@ -15,6 +15,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
+import net.ledok.arenas_ld.platform.ArenasMenus;
 
 public class MobSpawnerBlock extends BaseEntityBlock {
     public static final MapCodec<MobSpawnerBlock> CODEC = simpleCodec(MobSpawnerBlock::new);
@@ -51,7 +52,7 @@ public class MobSpawnerBlock extends BaseEntityBlock {
             }
             BlockEntity be = world.getBlockEntity(pos);
             if (be instanceof MobSpawnerBlockEntity mobSpawner) {
-                player.openMenu(mobSpawner);
+                ArenasMenus.open(player, mobSpawner);
                 return InteractionResult.CONSUME;
             }
         }

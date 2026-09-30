@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.raid.manager;
 
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.ledok.arenas_ld.dungeon.run.PlayerReturnPoint;
 import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.util.PendingRestoreStore;
@@ -13,13 +12,13 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 import java.util.WeakHashMap;
+import net.ledok.arenas_ld.platform.ArenasEvents;
 
 public class RaidBossManager {
     private final Set<RaidBossSpawnerBlockEntity> activeSpawners = Collections.newSetFromMap(new WeakHashMap<>());
 
     public void initialize() {
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
-            ServerPlayer player = handler.getPlayer();
+        ArenasEvents.PLAYER_DISCONNECT.add((player, server) -> {
             RaidBossSpawnerBlockEntity spawner = getSpawnerForPlayer(player);
             if (spawner != null) {
                 spawner.handlePlayerDisconnect(player);
@@ -28,8 +27,8 @@ public class RaidBossManager {
 
         // Deferred to the next tick — server.execute runs inline on the server thread, which
         // would teleport from inside the JOIN event (mid placeNewPlayer) and desync the client.
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            UUID uuid = handler.getPlayer().getUUID();
+        ArenasEvents.PLAYER_JOIN.add((joining, server) -> {
+            UUID uuid = joining.getUUID();
             net.ledok.arenas_ld.util.ServerTaskScheduler.nextTick(s -> {
                 ServerPlayer player = s.getPlayerList().getPlayer(uuid);
                 if (player == null) {

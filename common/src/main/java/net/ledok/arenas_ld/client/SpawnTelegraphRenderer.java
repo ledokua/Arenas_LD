@@ -2,8 +2,7 @@ package net.ledok.arenas_ld.client;
 
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+import net.ledok.arenas_ld.client.ArenasClientEvents.WorldRenderContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
@@ -27,7 +26,7 @@ public final class SpawnTelegraphRenderer {
     }
 
     public static void register() {
-        WorldRenderEvents.AFTER_TRANSLUCENT.register(SpawnTelegraphRenderer::render);
+        ArenasClientEvents.AFTER_TRANSLUCENT.add(SpawnTelegraphRenderer::render);
     }
 
     private static void render(WorldRenderContext context) {

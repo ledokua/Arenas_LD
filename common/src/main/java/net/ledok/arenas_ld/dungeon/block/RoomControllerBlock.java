@@ -15,6 +15,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
+import net.ledok.arenas_ld.platform.ArenasMenus;
 
 public class RoomControllerBlock extends BaseEntityBlock {
 
@@ -53,7 +54,7 @@ public class RoomControllerBlock extends BaseEntityBlock {
             }
             BlockEntity be = world.getBlockEntity(pos);
             if (be instanceof RoomControllerBlockEntity room) {
-                player.openMenu(room);
+                ArenasMenus.open(player, room);
                 return InteractionResult.CONSUME;
             }
         }

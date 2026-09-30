@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.mixin.client;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.item.DungeonToolItem;
 import net.ledok.arenas_ld.networking.ModPackets;
 import net.minecraft.client.Minecraft;
@@ -10,6 +9,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 @Mixin(MouseHandler.class)
 public class MouseHandlerMixin {
@@ -19,7 +19,7 @@ public class MouseHandlerMixin {
         Player player = Minecraft.getInstance().player;
         if (player != null && player.isShiftKeyDown()
                 && player.getMainHandItem().getItem() instanceof DungeonToolItem) {
-            ClientPlayNetworking.send(new ModPackets.CycleDungeonToolModePayload(vertical > 0));
+            ArenasNetwork.sendToServer(new ModPackets.CycleDungeonToolModePayload(vertical > 0));
             ci.cancel();
         }
     }

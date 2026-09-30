@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.arena.run;
 
-import net.fabricmc.loader.api.FabricLoader;
 import net.ledok.arenas_ld.ArenasLdMod;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity;
@@ -48,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import net.ledok.arenas_ld.platform.ArenasPlatform;
 
 /**
  * Controller-driven lifecycle for a wave-survival arena run. Mirrors the structure of
@@ -690,7 +690,7 @@ public final class ArenaRunLifecycle {
         int multiplier = run.hardcoreEnabled() ? 2 : 1;
         long currency = controller.computeCurrencyReward(waves) * multiplier;
         int xp = controller.computeXpReward(waves) * multiplier;
-        boolean skillsLoaded = FabricLoader.getInstance().isModLoaded("puffish_skills");
+        boolean skillsLoaded = ArenasPlatform.INSTANCE.isModLoaded("puffish_skills");
 
         for (UUID uuid : run.lootEligibleUuids()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);

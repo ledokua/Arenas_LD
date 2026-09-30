@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -9,8 +8,9 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 
 import java.util.Map;
+import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
-public class DungeonControllerAdminMenuProvider implements ExtendedScreenHandlerFactory<DungeonControllerAdminData> {
+public class DungeonControllerAdminMenuProvider implements ExtendedMenuProvider<DungeonControllerAdminData> {
     private final DungeonControllerBlockEntity controller;
 
     public DungeonControllerAdminMenuProvider(DungeonControllerBlockEntity controller) {
@@ -45,6 +45,11 @@ public class DungeonControllerAdminMenuProvider implements ExtendedScreenHandler
             runningInstances,
             enumerateLootTables(controller.getLevel())
         );
+    }
+
+    @Override
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, DungeonControllerAdminData> openingDataCodec() {
+        return DungeonControllerAdminData.STREAM_CODEC;
     }
 
     private static java.util.List<String> enumerateLootTables(net.minecraft.world.level.Level level) {

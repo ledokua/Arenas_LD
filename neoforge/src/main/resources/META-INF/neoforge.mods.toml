@@ -30,13 +30,6 @@ ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.arenas_ld]]
-modId = "fabric_api"
-type = "required"
-versionRange = "*"
-ordering = "NONE"
-side = "BOTH"
-
-[[dependencies.arenas_ld]]
 modId = "vectorlib"
 type = "required"
 versionRange = "[0.2.6,)"

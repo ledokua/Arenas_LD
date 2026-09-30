@@ -15,6 +15,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
+import net.ledok.arenas_ld.platform.ArenasMenus;
 
 public class DungeonBossSpawnerBlock extends BaseEntityBlock {
     public static final MapCodec<DungeonBossSpawnerBlock> CODEC = simpleCodec(DungeonBossSpawnerBlock::new);
@@ -51,7 +52,7 @@ public class DungeonBossSpawnerBlock extends BaseEntityBlock {
             }
             BlockEntity be = world.getBlockEntity(pos);
             if (be instanceof DungeonBossSpawnerBlockEntity dbs) {
-                player.openMenu(dbs);
+                ArenasMenus.open(player, dbs);
                 return InteractionResult.CONSUME;
             }
         }

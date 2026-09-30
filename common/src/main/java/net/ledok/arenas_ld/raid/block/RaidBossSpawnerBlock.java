@@ -14,6 +14,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
+import net.ledok.arenas_ld.platform.ArenasMenus;
 
 public class RaidBossSpawnerBlock extends BaseEntityBlock {
 
@@ -52,7 +53,7 @@ public class RaidBossSpawnerBlock extends BaseEntityBlock {
 
             BlockEntity blockEntity = world.getBlockEntity(pos);
             if (blockEntity instanceof RaidBossSpawnerBlockEntity) {
-                player.openMenu((RaidBossSpawnerBlockEntity) blockEntity);
+                ArenasMenus.open(player, (RaidBossSpawnerBlockEntity) blockEntity);
                 return InteractionResult.CONSUME;
             }
         }

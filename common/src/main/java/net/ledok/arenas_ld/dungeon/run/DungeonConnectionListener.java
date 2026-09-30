@@ -1,11 +1,11 @@
 package net.ledok.arenas_ld.dungeon.run;
 
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.ledok.arenas_ld.util.DebugLog;
 import net.ledok.arenas_ld.util.ServerTaskScheduler;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.UUID;
+import net.ledok.arenas_ld.platform.ArenasEvents;
 
 /**
  * Routes player logout/login events into the dungeon run lifecycle, which owns the disconnect
@@ -20,11 +20,11 @@ public final class DungeonConnectionListener {
     }
 
     public static void register() {
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
-            DungeonRunLifecycle.handlePlayerDisconnect(server, handler.player));
+        ArenasEvents.PLAYER_DISCONNECT.add((disconnecting, server) ->
+            DungeonRunLifecycle.handlePlayerDisconnect(server, disconnecting));
 
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            UUID uuid = handler.player.getUUID();
+        ArenasEvents.PLAYER_JOIN.add((joining, server) -> {
+            UUID uuid = joining.getUUID();
             ServerTaskScheduler.nextTick(s -> {
                 ServerPlayer player = s.getPlayerList().getPlayer(uuid);
                 if (player == null) {

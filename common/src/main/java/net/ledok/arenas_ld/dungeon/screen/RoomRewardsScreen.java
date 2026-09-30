@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.packet.RoomSetRewardPayload;
 import net.ledok.arenas_ld.dungeon.room.RoomEffectData;
 import net.ledok.arenas_ld.dungeon.room.RoomRewardConfig;
@@ -44,6 +43,7 @@ import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG_ALT;
 import static net.ledok.arenas_ld.screen.ArenasUi.WARN;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 /**
  * Room clear reward editor, opened from the Room Controller screen's "Rewards" button.
@@ -408,7 +408,7 @@ public class RoomRewardsScreen extends FitCanvasHandledScreen<RoomControllerScre
     }
 
     private void sendApplyRewards() {
-        ClientPlayNetworking.send(new RoomSetRewardPayload(menu.getBlockPos(), new RoomRewardConfig(
+        ArenasNetwork.sendToServer(new RoomSetRewardPayload(menu.getBlockPos(), new RoomRewardConfig(
             lootTableInput == null ? "" : lootTableInput.trim(),
             List.copyOf(effectsEdit),
             currencyValue,

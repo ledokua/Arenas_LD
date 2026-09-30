@@ -27,6 +27,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
 /**
  * Passive arena anchor. Holds only arena geometry and wave/mob/reward/cadence configuration; all
@@ -34,7 +35,7 @@ import java.util.List;
  * Mirrors {@link net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity}.
  */
 public class ArenaSpawnerBlockEntity extends BlockEntity
-    implements net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory<net.ledok.arenas_ld.arena.screen.ArenaSpawnerMenuData> {
+    implements ExtendedMenuProvider<net.ledok.arenas_ld.arena.screen.ArenaSpawnerMenuData> {
 
     // --- Geometry / identity ---
     private String groupId = "";
@@ -281,5 +282,10 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
     @Override
     public net.ledok.arenas_ld.arena.screen.ArenaSpawnerMenuData getScreenOpeningData(net.minecraft.server.level.ServerPlayer player) {
         return new net.ledok.arenas_ld.arena.screen.ArenaSpawnerMenuData(worldPosition);
+    }
+
+    @Override
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, net.ledok.arenas_ld.arena.screen.ArenaSpawnerMenuData> openingDataCodec() {
+        return net.ledok.arenas_ld.arena.screen.ArenaSpawnerMenuData.CODEC;
     }
 }

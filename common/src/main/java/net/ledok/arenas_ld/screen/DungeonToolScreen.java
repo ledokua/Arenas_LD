@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.screen;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
@@ -26,6 +25,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 /**
  * The Dungeon Tool's mode picker, opened by RMB in air. Client-only (no menu): picking a mode
@@ -93,7 +93,7 @@ public class DungeonToolScreen extends CanvasScreen {
             ? Component.literal("▶ ").append(mode.getName())
             : mode.getName();
         return new Button(W - 20, 18, label, () -> {
-            ClientPlayNetworking.send(new ModPackets.SetDungeonToolModePayload(
+            ArenasNetwork.sendToServer(new ModPackets.SetDungeonToolModePayload(
                 mode.ordinal(), hand == InteractionHand.MAIN_HAND));
             onClose();
         });
@@ -142,7 +142,7 @@ public class DungeonToolScreen extends CanvasScreen {
             label = Component.literal("▶ ").append(label);
         }
         Button pick = new Button(W - 20 - 21, SPAWNER_ROW_H, label, () -> {
-            ClientPlayNetworking.send(new ModPackets.SetDungeonToolSpawnerPayload(
+            ArenasNetwork.sendToServer(new ModPackets.SetDungeonToolSpawnerPayload(
                 pos, hand == InteractionHand.MAIN_HAND));
             onClose();
         });
@@ -153,7 +153,7 @@ public class DungeonToolScreen extends CanvasScreen {
 
         // Opens the spawner's own settings screen, as if the block were right-clicked.
         row.item(new Button(18, SPAWNER_ROW_H, Component.literal("⚙"), () -> {
-            ClientPlayNetworking.send(new ModPackets.OpenBlockMenuPayload(pos));
+            ArenasNetwork.sendToServer(new ModPackets.OpenBlockMenuPayload(pos));
             onClose();
         }));
         return row;

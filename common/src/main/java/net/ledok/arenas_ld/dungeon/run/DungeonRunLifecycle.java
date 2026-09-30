@@ -431,7 +431,7 @@ public final class DungeonRunLifecycle {
         for (UUID uuid : run.participants().keySet()) {
             ServerPlayer participant = world.getServer().getPlayerList().getPlayer(uuid);
             if (participant != null) {
-                net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(
+                net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(
                     participant, net.ledok.arenas_ld.packet.LootHudClearPayload.INSTANCE);
             }
         }
@@ -636,7 +636,7 @@ public final class DungeonRunLifecycle {
             if (entry.getValue().status() == ParticipantStatus.REMOVED) continue;
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
             if (player != null) {
-                net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(player, payload);
+                net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(player, payload);
             }
         }
     }
@@ -658,7 +658,7 @@ public final class DungeonRunLifecycle {
             rewardPerPlayer *= 2;
         }
         int xpReward = run.resolvedTierConfig().skillExperiencePerWin();
-        boolean puffishLoaded = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("puffish_skills");
+        boolean puffishLoaded = net.ledok.arenas_ld.platform.ArenasPlatform.INSTANCE.isModLoaded("puffish_skills");
 
         for (UUID uuid : run.lootEligibleUuids()) {
             PlayerStatsStore.get(world.getServer()).recordWin(uuid, PlayerStatsStore.Mode.DUNGEON);
@@ -1056,7 +1056,7 @@ public final class DungeonRunLifecycle {
         if (reward.isEmpty()) {
             return;
         }
-        boolean puffishLoaded = net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("puffish_skills");
+        boolean puffishLoaded = net.ledok.arenas_ld.platform.ArenasPlatform.INSTANCE.isModLoaded("puffish_skills");
         List<MobEffectInstance> effectInstances = resolveRewardEffects(reward.effects());
 
         for (UUID uuid : run.lootEligibleUuids()) {

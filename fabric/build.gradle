@@ -30,6 +30,7 @@ dependencies {
 }
 
 loom {
+    accessWidenerPath = project(':common').file("src/main/resources/arenas_ld.accesswidener")
     runs {
         client { ideConfigGenerated = true; runDir = "run" }
         server { ideConfigGenerated = true; runDir = "run-server" }
