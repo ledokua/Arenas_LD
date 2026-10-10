@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.6.1
+
+- Reward loot tables (dungeon and raid completion, room rewards, arena wave rows) now roll with the
+  player's luck, so luck-weighted entries and quality work. Offline winners roll without luck.
+
 ## 4.6.0
 
 Arenas_LD is standalone again: nothing hub-specific is stored in it. Hubs keep their own per-activity

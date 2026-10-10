@@ -38,8 +38,9 @@ public final class RewardDelivery {
     }
 
     /**
-     * Rolls {@code lootTableId} once with GIFT parameters. An unparseable or unknown id
-     * yields an empty list (unknown tables resolve to {@code LootTable.EMPTY}).
+     * Rolls {@code lootTableId} once with GIFT parameters and, for an online player, their luck
+     * attribute (so luck-scaled entries and quality work as they do for fishing or chests). An
+     * unparseable or unknown id yields an empty list (unknown tables resolve to {@code LootTable.EMPTY}).
      */
     public static List<ItemStack> rollLoot(ServerLevel world, String lootTableId,
                                            @Nullable ServerPlayer player, Vec3 origin) {
@@ -57,6 +58,7 @@ public final class RewardDelivery {
             .withParameter(LootContextParams.ORIGIN, origin);
         if (player != null) {
             builder.withParameter(LootContextParams.THIS_ENTITY, player);
+            builder.withLuck(player.getLuck());
         }
         List<ItemStack> rolled = new ArrayList<>();
         for (ItemStack stack : table.getRandomItems(builder.create(LootContextParamSets.GIFT))) {

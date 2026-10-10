@@ -767,6 +767,10 @@ Dungeon Reward, Room Cleared, Raid Reward, Wave Reward or Arena Reward. The popu
 12 seconds — but entering the next room dismisses it (and anything queued behind it) at once, so a
 bonus room's reward never clutters the screen once a fight is starting.
 
+**Loot tables roll with the player's luck** (the `generic.luck` attribute — Luck effects, gear
+and mods that raise it), so luck-weighted entries and quality behave as they do in chests and
+fishing. A winner who is offline at the end rolls with no luck.
+
 **Where a reward actually lands**: into the player's inventory first; overflow to the Economy_LD inbox
 when that mod is present, otherwise dropped at their feet. A winner who is offline gets everything
 through the inbox — without Economy_LD those items are logged and lost. Currency goes to the wallet
