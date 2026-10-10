@@ -16,7 +16,6 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
-import net.ledok.arenas_ld.platform.ArenasMenus;
 
 /**
  * Arena controller block. Mirrors {@link net.ledok.arenas_ld.raid.block.RaidControllerBlock}: a
@@ -52,8 +51,9 @@ public class ArenaControllerBlock extends BaseEntityBlock {
         if (player.getMainHandItem().getItem() instanceof DungeonToolItem || player.getOffhandItem().getItem() instanceof DungeonToolItem) {
             return InteractionResult.PASS;
         }
-        if (!world.isClientSide && world.getBlockEntity(pos) instanceof ArenaControllerBlockEntity controller) {
-            ArenasMenus.open(player, controller);
+        if (!world.isClientSide && world.getBlockEntity(pos) instanceof ArenaControllerBlockEntity controller
+            && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+            net.ledok.arenas_ld.activity.LobbyScreens.open(serverPlayer, controller, false);
             return InteractionResult.CONSUME;
         }
         return InteractionResult.SUCCESS;
@@ -64,5 +64,14 @@ public class ArenaControllerBlock extends BaseEntityBlock {
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level world, BlockState state, BlockEntityType<T> type) {
         if (world.isClientSide) return null;
         return createTickerHelper(type, BlockEntitiesRegistry.ARENA_CONTROLLER_BLOCK_ENTITY, ArenaControllerBlockEntity::tick);
+    }
+
+    /** Breaking (or replacing) the controller removes its activity from the API. */
+    @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
+        if (!state.is(newState.getBlock())) {
+            net.ledok.arenas_ld.activity.ActivityRegistry.detach(level, pos);
+        }
+        super.onRemove(state, level, pos, newState, movedByPiston);
     }
 }

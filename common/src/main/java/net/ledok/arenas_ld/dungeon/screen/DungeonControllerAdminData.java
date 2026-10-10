@@ -33,7 +33,9 @@ public record DungeonControllerAdminData(
     String dungeonName,
     Map<DifficultyTier, TierConfig> tierConfigs,
     Map<BlockPos, InstanceRun> runningInstances,
-    List<String> knownLootTableIds
+    List<String> knownLootTableIds,
+    /** The API id ({@code ActivityHost}); empty only before the first server tick. */
+    String activityId
 ) {
     /** Tier and party label of the run currently occupying an instance. */
     public record InstanceRun(DifficultyTier tier, String party) {}
@@ -93,6 +95,7 @@ public record DungeonControllerAdminData(
         for (String id : data.knownLootTableIds()) {
             buf.writeUtf(id);
         }
+        buf.writeUtf(data.activityId());
     }
 
     private static DungeonControllerAdminData decode(RegistryFriendlyByteBuf buf) {
@@ -157,6 +160,7 @@ public record DungeonControllerAdminData(
         for (int i = 0; i < lootIdCount; i++) {
             knownLootTableIds.add(buf.readUtf());
         }
+        String activityId = buf.readUtf();
 
         return new DungeonControllerAdminData(
             blockPos,
@@ -174,7 +178,8 @@ public record DungeonControllerAdminData(
             dungeonName,
             tierConfigs,
             runningInstances,
-            knownLootTableIds
+            knownLootTableIds,
+            activityId
         );
     }
 }

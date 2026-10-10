@@ -158,6 +158,13 @@ public class ArenasLdClient {
                     screen.applyData(payload.data());
                 }
             }));
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.arena.packet.ArenaControllerSnapshotPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> {
+                if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.arena.screen.ArenaControllerScreen screen
+                        && screen.matchesController(payload.data().blockPos())) {
+                    screen.applyData(payload.data());
+                }
+            }));
         ArenasClientNetwork.registerReceiver(RaidControllerSnapshotPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof RaidControllerScreen screen

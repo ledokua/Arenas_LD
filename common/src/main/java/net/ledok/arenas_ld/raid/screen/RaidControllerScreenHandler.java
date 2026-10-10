@@ -19,7 +19,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-public class RaidControllerScreenHandler extends AbstractContainerMenu {
+public class RaidControllerScreenHandler extends net.ledok.arenas_ld.activity.LobbyMenuBase {
     private final BlockPos pos;
     private List<Lobby> visibleLobbies;
     private Optional<Lobby> ownLobby;
@@ -34,6 +34,7 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
     private Set<UUID> busyPlayers;
     private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
     private Set<DifficultyTier> enabledTiers;
+    private Map<DifficultyTier, net.minecraft.network.chat.Component> lockedTiers;
 
     /** Client-side constructor — called when opening screen from packet data. */
     public RaidControllerScreenHandler(int syncId, Inventory playerInventory, RaidControllerData data) {
@@ -59,6 +60,7 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         this.busyPlayers = Set.of();
         this.topLeaderboards = Map.of();
         this.enabledTiers = Set.of(DifficultyTier.values());
+        this.lockedTiers = Map.of();
     }
 
     public BlockPos getPos() {
@@ -123,6 +125,11 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         return enabledTiers;
     }
 
+    /** Enabled tiers the entry gate refuses this player, with the reason. */
+    public Map<DifficultyTier, net.minecraft.network.chat.Component> getLockedTiers() {
+        return lockedTiers;
+    }
+
     public void applyData(RaidControllerData data) {
         this.visibleLobbies = List.copyOf(data.visibleLobbies());
         this.ownLobby = data.ownLobby();
@@ -137,6 +144,7 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
         this.busyPlayers = Set.copyOf(data.busyPlayers());
         this.topLeaderboards = Map.copyOf(data.topLeaderboards());
         this.enabledTiers = Set.copyOf(data.enabledTiers());
+        this.lockedTiers = Map.copyOf(data.lockedTiers());
     }
 
     @Override
@@ -145,8 +153,17 @@ public class RaidControllerScreenHandler extends AbstractContainerMenu {
     }
 
     @Override
-    public boolean stillValid(Player player) {
-        return player.level().getBlockEntity(pos) instanceof RaidControllerBlockEntity
-            && player.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) <= 64 * 64;
+    public BlockPos lobbyPos() {
+        return pos;
+    }
+
+    @Override
+    protected boolean isController(net.minecraft.world.level.block.entity.BlockEntity be) {
+        return be instanceof RaidControllerBlockEntity;
+    }
+
+    @Override
+    protected double maxDistanceSqr() {
+        return 64 * 64;
     }
 }

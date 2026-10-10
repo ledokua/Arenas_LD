@@ -8,10 +8,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 
-/**
- * Gametest entry point. Individual gametests will be added in later phases as
- * features land (PC-3 gametests, PE-* gametests, etc.).
- */
+/** Gametest entry point: the platform layer smoke test and the public API ({@code ApiGameTests}). */
 public final class ArenasLdGametests implements FabricGameTest {
 
     /** The loader platform layer is wired in a real server: service, packets, menus, commands. */
@@ -26,5 +23,20 @@ public final class ArenasLdGametests implements FabricGameTest {
         var commands = helper.getLevel().getServer().getCommands().getDispatcher().getRoot();
         helper.assertTrue(commands.getChild("arenasld") != null, "/arenasld registered through ArenasEvents");
         helper.succeed();
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void apiActivityIndex(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.activityIndex(helper);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void apiEntryGate(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.entryGate(helper);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void apiCopiedController(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.copiedController(helper);
     }
 }

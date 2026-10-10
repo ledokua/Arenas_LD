@@ -28,6 +28,7 @@ public class RaidControllerAdminScreenHandler extends AbstractContainerMenu {
     private Map<DifficultyTier, RaidTierConfig> tierConfigs;
     private Map<BlockPos, RaidControllerAdminData.InstanceRun> runningInstances;
     private List<String> knownLootTableIds;
+    private String activityId;
 
     public RaidControllerAdminScreenHandler(int syncId, Inventory inventory, RaidControllerAdminData data) {
         super(ModScreenHandlers.RAID_CONTROLLER_ADMIN_SCREEN_HANDLER, syncId);
@@ -52,6 +53,7 @@ public class RaidControllerAdminScreenHandler extends AbstractContainerMenu {
     public Map<DifficultyTier, RaidTierConfig> getTierConfigs() { return tierConfigs; }
     public Map<BlockPos, RaidControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
     public List<String> getKnownLootTableIds() { return knownLootTableIds != null ? knownLootTableIds : List.of(); }
+    public String getActivityId() { return activityId == null ? "" : activityId; }
 
     public void applyData(RaidControllerAdminData data) {
         this.instances = List.copyOf(data.instances());
@@ -66,6 +68,7 @@ public class RaidControllerAdminScreenHandler extends AbstractContainerMenu {
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
+        this.activityId = data.activityId();
     }
 
     @Override

@@ -59,7 +59,8 @@ import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
  * non-linear reward curve used by the end-of-run summary.
  */
 public class ArenaControllerBlockEntity extends BlockEntity
-    implements ExtendedMenuProvider<net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData> {
+    implements ExtendedMenuProvider<net.ledok.arenas_ld.arena.screen.ArenaControllerData>,
+    net.ledok.arenas_ld.activity.ActivityHost {
 
     public record ControllerKey(BlockPos pos, ResourceKey<Level> dimension) {}
 
@@ -126,6 +127,20 @@ public class ArenaControllerBlockEntity extends BlockEntity
 
     private transient boolean chunkForceLoaded = false;
 
+    /** Display name for the hub and chat (arenas had none before the API). */
+    private String arenaName = "";
+    /** Stable API id (e.g. {@code arenas_ld:colosseum}); assigned on the first server tick when missing. */
+    private @Nullable ResourceLocation activityId;
+    /** Whether this controller registered with the activity index this session. Transient. */
+    private transient boolean activityAttached = false;
+    /** Loaded from a save without an activity id (pre-API controller). Transient. */
+    private transient boolean loadedWithoutId = false;
+    /** Lobby state changed since the open lobby screens last got a snapshot. Transient. */
+    private transient boolean viewersDirty = false;
+    private transient long lastViewerPushTick = -1000L;
+    /** Minimum ticks between snapshot pushes (instance cooldowns change every tick). */
+    private static final int VIEWER_PUSH_INTERVAL_TICKS = 4;
+
     public ArenaControllerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.ARENA_CONTROLLER_BLOCK_ENTITY, pos, state);
     }
@@ -155,9 +170,26 @@ public class ArenaControllerBlockEntity extends BlockEntity
     public static void tick(Level level, BlockPos pos, BlockState state, ArenaControllerBlockEntity be) {
         if (level.isClientSide || !(level instanceof ServerLevel serverLevel)) return;
         be.ensureChunkForceLoaded(serverLevel);
+        if (!be.activityAttached) {
+            be.activityAttached = true;
+            net.ledok.arenas_ld.activity.ActivityRegistry.attach(be);
+        }
         be.tickCooldowns(serverLevel);
         be.tickLobbies(serverLevel);
         be.tickActiveRuns(serverLevel);
+        be.pushViewersIfDirty(serverLevel);
+    }
+
+    /** Sends the lobby snapshot to open lobby screens, at most every few ticks. */
+    private void pushViewersIfDirty(ServerLevel serverLevel) {
+        long now = serverLevel.getGameTime();
+        if (!viewersDirty || now - lastViewerPushTick < VIEWER_PUSH_INTERVAL_TICKS) return;
+        viewersDirty = false;
+        lastViewerPushTick = now;
+        for (ServerPlayer viewer : net.ledok.arenas_ld.activity.LobbyScreens.viewers(this)) {
+            net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(viewer,
+                new net.ledok.arenas_ld.arena.packet.ArenaControllerSnapshotPayload(getScreenOpeningData(viewer)));
+        }
     }
 
     private void ensureChunkForceLoaded(ServerLevel serverLevel) {
@@ -220,6 +252,47 @@ public class ArenaControllerBlockEntity extends BlockEntity
     /** Wave ceiling; {@code -1} = endless until wipe or wave-timer expiry. */
     public int getMaxWave() { return maxWave; }
     public void setMaxWave(int w) { this.maxWave = w < 0 ? -1 : w; markDirtyAndSync(); }
+
+    public String getArenaName() { return arenaName; }
+    public void setArenaName(String name) {
+        String trimmed = name == null ? "" : name.trim();
+        if (trimmed.length() > 48) trimmed = trimmed.substring(0, 48);
+        if (arenaName.equals(trimmed)) return;
+        arenaName = trimmed;
+        markDirtyAndSync();
+        refreshActivity();
+    }
+
+    // ── Activity (public API) ──────────────────────────────────────────────
+    @Override
+    public net.ledok.arenas_ld.api.ArenasApi.ActivityType activityType() {
+        return net.ledok.arenas_ld.api.ArenasApi.ActivityType.ARENA;
+    }
+    @Override public @Nullable ResourceLocation activityId() { return activityId; }
+    @Override public boolean loadedWithoutId() { return loadedWithoutId; }
+    @Override public void storeActivityId(ResourceLocation id) { activityId = id; markDirtyAndSync(); }
+    @Override public String activityName() { return arenaName; }
+    @Override public void setActivityName(String name) { setArenaName(name); }
+    @Override
+    public void clearCopiedState(@Nullable net.ledok.arenas_ld.activity.ActivityHost original) {
+        activeRuns.clear();
+        instances.clear();
+        pendingInstanceRemovals.clear();
+        leaderboard.clear();
+        lobbies.clear();
+        queuedLobbyIds.clear();
+        pendingInvites.clear();
+        pendingJoinRequests.clear();
+        offlineSinceTick.clear();
+        markDirtyAndSync();
+    }
+
+    /** Arenas have no difficulty tiers. */
+    @Override public List<DifficultyTier> enabledTiers() { return List.of(); }
+
+    private void refreshActivity() {
+        if (activityAttached) net.ledok.arenas_ld.activity.ActivityRegistry.refresh(this);
+    }
 
     public double getRewardCurrencyBase() { return rewardCurrencyBase; }
     public double getRewardCurrencyExp() { return rewardCurrencyExp; }
@@ -344,6 +417,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
         UUID uuid = player.getUUID();
         String name = player.getGameProfile().getName();
         if (getLobbyByMember(uuid) != null) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, null)) return false;
         Set<UUID> members = new HashSet<>();
         members.add(uuid);
         Map<UUID, String> memberNames = new HashMap<>();
@@ -401,6 +475,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
         ServerPlayer target = sl.getServer().getPlayerList().getPlayer(inviteeUuid);
         if (target == null || target.getUUID().equals(inviter.getUUID())) return false;
         if (getLobbyByMember(target.getUUID()) != null) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allowOther(sl.getServer(), inviter, inviteeUuid, this, null, false)) return false;
         for (PendingInvite invite : pendingInvites) {
             if (invite.lobbyId().equals(lobby.lobbyId()) && invite.invitedUuid().equals(target.getUUID())) return false;
         }
@@ -430,6 +505,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
             markDirtyAndSync();
             return false;
         }
+        if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, null)) return false;
         pendingInvites.remove(invite);
         pendingInvites.removeIf(i -> i.invitedUuid().equals(uuid));
         replaceLobby(lobby.withMemberAdded(uuid, player.getGameProfile().getName()));
@@ -495,6 +571,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
         if (lobby == null || lobby.visibility() != LobbyVisibility.PUBLIC) return false;
         if (lobby.status() == LobbyStatus.IN_RUN || lobby.status() == LobbyStatus.DISBANDED) return false;
         if (lobby.isFull(getMaxPartySize())) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, null)) return false;
         replaceLobby(lobby.withMemberAdded(uuid, player.getGameProfile().getName()));
         markDirtyAndSync();
         return true;
@@ -507,6 +584,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
         if (lobby == null || lobby.visibility() != LobbyVisibility.FRIENDS) return false;
         if (lobby.status() == LobbyStatus.IN_RUN || lobby.status() == LobbyStatus.DISBANDED) return false;
         if (lobby.isFull(getMaxPartySize())) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, null)) return false;
         for (PendingJoinRequest req : pendingJoinRequests) {
             if (req.lobbyId().equals(lobbyId) && req.requesterUuid().equals(uuid)) return false;
         }
@@ -523,6 +601,10 @@ public class ArenaControllerBlockEntity extends BlockEntity
         if (req == null) return false;
         pendingJoinRequests.remove(req);
         if (getLobbyByMember(requesterUuid) != null || lobby.isFull(getMaxPartySize()) || lobby.status() == LobbyStatus.IN_RUN) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allowOther(owner.server, owner, requesterUuid, this, null, true)) {
+            markDirtyAndSync();
+            return false;
+        }
         String requesterName = req.requesterName();
         if (level instanceof ServerLevel sl) {
             ServerPlayer requester = sl.getServer().getPlayerList().getPlayer(requesterUuid);
@@ -550,6 +632,11 @@ public class ArenaControllerBlockEntity extends BlockEntity
             return false;
         }
         if (lobby.status() == LobbyStatus.IN_RUN || !(level instanceof ServerLevel serverLevel)) return false;
+        Component refusal = net.ledok.arenas_ld.activity.EntryGates.partyRefusal(serverLevel.getServer(), lobby, this, null);
+        if (refusal != null) {
+            notifyLobbyMembers(lobby, refusal);
+            return false;
+        }
 
         ArenaInstanceState freeInst = reserveFreeInstance();
         if (freeInst == null) {
@@ -674,6 +761,15 @@ public class ArenaControllerBlockEntity extends BlockEntity
             promoteNextQueuedLobby();
             return;
         }
+        // The queue launches on its own, so the party is re-checked here (levels may have changed).
+        Component refusal = net.ledok.arenas_ld.activity.EntryGates.partyRefusal(serverLevel.getServer(), lobby, this, null);
+        if (refusal != null) {
+            queuedLobbyIds.remove(0);
+            notifyLobbyMembers(lobby, refusal);
+            markDirtyAndSync();
+            promoteNextQueuedLobby();
+            return;
+        }
         ArenaInstanceState freeInst = reserveFreeInstance();
         if (freeInst == null) return;
         queuedLobbyIds.remove(0);
@@ -760,6 +856,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
     }
 
     public void markDirtyAndSync() {
+        viewersDirty = true;
         setChanged();
         if (level instanceof ServerLevel serverLevel) {
             serverLevel.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
@@ -868,11 +965,16 @@ public class ArenaControllerBlockEntity extends BlockEntity
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save ArenaController at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
+        nbt.putString("ArenaName", arenaName);
+        if (activityId != null) nbt.putString("ActivityId", activityId.toString());
     }
 
     @Override
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.loadAdditional(nbt, registryLookup);
+        arenaName = nbt.getString("ArenaName");
+        activityId = nbt.contains("ActivityId") ? ResourceLocation.tryParse(nbt.getString("ActivityId")) : null;
+        loadedWithoutId = activityId == null;
         if (!nbt.contains("State", Tag.TAG_COMPOUND)) return;
         State.CODEC.parse(NbtOps.INSTANCE, nbt.get("State"))
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load ArenaController at {}: {}", worldPosition, err))
@@ -943,13 +1045,43 @@ public class ArenaControllerBlockEntity extends BlockEntity
         return new net.ledok.arenas_ld.arena.screen.ArenaControllerScreenHandler(syncId, inventory, this);
     }
 
+    /** What one player's lobby screen shows: visible lobbies plus their own, their invites, the queue. */
     @Override
-    public net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData getScreenOpeningData(ServerPlayer player) {
-        return new net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData(worldPosition);
+    public net.ledok.arenas_ld.arena.screen.ArenaControllerData getScreenOpeningData(ServerPlayer player) {
+        UUID me = player.getUUID();
+        Lobby own = getLobbyByMember(me);
+        List<Lobby> shown = new ArrayList<>();
+        Set<UUID> inLobby = new HashSet<>();
+        Set<UUID> inRun = new HashSet<>();
+        for (Lobby lobby : lobbies) {
+            (lobby.status() == LobbyStatus.IN_RUN ? inRun : inLobby).addAll(lobby.members());
+            if (lobby == own || (lobby.status() != LobbyStatus.DISBANDED && lobby.visibility() != LobbyVisibility.PRIVATE)) {
+                shown.add(lobby);
+            }
+        }
+        List<PendingInvite> myInvites = new ArrayList<>();
+        for (PendingInvite invite : pendingInvites) {
+            if (invite.invitedUuid().equals(me)) myInvites.add(invite);
+        }
+        List<PendingJoinRequest> myRequests = new ArrayList<>();
+        if (own != null && own.isOwner(me)) {
+            for (PendingJoinRequest req : pendingJoinRequests) {
+                if (req.lobbyId().equals(own.lobbyId())) myRequests.add(req);
+            }
+        }
+        int queuePosition = own == null ? 0 : queuedLobbyIds.indexOf(own.lobbyId()) + 1;
+        List<net.ledok.arenas_ld.arena.screen.ArenaControllerData.InstanceView> instanceViews = new ArrayList<>();
+        for (ArenaInstanceState inst : instances) {
+            instanceViews.add(new net.ledok.arenas_ld.arena.screen.ArenaControllerData.InstanceView(
+                inst.status(), inst.cooldownTicksRemaining()));
+        }
+        return new net.ledok.arenas_ld.arena.screen.ArenaControllerData(worldPosition, shown, queuePosition,
+            instanceViews, List.copyOf(leaderboard), myInvites, myRequests, inLobby, inRun,
+            getMaxPartySize(), maxWave);
     }
 
     @Override
-    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData> openingDataCodec() {
-        return net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData.CODEC;
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, net.ledok.arenas_ld.arena.screen.ArenaControllerData> openingDataCodec() {
+        return net.ledok.arenas_ld.arena.screen.ArenaControllerData.STREAM_CODEC;
     }
 }

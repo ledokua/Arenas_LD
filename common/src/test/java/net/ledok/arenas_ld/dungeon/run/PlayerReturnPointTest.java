@@ -22,7 +22,8 @@ class PlayerReturnPointTest {
             new Vec3(123.5, 64.0, -47.875),
             180.0f,
             -10.5f,
-            GameType.CREATIVE
+            GameType.CREATIVE,
+            true
         );
         Tag encoded = PlayerReturnPoint.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow();
         DataResult<PlayerReturnPoint> decoded = PlayerReturnPoint.CODEC.parse(NbtOps.INSTANCE, encoded);
@@ -40,7 +41,8 @@ class PlayerReturnPointTest {
             new Vec3(0.0, 100.0, 0.0),
             0.0f,
             0.0f,
-            GameType.SURVIVAL
+            GameType.SURVIVAL,
+            false
         );
         PlayerReturnPoint decoded = PlayerReturnPoint.CODEC.parse(NbtOps.INSTANCE,
             PlayerReturnPoint.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow()
@@ -56,12 +58,23 @@ class PlayerReturnPointTest {
             Vec3.ZERO,
             47.123f,
             -89.456f,
-            GameType.ADVENTURE
+            GameType.ADVENTURE,
+            false
         );
         PlayerReturnPoint decoded = PlayerReturnPoint.CODEC.parse(NbtOps.INSTANCE,
             PlayerReturnPoint.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow()
         ).getOrThrow();
         assertEquals(47.123f, decoded.yaw());
         assertEquals(-89.456f, decoded.pitch());
+    }
+
+    /** Return points saved before the flag existed (in-flight runs, pending restores) keep effects. */
+    @Test
+    void oldSavesDefaultToKeepingEffects() {
+        PlayerReturnPoint withFlag = new PlayerReturnPoint(Level.OVERWORLD, Vec3.ZERO, 0f, 0f, GameType.SURVIVAL, true);
+        net.minecraft.nbt.CompoundTag tag = (net.minecraft.nbt.CompoundTag) PlayerReturnPoint.CODEC
+            .encodeStart(NbtOps.INSTANCE, withFlag).getOrThrow();
+        tag.remove("clearEffects");
+        assertEquals(false, PlayerReturnPoint.CODEC.parse(NbtOps.INSTANCE, tag).getOrThrow().clearEffects());
     }
 }

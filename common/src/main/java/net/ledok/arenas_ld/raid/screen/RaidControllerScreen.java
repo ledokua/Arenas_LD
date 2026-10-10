@@ -720,10 +720,14 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
         inviteCountdownLabels.put(invite.lobbyId(), countdown);
         row.item(countdown);
 
-        row.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, 18, () -> {
+        Component inviteLock = lockReason(inviteTier);
+        Button accept = ArenasParchment.button(inviteLock != null ? inviteLock
+            : Component.translatable("gui.arenas_ld.dungeon_controller.button.accept"), 54, 18, () -> {
             footerError = null;
             ArenasNetwork.sendToServer(new RaidAcceptInvitePayload(menu.getBlockPos(), invite.lobbyId()));
-        }));
+        });
+        accept.enabled(inviteLock == null);
+        row.item(accept);
         row.item(ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.button.decline"), 58, 18, () -> {
             footerError = null;
             ArenasNetwork.sendToServer(new RaidDeclineInvitePayload(menu.getBlockPos(), invite.lobbyId()));
@@ -740,7 +744,8 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
         ownerInfo.sizing(Sizing.expand(), Sizing.content());
         Flex nameLine = Flex.row().gap(5).alignItems(Align.CENTER);
         nameLine.sizing(Sizing.expand(), Sizing.content());
-        nameLine.item(text(Component.literal(lobby.ownerName()), INK));
+        Component lock = lockReason(lobby.selectedTier());
+        nameLine.item(text(Component.literal(lobby.ownerName()), lock != null ? INK_DIM : INK));
         if (lobby.hardcoreEnabled()) {
             nameLine.item(badge(Component.literal("H"), DANGER));
         }
@@ -748,7 +753,8 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
         ownerInfo.item(text(Component.literal(shortUuid(lobby.lobbyId()).toUpperCase()), INK_DIM));
         row.item(ownerInfo);
         row.item(fixedBadge(Component.literal(lobby.members().size() + "/" + menu.getMaxPartySize()), 44, INK_MID).box());
-        row.item(fixedBadge(Component.literal(lobby.selectedTier().name()), 70, tierColor(lobby.selectedTier())).box());
+        row.item(fixedBadge(Component.literal(lobby.selectedTier().name()), 70,
+            lock != null ? INK_DIM : tierColor(lobby.selectedTier())).box());
 
         Flex visCell = Flex.row().gap(4).padding(Insets.of(4, 4, 2, 4)).justify(Justify.CENTER).alignItems(Align.CENTER);
         visCell.sizing(Sizing.fixed(78), Sizing.content());
@@ -773,6 +779,10 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
             actionButton.enabled(false);
         } else if (isFull) {
             actionButton = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.full"), 84, 18, () -> {});
+            actionButton.enabled(false);
+        } else if (lock != null && !isMine) {
+            // The entry gate refuses this lobby's difficulty: show why instead of Join/Request.
+            actionButton = ArenasParchment.button(lock, 84, 18, () -> {});
             actionButton.enabled(false);
         } else if (lobby.visibility() == LobbyVisibility.PUBLIC) {
             actionButton = ArenasParchment.button(Component.translatable("gui.arenas_ld.dungeon_controller.ui.action.join"), 84, 18, () -> {
@@ -1030,23 +1040,26 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
 
     private Flex ownerTierControls(boolean isOwner) {
         DifficultyTier current = ownLobby.map(Lobby::selectedTier).orElse(null);
-        Button easy = segmentButton("EASY", tierColor(DifficultyTier.EASY),
-            isOwner && isTierEnabled(DifficultyTier.EASY), current == DifficultyTier.EASY,
-            () -> ArenasNetwork.sendToServer(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.EASY)));
-        Button normal = segmentButton("NORMAL", tierColor(DifficultyTier.NORMAL),
-            isOwner && isTierEnabled(DifficultyTier.NORMAL), current == DifficultyTier.NORMAL,
-            () -> ArenasNetwork.sendToServer(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NORMAL)));
-        Button hard = segmentButton("HARD", tierColor(DifficultyTier.HARD),
-            isOwner && isTierEnabled(DifficultyTier.HARD), current == DifficultyTier.HARD,
-            () -> ArenasNetwork.sendToServer(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.HARD)));
-        Button nightmare = segmentButton("NIGHTMARE", tierColor(DifficultyTier.NIGHTMARE),
-            isOwner && isTierEnabled(DifficultyTier.NIGHTMARE), current == DifficultyTier.NIGHTMARE,
-            () -> ArenasNetwork.sendToServer(new RaidSetLobbyTierPayload(menu.getBlockPos(), DifficultyTier.NIGHTMARE)));
-        return segmentedControl(easy, normal, hard, nightmare);
+        DifficultyTier[] tiers = DifficultyTier.values();
+        Button[] buttons = new Button[tiers.length];
+        Component[] notes = new Component[tiers.length];
+        for (int i = 0; i < tiers.length; i++) {
+            DifficultyTier tier = tiers[i];
+            notes[i] = isTierEnabled(tier) ? lockReason(tier) : null;
+            buttons[i] = segmentButton(tier.name(), notes[i] != null ? INK_DIM : tierColor(tier),
+                isOwner && isTierEnabled(tier) && notes[i] == null, current == tier,
+                () -> ArenasNetwork.sendToServer(new RaidSetLobbyTierPayload(menu.getBlockPos(), tier)));
+        }
+        return segmentedControl(notes, buttons);
     }
 
     private boolean isTierEnabled(DifficultyTier tier) {
         return menu.getEnabledTiers().contains(tier);
+    }
+
+    /** The entry gate's reason this player may not pick {@code tier}, or null. */
+    private @org.jetbrains.annotations.Nullable Component lockReason(DifficultyTier tier) {
+        return menu.getLockedTiers().get(tier);
     }
 
     private Flex ownerVisibilityControls(boolean isOwner) {
@@ -1577,15 +1590,26 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
     }
 
     private Flex segmentedControl(Button... buttons) {
-        Flex row = Flex.row().alignItems(Align.CENTER);
+        return segmentedControl(new Component[buttons.length], buttons);
+    }
+
+    /** As {@link #segmentedControl(Button...)}, with an optional note (a lock reason) under each segment. */
+    private Flex segmentedControl(Component[] notes, Button... buttons) {
+        Flex row = Flex.row().alignItems(Align.START);
         row.sizing(Sizing.fill(), Sizing.content());
         int n = buttons.length;
         int base = 100 / n;
         for (int i = 0; i < n; i++) {
             int pct = (i == n - 1) ? (100 - base * (n - 1)) : base;
-            Flex cell = Flex.column().padding(Insets.of(0, i == n - 1 ? 0 : 3, 0, i == 0 ? 0 : 3));
+            Flex cell = Flex.column().gap(2).padding(Insets.of(0, i == n - 1 ? 0 : 3, 0, i == 0 ? 0 : 3));
             cell.sizing(Sizing.fill(pct / 100f), Sizing.content());
             cell.item(buttons[i]);
+            if (notes[i] != null) {
+                Label note = ArenasParchment.label(100, notes[i], DANGER).tooltipWhenCut(true);
+                note.align(TextNode.Align.CENTER);
+                note.sizing(Sizing.fill(), Sizing.content());
+                cell.item(note);
+            }
             row.item(cell);
         }
         return row;
@@ -1698,13 +1722,15 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
     public void applyData(RaidControllerData data) {
         Optional<Lobby> previousOwnLobby = this.ownLobby;
         int previousQueuePosition = this.lastQueuePosition;
+        java.util.Map<DifficultyTier, Component> previousLocks = menu.getLockedTiers();
         menu.applyData(data);
         syncFromMenu(true);
         this.lastQueuePosition = menu.getQueuePosition();
 
         // Queue position changed → the banner appears/disappears, so do a full rebuild rather than
-        // the in-place member refresh (which wouldn't add/remove the banner).
-        if (this.lastQueuePosition != previousQueuePosition) {
+        // the in-place member refresh (which wouldn't add/remove the banner). Same for the entry
+        // gate's locks: the tier picker and lobby rows show them.
+        if (this.lastQueuePosition != previousQueuePosition || !previousLocks.equals(menu.getLockedTiers())) {
             rebuildUi();
             return;
         }

@@ -113,7 +113,7 @@ class ArenaRunTest {
         original.addParticipant(new RunParticipant(UUID_B, "Bob", ParticipantStatus.DOWNED, 150L));
 
         original.setReturnPoint(UUID_A, new PlayerReturnPoint(
-            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(0, 64, 0), 0f, 0f, GameType.SURVIVAL));
+            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(0, 64, 0), 0f, 0f, GameType.SURVIVAL, false));
         original.setDowned(new DownedPlayer(UUID_B, 25));
         original.markDisconnected(UUID_C, 999L);
 

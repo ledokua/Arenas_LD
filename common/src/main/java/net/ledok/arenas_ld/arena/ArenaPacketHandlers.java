@@ -206,8 +206,8 @@ public final class ArenaPacketHandlers {
     @Nullable
     private static ArenaControllerBlockEntity findController(ServerPlayer player, BlockPos pos) {
         if (player == null || pos == null) return null;
-        BlockEntity be = player.level().getBlockEntity(pos);
-        return be instanceof ArenaControllerBlockEntity c ? c : null;
+        // The open lobby screen's controller (any dimension), else the block at pos in this level.
+        return net.ledok.arenas_ld.activity.LobbyScreens.controller(player, pos, ArenaControllerBlockEntity.class);
     }
 
     private static boolean busy(ServerPlayer player) {

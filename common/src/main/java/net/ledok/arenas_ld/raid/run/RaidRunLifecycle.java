@@ -215,7 +215,7 @@ public final class RaidRunLifecycle {
         for (ServerPlayer p : players) {
             run.addParticipant(new RunParticipant(
                 p.getUUID(), p.getGameProfile().getName(), ParticipantStatus.ACTIVE, now));
-            run.setReturnPoint(p.getUUID(), PlayerReturnPoint.capture(p));
+            run.setReturnPoint(p.getUUID(), PlayerReturnPoint.capture(p, false));
             // Everyone is online now; the snapshot pays an offline winner their perks later.
             net.ledok.arenas_ld.util.EndRewardPerks.snapshot(run.perkSnapshots(), p.getUUID(), net.ledok.arenas_ld.util.EndRewardPerks.Mode.RAID);
             PlayerStatsStore.get(world.getServer()).recordRunStart(p.getUUID(), PlayerStatsStore.Mode.RAID);
@@ -429,7 +429,15 @@ public final class RaidRunLifecycle {
                 net.ledok.arenas_ld.util.RewardDelivery.displayableCurrency(currency), grantedXp);
         }
 
+        // Before enterClosing: with no close timer it finalizes and releases the run right away.
+        fireRunResult(world, controller, run, true);
         enterClosing(world, controller, run);
+    }
+
+    /** Reports the finished run to {@code ArenasApi} run listeners. */
+    private static void fireRunResult(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, boolean win) {
+        net.ledok.arenas_ld.activity.RunEvents.fire(controller, run.tier(), win, run.startTick(), world.getGameTime(), 0,
+            run.participants().keySet());
     }
 
     static void handleLoss(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, String reason) {
@@ -452,6 +460,7 @@ public final class RaidRunLifecycle {
             }
         }
 
+        fireRunResult(world, controller, run, false);
         enterClosing(world, controller, run);
     }
 

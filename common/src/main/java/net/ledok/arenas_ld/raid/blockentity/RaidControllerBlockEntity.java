@@ -57,7 +57,7 @@ import java.util.UUID;
 import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
 public class RaidControllerBlockEntity extends BlockEntity
-    implements ExtendedMenuProvider<RaidControllerData> {
+    implements ExtendedMenuProvider<RaidControllerData>, net.ledok.arenas_ld.activity.ActivityHost {
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Inner types
@@ -137,6 +137,14 @@ public class RaidControllerBlockEntity extends BlockEntity
     private int disconnectGraceTicks = DEFAULT_DISCONNECT_GRACE_TICKS;
     private int lobbyOfflineTimeoutTicks = DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS;
     private String raidName = "";
+    /** Stable API id (e.g. {@code arenas_ld:dragon}); assigned on the first server tick when missing. */
+    private @Nullable ResourceLocation activityId;
+    /** Whether this controller registered with the activity index this session. Transient. */
+    private transient boolean activityAttached = false;
+    /** Loaded from a save without an activity id (pre-API controller). Transient. */
+    private transient boolean loadedWithoutId = false;
+    /** Entry-gate locks each open lobby screen last got. Transient. */
+    private final transient net.ledok.arenas_ld.activity.LockWatch lockWatch = new net.ledok.arenas_ld.activity.LockWatch();
     /** Per-tier raid configs (health/damage multipliers, time limit, enabled, reward currency). */
     private final Map<DifficultyTier, RaidTierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
     /** Instances queued for removal once their current run ends. */
@@ -273,10 +281,19 @@ public class RaidControllerBlockEntity extends BlockEntity
             return;
         }
         be.ensureChunkForceLoaded(serverLevel);
+        if (!be.activityAttached) {
+            be.activityAttached = true;
+            net.ledok.arenas_ld.activity.ActivityRegistry.attach(be);
+        }
         be.tickCooldowns(serverLevel);
         be.tickQueuePriority(serverLevel);
         be.tickLobbies(serverLevel);
         be.tickActiveRuns(serverLevel);
+        // A gate verdict can change on its own (a level-up): re-send those screens.
+        for (ServerPlayer viewer : be.lockWatch.changedViewers(be, serverLevel.getGameTime())) {
+            net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(viewer,
+                new net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload(be.getScreenOpeningData(viewer)));
+        }
     }
 
     /** Force-load this controller's chunk (once per session) so it keeps ticking unattended. */
@@ -416,6 +433,73 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
         this.raidName = trimmed;
         markDirtyAndSync();
+        refreshActivity();
+    }
+
+    // ── Activity (public API) ──────────────────────────────────────────────
+
+    @Override
+    public net.ledok.arenas_ld.api.ArenasApi.ActivityType activityType() {
+        return net.ledok.arenas_ld.api.ArenasApi.ActivityType.RAID;
+    }
+
+    @Override
+    public @Nullable ResourceLocation activityId() {
+        return activityId;
+    }
+
+    @Override
+    public boolean loadedWithoutId() {
+        return loadedWithoutId;
+    }
+
+    @Override
+    public void storeActivityId(ResourceLocation id) {
+        this.activityId = id;
+        markDirtyAndSync();
+    }
+
+    @Override
+    public String activityName() {
+        return raidName;
+    }
+
+    @Override
+    public void setActivityName(String name) {
+        setRaidName(name);
+    }
+
+    @Override
+    public void clearCopiedState(@Nullable net.ledok.arenas_ld.activity.ActivityHost original) {
+        activeRuns.clear();
+        instances.clear();
+        pendingInstanceRemovals.clear();
+        leaderboards.values().forEach(List::clear);
+        lobbies.clear();
+        queuedLobbyIds.clear();
+        priorityFrontLobby = null;
+        priorityFrontSinceTick = -1L;
+        pendingInvites.clear();
+        pendingJoinRequests.clear();
+        offlineSinceTick.clear();
+        markDirtyAndSync();
+    }
+
+    @Override
+    public List<DifficultyTier> enabledTiers() {
+        List<DifficultyTier> enabled = new ArrayList<>();
+        for (DifficultyTier tier : DifficultyTier.values()) {
+            if (isTierEnabled(tier)) {
+                enabled.add(tier);
+            }
+        }
+        return enabled;
+    }
+
+    private void refreshActivity() {
+        if (activityAttached) {
+            net.ledok.arenas_ld.activity.ActivityRegistry.refresh(this);
+        }
     }
 
     public Map<DifficultyTier, RaidTierConfig> getTierConfigs() {
@@ -430,6 +514,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         if (tier == null || config == null) return;
         tierConfigs.put(tier, config);
         markDirtyAndSync();
+        refreshActivity();
     }
 
     /** Live read-only view of in-progress raid runs, keyed by spawner position. */
@@ -617,6 +702,10 @@ public class RaidControllerBlockEntity extends BlockEntity
             player.sendSystemMessage(Component.translatable("message.arenas_ld.lobby.no_tiers_enabled"));
             return false;
         }
+        defaultTier = firstEnterableTier(player, defaultTier);
+        if (defaultTier == null) {
+            return false;
+        }
         Set<UUID> members = new HashSet<>();
         members.add(uuid);
         Map<UUID, String> memberNames = new HashMap<>();
@@ -680,6 +769,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         ServerPlayer target = sl.getServer().getPlayerList().getPlayer(inviteeUuid);
         if (target == null || target.getUUID().equals(inviter.getUUID())) return false;
         if (getLobbyByMember(target.getUUID()) != null) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allowOther(sl.getServer(), inviter, inviteeUuid, this, lobby.selectedTier(), false)) return false;
         // Check if already has pending invite
         for (PendingInvite invite : pendingInvites) {
             if (invite.lobbyId().equals(lobby.lobbyId()) && invite.invitedUuid().equals(target.getUUID())) return false;
@@ -717,6 +807,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             markDirtyAndSync();
             return false;
         }
+        if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, lobby.selectedTier())) return false;
 
         pendingInvites.remove(invite);
         // Also remove other invites for this player
@@ -768,6 +859,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         if (lobby == null || !lobby.isOwner(player.getUUID())) return false;
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
         if (!isTierEnabled(tier)) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, tier)) return false;
         replaceLobby(lobby.withTier(tier));
         markDirtyAndSync();
         return true;
@@ -789,6 +881,24 @@ public class RaidControllerBlockEntity extends BlockEntity
                 return tier;
             }
         }
+        return null;
+    }
+
+    /**
+     * The entry gate's pick for a new lobby: {@code preferred} when the owner may enter it, else
+     * the first enabled tier they may. Null (with the preferred tier's reason sent) when none.
+     */
+    private @Nullable DifficultyTier firstEnterableTier(ServerPlayer owner, DifficultyTier preferred) {
+        Component refusal = net.ledok.arenas_ld.activity.EntryGates.check(owner, this, preferred);
+        if (refusal == null) {
+            return preferred;
+        }
+        for (DifficultyTier tier : enabledTiers()) {
+            if (net.ledok.arenas_ld.activity.EntryGates.check(owner, this, tier) == null) {
+                return tier;
+            }
+        }
+        owner.sendSystemMessage(refusal);
         return null;
     }
 
@@ -848,6 +958,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         if (lobby.visibility() != net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility.PUBLIC) return false;
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN || lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.DISBANDED) return false;
         if (lobby.isFull(getMaxPartySize())) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, lobby.selectedTier())) return false;
 
         Lobby updated = lobby.withMemberAdded(uuid, player.getGameProfile().getName());
         replaceLobby(updated);
@@ -866,6 +977,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         if (lobby.visibility() != net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility.FRIENDS) return false;
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN || lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.DISBANDED) return false;
         if (lobby.isFull(getMaxPartySize())) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, lobby.selectedTier())) return false;
         // No duplicate requests
         for (PendingJoinRequest req : pendingJoinRequests) {
             if (req.lobbyId().equals(lobbyId) && req.requesterUuid().equals(uuid)) return false;
@@ -893,6 +1005,10 @@ public class RaidControllerBlockEntity extends BlockEntity
         if (getLobbyByMember(requesterUuid) != null) return false;
         if (lobby.isFull(getMaxPartySize())) return false;
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allowOther(owner.server, owner, requesterUuid, this, lobby.selectedTier(), true)) {
+            markDirtyAndSync();
+            return false;
+        }
 
         String requesterName = req.requesterName();
         if (level instanceof ServerLevel sl) {
@@ -934,6 +1050,11 @@ public class RaidControllerBlockEntity extends BlockEntity
         // The builder may have disabled the tier while the lobby was forming.
         if (!isTierEnabled(lobby.selectedTier())) {
             notifyLobbyMembers(lobby, Component.translatable("message.arenas_ld.lobby.tier_disabled"));
+            return false;
+        }
+        Component refusal = net.ledok.arenas_ld.activity.EntryGates.partyRefusal(serverLevel.getServer(), lobby, this, lobby.selectedTier());
+        if (refusal != null) {
+            notifyLobbyMembers(lobby, refusal);
             return false;
         }
 
@@ -1204,7 +1325,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         if (!(level instanceof ServerLevel serverLevel) || serverLevel.getServer() == null) {
             return;
         }
-        for (ServerPlayer target : serverLevel.getServer().getPlayerList().getPlayers()) {
+        for (ServerPlayer target : net.ledok.arenas_ld.activity.LobbyScreens.viewers(this)) {
             net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(target,
                 new net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload(getScreenOpeningData(target)));
         }
@@ -1396,6 +1517,9 @@ public class RaidControllerBlockEntity extends BlockEntity
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save RaidController at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
         nbt.putString("RaidName", raidName);
+        if (activityId != null) {
+            nbt.putString("ActivityId", activityId.toString());
+        }
     }
 
     @Override
@@ -1460,6 +1584,8 @@ public class RaidControllerBlockEntity extends BlockEntity
                 });
         }
         raidName = nbt.getString("RaidName");
+        activityId = nbt.contains("ActivityId") ? ResourceLocation.tryParse(nbt.getString("ActivityId")) : null;
+        loadedWithoutId = activityId == null;
     }
 
     @Override
@@ -1590,7 +1716,8 @@ public class RaidControllerBlockEntity extends BlockEntity
             serverTick,
             busyPlayers,
             topLeaderboards,
-            enabledTiers
+            enabledTiers,
+            lockWatch.locksFor(player, this)
         );
     }
 
@@ -1645,7 +1772,8 @@ public class RaidControllerBlockEntity extends BlockEntity
             raidName,
             new EnumMap<>(tierConfigs),
             running,
-            knownLootTableIds
+            knownLootTableIds,
+            activityId == null ? "" : activityId.toString()
         );
     }
 

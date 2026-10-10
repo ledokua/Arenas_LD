@@ -16,7 +16,6 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
-import net.ledok.arenas_ld.platform.ArenasMenus;
 
 public class RaidControllerBlock extends BaseEntityBlock {
     public static final MapCodec<RaidControllerBlock> CODEC = simpleCodec(RaidControllerBlock::new);
@@ -55,9 +54,18 @@ public class RaidControllerBlock extends BaseEntityBlock {
         if (!level.isClientSide) {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof RaidControllerBlockEntity controller && player instanceof ServerPlayer serverPlayer) {
-                ArenasMenus.open(serverPlayer, controller);
+                net.ledok.arenas_ld.activity.LobbyScreens.open(serverPlayer, controller, false);
             }
         }
         return InteractionResult.SUCCESS;
+    }
+
+    /** Breaking (or replacing) the controller removes its activity from the API. */
+    @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
+        if (!state.is(newState.getBlock())) {
+            net.ledok.arenas_ld.activity.ActivityRegistry.detach(level, pos);
+        }
+        super.onRemove(state, level, pos, newState, movedByPiston);
     }
 }

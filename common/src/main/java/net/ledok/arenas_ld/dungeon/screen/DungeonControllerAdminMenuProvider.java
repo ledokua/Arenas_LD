@@ -43,7 +43,8 @@ public class DungeonControllerAdminMenuProvider implements ExtendedMenuProvider<
             controller.getDungeonName(),
             controller.getTierConfigs(),
             runningInstances,
-            enumerateLootTables(controller.getLevel())
+            enumerateLootTables(controller.getLevel()),
+            controller.activityId() == null ? "" : controller.activityId().toString()
         );
     }
 

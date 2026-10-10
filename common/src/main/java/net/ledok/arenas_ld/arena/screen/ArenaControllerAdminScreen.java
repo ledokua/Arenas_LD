@@ -43,6 +43,7 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
     private Flex dynamicArea;
     private final Map<String, TextField> intFields = new LinkedHashMap<>();
     private TextField currencyBase, currencyExp, xpBase, xpExp;
+    private TextField nameField, idField;
     private Object lastDynamicSig;
 
     public ArenaControllerAdminScreen(ArenaControllerAdminScreenHandler handler, Inventory inventory, Component title) {
@@ -120,6 +121,12 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
     private Flex buildSettings(ArenaControllerBlockEntity c) {
         Flex box = Flex.column().gap(4);
         box.sizing(Sizing.fill(), Sizing.content());
+        box.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.identity")));
+        nameField = textRow(box, Component.translatable("gui.arenas_ld.arena.name"), c.getArenaName(), 48);
+        idField = textRow(box, Component.translatable("gui.arenas_ld.arena.activity_id"),
+            c.activityId() == null ? "" : c.activityId().toString(), 128);
+
+        box.item(ArenasUi.spacer(4));
         box.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.settings")));
         box.item(intField("maxPartySize", Component.translatable("gui.arenas_ld.arena.max_party"), c.getMaxPartySize()));
         box.item(intField("maxWave", Component.translatable("gui.arenas_ld.arena.max_wave"), c.getMaxWave()));
@@ -193,6 +200,8 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
     }
 
     private void saveSettings() {
+        ArenasNetwork.sendToServer(new net.ledok.arenas_ld.packet.SetActivityInfoPayload(pos,
+            idField.text().trim(), nameField.text().trim()));
         intFields.forEach((key, field) -> {
             try {
                 ArenasNetwork.sendToServer(new ArenaAdminSetIntPayload(pos, key, Integer.parseInt(field.text().trim())));
@@ -218,6 +227,19 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
         intFields.put(key, box);
         row.item(box);
         return row;
+    }
+
+    /** Caption + wide text box (name, id). */
+    private TextField textRow(Flex parent, Component caption, String value, int maxLength) {
+        Flex row = Flex.row().gap(6).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.fixed(20));
+        var label = ArenasUi.label(180, caption, INK_DIM);
+        label.sizing(Sizing.fixed(180), Sizing.content());
+        row.item(label);
+        TextField box = ArenasUi.textField(240, value, maxLength).size(240, 16);
+        row.item(box);
+        parent.item(row);
+        return box;
     }
 
     private TextField labeledBox(Flex parent, Component caption, String value) {

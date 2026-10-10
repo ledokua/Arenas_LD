@@ -130,7 +130,7 @@ public final class DungeonRunLifecycle {
                 ParticipantStatus.ACTIVE,
                 world.getGameTime()
             ));
-            run.setReturnPoint(uuid, PlayerReturnPoint.capture(player));
+            run.setReturnPoint(uuid, PlayerReturnPoint.capture(player, true));
             // Everyone is online now; the snapshot pays an offline winner their perks later.
             net.ledok.arenas_ld.util.EndRewardPerks.snapshot(run.perkSnapshots(), uuid, net.ledok.arenas_ld.util.EndRewardPerks.Mode.DUNGEON);
             ArenasLdMod.DUNGEON_MANAGER.registerParticipant(uuid, run);
@@ -721,6 +721,13 @@ public final class DungeonRunLifecycle {
         // Swap the run timer for the close countdown right away, not on the next second tick.
         RunHudSync.send(world, hudTargets(run), closeHudPayload(run));
         sendExitPrompt(world, run);
+        fireRunResult(world, controller, run, true);
+    }
+
+    /** Reports the finished run to {@code ArenasApi} run listeners. */
+    private static void fireRunResult(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, boolean win) {
+        net.ledok.arenas_ld.activity.RunEvents.fire(controller, run.tier(), win, run.startTick(), world.getGameTime(), 0,
+            run.participants().keySet());
     }
 
     static void handleLoss(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, DungeonOutcome reason) {
@@ -761,6 +768,7 @@ public final class DungeonRunLifecycle {
             net.minecraft.sounds.SoundEvents.ANVIL_LAND, 0.6f, 0.7f);
 
         run.setOutcome(reason);
+        fireRunResult(world, controller, run, false);
 
         // If nobody is left in the run, there's no one to wait for — close out immediately
         // rather than ticking through the (pointless) close timer.
@@ -1298,9 +1306,12 @@ public final class DungeonRunLifecycle {
         }
         player.setGameMode(rp.previousGameMode());
         player.setHealth(player.getMaxHealth());
-        // Leaving a run wipes all status effects — covers players who were offline when the run
-        // ended (pending-restore on next login) as well as early exits during CLOSING.
-        player.removeAllEffects();
+        // Leaving a dungeon or arena wipes all status effects — covers players who were offline when
+        // the run ended (pending-restore on next login) as well as early exits during CLOSING. A
+        // raid's pending restore picked up here keeps them, as a raid exit does.
+        if (rp.clearEffects()) {
+            player.removeAllEffects();
+        }
     }
 
     /** Sends a message to every online, non-removed participant except {@code except} (nullable). */

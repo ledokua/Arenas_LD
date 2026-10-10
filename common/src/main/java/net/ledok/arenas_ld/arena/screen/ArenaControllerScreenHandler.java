@@ -1,42 +1,51 @@
 package net.ledok.arenas_ld.arena.screen;
 
+import net.ledok.arenas_ld.activity.LobbyMenuBase;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.screen.ModScreenHandlers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
+import java.util.Set;
+
 /**
- * Player-facing arena controller menu. Holds the (client-synced) controller block entity; the owo
- * screen reads live lobby/instance state from it each refresh.
+ * Player-facing arena controller menu. Client side it holds the latest {@link ArenaControllerData}
+ * (opening data, then {@code ArenaControllerSnapshotPayload} pushes); the screen reads only that.
  */
-public class ArenaControllerScreenHandler extends AbstractContainerMenu {
+public class ArenaControllerScreenHandler extends LobbyMenuBase {
     private final BlockPos pos;
-    @Nullable public final ArenaControllerBlockEntity controller;
-    public final Player player;
+    private ArenaControllerData data;
 
-    public ArenaControllerScreenHandler(int syncId, Inventory playerInventory, ArenaControllerMenuData data) {
-        this(syncId, playerInventory,
-            playerInventory.player.level().getBlockEntity(data.blockPos()) instanceof ArenaControllerBlockEntity c ? c : null,
-            data.blockPos());
-    }
-
-    public ArenaControllerScreenHandler(int syncId, Inventory playerInventory, ArenaControllerBlockEntity blockEntity) {
-        this(syncId, playerInventory, blockEntity, blockEntity.getBlockPos());
-    }
-
-    private ArenaControllerScreenHandler(int syncId, Inventory playerInventory, @Nullable ArenaControllerBlockEntity controller, BlockPos pos) {
+    /** Client side: built from the opening data. */
+    public ArenaControllerScreenHandler(int syncId, Inventory playerInventory, ArenaControllerData data) {
         super(ModScreenHandlers.ARENA_CONTROLLER_SCREEN_HANDLER, syncId);
-        this.controller = controller;
-        this.player = playerInventory.player;
-        this.pos = pos;
+        this.pos = data.blockPos();
+        this.data = data;
+    }
+
+    /** Server side: the controller's own menu (the data is only sent, never read here). */
+    public ArenaControllerScreenHandler(int syncId, Inventory playerInventory, ArenaControllerBlockEntity blockEntity) {
+        super(ModScreenHandlers.ARENA_CONTROLLER_SCREEN_HANDLER, syncId);
+        this.pos = blockEntity.getBlockPos();
+        this.data = new ArenaControllerData(pos, List.of(), 0, List.of(), List.of(), List.of(), List.of(),
+            Set.of(), Set.of(), blockEntity.getMaxPartySize(), blockEntity.getMaxWave());
     }
 
     public BlockPos getBlockPos() {
         return pos;
+    }
+
+    public ArenaControllerData data() {
+        return data;
+    }
+
+    public void applyData(ArenaControllerData data) {
+        this.data = data;
     }
 
     @Override
@@ -45,8 +54,17 @@ public class ArenaControllerScreenHandler extends AbstractContainerMenu {
     }
 
     @Override
-    public boolean stillValid(Player player) {
-        return player.level().getBlockEntity(pos) instanceof ArenaControllerBlockEntity
-            && player.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) <= 64 * 64;
+    public BlockPos lobbyPos() {
+        return pos;
+    }
+
+    @Override
+    protected boolean isController(@Nullable BlockEntity be) {
+        return be instanceof ArenaControllerBlockEntity;
+    }
+
+    @Override
+    protected double maxDistanceSqr() {
+        return 64 * 64;
     }
 }

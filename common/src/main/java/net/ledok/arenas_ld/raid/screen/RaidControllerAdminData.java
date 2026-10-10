@@ -30,7 +30,9 @@ public record RaidControllerAdminData(
     String raidName,
     Map<DifficultyTier, RaidTierConfig> tierConfigs,
     Map<BlockPos, InstanceRun> runningInstances,
-    List<String> knownLootTableIds
+    List<String> knownLootTableIds,
+    /** The API id ({@code ActivityHost}); empty only before the first server tick. */
+    String activityId
 ) {
     /** One registered raid instance with its current status. */
     public record InstanceEntry(BlockPos spawnerPos, String dimension, InstanceStatus status, int cooldownTicksRemaining) {}
@@ -85,6 +87,7 @@ public record RaidControllerAdminData(
         for (String id : data.knownLootTableIds()) {
             buf.writeUtf(id);
         }
+        buf.writeUtf(data.activityId());
     }
 
     private static RaidControllerAdminData decode(RegistryFriendlyByteBuf buf) {
@@ -140,6 +143,7 @@ public record RaidControllerAdminData(
         for (int i = 0; i < lootIdCount; i++) {
             knownLootTableIds.add(buf.readUtf());
         }
+        String activityId = buf.readUtf();
 
         return new RaidControllerAdminData(
             blockPos,
@@ -154,7 +158,8 @@ public record RaidControllerAdminData(
             raidName,
             tierConfigs,
             runningInstances,
-            knownLootTableIds
+            knownLootTableIds,
+            activityId
         );
     }
 }

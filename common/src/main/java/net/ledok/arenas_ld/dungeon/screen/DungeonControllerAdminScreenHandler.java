@@ -32,6 +32,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     private Map<DifficultyTier, TierConfig> tierConfigs;
     private Map<BlockPos, DungeonControllerAdminData.InstanceRun> runningInstances;
     private List<String> knownLootTableIds;
+    private String activityId;
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerAdminData data) {
         super(ModScreenHandlers.DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER, syncId);
@@ -51,6 +52,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
+        this.activityId = data.activityId();
     }
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerBlockEntity controller) {
@@ -70,7 +72,8 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
             controller.getDungeonName(),
             controller.getTierConfigs(),
             Map.of(),
-            enumerateLootTables(controller.getLevel())
+            enumerateLootTables(controller.getLevel()),
+            controller.activityId() == null ? "" : controller.activityId().toString()
         ));
     }
 
@@ -108,6 +111,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     public Map<DifficultyTier, TierConfig> getTierConfigs() { return tierConfigs; }
     public Map<BlockPos, DungeonControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
     public List<String> getKnownLootTableIds() { return knownLootTableIds; }
+    public String getActivityId() { return activityId == null ? "" : activityId; }
 
     public void applyData(DungeonControllerAdminData data) {
         this.instances = List.copyOf(data.instances());
@@ -125,6 +129,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.tierConfigs = Map.copyOf(data.tierConfigs());
         this.runningInstances = Map.copyOf(data.runningInstances());
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
+        this.activityId = data.activityId();
     }
 
     @Override

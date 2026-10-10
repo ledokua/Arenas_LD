@@ -747,5 +747,21 @@
   "hud.arenas_ld.loot.currency": "+%s Gold",
   "hud.arenas_ld.loot.xp": "+%s XP",
   "hud.arenas_ld.loot.to_inbox": "inbox",
-  "hud.arenas_ld.loot.to_ground": "dropped"
+  "hud.arenas_ld.loot.to_ground": "dropped",
+  "activity.arenas_ld.unnamed.dungeon": "Unnamed dungeon",
+  "activity.arenas_ld.unnamed.raid": "Unnamed raid",
+  "activity.arenas_ld.unnamed.arena": "Unnamed arena",
+  "message.arenas_ld.activity.invalid_id": "\"%s\" is not a valid activity id (lowercase letters, digits and _ - . /, optionally namespace:path)",
+  "message.arenas_ld.activity.id_taken": "Activity id %s is already used by the controller at %s",
+  "message.arenas_ld.activity.list_empty": "No activities yet.",
+  "message.arenas_ld.activity.list_header": "Activities (%s):",
+  "message.arenas_ld.activity.unknown": "Unknown activity: %s",
+  "message.arenas_ld.activity.forgotten": "Removed activity %s from the index",
+  "message.arenas_ld.gate.player_refused": "%s can't enter: %s",
+  "message.arenas_ld.gate.start_refused": "Can't start: not everyone may enter this difficulty.",
+  "gui.arenas_ld.admin.activity_id": "ACTIVITY ID",
+  "gui.arenas_ld.admin.activity_id_hint": "unique, e.g. arenas_ld:crypt",
+  "gui.arenas_ld.arena.name": "Name",
+  "gui.arenas_ld.arena.activity_id": "Activity id",
+  "gui.arenas_ld.arena.identity": "Name and id"
 }

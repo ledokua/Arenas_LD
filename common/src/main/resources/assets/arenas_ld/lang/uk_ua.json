@@ -747,5 +747,21 @@
   "hud.arenas_ld.loot.currency": "+%s золота",
   "hud.arenas_ld.loot.xp": "+%s досвіду",
   "hud.arenas_ld.loot.to_inbox": "у скриньку",
-  "hud.arenas_ld.loot.to_ground": "випало"
+  "hud.arenas_ld.loot.to_ground": "випало",
+  "activity.arenas_ld.unnamed.dungeon": "Підземелля без назви",
+  "activity.arenas_ld.unnamed.raid": "Рейд без назви",
+  "activity.arenas_ld.unnamed.arena": "Арена без назви",
+  "message.arenas_ld.activity.invalid_id": "«%s» — недійсний ідентифікатор (малі латинські літери, цифри та _ - . /, за бажанням простір:шлях)",
+  "message.arenas_ld.activity.id_taken": "Ідентифікатор %s уже має контролер у %s",
+  "message.arenas_ld.activity.list_empty": "Активностей ще немає.",
+  "message.arenas_ld.activity.list_header": "Активності (%s):",
+  "message.arenas_ld.activity.unknown": "Невідома активність: %s",
+  "message.arenas_ld.activity.forgotten": "Активність %s прибрано з індексу",
+  "message.arenas_ld.gate.player_refused": "%s не може увійти: %s",
+  "message.arenas_ld.gate.start_refused": "Неможливо почати: не всі можуть увійти на цю складність.",
+  "gui.arenas_ld.admin.activity_id": "ІДЕНТИФІКАТОР АКТИВНОСТІ",
+  "gui.arenas_ld.admin.activity_id_hint": "унікальний, напр. arenas_ld:crypt",
+  "gui.arenas_ld.arena.name": "Назва",
+  "gui.arenas_ld.arena.activity_id": "Ідентифікатор активності",
+  "gui.arenas_ld.arena.identity": "Назва та ідентифікатор"
 }

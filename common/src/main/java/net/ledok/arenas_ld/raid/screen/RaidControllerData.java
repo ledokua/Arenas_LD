@@ -10,6 +10,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
 
@@ -36,7 +38,9 @@ public record RaidControllerData(
     long serverGameTick,
     Set<UUID> busyPlayers,
     Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards,
-    Set<DifficultyTier> enabledTiers
+    Set<DifficultyTier> enabledTiers,
+    /** Enabled tiers the entry gate refuses this viewer, with the reason to show. */
+    Map<DifficultyTier, Component> lockedTiers
 ) {
     /**
      * Flat data representation of a single raid instance, suitable for sending to the client.
@@ -104,6 +108,12 @@ public record RaidControllerData(
         buf.writeVarInt(data.enabledTiers().size());
         for (DifficultyTier tier : data.enabledTiers()) {
             DifficultyTier.STREAM_CODEC.encode(buf, tier);
+        }
+
+        buf.writeVarInt(data.lockedTiers().size());
+        for (Map.Entry<DifficultyTier, Component> entry : data.lockedTiers().entrySet()) {
+            DifficultyTier.STREAM_CODEC.encode(buf, entry.getKey());
+            ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, entry.getValue());
         }
     }
 
@@ -177,10 +187,17 @@ public record RaidControllerData(
             enabledTiers.add(DifficultyTier.STREAM_CODEC.decode(buf));
         }
 
+        int lockedCount = buf.readVarInt();
+        Map<DifficultyTier, Component> lockedTiers = new EnumMap<>(DifficultyTier.class);
+        for (int i = 0; i < lockedCount; i++) {
+            DifficultyTier tier = DifficultyTier.STREAM_CODEC.decode(buf);
+            lockedTiers.put(tier, ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf));
+        }
+
         return new RaidControllerData(
             blockPos, visible, own, invites, joinReqs, instances,
             queuePosition, estimatedWaitSeconds, maxPartySize, respawnTimeTicks, serverGameTick, busyPlayers,
-            topLeaderboards, enabledTiers
+            topLeaderboards, enabledTiers, lockedTiers
         );
     }
 

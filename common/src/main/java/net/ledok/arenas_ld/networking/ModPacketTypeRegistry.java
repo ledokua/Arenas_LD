@@ -123,7 +123,6 @@ final class ModPacketTypeRegistry {
         ArenasNetwork.playC2S(SetCooldownTicksPayload.TYPE, SetCooldownTicksPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(SetCloseTimerSecondsPayload.TYPE, SetCloseTimerSecondsPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(SetMaxPartySizePayload.TYPE, SetMaxPartySizePayload.STREAM_CODEC);
-        ArenasNetwork.playC2S(net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload.TYPE, net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload.STREAM_CODEC);
         ArenasNetwork.playC2S(SetRespawnTimeTicksPayload.TYPE, SetRespawnTimeTicksPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(SetDeathTimePenaltyPayload.TYPE, SetDeathTimePenaltyPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(SetHpScalePerPlayerPayload.TYPE, SetHpScalePerPlayerPayload.STREAM_CODEC);
@@ -147,7 +146,6 @@ final class ModPacketTypeRegistry {
         ArenasNetwork.playC2S(RaidDeclineJoinRequestPayload.TYPE, RaidDeclineJoinRequestPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(RaidSetRespawnTimeTicksPayload.TYPE, RaidSetRespawnTimeTicksPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(RaidSetMaxPartySizePayload.TYPE, RaidSetMaxPartySizePayload.STREAM_CODEC);
-        ArenasNetwork.playC2S(net.ledok.arenas_ld.raid.packet.RaidSetNamePayload.TYPE, net.ledok.arenas_ld.raid.packet.RaidSetNamePayload.STREAM_CODEC);
         ArenasNetwork.playC2S(RaidRemoveInstancePayload.TYPE, RaidRemoveInstancePayload.STREAM_CODEC);
         ArenasNetwork.playC2S(RaidMoveInstancePayload.TYPE, RaidMoveInstancePayload.STREAM_CODEC);
         ArenasNetwork.playC2S(RaidSetCooldownTicksPayload.TYPE, RaidSetCooldownTicksPayload.STREAM_CODEC);
@@ -169,6 +167,7 @@ final class ModPacketTypeRegistry {
         ArenasNetwork.playC2S(net.ledok.arenas_ld.arena.packet.ArenaSpawnerSettingsPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaSpawnerSettingsPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(net.ledok.arenas_ld.arena.packet.ArenaSpawnerMobsPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaSpawnerMobsPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(net.ledok.arenas_ld.arena.packet.ArenaSpawnerRewardsPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaSpawnerRewardsPayload.STREAM_CODEC);
+        ArenasNetwork.playC2S(net.ledok.arenas_ld.packet.SetActivityInfoPayload.TYPE, net.ledok.arenas_ld.packet.SetActivityInfoPayload.STREAM_CODEC);
     }
 
     static void registerS2CTypes() {
@@ -186,5 +185,6 @@ final class ModPacketTypeRegistry {
         ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.LootRewardPayload.TYPE, net.ledok.arenas_ld.packet.LootRewardPayload.STREAM_CODEC);
         ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.LootHudClearPayload.TYPE, net.ledok.arenas_ld.packet.LootHudClearPayload.STREAM_CODEC);
         ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.RunHudPayload.TYPE, net.ledok.arenas_ld.packet.RunHudPayload.STREAM_CODEC);
+        ArenasNetwork.playS2C(net.ledok.arenas_ld.arena.packet.ArenaControllerSnapshotPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaControllerSnapshotPayload.STREAM_CODEC);
     }
 }

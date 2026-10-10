@@ -131,6 +131,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
     private Button nightmareTabButton;
 
     private String nameInput;
+    private String activityIdInput;
     private String cooldownInput;
     private String closeTimerInput;
     private String maxPartyInput;
@@ -503,6 +504,9 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         contentArea.item(ArenasUi.spacer(2));
         contentArea.item(nameFieldRow());
         contentArea.item(ArenasUi.spacer(8));
+        contentArea.item(textFieldRow(tr("gui.arenas_ld.admin.activity_id"), tr("gui.arenas_ld.admin.activity_id_hint"),
+            activityIdInput, 128, v -> activityIdInput = v));
+        contentArea.item(ArenasUi.spacer(8));
         contentArea.item(twoColumnRow(
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.cooldown"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.cooldown_hint"), "S", 5, 0, 86400, cooldownInput, v -> cooldownInput = v),
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.close_timer"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.close_timer_hint"), "S", 5, 0, 86400, closeTimerInput, v -> closeTimerInput = v)
@@ -561,6 +565,26 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         IdSuggestionDropdown.Field field = IdSuggestionDropdown.textBox(100, nameInput, 48);
         field.sizing(Sizing.expand(), Sizing.fixed(18));
         field.changeListeners.add(v -> nameInput = v);
+        fieldWrap.item(field);
+        col.item(fieldWrap);
+        return col;
+    }
+
+    /** Caption + accent-barred single-line text field (the activity id). */
+    private Flex textFieldRow(String caption, String hint, String initial, int maxLength, Consumer<String> onChange) {
+        Flex col = Flex.column().gap(4);
+        col.sizing(Sizing.fill(), Sizing.content());
+        col.item(fieldHead(caption, hint));
+        Flex fieldWrap = Flex.row().alignItems(Align.CENTER);
+        fieldWrap.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldWrap.backgroundFill(PANEL_2, HAIRLINE, 1);
+        Flex accent = Flex.column();
+        accent.sizing(Sizing.fixed(2), Sizing.fill());
+        accent.backgroundFill(ACCENT);
+        fieldWrap.item(accent);
+        TextField field = ArenasUi.textField(100, initial == null ? "" : initial, maxLength);
+        field.sizing(Sizing.expand(), Sizing.fixed(18));
+        field.onChange(onChange);
         fieldWrap.item(field);
         col.item(fieldWrap);
         return col;
@@ -989,7 +1013,8 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         }
 
         footerError = null;
-        ArenasNetwork.sendToServer(new net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload(menu.getBlockPos(), nameInput == null ? "" : nameInput));
+        ArenasNetwork.sendToServer(new net.ledok.arenas_ld.packet.SetActivityInfoPayload(menu.getBlockPos(),
+            activityIdInput == null ? "" : activityIdInput, nameInput == null ? "" : nameInput));
         ArenasNetwork.sendToServer(new SetCooldownTicksPayload(menu.getBlockPos(), cooldown * 20));
         ArenasNetwork.sendToServer(new SetCloseTimerSecondsPayload(menu.getBlockPos(), close));
         ArenasNetwork.sendToServer(new SetMaxPartySizePayload(menu.getBlockPos(), maxParty));
@@ -1070,6 +1095,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         tierConfigs.putAll(menu.getTierConfigs());
 
         nameInput = menu.getDungeonName();
+        activityIdInput = menu.getActivityId();
         cooldownInput = Integer.toString(menu.getCooldownTicks() / 20);
         closeTimerInput = Integer.toString(menu.getCloseTimerSeconds());
         maxPartyInput = Integer.toString(menu.getMaxPartySize());

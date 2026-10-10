@@ -20,7 +20,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-public class DungeonControllerScreenHandler extends AbstractContainerMenu {
+public class DungeonControllerScreenHandler extends net.ledok.arenas_ld.activity.LobbyMenuBase {
     private final BlockPos blockPos;
     private List<Lobby> visibleLobbies;
     private Optional<Lobby> ownLobby;
@@ -33,13 +33,14 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
     private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
     private int queuePosition;
     private int estimatedWaitSeconds;
+    private Map<DifficultyTier, net.minecraft.network.chat.Component> lockedTiers;
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerData data) {
-        this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.myJoinRequests(), data.maxPartySize(), data.tiers(), data.serverGameTick(), data.busyPlayers(), data.topLeaderboards(), data.queuePosition(), data.estimatedWaitSeconds());
+        this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.myJoinRequests(), data.maxPartySize(), data.tiers(), data.serverGameTick(), data.busyPlayers(), data.topLeaderboards(), data.queuePosition(), data.estimatedWaitSeconds(), data.lockedTiers());
     }
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerBlockEntity blockEntity) {
-        this(syncId, inventory, blockEntity.getBlockPos(), blockEntity.getLobbies(), Optional.empty(), blockEntity.getPendingInvites(), blockEntity.getPendingJoinRequests(), blockEntity.getMaxPartySize(), blockEntity.getTierConfigs(), 0L, Set.of(), Map.of(), 0, 0);
+        this(syncId, inventory, blockEntity.getBlockPos(), blockEntity.getLobbies(), Optional.empty(), blockEntity.getPendingInvites(), blockEntity.getPendingJoinRequests(), blockEntity.getMaxPartySize(), blockEntity.getTierConfigs(), 0L, Set.of(), Map.of(), 0, 0, Map.of());
     }
 
     private DungeonControllerScreenHandler(
@@ -56,7 +57,8 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         Set<UUID> busyPlayers,
         Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards,
         int queuePosition,
-        int estimatedWaitSeconds
+        int estimatedWaitSeconds,
+        Map<DifficultyTier, net.minecraft.network.chat.Component> lockedTiers
     ) {
         super(ModScreenHandlers.DUNGEON_CONTROLLER_SCREEN_HANDLER, syncId);
         this.queuePosition = queuePosition;
@@ -71,6 +73,7 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         this.serverGameTick = serverGameTick;
         this.busyPlayers = Set.copyOf(busyPlayers);
         this.topLeaderboards = Map.copyOf(topLeaderboards);
+        this.lockedTiers = Map.copyOf(lockedTiers);
     }
 
     public BlockPos getBlockPos() {
@@ -121,6 +124,11 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         return estimatedWaitSeconds;
     }
 
+    /** Enabled tiers the entry gate refuses this player, with the reason. */
+    public Map<DifficultyTier, net.minecraft.network.chat.Component> getLockedTiers() {
+        return lockedTiers;
+    }
+
     public void applyData(DungeonControllerData data) {
         this.visibleLobbies = List.copyOf(data.visibleLobbies());
         this.ownLobby = data.ownLobby();
@@ -133,6 +141,7 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
         this.topLeaderboards = Map.copyOf(data.topLeaderboards());
         this.queuePosition = data.queuePosition();
         this.estimatedWaitSeconds = data.estimatedWaitSeconds();
+        this.lockedTiers = Map.copyOf(data.lockedTiers());
     }
 
     @Override
@@ -141,7 +150,17 @@ public class DungeonControllerScreenHandler extends AbstractContainerMenu {
     }
 
     @Override
-    public boolean stillValid(Player player) {
-        return player.distanceToSqr(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5) <= 64;
+    public BlockPos lobbyPos() {
+        return blockPos;
+    }
+
+    @Override
+    protected boolean isController(net.minecraft.world.level.block.entity.BlockEntity be) {
+        return be instanceof DungeonControllerBlockEntity;
+    }
+
+    @Override
+    protected double maxDistanceSqr() {
+        return 64;
     }
 }

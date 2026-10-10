@@ -1,7 +1,6 @@
 package net.ledok.arenas_ld.arena.screen;
 
-import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
-import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity.ArenaInstanceState;
+import net.ledok.arenas_ld.arena.screen.ArenaControllerData.InstanceView;
 import net.ledok.arenas_ld.arena.packet.ArenaLobbyActionPayload;
 import net.ledok.arenas_ld.arena.packet.ArenaLobbyTargetPayload;
 import net.ledok.arenas_ld.arena.packet.ArenaSetHardcorePayload;
@@ -77,10 +76,10 @@ import net.ledok.arenas_ld.platform.ArenasNetwork;
  * screens: tabbed (Lobbies / My Lobby / Leaderboard / Invites), instances strip, header status
  * badge, footer actions, segmented controls and invite dropdown.
  *
- * <p>Unlike the raid/dungeon screens (which apply server snapshots), the arena reads live state
- * directly from the client-synced {@link ArenaControllerBlockEntity} each frame and rebuilds when
- * the lobby state signature changes. There are no difficulty tiers; the leaderboard is keyed on the
- * deepest wave reached. Ignores the inventory key so "E" does not close the screen.
+ * <p>Reads the server's per-player {@link ArenaControllerData} (opening data, then pushed snapshots,
+ * so it also works opened remotely from a hub) and rebuilds when the lobby state signature changes.
+ * There are no difficulty tiers; the leaderboard is keyed on the deepest wave reached. Ignores the
+ * inventory key so "E" does not close the screen.
  */
 public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControllerScreenHandler> {
     private static final int INVITE_DROPDOWN_MAX_HEIGHT = 154;
@@ -149,12 +148,12 @@ public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControlle
 
     private final BlockPos pos;
 
-    // Snapshot of controller state, refreshed from the block entity on each rebuild.
+    // Snapshot of the server's ArenaControllerData, refreshed on each rebuild.
     private List<Lobby> visibleLobbies = new ArrayList<>();
     private List<PendingInvite> myInvites = new ArrayList<>();
     private List<PendingJoinRequest> myJoinRequests = new ArrayList<>();
     private Optional<Lobby> ownLobby = Optional.empty();
-    private List<ArenaInstanceState> instances = new ArrayList<>();
+    private List<InstanceView> instances = new ArrayList<>();
     private List<LeaderboardEntry> leaderboard = new ArrayList<>();
     private int maxPartySize = 10;
     private int maxWave = -1;
@@ -265,9 +264,17 @@ public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControlle
 
     // ── Data ─────────────────────────────────────────────────────────────────
 
-    @Nullable
-    private ArenaControllerBlockEntity controller() {
-        return this.menu.controller;
+    private ArenaControllerData data() {
+        return this.menu.data();
+    }
+
+    public boolean matchesController(BlockPos blockPos) {
+        return pos.equals(blockPos);
+    }
+
+    /** A pushed snapshot: the next frame's signature check rebuilds what changed. */
+    public void applyData(ArenaControllerData data) {
+        menu.applyData(data);
     }
 
     private UUID self() {
@@ -275,28 +282,23 @@ public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControlle
     }
 
     private int computeSignature() {
-        ArenaControllerBlockEntity c = controller();
-        if (c == null) {
-            return 0;
-        }
+        ArenaControllerData c = data();
         UUID me = self();
         int sig = 7;
-        sig = sig * 31 + c.getLobbies().size();
-        sig = sig * 31 + c.getQueuedLobbyIds().size();
-        sig = sig * 31 + c.getInstances().size();
-        sig = sig * 31 + c.getLeaderboard().size();
-        sig = sig * 31 + c.getMaxWave();
-        for (ArenaInstanceState inst : c.getInstances()) {
+        sig = sig * 31 + c.lobbies().size();
+        sig = sig * 31 + c.queuePosition();
+        sig = sig * 31 + c.instances().size();
+        sig = sig * 31 + c.leaderboard().size();
+        sig = sig * 31 + c.maxWave();
+        for (InstanceView inst : c.instances()) {
             sig = sig * 31 + inst.status().ordinal();
             sig = sig * 31 + (inst.cooldownTicksRemaining() / 20);
         }
-        int myInviteCount = 0;
-        for (PendingInvite inv : c.getPendingInvites()) {
-            if (inv.invitedUuid().equals(me)) myInviteCount++;
-        }
-        sig = sig * 31 + myInviteCount;
-        sig = sig * 31 + c.getPendingJoinRequests().size();
-        Lobby own = c.getLobbyByMember(me);
+        sig = sig * 31 + c.myInvites().size();
+        sig = sig * 31 + c.myJoinRequests().size();
+        sig = sig * 31 + c.inLobby().hashCode();
+        sig = sig * 31 + c.inRun().hashCode();
+        Lobby own = ownLobbyIn(c, me);
         if (own != null) {
             sig = sig * 31 + own.members().size();
             sig = sig * 31 + own.readyMembers().size();
@@ -318,39 +320,27 @@ public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControlle
         ownLobby = Optional.empty();
         queuePos = 0;
 
-        ArenaControllerBlockEntity c = controller();
-        if (c == null) {
-            return;
-        }
+        ArenaControllerData c = data();
         UUID me = self();
-        maxPartySize = c.getMaxPartySize();
-        maxWave = c.getMaxWave();
-        instances = new ArrayList<>(c.getInstances());
-        leaderboard = new ArrayList<>(c.getLeaderboard());
+        maxPartySize = c.maxPartySize();
+        maxWave = c.maxWave();
+        instances = new ArrayList<>(c.instances());
+        leaderboard = new ArrayList<>(c.leaderboard());
 
-        Lobby own = c.getLobbyByMember(me);
+        Lobby own = ownLobbyIn(c, me);
         ownLobby = Optional.ofNullable(own);
         UUID ownId = own != null ? own.lobbyId() : null;
 
-        for (Lobby lobby : c.getLobbies()) {
+        for (Lobby lobby : c.lobbies()) {
             if (ownId != null && lobby.lobbyId().equals(ownId)) continue;
             if (lobby.status() == LobbyStatus.DISBANDED) continue;
             if (lobby.visibility() == LobbyVisibility.PRIVATE) continue;
             visibleLobbies.add(lobby);
         }
 
-        for (PendingInvite inv : c.getPendingInvites()) {
-            if (inv.invitedUuid().equals(me)) myInvites.add(inv);
-        }
-        if (own != null && own.isOwner(me)) {
-            for (PendingJoinRequest req : c.getPendingJoinRequests()) {
-                if (req.lobbyId().equals(ownId)) myJoinRequests.add(req);
-            }
-        }
-        if (ownId != null) {
-            int idx = c.getQueuedLobbyIds().indexOf(ownId);
-            queuePos = idx >= 0 ? idx + 1 : 0;
-        }
+        myInvites.addAll(c.myInvites());
+        myJoinRequests.addAll(c.myJoinRequests());
+        queuePos = ownId != null ? c.queuePosition() : 0;
 
         // Auto-switch to the most relevant tab when lobby membership changes.
         boolean hasOwn = ownLobby.isPresent();
@@ -360,6 +350,14 @@ public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControlle
             currentTab = Tab.LOBBIES;
         }
         hadOwnLobby = hasOwn;
+    }
+
+    @Nullable
+    private static Lobby ownLobbyIn(ArenaControllerData data, UUID me) {
+        for (Lobby lobby : data.lobbies()) {
+            if (lobby.isMember(me)) return lobby;
+        }
+        return null;
     }
 
     // ── Build ────────────────────────────────────────────────────────────────
@@ -420,12 +418,6 @@ public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControlle
         if (instancesStrip != null) {
             instancesStrip.clear();
             buildInstancesStrip();
-        }
-
-        if (controller() == null) {
-            contentArea.item(dimLabel(Component.translatable("gui.arenas_ld.arena.not_loaded")));
-            footerLabel.text(Component.empty());
-            return;
         }
 
         lobbiesTabButton.enabled(currentTab != Tab.LOBBIES);
@@ -576,7 +568,7 @@ public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControlle
 
         Flex pillRow = Flex.row().gap(4).alignItems(Align.CENTER);
         pillRow.sizing(Sizing.fill(), Sizing.content());
-        for (ArenaInstanceState inst : instances) {
+        for (InstanceView inst : instances) {
             String pillText = inst.status().name()
                 + (inst.cooldownTicksRemaining() > 0 ? " " + (inst.cooldownTicksRemaining() / 20) + "s" : "");
             pillRow.item(badge(Component.literal(pillText), instanceStatusColor(inst.status())));
@@ -1192,14 +1184,9 @@ public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControlle
     }
 
     private InviteStatus inviteStatusFor(UUID uuid) {
-        ArenaControllerBlockEntity c = controller();
-        if (c != null) {
-            for (Lobby lobby : c.getLobbies()) {
-                if (lobby.members().contains(uuid)) {
-                    return lobby.status() == LobbyStatus.IN_RUN ? InviteStatus.IN_RUN : InviteStatus.IN_LOBBY;
-                }
-            }
-        }
+        ArenaControllerData c = data();
+        if (c.inRun().contains(uuid)) return InviteStatus.IN_RUN;
+        if (c.inLobby().contains(uuid)) return InviteStatus.IN_LOBBY;
         return InviteStatus.ONLINE;
     }
 
@@ -1673,12 +1660,9 @@ public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControlle
     }
 
     private Optional<Lobby> resolveLobbyForInvite(PendingInvite invite) {
-        ArenaControllerBlockEntity c = controller();
-        if (c != null) {
-            for (Lobby lobby : c.getLobbies()) {
-                if (lobby.lobbyId().equals(invite.lobbyId())) {
-                    return Optional.of(lobby);
-                }
+        for (Lobby lobby : data().lobbies()) {
+            if (lobby.lobbyId().equals(invite.lobbyId())) {
+                return Optional.of(lobby);
             }
         }
         return Optional.empty();

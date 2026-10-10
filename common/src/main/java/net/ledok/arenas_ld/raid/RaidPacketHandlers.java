@@ -198,18 +198,6 @@ public final class RaidPacketHandlers {
             })
         );
 
-        // ── Admin: Set Raid Name ──────────────────────────────────────────────
-        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.raid.packet.RaidSetNamePayload.TYPE, (payload, context) ->
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
-                if (controller == null) return;
-                controller.setRaidName(payload.name());
-                broadcastRaidControllerSnapshot(player, controller);
-            })
-        );
-
         // ── Join Lobby (PUBLIC) ───────────────────────────────────────────────
         ArenasNetwork.registerServerReceiver(RaidJoinLobbyPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
@@ -379,9 +367,9 @@ public final class RaidPacketHandlers {
     //  Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
+    /** The controller the player's open lobby screen shows (any dimension), else the block at pos here. */
     private static RaidControllerBlockEntity findController(ServerPlayer player, net.minecraft.core.BlockPos pos) {
-        BlockEntity be = player.level().getBlockEntity(pos);
-        return (be instanceof RaidControllerBlockEntity rc) ? rc : null;
+        return net.ledok.arenas_ld.activity.LobbyScreens.controller(player, pos, RaidControllerBlockEntity.class);
     }
 
     private static RaidControllerBlockEntity findControllerByLobbyId(net.minecraft.server.MinecraftServer server, UUID lobbyId) {
@@ -459,8 +447,10 @@ public final class RaidPacketHandlers {
         if (actor.server == null) return;
         net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload adminSnap =
             new net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload(controller.buildAdminData());
-        for (net.minecraft.server.level.ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
+        for (ServerPlayer target : net.ledok.arenas_ld.activity.LobbyScreens.viewers(controller)) {
             ArenasNetwork.sendToPlayer(target, new RaidControllerSnapshotPayload(controller.getScreenOpeningData(target)));
+        }
+        for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
             if (target.hasPermissions(2)) {
                 ArenasNetwork.sendToPlayer(target, adminSnap);
             }

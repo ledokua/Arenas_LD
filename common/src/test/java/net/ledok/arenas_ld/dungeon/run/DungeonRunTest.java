@@ -124,11 +124,11 @@ class DungeonRunTest {
         original.addParticipant(new RunParticipant(UUID_C, "Cara", ParticipantStatus.DISCONNECTED, 200L));
 
         original.setReturnPoint(UUID_A, new PlayerReturnPoint(
-            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(0, 64, 0), 0f, 0f, GameType.SURVIVAL));
+            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(0, 64, 0), 0f, 0f, GameType.SURVIVAL, false));
         original.setReturnPoint(UUID_B, new PlayerReturnPoint(
-            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(10, 64, 10), 90f, 0f, GameType.SURVIVAL));
+            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(10, 64, 10), 90f, 0f, GameType.SURVIVAL, false));
         original.setReturnPoint(UUID_C, new PlayerReturnPoint(
-            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(20, 64, 20), 180f, -10f, GameType.SURVIVAL));
+            Level.OVERWORLD, new net.minecraft.world.phys.Vec3(20, 64, 20), 180f, -10f, GameType.SURVIVAL, false));
 
         original.setDowned(new DownedPlayer(UUID_B, 25));
 

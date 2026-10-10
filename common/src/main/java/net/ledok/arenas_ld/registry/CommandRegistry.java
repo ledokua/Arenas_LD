@@ -12,6 +12,8 @@ import net.ledok.arenas_ld.networking.SpawnerPacketHandlers;
 import net.ledok.arenas_ld.raid.screen.RaidControllerAdminMenuProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.arguments.DimensionArgument;
+import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.commands.arguments.UuidArgument;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.core.BlockPos;
@@ -65,7 +67,8 @@ public class CommandRegistry {
                 }))
             .then(literal("exit").executes(CommandRegistry::exitDungeon))
             .then(literal("stats").executes(CommandRegistry::showStats))
-            .then(buildLobbyNode());
+            .then(buildLobbyNode())
+            .then(buildActivityNode());
 
         dispatcher.register(arenasLdNode);
         // Convenience top-level alias so players can simply type /exit.
@@ -129,6 +132,79 @@ public class CommandRegistry {
                             .executes(ctx -> lobbyAction(ctx, "decline", true))))));
     }
 
+    /**
+     * Admin view of the public API's activities: list them, open one's lobby screen for players
+     * (exactly what {@code ArenasApi.openLobbies} does, gate included), and drop a stale entry.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> buildActivityNode() {
+        return literal("activity")
+            .requires(source -> source.hasPermission(2))
+            .then(literal("list").executes(CommandRegistry::listActivities))
+            .then(literal("open")
+                .then(argument("id", ResourceLocationArgument.id())
+                    .suggests(ACTIVITY_IDS)
+                    .executes(ctx -> openActivity(ctx, java.util.List.of(ctx.getSource().getPlayerOrException())))
+                    .then(argument("targets", EntityArgument.players())
+                        .executes(ctx -> openActivity(ctx, EntityArgument.getPlayers(ctx, "targets"))))))
+            .then(literal("forget")
+                .then(argument("id", ResourceLocationArgument.id())
+                    .suggests(ACTIVITY_IDS)
+                    .executes(CommandRegistry::forgetActivity)));
+    }
+
+    private static final com.mojang.brigadier.suggestion.SuggestionProvider<CommandSourceStack> ACTIVITY_IDS =
+        (ctx, builder) -> net.minecraft.commands.SharedSuggestionProvider.suggestResource(
+            net.ledok.arenas_ld.api.ArenasApi.activities(ctx.getSource().getServer()).stream()
+                .map(net.ledok.arenas_ld.api.ArenasApi.Activity::id), builder);
+
+    private static int listActivities(CommandContext<CommandSourceStack> ctx) {
+        var activities = net.ledok.arenas_ld.api.ArenasApi.activities(ctx.getSource().getServer());
+        if (activities.isEmpty()) {
+            ctx.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.activity.list_empty"), false);
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.activity.list_header", activities.size()), false);
+        for (var activity : activities) {
+            String difficulties = activity.difficulties().isEmpty()
+                ? "-"
+                : activity.difficulties().stream()
+                    .map(net.ledok.arenas_ld.api.ArenasApi.Difficulty::id)
+                    .collect(java.util.stream.Collectors.joining(", "));
+            Component line = Component.literal(" " + activity.id() + " ")
+                .append(Component.literal("[" + activity.type().name().toLowerCase(java.util.Locale.ROOT) + "] ")
+                    .withStyle(net.minecraft.ChatFormatting.GRAY))
+                .append(activity.name())
+                .append(Component.literal(" — " + difficulties).withStyle(net.minecraft.ChatFormatting.GRAY));
+            ctx.getSource().sendSuccess(() -> line, false);
+        }
+        return activities.size();
+    }
+
+    private static int openActivity(CommandContext<CommandSourceStack> ctx, java.util.Collection<ServerPlayer> targets) {
+        net.minecraft.resources.ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
+        if (net.ledok.arenas_ld.api.ArenasApi.activity(ctx.getSource().getServer(), id).isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.activity.unknown", id.toString()));
+            return 0;
+        }
+        int opened = 0;
+        for (ServerPlayer target : targets) {
+            if (net.ledok.arenas_ld.api.ArenasApi.openLobbies(target, id)) {
+                opened++;
+            }
+        }
+        return opened;
+    }
+
+    private static int forgetActivity(CommandContext<CommandSourceStack> ctx) {
+        net.minecraft.resources.ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
+        if (!net.ledok.arenas_ld.activity.ActivityRegistry.forget(ctx.getSource().getServer(), id)) {
+            ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.activity.unknown", id.toString()));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.activity.forgotten", id.toString()), true);
+        return 1;
+    }
+
     private static int lobbyAction(CommandContext<CommandSourceStack> ctx, String action, boolean needsLobbyId) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         ServerLevel level = DimensionArgument.getDimension(ctx, "dim");
@@ -139,7 +215,7 @@ public class CommandRegistry {
             switch (action) {
                 case "ready" -> SpawnerPacketHandlers.performToggleReady(player, controller);
                 case "start" -> SpawnerPacketHandlers.performStartRun(player, controller);
-                case "open" -> ArenasMenus.open(player, controller);
+                case "open" -> net.ledok.arenas_ld.activity.LobbyScreens.open(player, controller, true);
                 case "accept" -> {
                     controller.acceptInvite(player, lobbyId);
                     controller.setChanged();
@@ -158,7 +234,7 @@ public class CommandRegistry {
             switch (action) {
                 case "ready" -> net.ledok.arenas_ld.raid.RaidPacketHandlers.performToggleReadyRaid(player, raid);
                 case "start" -> net.ledok.arenas_ld.raid.RaidPacketHandlers.performStartRaid(player, raid);
-                case "open" -> ArenasMenus.open(player, raid);
+                case "open" -> net.ledok.arenas_ld.activity.LobbyScreens.open(player, raid, true);
                 case "accept" -> {
                     raid.acceptInvite(player, lobbyId);
                     net.ledok.arenas_ld.raid.RaidPacketHandlers.broadcastRaidControllerSnapshot(player, raid);
@@ -175,7 +251,7 @@ public class CommandRegistry {
             switch (action) {
                 case "ready" -> arena.toggleReady(player);
                 case "start" -> arena.startRun(player);
-                case "open" -> ArenasMenus.open(player, arena);
+                case "open" -> net.ledok.arenas_ld.activity.LobbyScreens.open(player, arena, true);
                 case "accept" -> arena.acceptInvite(player, lobbyId);
                 case "decline" -> arena.declineInvite(player, lobbyId);
                 default -> { return 0; }

@@ -54,7 +54,8 @@ import java.util.UUID;
 import java.util.Optional;
 import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
-public class DungeonControllerBlockEntity extends BlockEntity implements ExtendedMenuProvider<DungeonControllerData> {
+public class DungeonControllerBlockEntity extends BlockEntity
+    implements ExtendedMenuProvider<DungeonControllerData>, net.ledok.arenas_ld.activity.ActivityHost {
     private static final int DEFAULT_COOLDOWN_TICKS = 5 * 60 * 20;
     /** How long the front queued lobby keeps priority on a free instance before it rotates to the next. */
     private static final int QUEUE_PRIORITY_TIMEOUT_TICKS = 20 * 20;
@@ -83,6 +84,14 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     private int lobbyOfflineTimeoutTicks = DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS;
     private double hpScalePerPlayer = DEFAULT_HP_SCALE_PER_PLAYER;
     private String dungeonName = "";
+    /** Stable API id (e.g. {@code arenas_ld:crypt}); assigned on the first server tick when missing. */
+    private @Nullable net.minecraft.resources.ResourceLocation activityId;
+    /** Whether this controller registered with the activity index this session. Transient. */
+    private transient boolean activityAttached = false;
+    /** Loaded from a save without an activity id (pre-API controller). Transient. */
+    private transient boolean loadedWithoutId = false;
+    /** Entry-gate locks each open lobby screen last got. Transient. */
+    private final transient net.ledok.arenas_ld.activity.LockWatch lockWatch = new net.ledok.arenas_ld.activity.LockWatch();
     private final Map<BlockPos, Integer> instanceCooldownTimers = new HashMap<>();
     private final Set<BlockPos> pendingInstanceRemovals = new HashSet<>();
     private final Map<DifficultyTier, List<LeaderboardEntry>> leaderboards = new EnumMap<>(DifficultyTier.class);
@@ -168,6 +177,93 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         }
         this.dungeonName = trimmed;
         setChanged();
+        refreshActivity();
+    }
+
+    // ── Activity (public API) ──────────────────────────────────────────────
+
+    @Override
+    public net.ledok.arenas_ld.api.ArenasApi.ActivityType activityType() {
+        return net.ledok.arenas_ld.api.ArenasApi.ActivityType.DUNGEON;
+    }
+
+    @Override
+    public @Nullable net.minecraft.resources.ResourceLocation activityId() {
+        return activityId;
+    }
+
+    @Override
+    public boolean loadedWithoutId() {
+        return loadedWithoutId;
+    }
+
+    @Override
+    public void storeActivityId(net.minecraft.resources.ResourceLocation id) {
+        this.activityId = id;
+        markDirtyAndSync();
+    }
+
+    @Override
+    public String activityName() {
+        return dungeonName;
+    }
+
+    @Override
+    public void setActivityName(String name) {
+        setDungeonName(name);
+    }
+
+    @Override
+    public void clearCopiedState(@Nullable net.ledok.arenas_ld.activity.ActivityHost original) {
+        // Loading the copy registered its copied runs' players with the run manager, replacing the
+        // original's live runs for them; hand those players back to the original's runs.
+        for (DungeonRun copiedRun : activeRuns.values()) {
+            for (UUID uuid : copiedRun.participants().keySet()) {
+                if (ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(uuid) != copiedRun) {
+                    continue;
+                }
+                ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
+                if (original instanceof DungeonControllerBlockEntity originalController) {
+                    for (DungeonRun run : originalController.getActiveRuns().values()) {
+                        RunParticipant participant = run.participants().get(uuid);
+                        if (participant != null && participant.isEligibleForLoot()) {
+                            ArenasLdMod.DUNGEON_MANAGER.registerParticipant(uuid, run);
+                        }
+                    }
+                }
+            }
+        }
+        activeRuns.clear();
+        instances.clear();
+        instanceDimensions.clear();
+        instanceCooldownTimers.clear();
+        pendingInstanceRemovals.clear();
+        leaderboards.values().forEach(List::clear);
+        lobbies.clear();
+        queuedLobbyIds.clear();
+        priorityFrontLobby = null;
+        priorityFrontSinceTick = -1L;
+        pendingInvites.clear();
+        pendingJoinRequests.clear();
+        lobbyOfflineSinceTicks.clear();
+        markDirtyAndSync();
+    }
+
+    @Override
+    public List<DifficultyTier> enabledTiers() {
+        List<DifficultyTier> enabled = new ArrayList<>();
+        for (DifficultyTier tier : DifficultyTier.values()) {
+            if (isTierEnabled(tier)) {
+                enabled.add(tier);
+            }
+        }
+        return enabled;
+    }
+
+    private void refreshActivity() {
+        if (activityAttached) {
+            net.ledok.arenas_ld.activity.ActivityRegistry.refresh(this);
+        }
     }
 
     public Map<BlockPos, Integer> getInstanceCooldownTimers() {
@@ -205,6 +301,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
     public void setTierConfig(DifficultyTier tier, TierConfig config) {
         tierConfigs.put(tier, config);
         setChanged();
+        refreshActivity();
     }
 
     public boolean setCooldownTicks(int cooldownTicks) {
@@ -479,6 +576,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             player.sendSystemMessage(Component.translatable("message.arenas_ld.lobby.no_tiers_enabled"));
             return Optional.empty();
         }
+        defaultTier = firstEnterableTier(player, defaultTier);
+        if (defaultTier == null) {
+            return Optional.empty();
+        }
 
         UUID lobbyId = UUID.randomUUID();
         String playerName = player.getGameProfile().getName();
@@ -512,6 +613,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (BusyStateCompat.isBusy(inviteeUuid)) return false;
         if (findLobbyByMember(inviteeUuid).isPresent()) return false;
         if (lobby.isFull(maxPartySize)) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allowOther(inviter.server, inviter, inviteeUuid, this, lobby.selectedTier(), false)) return false;
 
         long now = inviter.serverLevel().getGameTime();
         pendingInvites.removeIf(invite -> invite.expiresAtTick() <= now);
@@ -542,6 +644,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         Lobby lobby = lobbyOpt.get();
         if (lobby.status() == LobbyStatus.IN_RUN) return false;
         if (lobby.isFull(maxPartySize)) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allow(invitee, this, lobby.selectedTier())) return false;
 
         Lobby updated = lobby.withMemberAdded(invitee.getUUID(), invitee.getGameProfile().getName());
         updated = recomputeLobbyReadiness(updated);
@@ -569,6 +672,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (lobby.visibility() != LobbyVisibility.FRIENDS) return false;
         if (lobby.status() == LobbyStatus.IN_RUN || lobby.status() == LobbyStatus.DISBANDED) return false;
         if (lobby.isFull(maxPartySize)) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allow(requester, this, lobby.selectedTier())) return false;
 
         long now = requester.serverLevel().getGameTime();
         pendingJoinRequests.removeIf(req -> req.expiresAtTick() <= now);
@@ -644,6 +748,24 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         return null;
     }
 
+    /**
+     * The entry gate's pick for a new lobby: {@code preferred} when the owner may enter it, else
+     * the first enabled tier they may. Null (with the preferred tier's reason sent) when none.
+     */
+    private @Nullable DifficultyTier firstEnterableTier(ServerPlayer owner, DifficultyTier preferred) {
+        Component refusal = net.ledok.arenas_ld.activity.EntryGates.check(owner, this, preferred);
+        if (refusal == null) {
+            return preferred;
+        }
+        for (DifficultyTier tier : enabledTiers()) {
+            if (net.ledok.arenas_ld.activity.EntryGates.check(owner, this, tier) == null) {
+                return tier;
+            }
+        }
+        owner.sendSystemMessage(refusal);
+        return null;
+    }
+
     public boolean setLobbyTier(ServerPlayer player, DifficultyTier tier) {
         Optional<Lobby> lobbyOpt = findLobbyByMember(player.getUUID());
         if (lobbyOpt.isEmpty()) return false;
@@ -651,6 +773,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (!lobby.isOwner(player.getUUID())) return false;
         if (lobby.status() == LobbyStatus.IN_RUN) return false;
         if (!isTierEnabled(tier)) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, tier)) return false;
         replaceLobby(lobby.withTier(tier));
         return true;
     }
@@ -701,6 +824,11 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         // The builder may have disabled the tier while the lobby was forming.
         if (!isTierEnabled(lobby.selectedTier())) {
             notifyLobbyMembers(lobby, Component.translatable("message.arenas_ld.lobby.tier_disabled"));
+            return Optional.empty();
+        }
+        Component refusal = net.ledok.arenas_ld.activity.EntryGates.partyRefusal(player.server, lobby, this, lobby.selectedTier());
+        if (refusal != null) {
+            notifyLobbyMembers(lobby, refusal);
             return Optional.empty();
         }
 
@@ -846,7 +974,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (!(level instanceof ServerLevel serverLevel) || serverLevel.getServer() == null) {
             return;
         }
-        for (ServerPlayer target : serverLevel.getServer().getPlayerList().getPlayers()) {
+        for (ServerPlayer target : net.ledok.arenas_ld.activity.LobbyScreens.viewers(this)) {
             net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(target,
                 new net.ledok.arenas_ld.dungeon.packet.DungeonControllerSnapshotPayload(getScreenOpeningData(target)));
         }
@@ -870,6 +998,7 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         if (lobby.visibility() != LobbyVisibility.PUBLIC) return false;
         if (lobby.status() == LobbyStatus.IN_RUN || lobby.status() == LobbyStatus.DISBANDED) return false;
         if (lobby.isFull(maxPartySize)) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, lobby.selectedTier())) return false;
 
         Lobby updated = recomputeLobbyReadiness(lobby.withMemberAdded(player.getUUID(), player.getGameProfile().getName()));
         replaceLobby(updated);
@@ -898,6 +1027,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             return false;
         }
         if (BusyStateCompat.isBusy(requesterUuid)) {
+            removeJoinRequest(lobby.lobbyId(), requesterUuid);
+            return false;
+        }
+        if (!net.ledok.arenas_ld.activity.EntryGates.allowOther(owner.server, owner, requesterUuid, this, lobby.selectedTier(), true)) {
             removeJoinRequest(lobby.lobbyId(), requesterUuid);
             return false;
         }
@@ -1037,7 +1170,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
                 .toList();
             topLeaderboards.put(tier, top);
         }
-        return new DungeonControllerData(worldPosition, visible, own, myInvites, myJoinRequests, maxPartySize, tierConfigs, player.serverLevel().getGameTime(), busyPlayers, topLeaderboards, getQueuePosition(playerUuid), getEstimatedWaitSeconds());
+        return new DungeonControllerData(worldPosition, visible, own, myInvites, myJoinRequests, maxPartySize, tierConfigs, player.serverLevel().getGameTime(), busyPlayers, topLeaderboards, getQueuePosition(playerUuid), getEstimatedWaitSeconds(),
+            lockWatch.locksFor(player, this));
     }
 
     @Override
@@ -1066,6 +1200,10 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         }
 
         be.ensureChunkForceLoaded(serverLevel);
+        if (!be.activityAttached) {
+            be.activityAttached = true;
+            net.ledok.arenas_ld.activity.ActivityRegistry.attach(be);
+        }
 
         Iterator<Map.Entry<BlockPos, Integer>> cdIter = be.instanceCooldownTimers.entrySet().iterator();
         while (cdIter.hasNext()) {
@@ -1090,6 +1228,11 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
         }
 
         be.tickLobbyTimeouts(serverLevel, currentTick);
+        // A gate verdict can change on its own (a level-up): re-send those screens.
+        for (ServerPlayer viewer : be.lockWatch.changedViewers(be, currentTick)) {
+            net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(viewer,
+                new net.ledok.arenas_ld.dungeon.packet.DungeonControllerSnapshotPayload(be.getScreenOpeningData(viewer)));
+        }
 
         for (DungeonRun run : new ArrayList<>(be.activeRuns.values())) {
             // The run's DBS may live in a different dimension than this controller; tick it there.
@@ -1274,6 +1417,9 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save DungeonController at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
         nbt.putString("DungeonName", dungeonName);
+        if (activityId != null) {
+            nbt.putString("ActivityId", activityId.toString());
+        }
     }
 
     @Override
@@ -1350,6 +1496,8 @@ public class DungeonControllerBlockEntity extends BlockEntity implements Extende
             initializeDefaults();
         }
         dungeonName = nbt.getString("DungeonName");
+        activityId = nbt.contains("ActivityId") ? net.minecraft.resources.ResourceLocation.tryParse(nbt.getString("ActivityId")) : null;
+        loadedWithoutId = activityId == null;
     }
 
     @Override

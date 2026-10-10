@@ -17,10 +17,11 @@ from. Built on VectorLib for the UI.
 [Room objectives](#room-objectives) · [Difficulty tiers](#difficulty-tiers) ·
 [Arenas](#arenas) · [The wave loop](#the-wave-loop) · [Scaling](#scaling) ·
 [Raids](#raids) · [Tier scaling](#tier-scaling) ·
-[Lobbies, parties and instances](#lobbies-parties-and-instances) · [Rewards and loot](#rewards-and-loot) ·
+[Lobbies, parties and instances](#lobbies-parties-and-instances) ·
+[Activity ids and the entry gate](#activity-ids-and-the-entry-gate) · [Rewards and loot](#rewards-and-loot) ·
 [LuckPerms reward perks](#luckperms-reward-perks) ·
 [Commands](#commands) · [Config](#config) · [File locations](#file-locations) ·
-[Compatibility](#compatibility) · [License](#license)
+[Addon API](#addon-api) · [Compatibility](#compatibility) · [License](#license)
 
 ## Getting started
 
@@ -399,7 +400,8 @@ controller's block entity, so breaking the block destroys them.
 
 | Field | Default |
 |---|---|
-| Dungeon name (shown in invites, max 48 chars) | — |
+| Dungeon name (shown in invites and hubs, max 48 chars) | — |
+| Activity id (unique, see [Activity ids](#activity-ids-and-the-entry-gate)) | generated, e.g. `arenas_ld:dungeon_old_crypt` |
 | Cooldown | 300 s |
 | Close timer | 30 s |
 | Max party size | 4 (the server accepts 1–16; the admin stepper goes to 64 and anything above 16 is silently rejected) |
@@ -533,6 +535,8 @@ The leaderboard is a single top-10 list keyed by **deepest wave reached**, each 
 
 | Setting | Default |
 |---|---|
+| Name (shown in hubs, max 48 chars) | — |
+| Activity id (unique, see [Activity ids](#activity-ids-and-the-entry-gate)) | generated, e.g. `arenas_ld:arena_pit` |
 | Max party size | 10 (clamped 1–20) |
 | Max wave | −1 (endless) |
 | Close timer | 30 s |
@@ -626,7 +630,8 @@ The General tab, alongside the four tier tabs above.
 
 | Field | Default |
 |---|---|
-| Raid name (shown in invites, max 48 chars) | — |
+| Raid name (shown in invites and hubs, max 48 chars) | — |
+| Activity id (unique, see [Activity ids](#activity-ids-and-the-entry-gate)) | generated, e.g. `arenas_ld:raid_dragon` |
 | Cooldown | 300 s (step 5, 0–86400) |
 | Close timer | 30 s (step 5, 0–86400) |
 | Max party size | 10 (clamped 1–20; the admin stepper goes to 64, values above 20 are clamped down) |
@@ -634,11 +639,10 @@ The General tab, alongside the four tier tabs above.
 | Respawn time | 6000 ticks (step 20, 0–1200000) — the only General field in ticks |
 | Death time penalty | 10 s (step 1, 0–600) |
 
-**Two things to watch.** The **TIER AVAILABILITY** toggle does nothing for raids: it is stored and
-shown, but the start path never checks it and the player tier picker always offers all four. And the
-post-run instance cooldown uses the **RESPAWN TIME** setting, not COOLDOWN — the COOLDOWN field only
-feeds the queue's wait estimate. Both are 6000 ticks by default (COOLDOWN shows that as 300 s), so
-the difference only shows once you change one.
+**One thing to watch.** The post-run instance cooldown uses the **RESPAWN TIME** setting, not
+COOLDOWN — the COOLDOWN field only feeds the queue's wait estimate. Both are 6000 ticks by default
+(COOLDOWN shows that as 300 s), so the difference only shows once you change one. Tier availability
+works as for dungeons: disabled tiers can't be picked in the lobby and Start re-checks the selected one.
 
 ## Lobbies, parties and instances
 
@@ -692,7 +696,8 @@ seconds of silence. Objective lines include "Explore • Rooms cleared: 2/7", "F
 "Wave 4 • Enemies: 12", "Defeat the boss", and "Returning home — /exit to leave now".
 
 **Players bring their own gear.** No inventory is stored, taken or handed back on entry or exit —
-only game mode, health, status effects (wiped on exit) and the scoreboard team change. What is
+only game mode, health, status effects (wiped when leaving a dungeon or arena; a raid keeps them)
+and the scoreboard team change. What is
 restricted is a config
 [item blacklist](#config) (blocked on use in air, on a block and on an entity, with a red action-bar
 message) and a config effect blacklist stripped every tick.
@@ -702,6 +707,54 @@ stay as IN_RUN — so a dungeon party in progress is not in the lobby list. The 
 6 lobbies and the member list at most 5 rows. There is no minimum party size anywhere: a lobby of one
 can start any run. And "Leave Queue" on the raid and arena screens leaves the whole lobby, not just the
 queue.
+
+## Activity ids and the entry gate
+
+Every Dungeon, Raid and Arena Controller is one **activity** with a stable id, for other mods to list
+and open (Eden_LD's Activities tab is built on it). Arenas_LD is a standalone mod and works the same
+without any of them; whatever a hub shows about an activity — whether it's listed, its card art, level
+requirements — the hub keeps itself, keyed by the id.
+
+- **The id** is set on the admin screen's General tab (the arena's single settings page) — a resource
+  location such as `arenas_ld:crypt`; type just `crypt` and the `arenas_ld:` namespace is added.
+  Lowercase letters, digits and `_ - . /` only, and unique on the server: taking an id another
+  controller already has is refused with the controller's location in chat. A controller without one
+  gets a generated id on its first tick — `arenas_ld:<type>_<name>`, or `<type>_<x>_<y>_<z>` when the
+  name has no Latin letters — and a controller from an older save also logs a warning about it. Set a
+  real id before a hub stores it anywhere (unlock records, configs): hubs key everything by id.
+- **Copying a controller** (a structure block, a schematic) copies its saved data, id included. The
+  copy is recognized on its first tick: it gets its own id and keeps the settings (name, timers, tiers),
+  but starts with no instances, lobbies, queue, invites, runs or leaderboard — those belong to the
+  original — and the log says so. Link the copy's own instances. A copy made before 4.5.0 had no id
+  to give it away and can't be told apart.
+- **Arena names**: arenas have a name field too (next to the id), used in chat and by other mods.
+- **Breaking a controller** removes its activity. The id index lives in
+  `<world>/data/arenas_ld_activities.dat`, so hubs list every activity even when its chunk isn't
+  loaded; `/arenasld activity forget <id>` drops an entry whose block was removed by a tool that
+  skipped block updates.
+
+**The entry gate.** A hub registers a gate (see [API.md](API.md)) that may refuse a player with a
+reason, which is shown as is (Eden_LD sends text like "🔒 Lv 25+"). With no gate registered nothing
+changes. It is asked:
+
+| When | Who must pass | For which difficulty |
+|---|---|---|
+| Opening a lobby screen — right-clicking the controller, the chat **[Open]** button, a hub | the player | the activity itself |
+| Creating a lobby | the owner | Normal, else the first enabled tier the owner may enter |
+| Changing the lobby's difficulty | the owner | the new one |
+| Joining, requesting to join, accepting an invite; an owner accepting a request or sending an invite | the joiner (the owner hears why when it's someone else) | the lobby's |
+| Starting a run, and an arena queue launching on its own | **every** online member — the refusal names each one and why | the lobby's |
+
+Every difficulty check asks about the activity itself first, and arenas have no tiers, so every arena
+check is for the activity itself. On the dungeon and raid lobby screens a difficulty the viewer may not
+pick is dimmed with the reason under it, and lobbies (and invites) for such a difficulty show the reason
+instead of Join / Request / Accept. Open screens are re-checked every 2 seconds, so a level-up unlocks
+them without reopening.
+
+**Opening from anywhere.** A hub can open an activity's lobby screen for a player in any dimension, at
+any distance — the same screen the block opens, kept open until closed. Lobby actions from it reach
+the right controller, and an arena's lobby screen now comes from the server, so it works without the
+controller's chunk on the client. Admins can do the same with `/arenasld activity open <id> [players]`.
 
 ## Rewards and loot
 
@@ -793,11 +846,15 @@ before it. Without LuckPerms every player simply gets the defaults.
 /arenasld lobby open    <dim> <pos>
 /arenasld lobby accept  <dim> <pos> <lobbyId>
 /arenasld lobby decline <dim> <pos> <lobbyId>
+/arenasld activity list            every activity: id, type, name, enabled difficulties
+/arenasld activity open <id> [players]   open its lobby screen from anywhere, entry gate included
+/arenasld activity forget <id>     drop an activity whose controller block is gone
 ```
 
-`admin` and `reload` require **permission level 2**; everything else is open to all players. The
-`lobby` subcommands exist as the click targets behind the chat buttons and re-validate membership,
-ownership and invites server-side, which is why they need no gate.
+`admin`, `reload` and `activity` require **permission level 2**; everything else is open to all
+players. The `lobby` subcommands exist as the click targets behind the chat buttons and re-validate
+membership, ownership and invites server-side (and ask the [entry gate](#activity-ids-and-the-entry-gate)),
+which is why they need no permission. `lobby open` opens the screen from any distance.
 
 `/exit` is registered as an unconditional top-level alias and can collide with another mod or plugin
 that registers the same name.
@@ -824,22 +881,31 @@ One pretty-printed JSON file at `config/arenas_ld.json`, created with defaults o
 | Instances, lobbies, queue, invites, tier settings, leaderboards, in-flight runs | the controller block's own NBT, i.e. that chunk |
 | Rooms, doors, respawn points, objectives, room rewards | the Room Controller block's NBT |
 | Lifetime player stats | `<world>/data/arenas_ld_player_stats.dat` |
+| Activity ids and what the API reports about each | `<world>/data/arenas_ld_activities.dat` |
 | Pending ejects for players offline when a run ended | `<world>/data/arenas_ld_pending_restores.dat` |
 | Saved pre-run scoreboard teams | `<world>/data/arenas_ld_party_teams.dat` |
 
 Because lobbies, instance links, tier settings and leaderboards live in the controller's block entity,
-**breaking or replacing a controller block destroys all of them.** Only the three world-level files
-above survive it.
+**breaking or replacing a controller block destroys all of them.** Only the world-level files above
+survive it (and the activity index forgets the broken controller).
+
+## Addon API
+
+`net.ledok.arenas_ld.api.ArenasApi` (common module, server side) lists the activities with their
+enabled difficulties, opens an activity's lobby screen for a player, lets other mods veto entry through
+an entry gate, and reports every finished run. Eden_LD's Activities tab uses it; Arenas_LD never
+depends on its callers. See [API.md](API.md).
 
 ## Compatibility
 
 | Mod | Required | What it adds |
 |---|---|---|
 | Fabric API | Fabric only | Required on Fabric. The NeoForge build needs nothing extra — no Forgified Fabric API; the shared code talks to each loader through its own small platform layer. |
-| VectorLib ≥ 0.2.5 | yes | Every screen and HUD. **Bundled in both jars** — no separate download. |
+| VectorLib ≥ 0.2.6 | yes | Every screen and HUD. **Bundled in both jars** — no separate download. |
 | [BusyLib](https://github.com/ledokua/BusyLib) | yes | The cross-mod "player is busy" flag that stops a player being in two activities at once. **Not bundled**, and it has no published release yet — build it from source (`./gradlew build`) and drop the jar in the server's `mods/` folder next to Arenas_LD. |
 | Economy_LD | optional | Currency rewards and the inbox that delivers loot to offline players or a full inventory. Without it, currency is skipped silently and an offline player's items are logged and lost. |
 | [Pufferfish's Skills](https://modrinth.com/mod/pufferfishs-skills) | optional | Skill XP on tier and room rewards. Every call is guarded, so the XP part of a reward is simply skipped when absent. |
+| Eden_LD | optional | Its Activities tab lists the activities, locks them by player level through the [entry gate](#activity-ids-and-the-entry-gate) and opens their lobby screens; its card art, levels and visibility settings live in Eden. Uses the [API](API.md); Arenas_LD has no dependency on it. |
 | [LuckPerms](https://luckperms.net) | optional | [Reward perks](#luckperms-reward-perks) from player/group meta: extra loot rolls and currency / XP multipliers for raids, dungeons and the mob arena. Same API on Fabric and NeoForge; without it everyone gets the defaults. |
 
 Both jars are side `BOTH` and load on client and server. The Fabric jar pins Minecraft to exactly

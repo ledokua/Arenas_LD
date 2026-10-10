@@ -496,9 +496,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(CreateLobbyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     controller.createLobby(player);
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -509,9 +510,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(JoinLobbyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     controller.joinLobby(player, payload.lobbyId());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -522,9 +524,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(InvitePlayerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     boolean invited = controller.invitePlayer(player, payload.inviteeUuid());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -543,9 +546,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(AcceptInvitePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     controller.acceptInvite(player, payload.lobbyId());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -556,9 +560,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(DeclineInvitePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     controller.declineInvite(player, payload.lobbyId());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -569,9 +574,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(RequestJoinPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     controller.requestJoin(player, payload.lobbyId());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -582,9 +588,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(AcceptJoinRequestPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     controller.acceptJoinRequest(player, payload.requesterUuid());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -595,9 +602,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(DeclineJoinRequestPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     controller.declineJoinRequest(player, payload.requesterUuid());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -608,9 +616,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(LeaveLobbyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     controller.leaveLobby(player);
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -621,9 +630,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(KickFromLobbyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     controller.kickFromLobby(player, payload.targetUuid());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -634,9 +644,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(SetLobbyTierPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     controller.setLobbyTier(player, payload.tier());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -647,9 +658,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(SetLobbyHardcorePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     controller.setLobbyHardcore(player, payload.hardcore());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -660,9 +672,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(SetLobbyVisibilityPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     controller.setLobbyVisibility(player, payload.visibility());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -673,9 +686,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(ToggleReadyPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     performToggleReady(player, controller);
                 }
             });
@@ -684,9 +698,10 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(StartRunPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.blockPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                var controller = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.blockPos(),
+                    net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity.class);
+                if (controller != null) {
+                    Level world = controller.getLevel();
                     performStartRun(player, controller);
                 }
             });
@@ -807,22 +822,6 @@ public final class SpawnerPacketHandlers {
             });
         });
 
-        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.dungeon.packet.SetDungeonNamePayload.TYPE, (payload, context) -> {
-            context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!player.hasPermissions(2)) {
-                    return;
-                }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
-                    controller.setDungeonName(payload.name());
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
-                }
-            });
-        });
-
         ArenasNetwork.registerServerReceiver(SetRespawnTimeTicksPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
@@ -915,9 +914,40 @@ public final class SpawnerPacketHandlers {
                     controller.setTierConfig(payload.tier(), payload.config());
                     markDirtyAndSync(world, controller);
                     broadcastDungeonControllerAdminSnapshot(player, controller);
+                    broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
         });
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.SetActivityInfoPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> applyActivityInfo(context.player(), payload));
+        });
+    }
+
+    /**
+     * Admin name and activity id for any controller type (the id is kept unique; a refusal is
+     * explained in chat). The admin screen re-syncs from the next snapshot.
+     */
+    private static void applyActivityInfo(ServerPlayer player, net.ledok.arenas_ld.packet.SetActivityInfoPayload payload) {
+        if (!player.hasPermissions(2)) {
+            return;
+        }
+        BlockEntity be = player.level().getBlockEntity(payload.controllerPos());
+        if (!(be instanceof net.ledok.arenas_ld.activity.ActivityHost host)) {
+            return;
+        }
+        host.setActivityName(payload.name());
+        // A blank id field means "leave it" (only possible before the controller's first tick).
+        Component refusal = payload.activityId().isBlank() ? null
+            : net.ledok.arenas_ld.activity.ActivityRegistry.changeId(host, payload.activityId());
+        if (refusal != null) {
+            player.sendSystemMessage(refusal.copy().withStyle(ChatFormatting.YELLOW));
+        }
+        markDirtyAndSync(be.getLevel(), be);
+        if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity dungeon) {
+            broadcastDungeonControllerAdminSnapshot(player, dungeon);
+        } else if (be instanceof net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity raid) {
+            net.ledok.arenas_ld.raid.RaidPacketHandlers.broadcastRaidControllerSnapshot(player, raid);
+        }
     }
 
     private static void markDirtyAndSync(Level world, BlockEntity blockEntity) {
@@ -929,7 +959,7 @@ public final class SpawnerPacketHandlers {
         if (actor.server == null) {
             return;
         }
-        for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
+        for (ServerPlayer target : net.ledok.arenas_ld.activity.LobbyScreens.viewers(controller)) {
             ArenasNetwork.sendToPlayer(target, new DungeonControllerSnapshotPayload(controller.getScreenOpeningData(target)));
         }
     }

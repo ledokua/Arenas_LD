@@ -32,4 +32,19 @@ public final class NeoForgeGametests {
         helper.assertTrue(commands.getChild("arenasld") != null, "/arenasld registered through ArenasEvents");
         helper.succeed();
     }
+
+    @GameTest(template = "empty")
+    public static void apiActivityIndex(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.activityIndex(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiEntryGate(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.entryGate(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiCopiedController(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.copiedController(helper);
+    }
 }

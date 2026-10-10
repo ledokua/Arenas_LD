@@ -74,9 +74,7 @@ public final class ArenaRunLifecycle {
         BlockPos entrance = spawner != null ? spawner.getAbsoluteEntrancePos() : run.spawnerPos();
 
         for (ServerPlayer player : players) {
-            run.setReturnPoint(player.getUUID(), new PlayerReturnPoint(
-                player.level().dimension(), player.position(), player.getYRot(), player.getXRot(),
-                player.gameMode.getGameModeForPlayer()));
+            run.setReturnPoint(player.getUUID(), PlayerReturnPoint.capture(player, true));
             run.addParticipant(new RunParticipant(player.getUUID(), player.getGameProfile().getName(),
                 ParticipantStatus.ACTIVE, now));
             // Everyone is online now; the snapshot pays an offline player their summary perks later.
@@ -595,6 +593,12 @@ public final class ArenaRunLifecycle {
         enterClosing(world, controller, run);
     }
 
+    /** Reports the finished run (after the payout in enterClosing) to {@code ArenasApi} run listeners. */
+    private static void fireRunResult(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run, boolean win) {
+        net.ledok.arenas_ld.activity.RunEvents.fire(controller, null, win, run.startTick(), world.getGameTime(),
+            run.currentWave(), run.participants().keySet());
+    }
+
     private static void handleLoss(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run,
                                    ArenaOutcome outcome, String reason) {
         run.setOutcome(outcome);
@@ -608,6 +612,8 @@ public final class ArenaRunLifecycle {
 
     private static void enterClosing(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
         payoutSummary(world, controller, run);
+        // After the payout, before a zero close timer finalizes and the queue launches the next run.
+        fireRunResult(world, controller, run, run.outcome() == ArenaOutcome.COMPLETED);
         for (UUID uuid : new ArrayList<>(run.aliveMobs())) {
             Entity e = world.getEntity(uuid);
             if (e != null) e.discard();
@@ -825,6 +831,8 @@ public final class ArenaRunLifecycle {
         }
         player.setGameMode(restoreMode);
         player.setHealth(player.getMaxHealth());
+        // Leaving an arena wipes status effects (skill buffs, potions), as leaving a dungeon does.
+        player.removeAllEffects();
         ServerLevel returnWorld = world.getServer().getLevel(rp.dimension());
         if (returnWorld != null) {
             player.teleportTo(returnWorld, rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
