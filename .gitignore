@@ -18,6 +18,8 @@ atlassian-ide-plugin.xml
 
 # Log file
 *.log
+# Logs a run or gametest writes into the common module
+common/logs/
 
 # BlueJ files
 *.ctxt
