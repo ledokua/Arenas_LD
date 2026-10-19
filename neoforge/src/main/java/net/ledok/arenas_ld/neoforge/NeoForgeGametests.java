@@ -47,4 +47,9 @@ public final class NeoForgeGametests {
     public static void apiCopiedController(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.copiedController(helper);
     }
+
+    @GameTest(template = "empty")
+    public static void runTeams(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runTeams(helper);
+    }
 }

@@ -150,6 +150,52 @@ public final class ApiGameTests {
         });
     }
 
+    /**
+     * Run teams: a player joins the run's no-friendly-fire team and gets their prior team back, but
+     * a player who was on the mobs' team never gets it back, and is taken off it at login.
+     */
+    public static void runTeams(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var scoreboard = level.getScoreboard();
+        // Mock players all share one name, and teams are keyed by name: one player, two passes.
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        String name = player.getScoreboardName();
+        var priorTeam = scoreboard.addPlayerTeam("gt_prior_" + suffix());
+        var mobTeam = scoreboard.getPlayerTeam("arenas_ld") != null
+            ? scoreboard.getPlayerTeam("arenas_ld") : scoreboard.addPlayerTeam("arenas_ld");
+        try {
+            // Pass 1: an ordinary prior team is given back.
+            String runTeam = "ald_t_" + suffix();
+            scoreboard.addPlayerToTeam(name, priorTeam);
+            net.ledok.arenas_ld.util.RunPartyTeams.add(level, runTeam, player);
+            var team = scoreboard.getPlayerTeam(runTeam);
+            helper.assertTrue(team != null && !team.isAllowFriendlyFire(), "run team has friendly fire off");
+            helper.assertTrue(scoreboard.getPlayersTeam(name) == team, "player is on the run team");
+            net.ledok.arenas_ld.util.RunPartyTeams.teardown(level, runTeam, List.of(name));
+            helper.assertTrue(scoreboard.getPlayerTeam(runTeam) == null, "run team deleted");
+            helper.assertTrue(scoreboard.getPlayersTeam(name) == priorTeam, "prior team given back");
+
+            // Pass 2: the mobs' team is never given back.
+            String secondRun = "ald_t_" + suffix();
+            scoreboard.addPlayerToTeam(name, mobTeam);
+            net.ledok.arenas_ld.util.RunPartyTeams.add(level, secondRun, player);
+            net.ledok.arenas_ld.util.RunPartyTeams.teardown(level, secondRun, List.of(name));
+            helper.assertTrue(scoreboard.getPlayersTeam(name) == null, "the mob team is never given back");
+
+            // Login takes a player off the mob team.
+            scoreboard.addPlayerToTeam(name, mobTeam);
+            net.ledok.arenas_ld.util.RunPartyTeams.leaveMobTeamOnLogin(player);
+            helper.assertTrue(scoreboard.getPlayersTeam(name) == null, "login takes a player off the mob team");
+        } finally {
+            scoreboard.removePlayerTeam(priorTeam);
+            if (scoreboard.getPlayersTeam(name) != null) {
+                scoreboard.removePlayerFromTeam(name);
+            }
+            level.getServer().getPlayerList().remove(player);
+        }
+        helper.succeed();
+    }
+
     /** The gate guards picking a difficulty, joining and starting; lobby data carries the locks. */
     public static void entryGate(GameTestHelper helper) {
         registerHooksOnce();

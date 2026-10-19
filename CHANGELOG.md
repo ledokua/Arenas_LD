@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.6.2
+
+- **Arena run mates are allies.** A mob arena run now puts its players on their own no-friendly-fire
+  team (`ald_a_*`), like dungeon and raid runs, so lobby mates who aren't partied or guilded can't AOE
+  or sweep each other where PvP is on. Mobs keep their own team.
+- **Players stay off the mob teams.** A player found on `arenas_ld` or `arenas_dungeon` (which makes
+  every run mob their ally) is taken off it at login, and a run never gives it back as their prior
+  team. Arenas_LD itself never puts players there; this cleans up hand-made or leftover memberships.
+- The three run types share one run-team helper.
+
 ## 4.6.1
 
 - Reward loot tables (dungeon and raid completion, room rewards, arena wave rows) now roll with the

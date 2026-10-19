@@ -39,4 +39,9 @@ public final class ArenasLdGametests implements FabricGameTest {
     public void apiCopiedController(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.copiedController(helper);
     }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void runTeams(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runTeams(helper);
+    }
 }

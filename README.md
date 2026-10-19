@@ -697,8 +697,18 @@ seconds of silence. Objective lines include "Explore • Rooms cleared: 2/7", "F
 
 **Players bring their own gear.** No inventory is stored, taken or handed back on entry or exit —
 only game mode, health, status effects (wiped when leaving a dungeon or arena; a raid keeps them)
-and the scoreboard team change. What is
-restricted is a config
+and the scoreboard team change.
+
+**Run mates are allies.** Every dungeon, raid and arena run puts its players on their own
+no-friendly-fire scoreboard team (`ald_d_*`, `ald_r_*`, `ald_a_*`) — even strangers from a PUBLIC
+lobby — so where PvP is on they still can't hurt each other, and combat mods that check scoreboard
+teams first (Spell Engine area effects, Better Combat sweeps) treat them as allies. Mobs stay on their
+own team. Leaving the run (any way: exit, death-out, disconnect expiry, the end) gives each player back
+the team they had before, even after a restart or while offline. A player is never put on, or given
+back, Arenas_LD's mob teams `arenas_ld` / `arenas_dungeon` — anyone found on one at login is taken
+off it, since that team would make every run mob their ally.
+
+What is restricted is a config
 [item blacklist](#config) (blocked on use in air, on a block and on an entity, with a red action-bar
 message) and a config effect blacklist stripped every tick.
 

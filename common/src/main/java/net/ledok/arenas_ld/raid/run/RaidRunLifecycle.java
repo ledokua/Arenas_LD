@@ -12,7 +12,7 @@ import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity.ControllerKey;
 import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.util.EntityEquipmentHelper;
-import net.ledok.arenas_ld.util.PartyTeamStore;
+import net.ledok.arenas_ld.util.RunPartyTeams;
 import net.ledok.arenas_ld.util.PendingRestoreStore;
 import net.ledok.arenas_ld.util.PlayerStatsStore;
 import net.ledok.arenas_ld.util.RunHudSync;
@@ -795,50 +795,20 @@ public final class RaidRunLifecycle {
         return "ald_r_" + Integer.toHexString(run.spawnerPos().hashCode());
     }
 
-    /** Adds the player to the run's no-PvP party team, remembering their prior team. */
+    /** Moves the player onto the run's no-PvP party team, remembering their prior team. */
     private static void addToPartyTeam(ServerLevel world, RaidRun run, ServerPlayer player) {
-        Scoreboard scoreboard = world.getScoreboard();
-        String teamName = partyTeamNameFor(run);
-        PlayerTeam team = scoreboard.getPlayerTeam(teamName);
-        if (team == null) {
-            team = scoreboard.addPlayerTeam(teamName);
-            team.setAllowFriendlyFire(false);
-            team.setSeeFriendlyInvisibles(true);
-        }
-        String name = player.getScoreboardName();
-        PlayerTeam prior = scoreboard.getPlayersTeam(name);
-        PartyTeamStore.get(world.getServer()).put(name, prior != null ? prior.getName() : "");
-        scoreboard.addPlayerToTeam(name, team);
+        RunPartyTeams.add(world, partyTeamNameFor(run), player);
     }
 
-    /** Removes one member from the run team and restores their prior team (works offline). */
+    /** Takes one member off the run team and gives back their prior team (works offline). */
     private static void removeFromPartyTeam(ServerLevel world, RaidRun run, String playerName) {
-        Scoreboard scoreboard = world.getScoreboard();
-        String priorName = PartyTeamStore.get(world.getServer()).take(playerName);
-        if (priorName == null) {
-            return;
-        }
-        PlayerTeam current = scoreboard.getPlayersTeam(playerName);
-        if (current != null && current.getName().equals(partyTeamNameFor(run))) {
-            scoreboard.removePlayerFromTeam(playerName, current);
-        }
-        if (!priorName.isEmpty()) {
-            PlayerTeam prior = scoreboard.getPlayerTeam(priorName);
-            if (prior != null) {
-                scoreboard.addPlayerToTeam(playerName, prior);
-            }
-        }
+        RunPartyTeams.remove(world, partyTeamNameFor(run), playerName);
     }
 
-    /** Restores every member's prior team and deletes the temporary party team. */
+    /** Gives every member back their prior team and deletes the temporary party team. */
     private static void teardownPartyTeam(ServerLevel world, RaidRun run) {
-        for (RunParticipant participant : run.participants().values()) {
-            removeFromPartyTeam(world, run, participant.playerName());
-        }
-        PlayerTeam team = world.getScoreboard().getPlayerTeam(partyTeamNameFor(run));
-        if (team != null) {
-            world.getScoreboard().removePlayerTeam(team);
-        }
+        RunPartyTeams.teardown(world, partyTeamNameFor(run),
+            run.participants().values().stream().map(RunParticipant::playerName).toList());
     }
 
     /** Sends a message to every online, non-removed participant except {@code except} (nullable). */

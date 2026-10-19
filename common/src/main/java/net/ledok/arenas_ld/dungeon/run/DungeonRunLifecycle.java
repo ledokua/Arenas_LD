@@ -10,7 +10,7 @@ import net.ledok.arenas_ld.dungeon.room.RoomRewardConfig;
 import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.util.DebugLog;
 import net.ledok.arenas_ld.util.LobbyChatActions;
-import net.ledok.arenas_ld.util.PartyTeamStore;
+import net.ledok.arenas_ld.util.RunPartyTeams;
 import net.ledok.arenas_ld.util.PendingRestoreStore;
 import net.ledok.arenas_ld.util.PlayerStatsStore;
 import net.ledok.arenas_ld.util.RewardDelivery;
@@ -1340,50 +1340,20 @@ public final class DungeonRunLifecycle {
         return "ald_d_" + Integer.toHexString(run.dbsPos().hashCode());
     }
 
-    /** Creates the run's no-PvP team and adds the player, remembering their prior team. */
+    /** Moves the player onto the run's no-PvP team, remembering their prior team. */
     private static void addToPartyTeam(ServerLevel world, DungeonRun run, ServerPlayer player) {
-        Scoreboard scoreboard = world.getScoreboard();
-        String teamName = teamNameFor(run);
-        PlayerTeam team = scoreboard.getPlayerTeam(teamName);
-        if (team == null) {
-            team = scoreboard.addPlayerTeam(teamName);
-            team.setAllowFriendlyFire(false);
-            team.setSeeFriendlyInvisibles(true);
-        }
-        String name = player.getScoreboardName();
-        PlayerTeam prior = scoreboard.getPlayersTeam(name);
-        PartyTeamStore.get(world.getServer()).put(name, prior != null ? prior.getName() : "");
-        scoreboard.addPlayerToTeam(name, team);
+        RunPartyTeams.add(world, teamNameFor(run), player);
     }
 
-    /** Removes one member from the run team and restores their prior team (works for offline players). */
+    /** Takes one member off the run team and gives back their prior team (works for offline players). */
     private static void removeFromPartyTeam(ServerLevel world, DungeonRun run, String playerName) {
-        Scoreboard scoreboard = world.getScoreboard();
-        String priorName = PartyTeamStore.get(world.getServer()).take(playerName);
-        if (priorName == null) {
-            return; // not in this run's team
-        }
-        PlayerTeam current = scoreboard.getPlayersTeam(playerName);
-        if (current != null && current.getName().equals(teamNameFor(run))) {
-            scoreboard.removePlayerFromTeam(playerName, current);
-        }
-        if (!priorName.isEmpty()) {
-            PlayerTeam prior = scoreboard.getPlayerTeam(priorName);
-            if (prior != null) {
-                scoreboard.addPlayerToTeam(playerName, prior);
-            }
-        }
+        RunPartyTeams.remove(world, teamNameFor(run), playerName);
     }
 
-    /** Restores every member's prior team and deletes the temporary run team. */
+    /** Gives every member back their prior team and deletes the temporary run team. */
     private static void teardownPartyTeam(ServerLevel world, DungeonRun run) {
-        for (RunParticipant participant : run.participants().values()) {
-            removeFromPartyTeam(world, run, participant.playerName());
-        }
-        PlayerTeam team = world.getScoreboard().getPlayerTeam(teamNameFor(run));
-        if (team != null) {
-            world.getScoreboard().removePlayerTeam(team);
-        }
+        RunPartyTeams.teardown(world, teamNameFor(run),
+            run.participants().values().stream().map(RunParticipant::playerName).toList());
     }
 
     /**

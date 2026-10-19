@@ -83,6 +83,9 @@ public final class ArenaRunLifecycle {
                 .recordRunStart(player.getUUID(), net.ledok.arenas_ld.util.PlayerStatsStore.Mode.ARENA);
             player.setGameMode(GameType.SURVIVAL);
             player.setHealth(player.getMaxHealth());
+            // Run mates share a no-friendly-fire team, so AOE and sweeps never hit each other (the
+            // lobby may be PUBLIC: they need not be partied or guilded). Mobs keep their own team.
+            net.ledok.arenas_ld.util.RunPartyTeams.add(world, partyTeamNameFor(run), player);
             if (entranceWorld != null) {
                 player.teleportTo(entranceWorld, entrance.getX() + 0.5, entrance.getY(), entrance.getZ() + 0.5,
                     player.getYRot(), player.getXRot());
@@ -734,6 +737,8 @@ public final class ArenaRunLifecycle {
             if (p != null) names.add(p.playerName());
             restoreToReturnPoint(world, run, uuid);
         }
+        net.ledok.arenas_ld.util.RunPartyTeams.teardown(world, partyTeamNameFor(run),
+            run.participants().values().stream().map(RunParticipant::playerName).toList());
         RunHudSync.hide(world, hudTargets(run));
         run.setPhase(ArenaPhase.DONE);
         controller.onArenaEnded(run.spawnerPos(), run.currentWave(), names);
@@ -813,13 +818,28 @@ public final class ArenaRunLifecycle {
             UUID uuid = entry.getKey();
             RunParticipant participant = run.participants().get(uuid);
             if (participant != null) run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, now));
+            leavePartyTeam(world, run, uuid); // by name, works while they're offline
             run.clearDisconnected(uuid);
             run.clearDowned(uuid);
             net.ledok.arenas_ld.util.BusyStateCompat.clearBusy(uuid, BUSY_REASON);
         }
     }
 
+    /** The run's no-friendly-fire player team. */
+    private static String partyTeamNameFor(ArenaRun run) {
+        return "ald_a_" + Integer.toHexString(run.spawnerPos().hashCode());
+    }
+
+    private static void leavePartyTeam(ServerLevel world, ArenaRun run, UUID uuid) {
+        RunParticipant participant = run.participants().get(uuid);
+        if (participant != null) {
+            net.ledok.arenas_ld.util.RunPartyTeams.remove(world, partyTeamNameFor(run), participant.playerName());
+        }
+    }
+
     private static void restoreToReturnPoint(ServerLevel world, ArenaRun run, UUID uuid) {
+        // Every way out of the run (exit, hardcore death-out, disconnect expiry, the end) passes here.
+        leavePartyTeam(world, run, uuid);
         PlayerReturnPoint rp = run.returnPoints().get(uuid);
         if (rp == null) return;
         GameType restoreMode = rp.previousGameMode();
