@@ -9,6 +9,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Entity.class)
@@ -26,5 +27,17 @@ public abstract class EntityMixin {
         if (LivingEntityHooks.suppressExplosionBlockDamage(explosion)) {
             cir.setReturnValue(false);
         }
+    }
+
+    /** A minion read back from disk is remembered with its summoner again (see RunMinions). */
+    @Inject(method = "load", at = @At("TAIL"))
+    private void arenas_ld$minionLoaded(net.minecraft.nbt.CompoundTag tag, CallbackInfo ci) {
+        net.ledok.arenas_ld.util.RunMinions.onLoaded((Entity) (Object) this);
+    }
+
+    /** A run mob killed or discarded takes its minions with it (see RunMinions). */
+    @Inject(method = "remove", at = @At("HEAD"))
+    private void arenas_ld$minionsLeaveWithSummoner(Entity.RemovalReason reason, CallbackInfo ci) {
+        net.ledok.arenas_ld.util.RunMinions.onRemoved((Entity) (Object) this, reason);
     }
 }

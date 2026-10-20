@@ -368,6 +368,11 @@ public final class ArenaRunLifecycle {
         living.heal(living.getMaxHealth());
         // Owned by the run: never let vanilla despawn or convert arena mobs.
         EntityEquipmentHelper.markRunMob(living);
+        // For its minions: the wave scaling that reached its own health and attack damage (arenas
+        // don't scale damage to players separately).
+        net.ledok.arenas_ld.util.RunMinions.recordScale(living,
+            EntityEquipmentHelper.setsMaxHealth(mobData.attributes) ? scaleFactor : 1.0,
+            EntityEquipmentHelper.setsAttackDamage(mobData.attributes) ? scaleFactor : 1.0);
         assignTeam(world, spawner, living);
 
         BlockPos origin = run.spawnerPos();

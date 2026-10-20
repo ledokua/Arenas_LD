@@ -61,5 +61,7 @@ public class ArenasLdMod {
         ArenasEvents.SERVER_TICK_END.add(net.ledok.arenas_ld.block.entity.PhaseBlockEntity::tickLegacyMains);
         ArenasEvents.SERVER_STARTED.add(net.ledok.arenas_ld.util.ControllerChunks::holdKnown);
         ArenasEvents.SERVER_STOPPED.add(server -> net.ledok.arenas_ld.util.RunChunkTickets.clear());
+        ArenasEvents.SERVER_TICK_END.add(net.ledok.arenas_ld.util.RunMinions::endTick);
+        ArenasEvents.SERVER_STOPPED.add(server -> net.ledok.arenas_ld.util.RunMinions.clear());
     }
 }

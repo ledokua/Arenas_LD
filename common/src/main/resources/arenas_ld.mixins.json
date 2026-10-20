@@ -8,8 +8,11 @@
     "EndermanTakeBlockGoalMixin",
     "EntityMixin",
     "ExplosionDamageCalculatorMixin",
+    "LivingEntityMinionMixin",
     "MobMixin",
-    "ProjectileMixin"
+    "ProjectileMixin",
+    "ServerLevelMinionMixin",
+    "ZombieMinionMixin"
   ],
   "client": [
     "client.BossHealthOverlayMixin",

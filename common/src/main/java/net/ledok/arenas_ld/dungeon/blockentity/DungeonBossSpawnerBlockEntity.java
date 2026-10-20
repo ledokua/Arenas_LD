@@ -209,6 +209,9 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         living.heal(living.getMaxHealth());
         // Owned by the run: never let vanilla despawn or convert the boss.
         EntityEquipmentHelper.markRunMob(living);
+        // For its minions: what reached its own health (damage to players is scaled per run).
+        net.ledok.arenas_ld.util.RunMinions.recordScale(living,
+            EntityEquipmentHelper.setsMaxHealth(entityDefinition.attributes()) ? healthMultiplier : 1.0, 1.0);
 
         Vec3 spawnPos = EntityEquipmentHelper.resolveBossSpawnPos(worldPosition, entityDefinition.spawnOffsets());
         living.moveTo(spawnPos.x, spawnPos.y, spawnPos.z, world.random.nextFloat() * 360.0F, 0.0F);

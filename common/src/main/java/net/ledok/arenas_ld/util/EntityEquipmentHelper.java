@@ -133,6 +133,16 @@ public final class EntityEquipmentHelper {
         }
     }
 
+    /** Whether these attribute rows set max health (so the spawn multipliers reach it). */
+    public static boolean setsMaxHealth(List<AttributeData> attributes) {
+        return attributes != null && attributes.stream().anyMatch(a -> MAX_HEALTH_ID.equals(a.id()));
+    }
+
+    /** Whether these attribute rows set attack damage. */
+    public static boolean setsAttackDamage(List<AttributeData> attributes) {
+        return attributes != null && attributes.stream().anyMatch(a -> ATTACK_DAMAGE_ID.equals(a.id()));
+    }
+
     /**
      * Resolve the world-space spawn position for a boss relative to its spawner. When no offset is
      * configured the boss spawns one block above the spawner; otherwise the first offset is used.

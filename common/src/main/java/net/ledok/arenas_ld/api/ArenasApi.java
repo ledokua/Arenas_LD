@@ -4,10 +4,12 @@ import net.ledok.arenas_ld.activity.ActivityRegistry;
 import net.ledok.arenas_ld.activity.EntryGates;
 import net.ledok.arenas_ld.activity.LobbyScreens;
 import net.ledok.arenas_ld.activity.RunEvents;
+import net.ledok.arenas_ld.util.RunMinions;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.LivingEntity;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -125,5 +127,22 @@ public final class ArenasApi {
     /** Called (on the server thread) once per finished run of any type. */
     public static void addRunListener(Consumer<RunResult> listener) {
         RunEvents.addListener(listener);
+    }
+
+    /**
+     * Runs {@code spawning} as {@code summoner}. Every mob it adds to the world becomes the
+     * summoner's minion when the summoner is a run mob (a boss or wave mob of a dungeon, raid or
+     * arena): on its team, with its health and damage scaling, without loot or experience, and gone
+     * when the summoner dies. Outside a run it just runs {@code spawning}.
+     *
+     * <p>Not needed for mobs spawned from the summoner's own tick or while it is hurt, or whose
+     * owner ({@code OwnableEntity}, {@code TraceableEntity}) is the summoner: those are recognized
+     * on their own. Use it for spawns from delayed tasks or from other entities.
+     */
+    public static void spawnAsMinions(LivingEntity summoner, Runnable spawning) {
+        RunMinions.actingAs(summoner, () -> {
+            spawning.run();
+            return null;
+        });
     }
 }

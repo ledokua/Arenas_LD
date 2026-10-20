@@ -237,6 +237,10 @@ public final class RaidRunLifecycle {
             livingBoss.heal(livingBoss.getMaxHealth());
             // Owned by the run: never let vanilla despawn or convert the boss.
             EntityEquipmentHelper.markRunMob(livingBoss);
+            // For its minions: what reached its own health. Damage to raid players is already
+            // multiplied by the tier for every source, so minions get no attack-damage factor.
+            net.ledok.arenas_ld.util.RunMinions.recordScale(livingBoss,
+                EntityEquipmentHelper.setsMaxHealth(entityDefinition.attributes()) ? healthMult * perPlayerMult : 1.0, 1.0);
             String groupId = spawner.getGroupId();
             String teamName = groupId == null || groupId.isBlank() ? "arenas_ld" : groupId;
             Scoreboard scoreboard = world.getScoreboard();

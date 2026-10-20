@@ -138,6 +138,30 @@ the player stats. Dungeon leaderboards are already updated by then; raid and are
 arena's best-wave stat) are written when the run closes, after its close timer. An arena run is a WIN when it reached its maximum wave and a
 LOSS otherwise — `wave` tells how far it got. A listener that throws is logged and skipped.
 
+## Minions
+
+Mobs a run mob spawns by itself become its minions (see the README). They join its team and
+scaling, drop nothing, never hold up a room, wave or raid, and vanish when it dies. Arenas_LD
+recognizes them by itself in these cases:
+- spawned from the summoner's own tick, scheduled events it runs there included;
+- spawned from vanilla's `LivingEntity.hurt` while it is being damaged;
+- the summoner is their owner (`OwnableEntity`, `TraceableEntity`).
+
+Spawns from a subclass's `hurt` override outside `super.hurt` are not recognized; neither are
+spawns from a delayed task or another entity. For those, wrap the spawn:
+
+```java
+// In your boss, inside a task that runs later, outside the boss's tick:
+ArenasApi.spawnAsMinions(boss, () -> {
+    Zombie add = EntityType.ZOMBIE.create(level);
+    add.moveTo(x, y, z);
+    level.addFreshEntity(add);   // becomes the boss's minion when the boss is a run mob
+});
+```
+
+Outside a run (the boss is not a run mob) it just runs the code. While the boss is dead or dying,
+mobs added for it are not spawned (`addFreshEntity` returns false). Server thread only.
+
 ## Stability
 
 The methods, records and interfaces on this page are the stable surface: they won't change or

@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.8.0
+
+- **Bosses that summon minions.** Mobs a run mob spawns by itself are now its minions: a vanilla
+  Evoker's Vexes, a Bosses of Mass Destruction lich's phantoms, your own bosses' adds. A minion:
+  - joins its summoner's team and health and damage scaling;
+  - drops no loot or experience;
+  - never holds up a room, wave or raid;
+  - vanishes when its summoner dies or is cleaned up.
+
+  Before, they were strangers to the run: unscaled, dropping loot, and left behind in the instance
+  for the next party. A minion is recognized in these cases:
+  - it is spawned while the run mob acts: its tick, vanilla's damage code, a zombie's
+    reinforcements, or a projectile it shot;
+  - the run mob is its owner.
+
+  A mob owned by someone else (a player's pet or summon), or converted during the boss's turn, is
+  never adopted. Minions are removed in the same tick as their summoner, so run cleanup leaves none
+  behind.
+- **Nothing is spawned for a dying top summoner** (a slime's split, a boss's death summons): those
+  mobs would vanish with it at once. A dying minion's spawns are still minions.
+- New API: `ArenasApi.spawnAsMinions(summoner, spawning)` for minions spawned from delayed tasks.
+
 ## 4.7.0
 
 ### Copying instances

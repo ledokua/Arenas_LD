@@ -733,6 +733,35 @@ the team they had before, even after a restart or while offline. A player is nev
 back, Arenas_LD's mob teams `arenas_ld` / `arenas_dungeon` — anyone found on one at login is taken
 off it, since that team would make every run mob their ally.
 
+**Bosses that summon minions.** Mobs that a run mob (a boss or a wave mob) spawns by itself become
+its **minions**. That covers a vanilla Evoker's Vexes, a Bosses of Mass Destruction lich's phantoms,
+and your own bosses' adds. Arenas_LD spots them in two ways:
+- a mob added while the run mob is acting: its tick (scheduled attacks it runs from its tick
+  included), vanilla's damage code (`LivingEntity.hurt`, and a zombie's reinforcements), or a
+  projectile it shot;
+- a mob whose owner is the run mob.
+
+A minion:
+- is a run mob too: it doesn't despawn, convert or break blocks;
+- is on its summoner's team, so it doesn't hurt the boss or other mobs;
+- gets its summoner's health and damage scaling (difficulty tier, party size, arena wave);
+- drops no loot and no experience;
+- never holds up a room, wave or raid;
+- **vanishes when its summoner dies** or is cleaned up (room reset, run end). A minion's own minions
+  belong to the same top summoner.
+
+Nothing is spawned for a top summoner that is already dying. A slime doesn't split, and a boss's
+death summons don't appear, since they would vanish with it at once. A dying minion's own spawns are
+still minions of the top summoner. A mob owned by someone else, such as a player's pet or summon, is
+never adopted, and nor is a mob converted during the boss's turn (a villager it killed).
+
+A boss written in your own mod should do one of these:
+- spawn from its tick (check its health there);
+- set itself as the minion's owner;
+- wrap the spawn in `ArenasApi.spawnAsMinions` (see [API.md](API.md)).
+
+Spawning from its own `hurt` override, outside `super.hurt`, is not recognized on its own.
+
 What is restricted is a config
 [item blacklist](#config) (blocked on use in air, on a block and on an entity, with a red action-bar
 message) and a config effect blacklist stripped every tick.

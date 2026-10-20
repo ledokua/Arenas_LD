@@ -54,4 +54,19 @@ public final class ArenasLdGametests implements FabricGameTest {
     public void controllerChunks(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.controllerChunks(helper);
     }
+
+    @GameTest(template = EMPTY_STRUCTURE, timeoutTicks = 400)
+    public void runMinions(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runMinions(helper);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE, timeoutTicks = 2000)
+    public void evokerMinions(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.evokerMinions(helper);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE, timeoutTicks = 6200, skyAccess = true)
+    public void lichMinions(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.lichMinions(helper);
+    }
 }

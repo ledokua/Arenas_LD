@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 /**
  * GameTest bodies for the public API, shared by the Fabric and NeoForge gametest holders. They
@@ -62,10 +63,15 @@ public final class ApiGameTests {
     /** Runs {@code then} on the first tick {@code ready} holds, failing after {@code ticks} ticks. */
     private static void whenTrue(GameTestHelper helper, int ticks, java.util.function.BooleanSupplier ready, String what,
                                  Runnable then) {
+        whenTrue(helper, ticks, ready, () -> what, then);
+    }
+
+    private static void whenTrue(GameTestHelper helper, int ticks, java.util.function.BooleanSupplier ready,
+                                 Supplier<String> what, Runnable then) {
         if (ready.getAsBoolean()) {
             then.run();
         } else if (ticks <= 0) {
-            helper.fail("timed out waiting: " + what);
+            helper.fail("timed out waiting: " + what.get());
         } else {
             helper.runAfterDelay(1, () -> whenTrue(helper, ticks - 1, ready, what, then));
         }
@@ -125,6 +131,211 @@ public final class ApiGameTests {
             helper.assertTrue(ArenasApi.activity(server, newId).isEmpty(), "breaking the controller removes the activity");
             helper.succeed();
         });
+    }
+
+    /**
+     * Minions: what a run mob spawns (owned by it, or while it acts) joins its team and scaling and
+     * drops nothing; a mob owned by someone else is left alone; a dying run mob spawns nothing; and
+     * the minions vanish when it dies.
+     */
+    public static void runMinions(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos at = helper.absolutePos(new BlockPos(3, 1, 3));
+        var scoreboard = level.getScoreboard();
+        String teamName = "ald_gt_" + suffix();
+        var team = scoreboard.addPlayerTeam(teamName);
+        team.setAllowFriendlyFire(false);
+
+        var boss = net.minecraft.world.entity.EntityType.HUSK.create(level);
+        boss.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5);
+        net.ledok.arenas_ld.util.EntityEquipmentHelper.markRunMob(boss);
+        net.ledok.arenas_ld.util.RunMinions.recordScale(boss, 2.0, 1.5);
+        scoreboard.addPlayerToTeam(boss.getScoreboardName(), team);
+        boss.setNoAi(true);
+        level.addFreshEntity(boss);
+
+        var vex = net.minecraft.world.entity.EntityType.VEX.create(level);
+        vex.moveTo(at.getX() + 0.5, at.getY() + 1, at.getZ() + 0.5);
+        vex.setOwner(boss);
+        vex.setNoAi(true);
+        level.addFreshEntity(vex);
+        helper.assertTrue(net.ledok.arenas_ld.util.RunMinions.isMinion(vex), "an owned mob is a minion");
+        helper.assertTrue(vex.getTags().contains(net.ledok.arenas_ld.util.EntityEquipmentHelper.RUN_MOB_TAG)
+            && vex.getTags().contains(net.ledok.arenas_ld.util.EntityEquipmentHelper.NO_NATURAL_LOOT_TAG), "a run mob without loot");
+        helper.assertTrue(vex.getTeam() == team, "on its summoner's team");
+        helper.assertTrue(Math.abs(vex.getMaxHealth() - 28.0f) < 0.01f && Math.abs(vex.getHealth() - 28.0f) < 0.01f,
+            "health scaled like its summoner: " + vex.getMaxHealth());
+
+        var fish = net.minecraft.world.entity.EntityType.SILVERFISH.create(level);
+        fish.moveTo(at.getX() + 1.5, at.getY(), at.getZ() + 0.5);
+        fish.setNoAi(true);
+        net.ledok.arenas_ld.util.RunMinions.actingAs(boss, () -> level.addFreshEntity(fish));
+        double damage = fish.getAttributeBaseValue(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+        helper.assertTrue(net.ledok.arenas_ld.util.RunMinions.isMinion(fish) && Math.abs(damage - 1.5) < 0.01,
+            "spawned while the run mob acts: a minion with its damage scaling (" + damage + ")");
+
+        var stranger = net.minecraft.world.entity.EntityType.HUSK.create(level);
+        stranger.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 2.5);
+        stranger.setNoAi(true);
+        level.addFreshEntity(stranger);
+        var theirVex = net.minecraft.world.entity.EntityType.VEX.create(level);
+        theirVex.moveTo(at.getX() + 0.5, at.getY() + 1, at.getZ() + 2.5);
+        theirVex.setOwner(stranger);
+        theirVex.setNoAi(true);
+        net.ledok.arenas_ld.util.RunMinions.actingAs(boss, () -> level.addFreshEntity(theirVex));
+        helper.assertTrue(!net.ledok.arenas_ld.util.RunMinions.isMinion(theirVex), "someone else's mob is left alone");
+
+        // Outside a run, spawnAsMinions just runs the code.
+        var plain = net.minecraft.world.entity.EntityType.HUSK.create(level);
+        plain.moveTo(at.getX() + 2.5, at.getY(), at.getZ() + 2.5);
+        plain.setNoAi(true);
+        level.addFreshEntity(plain);
+        var plainAdd = net.minecraft.world.entity.EntityType.SILVERFISH.create(level);
+        plainAdd.moveTo(at.getX() + 2.5, at.getY(), at.getZ() + 3.5);
+        plainAdd.setNoAi(true);
+        net.ledok.arenas_ld.api.ArenasApi.spawnAsMinions(plain, () -> level.addFreshEntity(plainAdd));
+        helper.assertTrue(!net.ledok.arenas_ld.util.RunMinions.isMinion(plainAdd) && !plainAdd.isRemoved()
+                && !plainAdd.getTags().contains(net.ledok.arenas_ld.util.EntityEquipmentHelper.RUN_MOB_TAG),
+            "outside a run, spawnAsMinions adopts nothing");
+
+        // A summoner discarded by run cleanup takes its minions at once (they may never tick again).
+        var second = net.minecraft.world.entity.EntityType.HUSK.create(level);
+        second.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 4.5);
+        net.ledok.arenas_ld.util.EntityEquipmentHelper.markRunMob(second);
+        second.setNoAi(true);
+        level.addFreshEntity(second);
+        var secondFish = net.minecraft.world.entity.EntityType.SILVERFISH.create(level);
+        secondFish.moveTo(at.getX() + 1.5, at.getY(), at.getZ() + 4.5);
+        secondFish.setNoAi(true);
+        net.ledok.arenas_ld.api.ArenasApi.spawnAsMinions(second, () -> level.addFreshEntity(secondFish));
+        helper.assertTrue(net.ledok.arenas_ld.util.RunMinions.isMinion(secondFish), "spawnAsMinions adopts for a run mob");
+        second.discard();
+        helper.assertTrue(secondFish.isRemoved(), "a discarded summoner takes its minions at once");
+
+        boss.kill();
+        var late = net.minecraft.world.entity.EntityType.SILVERFISH.create(level);
+        late.moveTo(at.getX() + 1.5, at.getY(), at.getZ() + 1.5);
+        boolean added = net.ledok.arenas_ld.util.RunMinions.actingAs(boss, () -> level.addFreshEntity(late));
+        helper.assertTrue(!added, "a dying run mob spawns nothing");
+
+        whenTrue(helper, 200, () -> vex.isRemoved() && fish.isRemoved(), "the minions vanish with their summoner", () -> {
+            helper.assertTrue(!theirVex.isRemoved() && !plainAdd.isRemoved(), "mobs that aren't minions stay");
+            theirVex.discard();
+            stranger.discard();
+            plain.discard();
+            plainAdd.discard();
+            scoreboard.removePlayerTeam(team);
+            helper.succeed();
+        });
+    }
+
+    /** A vanilla evoker run boss: the vexes its spell summons become its minions and vanish with it. */
+    public static void evokerMinions(GameTestHelper helper) {
+        bossMinions(helper, net.minecraft.world.entity.EntityType.EVOKER, 1700);
+    }
+
+    /**
+     * A Bosses of Mass Destruction lich run boss: the phantoms its minion attack summons (from its
+     * own scheduled events) become its minions and vanish with it. Passes at once without BOMD.
+     */
+    public static void lichMinions(GameTestHelper helper) {
+        var type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
+            .getOptional(ResourceLocation.parse("bosses_of_mass_destruction:lich"));
+        if (type.isEmpty()) {
+            helper.succeed(); // BOMD not installed
+            return;
+        }
+        bossMinions(helper, type.get(), 1200, (boss, player) -> {
+            // Its attack cycle is random and needs a clear view; start its minion attack directly
+            // (BOMD's own MinionAction: it schedules the summons on the lich's tick events).
+            ((net.minecraft.world.entity.Mob) boss).setTarget(player);
+            try {
+                var field = boss.getClass().getDeclaredField("minionAction");
+                field.setAccessible(true);
+                Object action = field.get(boss);
+                action.getClass().getMethod("perform").invoke(action);
+            } catch (ReflectiveOperationException e) {
+                helper.fail("BOMD's lich has no minionAction to start: " + e);
+            }
+        });
+    }
+
+    /** Spawns {@code bossType} as a run boss next to a survival player and waits for its minions. */
+    private static void bossMinions(GameTestHelper helper, net.minecraft.world.entity.EntityType<?> bossType, int ticks) {
+        bossMinions(helper, bossType, ticks, (boss, player) -> {
+        });
+    }
+
+    private static void bossMinions(GameTestHelper helper, net.minecraft.world.entity.EntityType<?> bossType, int ticks,
+                                    java.util.function.BiConsumer<net.minecraft.world.entity.LivingEntity, ServerPlayer> start) {
+        var level = helper.getLevel();
+        BlockPos at = helper.absolutePos(new BlockPos(2, 1, 2));
+        var scoreboard = level.getScoreboard();
+        var team = scoreboard.addPlayerTeam("ald_gt_" + suffix());
+        team.setAllowFriendlyFire(false);
+
+        var boss = (net.minecraft.world.entity.LivingEntity) bossType.create(level);
+        boss.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5);
+        net.ledok.arenas_ld.util.EntityEquipmentHelper.markRunMob(boss);
+        net.ledok.arenas_ld.util.RunMinions.recordScale(boss, 2.0, 1.0);
+        scoreboard.addPlayerToTeam(boss.getScoreboardName(), team);
+        level.addFreshEntity(boss);
+        ServerPlayer player = survivalPlayer(helper, at.offset(4, 0, 4)); // inside the test area's barrier walls
+        start.accept(boss, player);
+
+        UUID bossId = boss.getUUID();
+        net.minecraft.world.phys.AABB area = new net.minecraft.world.phys.AABB(at).inflate(48);
+        Supplier<List<net.minecraft.world.entity.Mob>> minions = () -> level.getEntitiesOfClass(
+            net.minecraft.world.entity.Mob.class, area, mob -> net.ledok.arenas_ld.util.RunMinions.isMinionOf(mob, bossId));
+        whenTrue(helper, ticks, () -> !minions.get().isEmpty(), () -> boss.getType() + " summons minions (boss alive="
+                + boss.isAlive() + " removed=" + boss.isRemoved() + " target="
+                + (boss instanceof net.minecraft.world.entity.Mob m ? m.getTarget() : null) + " at " + boss.blockPosition()
+                + "; player " + player.blockPosition() + " creative=" + player.isCreative() + " alive=" + player.isAlive()
+                + "; difficulty " + level.getDifficulty() + "; vanilla targeting finds "
+                + level.getNearestPlayer(net.minecraft.world.entity.ai.targeting.TargetingConditions.forCombat().range(32),
+                    boss) + "; seeAsEnemy=" + player.canBeSeenAsEnemy() + " los=" + boss.hasLineOfSight(player)
+                + " inLevelPlayers=" + level.players().contains(player) + ")", () -> {
+            List<net.minecraft.world.entity.Mob> summoned = minions.get();
+            for (var mob : summoned) {
+                helper.assertTrue(mob.getTeam() == team, mob.getType() + " is on its summoner's team");
+                helper.assertTrue(mob.getTags().contains(net.ledok.arenas_ld.util.EntityEquipmentHelper.NO_NATURAL_LOOT_TAG),
+                    mob.getType() + " drops no loot");
+                var health = mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+                double defaultHealth = net.minecraft.world.entity.ai.attributes.DefaultAttributes
+                    .getSupplier((net.minecraft.world.entity.EntityType<? extends net.minecraft.world.entity.LivingEntity>) mob.getType())
+                    .getBaseValue(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+                helper.assertTrue(health != null && Math.abs(health.getBaseValue() - defaultHealth * 2.0) < 0.01,
+                    mob.getType() + " health is scaled like its summoner: " + (health == null ? "-" : health.getBaseValue()));
+            }
+            boss.kill();
+            whenTrue(helper, 200, () -> summoned.stream().allMatch(net.minecraft.world.entity.Entity::isRemoved),
+                "the minions vanish with their summoner", () -> {
+                    level.getServer().getPlayerList().remove(player);
+                    scoreboard.removePlayerTeam(team);
+                    helper.succeed();
+                });
+        });
+    }
+
+    /**
+     * A survival test player that mobs attack (the GameTest mock player counts as creative, which
+     * mobs never target), kept alive by Resistance V and Regeneration.
+     */
+    private static ServerPlayer survivalPlayer(GameTestHelper helper, BlockPos at) {
+        var level = helper.getLevel();
+        var cookie = net.minecraft.server.network.CommonListenerCookie.createInitial(
+            new com.mojang.authlib.GameProfile(UUID.randomUUID(), "ald_gt_" + suffix()), false);
+        ServerPlayer player = new ServerPlayer(level.getServer(), level, cookie.gameProfile(), cookie.clientInformation());
+        var connection = new net.minecraft.network.Connection(net.minecraft.network.protocol.PacketFlow.SERVERBOUND);
+        new io.netty.channel.embedded.EmbeddedChannel(connection);
+        level.getServer().getPlayerList().placeNewPlayer(connection, player, cookie);
+        player.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
+        player.teleportTo(level, at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0f, 0f);
+        player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+            net.minecraft.world.effect.MobEffects.DAMAGE_RESISTANCE, 20 * 600, 4, false, false));
+        player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+            net.minecraft.world.effect.MobEffects.REGENERATION, 20 * 600, 4, false, false));
+        return player;
     }
 
     /**

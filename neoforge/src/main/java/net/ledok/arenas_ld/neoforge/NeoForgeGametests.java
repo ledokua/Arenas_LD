@@ -62,4 +62,19 @@ public final class NeoForgeGametests {
     public static void controllerChunks(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.controllerChunks(helper);
     }
+
+    @GameTest(template = "empty", timeoutTicks = 400)
+    public static void runMinions(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runMinions(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 2000)
+    public static void evokerMinions(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.evokerMinions(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 6200, skyAccess = true)
+    public static void lichMinions(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.lichMinions(helper);
+    }
 }
