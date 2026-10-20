@@ -14,6 +14,8 @@ import net.ledok.arenas_ld.util.RunPartyTeams;
 import net.ledok.arenas_ld.util.PendingRestoreStore;
 import net.ledok.arenas_ld.util.PlayerStatsStore;
 import net.ledok.arenas_ld.util.RewardDelivery;
+import net.ledok.arenas_ld.util.ControllerChunks;
+import net.ledok.arenas_ld.util.RunChunkTickets;
 import net.ledok.arenas_ld.util.RunHudSync;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.MutableComponent;
@@ -54,6 +56,11 @@ public final class DungeonRunLifecycle {
     }
 
     public static void tick(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+        if (run.phase() != DungeonPhase.DONE && world.dimension().equals(run.dbsDimension())
+                && !RunChunkTickets.isHeld(RunChunkTickets.owner(run.dbsDimension(), run.dbsPos()))) {
+            // A run restored after a restart: tickets aren't saved, so take them again.
+            holdChunksForRun(world, run.dbsPos());
+        }
         switch (run.phase()) {
             case STARTING -> tickStarting(world, controller, run);
             case RUNNING -> tickRunning(world, controller, run);
@@ -110,7 +117,7 @@ public final class DungeonRunLifecycle {
             }
         }
 
-        forceLoadChunksForRun(world, dbsPos);
+        holdChunksForRun(world, dbsPos);
 
         TierConfig tierConfig = controller.getTierConfigs().getOrDefault(tier, TierConfig.defaultFor(tier));
         DungeonRun run = new DungeonRun(tier, tierConfig, hardcore, dbsPos, world.dimension(), world.getGameTime(), ownerName);
@@ -834,7 +841,7 @@ public final class DungeonRunLifecycle {
                 }
             }
         }
-        unforceChunksForRun(world, run.dbsPos());
+        releaseChunksForRun(world, run);
     }
 
     /**
@@ -1478,44 +1485,58 @@ public final class DungeonRunLifecycle {
         }
     }
 
-    public static void forceLoadChunksForRun(ServerLevel world, BlockPos dbsPos) {
-        Set<ChunkPos> chunks = collectRunChunks(world, dbsPos);
-        DebugLog.log("forceLoad: {} chunks in {} for dbs {}: {}", chunks.size(), world.dimension().location(), dbsPos, chunks);
-        for (ChunkPos chunkPos : chunks) {
-            world.setChunkForced(chunkPos.x, chunkPos.z, true);
+    /**
+     * Keeps the run's chunks loaded — the boss spawner, rooms, spawners, door anchors, protect spot
+     * and the entrance (which may be in another dimension) — with tickets owned by this instance.
+     */
+    public static void holdChunksForRun(ServerLevel world, BlockPos dbsPos) {
+        Set<RunChunkTickets.HeldChunk> chunks = new HashSet<>();
+        for (ChunkPos chunk : collectRunChunks(world, dbsPos)) {
+            chunks.add(new RunChunkTickets.HeldChunk(world.dimension(), chunk));
         }
-        setEntranceChunkForced(world, dbsPos, true);
+        RunChunkTickets.HeldChunk entrance = entranceChunk(world, dbsPos);
+        if (entrance != null) {
+            chunks.add(entrance);
+        }
+        DebugLog.log("hold: {} chunks for dbs {} in {}: {}", chunks.size(), dbsPos, world.dimension().location(), chunks);
+        RunChunkTickets.hold(world.getServer(), RunChunkTickets.owner(world.dimension(), dbsPos), chunks);
     }
 
-    private static void unforceChunksForRun(ServerLevel world, BlockPos dbsPos) {
-        Set<ChunkPos> chunks = collectRunChunks(world, dbsPos);
-        DebugLog.log("unforce: {} chunks in {} for dbs {}", chunks.size(), world.dimension().location(), dbsPos);
-        for (ChunkPos chunkPos : chunks) {
-            world.setChunkForced(chunkPos.x, chunkPos.z, false);
+    private static void releaseChunksForRun(ServerLevel world, DungeonRun run) {
+        RunChunkTickets.release(world.getServer(), RunChunkTickets.owner(run.dbsDimension(), run.dbsPos()));
+        if (run.legacyForcedChunks()) {
+            // Started before 4.7.0, when runs force-loaded their chunks: let go of those once (not of
+            // a chunk a controller lives in, which keeps its own hold).
+            for (ChunkPos chunk : collectRunChunks(world, run.dbsPos())) {
+                ControllerChunks.unforceUnlessController(world, chunk);
+            }
+            RunChunkTickets.HeldChunk entrance = entranceChunk(world, run.dbsPos());
+            ServerLevel entranceLevel = entrance != null ? world.getServer().getLevel(entrance.level()) : null;
+            if (entranceLevel != null) {
+                ControllerChunks.unforceUnlessController(entranceLevel, entrance.chunk());
+            }
+            DebugLog.log("unforce (pre-4.7.0 run) for dbs {} in {}", run.dbsPos(), world.dimension().location());
         }
-        setEntranceChunkForced(world, dbsPos, false);
     }
 
     /**
      * The entrance may live in a different dimension than the DBS and its rooms, so
-     * {@link #collectRunChunks} can't cover it — force it separately in its own level.
+     * {@link #collectRunChunks} can't cover it — it is held separately in its own level.
      * Keeps run starts and reconnects from dropping players into an unloaded chunk.
      */
-    private static void setEntranceChunkForced(ServerLevel world, BlockPos dbsPos, boolean forced) {
+    private static @Nullable RunChunkTickets.HeldChunk entranceChunk(ServerLevel world, BlockPos dbsPos) {
         if (!(world.getBlockEntity(dbsPos) instanceof DungeonBossSpawnerBlockEntity dbs)) {
-            return;
+            return null;
         }
         BlockPos entrance = dbs.getAbsoluteEntrancePos();
         if (entrance == null) {
-            return;
+            return null;
         }
         ServerLevel entranceLevel = world.getServer().getLevel(dbs.getEntranceDimension());
         if (entranceLevel == null) {
             entranceLevel = world;
         }
-        ChunkPos chunkPos = new ChunkPos(entrance);
-        DebugLog.log("{} entrance chunk {} in {}", forced ? "forceLoad:" : "unforce:", chunkPos, entranceLevel.dimension().location());
-        entranceLevel.setChunkForced(chunkPos.x, chunkPos.z, forced);
+        return new RunChunkTickets.HeldChunk(entranceLevel.dimension(), new ChunkPos(entrance));
     }
 
     private static Set<ChunkPos> collectRunChunks(ServerLevel world, BlockPos dbsPos) {

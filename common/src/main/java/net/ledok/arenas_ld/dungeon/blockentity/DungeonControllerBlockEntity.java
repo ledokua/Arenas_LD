@@ -33,7 +33,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
@@ -1205,17 +1204,19 @@ public class DungeonControllerBlockEntity extends BlockEntity
             net.ledok.arenas_ld.activity.ActivityRegistry.attach(be);
         }
 
+        boolean cooling = !be.instanceCooldownTimers.isEmpty();
         Iterator<Map.Entry<BlockPos, Integer>> cdIter = be.instanceCooldownTimers.entrySet().iterator();
         while (cdIter.hasNext()) {
             Map.Entry<BlockPos, Integer> entry = cdIter.next();
             int remaining = entry.getValue() - 1;
             if (remaining <= 0) {
                 cdIter.remove();
-                be.setChanged();
             } else {
                 entry.setValue(remaining);
-                be.setChanged();
             }
+        }
+        if (cooling) {
+            be.setChanged();
         }
         be.tickQueuePriority(serverLevel);
 
@@ -1249,8 +1250,7 @@ public class DungeonControllerBlockEntity extends BlockEntity
      */
     private void ensureChunkForceLoaded(ServerLevel serverLevel) {
         if (chunkForceLoaded) return;
-        ChunkPos chunkPos = new ChunkPos(worldPosition);
-        serverLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
+        net.ledok.arenas_ld.util.ControllerChunks.hold(serverLevel, worldPosition);
         chunkForceLoaded = true;
     }
 
@@ -1518,11 +1518,8 @@ public class DungeonControllerBlockEntity extends BlockEntity
 
     @Override
     public void setRemoved() {
-        if (chunkForceLoaded && level instanceof ServerLevel serverLevel) {
-            ChunkPos chunkPos = new ChunkPos(worldPosition);
-            serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
-            chunkForceLoaded = false;
-        }
+        // The chunk stays force-loaded: this also runs when the chunk unloads (every clean stop).
+        // Breaking the block lets go of it (DungeonControllerBlock.onRemove).
         super.setRemoved();
         ArenasLdMod.DUNGEON_MANAGER.unregisterController(this);
     }

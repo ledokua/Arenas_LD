@@ -204,6 +204,28 @@ another dimension — the dimension is stored with the position. Everything else
 from its owner, so a dungeon's boss spawner, its rooms and their spawners must all live in one
 dimension; a cross-dimension click there is refused.
 
+**Copying an instance.** Build one instance, then paste copies with WorldEdit or Axiom. Every link
+inside an instance (rooms, spawners, doors, respawn points, the entrance and the Start/Final markers)
+is an offset from its own block, so a paste that keeps block data comes out wired up. Only the
+controller doesn't know about the copy yet. Link it with the Dungeon Tool, or from anywhere with
+`/arenasld instance add <activity> <x y z> [dimension]`. That also checks the copy.
+`/arenasld instance check <activity>` checks every instance of an activity, and
+`/arenasld instance check at <x y z> [dimension]` checks one spawner block, linked or not. The check
+reports:
+- links that don't point at the right block;
+- a Start/Final marker that isn't one of the rooms;
+- a Start room with no way in;
+- an entrance that was never set;
+- an entrance or respawn point inside a block;
+- an entrance in another dimension, since a copy keeps the same offset there. For a dungeon this is
+  a warning, since its entrance may be elsewhere. For a raid or arena it is an error, because the
+  fight happens at the spawner;
+- which activity lists the instance.
+
+It loads the chunks it looks at, so run it as an admin action, not on a timer. Don't paste a
+controller along with an instance: a copied controller gets a fresh id and none of the original's
+instances, lobbies or runs.
+
 **Stale labels.** Several admin screens and chat messages still say "Linker" or "Spawner
 Configurator" in their hint text. Both items were merged into the Dungeon Tool; those labels are
 stale, not a second item.
@@ -683,10 +705,13 @@ auto-start**: when an instance frees, the front lobby gets a clickable **[Start]
 priority before it rotates to the back with "priority lost" and the next lobby is offered the slot.
 **Arenas are the opposite** — the front queued lobby is promoted and launched automatically.
 
-**Runs keep ticking while nobody is nearby.** Each controller force-loads its own chunk, and a
-starting **dungeon** run also force-loads its instance's chunks plus the entrance chunk in its own
-dimension. Raid and arena runs force-load only their controller's chunk, so keep those instances
-inside an area that stays loaded.
+**Runs keep ticking while nobody is nearby.** Each controller force-loads its own chunk, at every
+server start too, so runs saved in it come back after a restart. Only breaking the controller lets
+go of that chunk, unless another controller shares it. A running **dungeon** also keeps its
+instance's chunks and the entrance chunk (in its own dimension) loaded, with tickets that belong
+to that run alone. They are let go when the run ends, even if the rooms were edited meanwhile, and
+they never clear another run's chunks or an admin `/forceload`. Raid and arena runs keep only
+their controller's chunk loaded, so keep those instances inside an area that stays loaded.
 
 **The run HUD** replaces vanilla boss bars entirely (they are suppressed while it is up): a dark panel
 at the top with a large MM:SS countdown, a red *Hardcore* tag, an objective line, and an optional
@@ -862,10 +887,13 @@ before it. Without LuckPerms every player simply gets the defaults.
 /arenasld lobby decline <dim> <pos> <lobbyId>
 /arenasld activity list            every activity: id, type, name, enabled difficulties
 /arenasld activity open <id> [players]   open its lobby screen from anywhere, entry gate included
-/arenasld activity forget <id>     drop an activity whose controller block is gone
+/arenasld activity forget <id>     drop an activity whose controller block is gone (and let go of its chunk)
+/arenasld instance add <activity> <pos> [dim]   link a pasted instance to the activity's controller, then check it
+/arenasld instance check <activity>             check every instance of the activity
+/arenasld instance check at <pos> [dim]         check one Dungeon Boss / Raid Boss / Arena Spawner
 ```
 
-`admin`, `reload` and `activity` require **permission level 2**; everything else is open to all
+`admin`, `reload`, `activity` and `instance` require **permission level 2**; everything else is open to all
 players. The `lobby` subcommands exist as the click targets behind the chat buttons and re-validate
 membership, ownership and invites server-side (and ask the [entry gate](#activity-ids-and-the-entry-gate)),
 which is why they need no permission. `lobby open` opens the screen from any distance.
@@ -885,7 +913,7 @@ One pretty-printed JSON file at `config/arenas_ld.json`, created with defaults o
 | `dungeon_damage_source_filter` | `"ALL"` | Which damage the **dungeon** tier damage multiplier applies to: `LIVING` (only from a living entity), `MOB` (only from a mob), anything else = all. Case-insensitive. Raid multipliers ignore it; arenas do not use this path. |
 | `run_item_blacklist` | `["minecraft:ender_pearl", "minecraft:chorus_fruit"]` | Items unusable during any run. Item ids, or tags with a `#` prefix. |
 | `run_effect_blacklist` | `[]` | Mob effects stripped from run participants every tick. **Plain ids only** — the `#` tag syntax is not supported here. |
-| `debug_logging` | `false` | Verbose `[debug]` INFO logging of teleports, reconnect decisions and chunk force-loading. |
+| `debug_logging` | `false` | Verbose `[debug]` INFO logging of teleports, reconnect decisions and the chunks a run keeps loaded. |
 
 ## File locations
 

@@ -1,5 +1,52 @@
 # Changelog
 
+## 4.7.0
+
+### Copying instances
+
+- **`/arenasld instance add <activity> <pos> [dimension]`** links a pasted copy of an instance to the
+  activity's controller from anywhere (what the Dungeon Tool does by clicking both blocks), then
+  checks it. Copies are made with WorldEdit or Axiom: every link inside an instance is an offset
+  from its own block, so a paste keeps them.
+- **`/arenasld instance check <activity>`** and **`check at <pos> [dimension]`** report:
+  - links that don't point at the right block;
+  - Start/Final markers that aren't rooms, and a Start room with no way in;
+  - an entrance that was never set;
+  - entrances and respawn points inside a block;
+  - an entrance in another dimension, since a copy keeps the same offset there. This is a warning
+    for dungeons and an error for raids and arenas, whose fight is at the spawner.
+
+  It also says which activity lists the instance, and lists errors first. Op level 2.
+
+### Load
+
+- **Raid and arena cooldowns no longer resend the controller every tick.** While an instance was
+  cooling down (5 minutes by default), the whole controller (lobbies, runs, leaderboards, tier
+  settings) went to every nearby player 20 times a second. Now only an instance coming free is sent;
+  open arena lobby screens still count down once a second.
+- **Phase Blocks no longer tick.** Every door block had a ticker on the server and the client that
+  did nothing. The few legacy raid doors made by the old Linker (main blocks that close while a linked
+  raid runs) keep working and are the only ones still checked.
+- The dungeon controller marks itself changed once per tick during cooldowns, not once per instance.
+
+### Chunk loading
+
+- **Controllers come back after a clean restart.** A controller let go of its force-loaded chunk
+  whenever the chunk unloaded, and a clean server stop unloads every chunk, so after a restart
+  controllers (and the runs saved in them) stayed unloaded until someone came near. A player who
+  reconnected inside a dungeon could be stuck there. Now only breaking the controller lets go of
+  its chunk (unless another controller shares it), and every known controller is loaded at server
+  start, which also repairs worlds already affected.
+- **Dungeon runs hold their chunks with their own tickets** instead of force-loading them. One run
+  ending no longer unloads chunks another run, a controller or an admin `/forceload` still needs.
+  Editing rooms or breaking the boss spawner mid-run no longer leaves chunks force-loaded for good.
+  The tickets are not saved; a run restored after a restart takes them again. A run started before
+  this version lets go of its old force-loads once when it ends.
+- `/arenasld activity forget` also lets go of the chunk of a controller that is gone without its
+  block being broken; stale index entries found at server start are released the same way.
+- Arenas_LD no longer calls `setChunkForced` when nothing would change. Such a call resets the saved
+  data's dirty flag and could drop another unsaved force-load change.
+
 ## 4.6.2
 
 - **Arena run mates are allies.** A mob arena run now puts its players on their own no-friendly-fire

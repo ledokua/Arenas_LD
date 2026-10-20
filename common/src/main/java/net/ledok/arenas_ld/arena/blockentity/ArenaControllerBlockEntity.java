@@ -31,7 +31,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -157,11 +156,8 @@ public class ArenaControllerBlockEntity extends BlockEntity
     public void setRemoved() {
         if (level instanceof ServerLevel serverLevel) {
             CONTROLLERS.remove(new ControllerKey(worldPosition, serverLevel.dimension()));
-            if (chunkForceLoaded) {
-                ChunkPos chunkPos = new ChunkPos(worldPosition);
-                serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
-                chunkForceLoaded = false;
-            }
+            // The chunk stays force-loaded: this also runs when the chunk unloads (every clean
+            // stop). Breaking the block lets go of it (the block's onRemove).
         }
         super.setRemoved();
     }
@@ -194,8 +190,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
 
     private void ensureChunkForceLoaded(ServerLevel serverLevel) {
         if (chunkForceLoaded) return;
-        ChunkPos chunkPos = new ChunkPos(worldPosition);
-        serverLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
+        net.ledok.arenas_ld.util.ControllerChunks.hold(serverLevel, worldPosition);
         chunkForceLoaded = true;
     }
 
@@ -697,19 +692,34 @@ public class ArenaControllerBlockEntity extends BlockEntity
     }
 
     // ── Tick helpers ──────────────────────────────────────────────────────────
+    /**
+     * Counts instance cooldowns down. Only an instance coming free is sent to clients as a block
+     * update; open lobby screens get the countdown once a second (they show whole seconds), instead
+     * of the whole controller being resent to every nearby player each tick.
+     */
     private void tickCooldowns(ServerLevel level) {
-        boolean changed = false;
+        boolean counting = false;
+        boolean freed = false;
         for (int i = 0; i < instances.size(); i++) {
             ArenaInstanceState inst = instances.get(i);
             if (inst.status() != InstanceStatus.COOLDOWN) continue;
             int remaining = Math.max(0, inst.cooldownTicksRemaining() - 1);
             InstanceStatus next = remaining > 0 ? InstanceStatus.COOLDOWN : InstanceStatus.FREE;
             instances.set(i, inst.withStatus(next, remaining));
-            changed = true;
+            counting = true;
+            freed |= next == InstanceStatus.FREE;
         }
-        if (changed) {
-            promoteNextQueuedLobby();
+        if (!counting) {
+            return;
+        }
+        promoteNextQueuedLobby();
+        if (freed) {
             markDirtyAndSync();
+        } else {
+            setChanged();
+            if (level.getGameTime() % 20 == 0) {
+                viewersDirty = true;
+            }
         }
     }
 

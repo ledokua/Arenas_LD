@@ -13,6 +13,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -31,6 +32,8 @@ final class NeoForgeArenasWiring {
 
         NeoForge.EVENT_BUS.addListener((ServerTickEvent.Post event) ->
             ArenasEvents.fire(ArenasEvents.SERVER_TICK_END, event.getServer()));
+        NeoForge.EVENT_BUS.addListener((ServerStartedEvent event) ->
+            ArenasEvents.fire(ArenasEvents.SERVER_STARTED, event.getServer()));
         NeoForge.EVENT_BUS.addListener((ServerStoppingEvent event) ->
             ArenasEvents.fire(ArenasEvents.SERVER_STOPPING, event.getServer()));
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent event) ->

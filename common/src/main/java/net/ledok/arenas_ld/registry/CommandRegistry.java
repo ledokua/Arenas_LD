@@ -68,7 +68,8 @@ public class CommandRegistry {
             .then(literal("exit").executes(CommandRegistry::exitDungeon))
             .then(literal("stats").executes(CommandRegistry::showStats))
             .then(buildLobbyNode())
-            .then(buildActivityNode());
+            .then(buildActivityNode())
+            .then(net.ledok.arenas_ld.activity.InstanceCommands.node());
 
         dispatcher.register(arenasLdNode);
         // Convenience top-level alias so players can simply type /exit.

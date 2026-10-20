@@ -36,7 +36,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -263,11 +262,8 @@ public class RaidControllerBlockEntity extends BlockEntity
     public void setRemoved() {
         if (level instanceof ServerLevel serverLevel) {
             CONTROLLERS.remove(new ControllerKey(worldPosition, serverLevel.dimension()));
-            if (chunkForceLoaded) {
-                ChunkPos chunkPos = new ChunkPos(worldPosition);
-                serverLevel.setChunkForced(chunkPos.x, chunkPos.z, false);
-                chunkForceLoaded = false;
-            }
+            // The chunk stays force-loaded: this also runs when the chunk unloads (every clean
+            // stop). Breaking the block lets go of it (the block's onRemove).
         }
         super.setRemoved();
     }
@@ -299,8 +295,7 @@ public class RaidControllerBlockEntity extends BlockEntity
     /** Force-load this controller's chunk (once per session) so it keeps ticking unattended. */
     private void ensureChunkForceLoaded(ServerLevel serverLevel) {
         if (chunkForceLoaded) return;
-        ChunkPos chunkPos = new ChunkPos(worldPosition);
-        serverLevel.setChunkForced(chunkPos.x, chunkPos.z, true);
+        net.ledok.arenas_ld.util.ControllerChunks.hold(serverLevel, worldPosition);
         chunkForceLoaded = true;
     }
 
@@ -1156,18 +1151,28 @@ public class RaidControllerBlockEntity extends BlockEntity
     //  Tick helpers
     // ─────────────────────────────────────────────────────────────────────────
 
+    /**
+     * Counts instance cooldowns down. Only an instance coming free is sent to clients: the countdown
+     * is saved every tick but no client reads it from the block entity (the admin screen counts down
+     * by itself), so resending the whole controller each tick was pure network load.
+     */
     private void tickCooldowns(ServerLevel level) {
-        boolean changed = false;
+        boolean counting = false;
+        boolean freed = false;
         for (int i = 0; i < instances.size(); i++) {
             RaidInstanceState inst = instances.get(i);
             if (inst.status() != InstanceStatus.COOLDOWN) continue;
             int remaining = Math.max(0, inst.cooldownTicksRemaining() - 1);
             InstanceStatus next = remaining > 0 ? InstanceStatus.COOLDOWN : InstanceStatus.FREE;
             instances.set(i, inst.withStatus(next, remaining));
-            changed = true;
+            counting = true;
+            freed |= next == InstanceStatus.FREE;
         }
-        if (changed) {
+        if (freed) {
             markDirtyAndSync();
+            broadcastPlayerSnapshots();
+        } else if (counting) {
+            setChanged();
         }
     }
 

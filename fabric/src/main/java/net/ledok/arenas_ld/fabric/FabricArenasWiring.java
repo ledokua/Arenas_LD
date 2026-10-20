@@ -49,6 +49,7 @@ final class FabricArenasWiring {
 
     private static void registerEvents() {
         ServerTickEvents.END_SERVER_TICK.register(server -> ArenasEvents.fire(ArenasEvents.SERVER_TICK_END, server));
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> ArenasEvents.fire(ArenasEvents.SERVER_STARTED, server));
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> ArenasEvents.fire(ArenasEvents.SERVER_STOPPING, server));
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> ArenasEvents.fire(ArenasEvents.SERVER_STOPPED, server));
 

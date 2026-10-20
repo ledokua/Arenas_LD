@@ -9,6 +9,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -16,8 +17,16 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 public class PhaseBlockEntity extends BlockEntity {
+    /**
+     * Loaded legacy raid doors: main blocks made by the old Linker (before May 2026), which close
+     * while a linked raid runs. Phase blocks have no ticker, so these few are ticked from here.
+     */
+    private static final Set<PhaseBlockEntity> LEGACY_MAINS = Collections.newSetFromMap(new WeakHashMap<>());
+
     private boolean isMain = false;
     private final List<BlockPos> watchedSpawnerOffsets = new ArrayList<>();
     private int checkTick = 0;
@@ -37,7 +46,45 @@ public class PhaseBlockEntity extends BlockEntity {
         }
     }
 
-    public static void tick(Level world, BlockPos pos, BlockState state, PhaseBlockEntity be) {
+    /** Server tick end: runs the legacy raid-door check of every loaded main block. */
+    public static void tickLegacyMains(MinecraftServer server) {
+        if (LEGACY_MAINS.isEmpty()) {
+            return;
+        }
+        for (PhaseBlockEntity be : List.copyOf(LEGACY_MAINS)) {
+            Level world = be.getLevel();
+            if (be.isRemoved() || world == null || !be.isMain) {
+                LEGACY_MAINS.remove(be);
+                continue;
+            }
+            BlockState state = world.getBlockState(be.getBlockPos());
+            if (state.getBlock() instanceof PhaseBlock) {
+                tick(world, be.getBlockPos(), state, be);
+            }
+        }
+    }
+
+    @Override
+    public void setLevel(Level level) {
+        super.setLevel(level);
+        trackIfMain();
+    }
+
+    @Override
+    public void setRemoved() {
+        super.setRemoved();
+        LEGACY_MAINS.remove(this);
+    }
+
+    private void trackIfMain() {
+        if (isMain && level != null && !level.isClientSide()) {
+            LEGACY_MAINS.add(this);
+        } else {
+            LEGACY_MAINS.remove(this);
+        }
+    }
+
+    private static void tick(Level world, BlockPos pos, BlockState state, PhaseBlockEntity be) {
         if (world.isClientSide() || !be.isMain) {
             return;
         }
@@ -113,6 +160,7 @@ public class PhaseBlockEntity extends BlockEntity {
                 watchedSpawnerOffsets.add(BlockPos.of(posLong));
             }
         }
+        trackIfMain();
     }
 
     @Override
@@ -124,6 +172,7 @@ public class PhaseBlockEntity extends BlockEntity {
 
     public void setIsMain(boolean isMain) {
         this.isMain = isMain;
+        trackIfMain();
         markDirtyAndSync();
     }
 

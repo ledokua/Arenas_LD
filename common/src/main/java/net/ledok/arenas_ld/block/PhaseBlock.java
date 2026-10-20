@@ -2,17 +2,13 @@ package net.ledok.arenas_ld.block;
 
 import com.mojang.serialization.MapCodec;
 import net.ledok.arenas_ld.block.entity.PhaseBlockEntity;
-import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityTicker;
-import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
@@ -88,9 +84,6 @@ public class PhaseBlock extends BaseEntityBlock {
         return new PhaseBlockEntity(pos, state);
     }
 
-    @Nullable
-    @Override
-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level world, BlockState state, BlockEntityType<T> type) {
-        return createTickerHelper(type, BlockEntitiesRegistry.PHASE_BLOCK_ENTITY, PhaseBlockEntity::tick);
-    }
+    // No ticker: a door can be over a thousand blocks, and almost none of them have anything to do.
+    // The few legacy raid doors (main blocks from the old Linker) are ticked from PhaseBlockEntity.
 }

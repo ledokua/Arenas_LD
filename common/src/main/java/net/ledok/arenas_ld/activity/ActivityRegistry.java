@@ -8,7 +8,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jetbrains.annotations.Nullable;
@@ -60,6 +59,14 @@ public final class ActivityRegistry {
             .toList();
     }
 
+    /** Every controller the world knows of (it may be gone since); read straight from the saved index. */
+    public static List<ActivityIndex.Entry> knownControllers(MinecraftServer server) {
+        if (server.overworld() == null) {
+            return List.of();
+        }
+        return List.copyOf(ActivityIndex.get(server).entries());
+    }
+
     public static Optional<ArenasApi.Activity> activity(MinecraftServer server, ResourceLocation id) {
         if (server.overworld() == null) {
             return Optional.empty();
@@ -99,11 +106,11 @@ public final class ActivityRegistry {
         }
         BlockEntity be = level.getBlockEntity(entry.pos());
         if (be instanceof ActivityHost host && id.equals(host.activityId())) {
-            ChunkPos chunk = new ChunkPos(entry.pos());
-            level.setChunkForced(chunk.x, chunk.z, true);
+            net.ledok.arenas_ld.util.ControllerChunks.hold(level, entry.pos());
             return host;
         }
         ArenasLdMod.LOGGER.warn("Dropping activity {}: no controller with that id at {} any more", id, entry.location());
+        net.ledok.arenas_ld.util.ControllerChunks.releaseIfGone(server, entry);
         if (index.remove(id)) {
             fireChanged();
         }
@@ -178,7 +185,13 @@ public final class ActivityRegistry {
 
     /** Drops an index entry by hand (for a controller removed by a tool that skipped block updates). */
     public static boolean forget(MinecraftServer server, ResourceLocation id) {
-        if (ActivityIndex.get(server).remove(id)) {
+        ActivityIndex index = ActivityIndex.get(server);
+        ActivityIndex.Entry entry = index.get(id);
+        if (entry != null) {
+            // A controller gone without a block break still has its chunk force-loaded.
+            net.ledok.arenas_ld.util.ControllerChunks.releaseIfGone(server, entry);
+        }
+        if (index.remove(id)) {
             fireChanged();
             return true;
         }

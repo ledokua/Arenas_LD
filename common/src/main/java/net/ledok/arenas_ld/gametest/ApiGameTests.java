@@ -59,6 +59,18 @@ public final class ApiGameTests {
         });
     }
 
+    /** Runs {@code then} on the first tick {@code ready} holds, failing after {@code ticks} ticks. */
+    private static void whenTrue(GameTestHelper helper, int ticks, java.util.function.BooleanSupplier ready, String what,
+                                 Runnable then) {
+        if (ready.getAsBoolean()) {
+            then.run();
+        } else if (ticks <= 0) {
+            helper.fail("timed out waiting: " + what);
+        } else {
+            helper.runAfterDelay(1, () -> whenTrue(helper, ticks - 1, ready, what, then));
+        }
+    }
+
     private static String suffix() {
         return UUID.randomUUID().toString().substring(0, 8);
     }
@@ -111,6 +123,93 @@ public final class ApiGameTests {
 
             helper.setBlock(DUNGEON, Blocks.AIR);
             helper.assertTrue(ArenasApi.activity(server, newId).isEmpty(), "breaking the controller removes the activity");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * A controller keeps its chunk force-loaded when its block entity is unloaded (every clean server
+     * stop does that), and lets go of it only when the last controller in the chunk is broken.
+     * Far from the test area, whose chunks the GameTest framework force-loads itself.
+     */
+    public static void controllerChunks(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos near = helper.absolutePos(new BlockPos(0, 1, 0));
+        BlockPos first = new BlockPos(((near.getX() + 4096) & ~15) + 2, near.getY(), ((near.getZ() + 4096) & ~15) + 2);
+        BlockPos second = first.offset(3, 0, 0);
+        long chunk = new net.minecraft.world.level.ChunkPos(first).toLong();
+        level.setBlockAndUpdate(first, BlockRegistry.DUNGEON_CONTROLLER_BLOCK.defaultBlockState());
+        level.setBlockAndUpdate(second, BlockRegistry.RAID_CONTROLLER_BLOCK.defaultBlockState());
+        helper.assertTrue(!level.getForcedChunks().contains(chunk), "the far chunk starts unforced");
+
+        net.ledok.arenas_ld.util.ControllerChunks.hold(level, first);
+        helper.assertTrue(level.getForcedChunks().contains(chunk), "held");
+
+        // Let both controllers tick (their first tick takes their own hold, as on a real server); the
+        // far chunk becomes a ticking chunk once its neighbors are generated (registered with a
+        // 1200-tick timeout for that).
+        whenTrue(helper, 1150, () -> level.getBlockEntity(first) instanceof DungeonControllerBlockEntity c
+                && c.activityId() != null && level.getBlockEntity(second) instanceof RaidControllerBlockEntity r
+                && r.activityId() != null, "the far controllers tick", () -> {
+            level.getBlockEntity(first).setRemoved(); // what a chunk unload does
+            helper.assertTrue(level.getForcedChunks().contains(chunk), "an unloaded controller keeps its chunk");
+
+            level.removeBlock(first, false);
+            helper.assertTrue(level.getForcedChunks().contains(chunk), "kept while another controller shares the chunk");
+
+            level.removeBlock(second, false);
+            helper.assertTrue(!level.getForcedChunks().contains(chunk), "breaking the last controller lets go of it");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * {@code /arenasld instance check}: a small wired dungeon instance checks clean and names its
+     * controller; a missing spawner and a blocked entrance are reported as errors.
+     */
+    public static void instanceCheck(GameTestHelper helper) {
+        BlockPos dbsRel = new BlockPos(1, 1, 1);
+        BlockPos roomRel = new BlockPos(3, 1, 1);
+        BlockPos spawnerRel = new BlockPos(3, 1, 3);
+        BlockPos doorRel = new BlockPos(5, 1, 1);
+        BlockPos entranceRel = new BlockPos(1, 1, 4);
+        BlockPos controllerRel = new BlockPos(6, 1, 6);
+        helper.setBlock(dbsRel, BlockRegistry.DUNGEON_BOSS_SPAWNER_BLOCK);
+        helper.setBlock(roomRel, BlockRegistry.ROOM_CONTROLLER_BLOCK);
+        helper.setBlock(spawnerRel, BlockRegistry.MOB_SPAWNER_BLOCK);
+        helper.setBlock(doorRel, BlockRegistry.PHASE_BLOCK);
+        helper.setBlock(controllerRel, BlockRegistry.DUNGEON_CONTROLLER_BLOCK);
+        var level = helper.getLevel();
+        BlockPos dbsPos = helper.absolutePos(dbsRel);
+
+        net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity dbs = helper.getBlockEntity(dbsRel);
+        net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity room = helper.getBlockEntity(roomRel);
+        helper.assertTrue(dbs.addRoom(helper.absolutePos(roomRel)), "room linked");
+        helper.assertTrue(room.toggleSpawner(helper.absolutePos(spawnerRel)), "spawner linked");
+        helper.assertTrue(room.toggleDoor(helper.absolutePos(doorRel)), "door linked");
+        room.addRespawnPointOffset(new BlockPos(0, 0, 4));
+        dbs.setEntrancePosition(helper.absolutePos(entranceRel), level.dimension());
+
+        helper.runAfterDelay(3, () -> {
+            DungeonControllerBlockEntity controller = helper.getBlockEntity(controllerRel);
+            helper.assertTrue(controller.activityId() != null, "the controller has an activity id");
+            helper.assertTrue(net.ledok.arenas_ld.activity.InstanceCheck.check(level, helper.absolutePos(new BlockPos(1, 1, 6))) == null,
+                "air is not an instance");
+
+            var unlinked = net.ledok.arenas_ld.activity.InstanceCheck.check(level, dbsPos);
+            helper.assertTrue(unlinked != null && unlinked.problems().isEmpty(),
+                "a wired instance has no problems: " + (unlinked == null ? "null" : unlinked.problems()));
+            helper.assertTrue(unlinked.linkedTo().isEmpty(), "not linked to a controller yet");
+
+            controller.addInstance(dbsPos, level.dimension());
+            var linked = net.ledok.arenas_ld.activity.InstanceCheck.check(level, dbsPos);
+            helper.assertTrue(linked.linkedTo().equals(List.of(controller.activityId())), "names its controller");
+
+            helper.setBlock(spawnerRel, Blocks.AIR);
+            helper.setBlock(entranceRel, Blocks.STONE);
+            var broken = net.ledok.arenas_ld.activity.InstanceCheck.check(level, dbsPos);
+            helper.assertTrue(broken.errors() == 2,
+                "a missing spawner and a blocked entrance are errors: " + broken.problems());
             helper.succeed();
         });
     }

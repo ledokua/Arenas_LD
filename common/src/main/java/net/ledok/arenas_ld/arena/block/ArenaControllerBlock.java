@@ -71,6 +71,7 @@ public class ArenaControllerBlock extends BaseEntityBlock {
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (!state.is(newState.getBlock())) {
             net.ledok.arenas_ld.activity.ActivityRegistry.detach(level, pos);
+            net.ledok.arenas_ld.util.ControllerChunks.release(level, pos);
         }
         super.onRemove(state, level, pos, newState, movedByPiston);
     }

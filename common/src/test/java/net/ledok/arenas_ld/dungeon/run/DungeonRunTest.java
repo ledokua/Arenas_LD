@@ -154,4 +154,17 @@ class DungeonRunTest {
         assertEquals(1, decoded.downedPlayers().size());
         assertEquals(25, decoded.downedPlayers().get(UUID_B).ticksRemaining());
     }
+
+    @Test
+    void newRunsHoldTicketsAndOldSavesForceLoaded() {
+        DungeonRun fresh = freshRun();
+        assertFalse(fresh.legacyForcedChunks());
+        Tag encoded = DungeonRun.CODEC.encodeStart(NbtOps.INSTANCE, fresh).getOrThrow();
+        assertFalse(DungeonRun.CODEC.parse(NbtOps.INSTANCE, encoded).getOrThrow().legacyForcedChunks());
+
+        // A run saved before 4.7.0 has no chunkTickets key: its chunks were force-loaded.
+        net.minecraft.nbt.CompoundTag old = (net.minecraft.nbt.CompoundTag) encoded.copy();
+        old.remove("chunkTickets");
+        assertTrue(DungeonRun.CODEC.parse(NbtOps.INSTANCE, old).getOrThrow().legacyForcedChunks());
+    }
 }

@@ -21,6 +21,8 @@ public final class ArenasEvents {
     private ArenasEvents() {}
 
     public static final List<Consumer<MinecraftServer>> SERVER_TICK_END = new CopyOnWriteArrayList<>();
+    /** The worlds are loaded and the server is about to tick. */
+    public static final List<Consumer<MinecraftServer>> SERVER_STARTED = new CopyOnWriteArrayList<>();
     public static final List<Consumer<MinecraftServer>> SERVER_STOPPING = new CopyOnWriteArrayList<>();
     public static final List<Consumer<MinecraftServer>> SERVER_STOPPED = new CopyOnWriteArrayList<>();
 

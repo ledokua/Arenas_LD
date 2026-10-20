@@ -60,6 +60,8 @@ public final class DungeonRun {
     private final Map<UUID, Long> disconnectedAt;
     /** Mob HP multiplier from the starting party size — frozen at run start, like the tier config. */
     private double partyHealthMultiplier = 1.0;
+    /** Saved by a build before 4.7.0, which force-loaded the run's chunks instead of holding tickets. */
+    private boolean legacyForcedChunks = false;
     // Branching-mode progression (legacy linear runs leave these untouched):
     /** Room the party is locked into (PENDING/ACTIVE), or null while EXPLORING. */
     @Nullable private BlockPos currentRoomPos = null;
@@ -165,6 +167,7 @@ public final class DungeonRun {
     public DungeonPhase phase() { return phase; }
     public DungeonOutcome outcome() { return outcome; }
     public DifficultyTier tier() { return tier; }
+    public boolean legacyForcedChunks() { return legacyForcedChunks; }
     public double partyHealthMultiplier() { return partyHealthMultiplier; }
     public void setPartyHealthMultiplier(double multiplier) { this.partyHealthMultiplier = Math.max(1.0, multiplier); }
     public String ownerName() { return ownerName; }
@@ -325,11 +328,14 @@ public final class DungeonRun {
             BASE_CODEC.forGetter(run -> run),
             Codec.DOUBLE.optionalFieldOf("partyHealthMultiplier", 1.0).forGetter(DungeonRun::partyHealthMultiplier),
             RoomProgress.CODEC.optionalFieldOf("roomProgress", RoomProgress.EMPTY).forGetter(DungeonRun::snapshotRoomProgress),
-            net.ledok.arenas_ld.util.EndRewardPerks.SNAPSHOT_CODEC.optionalFieldOf("perkSnapshots", Map.of()).forGetter(DungeonRun::perkSnapshots)
-        ).apply(instance, (run, partyHealthMultiplier, roomProgress, perkSnapshots) -> {
+            net.ledok.arenas_ld.util.EndRewardPerks.SNAPSHOT_CODEC.optionalFieldOf("perkSnapshots", Map.of()).forGetter(DungeonRun::perkSnapshots),
+            // Absent in saves from before 4.7.0: those runs force-loaded their chunks.
+            Codec.BOOL.optionalFieldOf("chunkTickets", false).forGetter(run -> !run.legacyForcedChunks)
+        ).apply(instance, (run, partyHealthMultiplier, roomProgress, perkSnapshots, chunkTickets) -> {
             run.setPartyHealthMultiplier(partyHealthMultiplier);
             run.applyRoomProgress(roomProgress);
             run.perkSnapshots.putAll(perkSnapshots);
+            run.legacyForcedChunks = !chunkTickets;
             return run;
         })
     );

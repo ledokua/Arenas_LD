@@ -58,5 +58,8 @@ public class ArenasLdMod {
         net.ledok.arenas_ld.arena.run.ArenaConnectionListener.register();
         net.ledok.arenas_ld.util.RunItemRestrictions.register();
         net.ledok.arenas_ld.util.RunEffectRestrictions.register();
+        ArenasEvents.SERVER_TICK_END.add(net.ledok.arenas_ld.block.entity.PhaseBlockEntity::tickLegacyMains);
+        ArenasEvents.SERVER_STARTED.add(net.ledok.arenas_ld.util.ControllerChunks::holdKnown);
+        ArenasEvents.SERVER_STOPPED.add(server -> net.ledok.arenas_ld.util.RunChunkTickets.clear());
     }
 }

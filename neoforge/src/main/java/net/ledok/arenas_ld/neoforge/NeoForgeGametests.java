@@ -52,4 +52,14 @@ public final class NeoForgeGametests {
     public static void runTeams(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.runTeams(helper);
     }
+
+    @GameTest(template = "empty")
+    public static void instanceCheck(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.instanceCheck(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 1200)
+    public static void controllerChunks(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.controllerChunks(helper);
+    }
 }
