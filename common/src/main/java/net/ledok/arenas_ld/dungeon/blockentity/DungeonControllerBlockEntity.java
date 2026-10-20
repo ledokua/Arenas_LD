@@ -3,6 +3,9 @@ package net.ledok.arenas_ld.dungeon.blockentity;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.activity.ActivityHost;
+import net.ledok.arenas_ld.activity.AdminScreens;
+import net.ledok.arenas_ld.api.ArenasApi;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
@@ -15,6 +18,8 @@ import net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.dungeon.run.RunParticipant;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
+import net.ledok.arenas_ld.dungeon.packet.DungeonControllerAdminSnapshotPayload;
+import net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminMenuProvider;
 import net.ledok.arenas_ld.dungeon.screen.DungeonControllerData;
 import net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreenHandler;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
@@ -175,7 +180,7 @@ public class DungeonControllerBlockEntity extends BlockEntity
             return;
         }
         this.dungeonName = trimmed;
-        setChanged();
+        markDirtyAndSync();
         refreshActivity();
     }
 
@@ -262,6 +267,119 @@ public class DungeonControllerBlockEntity extends BlockEntity
     private void refreshActivity() {
         if (activityAttached) {
             net.ledok.arenas_ld.activity.ActivityRegistry.refresh(this);
+        }
+    }
+
+    @Override
+    public LiveStatus liveStatus() {
+        // Memory only; the run phase line reads a boss spawner only where its chunk is loaded.
+        List<ArenasApi.InstanceStatus> instanceStatuses = new ArrayList<>(instances.size());
+        for (BlockPos pos : instances) {
+            ArenasApi.InstanceState state = ArenasApi.InstanceState.FREE;
+            int cooldownLeft = 0;
+            if (activeRuns.containsKey(pos)) {
+                state = ArenasApi.InstanceState.RUNNING;
+            } else if (instanceCooldownTimers.getOrDefault(pos, 0) > 0) {
+                state = ArenasApi.InstanceState.COOLDOWN;
+                cooldownLeft = instanceCooldownTimers.get(pos);
+            }
+            instanceStatuses.add(new ArenasApi.InstanceStatus(instanceRef(pos), state, cooldownLeft,
+                pendingInstanceRemovals.contains(pos)));
+        }
+
+        List<ArenasApi.RunStatus> runs = new ArrayList<>();
+        if (level instanceof ServerLevel serverLevel) {
+            long now = serverLevel.getGameTime();
+            // Runs in instance order; a run whose instance is missing from the list still shows.
+            List<BlockPos> runOrder = new ArrayList<>(instances);
+            for (BlockPos pos : activeRuns.keySet()) {
+                if (!runOrder.contains(pos)) {
+                    runOrder.add(pos);
+                }
+            }
+            for (BlockPos pos : runOrder) {
+                DungeonRun run = activeRuns.get(pos);
+                if (run == null || run.phase() == DungeonPhase.DONE) {
+                    continue; // DONE only survives in a corrupt save; forceEnd clears it
+                }
+                List<UUID> players = run.participants().values().stream()
+                    .filter(p -> p.status() != RunParticipant.ParticipantStatus.REMOVED)
+                    .map(RunParticipant::playerUuid)
+                    .toList();
+                boolean closing = run.phase() == DungeonPhase.CLOSING;
+                long ticksLeft = Math.max(0, closing ? run.closeTimerTicks() : run.dungeonTimerTicks());
+                ServerLevel runLevel = serverLevel.getServer().getLevel(run.dbsDimension());
+                runs.add(new ArenasApi.RunStatus(instanceRef(pos), ActivityHost.difficultyId(run.tier()), players,
+                    DungeonRunLifecycle.statusPhase(runLevel, run), Math.max(0L, now - run.startTick()),
+                    ticksLeft, closing));
+            }
+        }
+
+        // Dungeon lobbies are only ever FORMING or READY: a lobby goes away when its run starts.
+        int openLobbies = 0;
+        int waitingPlayers = 0;
+        Set<UUID> openLobbyIds = new HashSet<>();
+        for (Lobby lobby : lobbies) {
+            if (lobby.status() == LobbyStatus.FORMING || lobby.status() == LobbyStatus.READY) {
+                openLobbies++;
+                waitingPlayers += lobby.members().size();
+                openLobbyIds.add(lobby.lobbyId());
+            }
+        }
+        // The queue can hold ids of lobbies that timed out; those don't count.
+        int queuedLobbies = (int) queuedLobbyIds.stream().filter(openLobbyIds::contains).distinct().count();
+        return new LiveStatus(instanceStatuses, runs, openLobbies, queuedLobbies, waitingPlayers);
+    }
+
+    /** An instance as the API names it: one per position, in its boss spawner's dimension. */
+    private ArenasApi.InstanceRef instanceRef(BlockPos pos) {
+        return new ArenasApi.InstanceRef(getInstanceDimension(pos), pos);
+    }
+
+    @Override
+    public int forceEnd(@Nullable ArenasApi.InstanceRef instance) {
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return 0;
+        }
+        int ended = 0;
+        // A copy: closing a run removes it from activeRuns.
+        for (DungeonRun run : new ArrayList<>(activeRuns.values())) {
+            BlockPos pos = run.dbsPos();
+            if (instance != null && !(instance.pos().equals(pos) && instance.dimension().equals(getInstanceDimension(pos)))) {
+                continue;
+            }
+            if (DungeonRunLifecycle.forceEnd(serverLevel.getServer(), this, run)) {
+                ended++;
+            }
+        }
+        if (ended > 0) {
+            setChanged();
+            broadcastPlayerSnapshots(); // queue positions and wait estimates moved
+        }
+        return ended;
+    }
+
+    @Override
+    public void syncViewers() {
+        markDirtyAndSync();
+        broadcastPlayerSnapshots();
+        syncAdminViewers();
+    }
+
+    /**
+     * Sends the admin screens showing this controller ({@link AdminScreens#viewers}) its current
+     * data. The data is the same for every viewer, so it is built once, and not at all when no
+     * admin screen is open.
+     */
+    public void syncAdminViewers() {
+        List<ServerPlayer> viewers = AdminScreens.viewers(this);
+        if (viewers.isEmpty()) {
+            return;
+        }
+        DungeonControllerAdminSnapshotPayload payload =
+            new DungeonControllerAdminSnapshotPayload(DungeonControllerAdminMenuProvider.data(this));
+        for (ServerPlayer viewer : viewers) {
+            net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(viewer, payload);
         }
     }
 
@@ -1205,18 +1323,23 @@ public class DungeonControllerBlockEntity extends BlockEntity
         }
 
         boolean cooling = !be.instanceCooldownTimers.isEmpty();
+        boolean cooldownEnded = false;
         Iterator<Map.Entry<BlockPos, Integer>> cdIter = be.instanceCooldownTimers.entrySet().iterator();
         while (cdIter.hasNext()) {
             Map.Entry<BlockPos, Integer> entry = cdIter.next();
             int remaining = entry.getValue() - 1;
             if (remaining <= 0) {
                 cdIter.remove();
+                cooldownEnded = true;
             } else {
                 entry.setValue(remaining);
             }
         }
         if (cooling) {
             be.setChanged();
+        }
+        if (cooldownEnded) {
+            be.syncAdminViewers(); // an instance is free again
         }
         be.tickQueuePriority(serverLevel);
 

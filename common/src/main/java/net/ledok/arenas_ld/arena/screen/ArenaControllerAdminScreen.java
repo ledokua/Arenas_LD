@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.arena.screen;
 
-import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.arena.packet.ArenaAdminSetIntPayload;
 import net.ledok.arenas_ld.arena.packet.ArenaMoveInstancePayload;
 import net.ledok.arenas_ld.arena.packet.ArenaRemoveInstancePayload;
@@ -17,18 +16,20 @@ import net.ledok.vectorlib.client.canvas.widget.Button;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
 import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.arenas_ld.screen.FitCanvasHandledScreen;
+import net.ledok.arenas_ld.util.InstanceStatus;
 import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.level.Level;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
-import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
 import static net.ledok.arenas_ld.screen.ArenasUi.INK;
 import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
@@ -37,11 +38,25 @@ import static net.ledok.arenas_ld.screen.ArenasUi.PANEL_2;
 import static net.ledok.arenas_ld.screen.ArenasUi.ROW_BG;
 import net.ledok.arenas_ld.platform.ArenasNetwork;
 
-/** Admin/config view for the arena controller. Reads the client-synced controller; edits via packets. */
+/**
+ * Admin/config view for the arena controller. Reads the menu's {@link ArenaControllerAdminData}
+ * (opening data, then admin snapshots), never the client-side block entity; edits via packets.
+ */
 public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaControllerAdminScreenHandler> {
+    private static final String NAME = "name";
+    private static final String ID = "id";
+    private static final String CURRENCY_BASE = "currencyBase";
+    private static final String CURRENCY_EXP = "currencyExp";
+    private static final String XP_BASE = "xpBase";
+    private static final String XP_EXP = "xpExp";
+
     private final BlockPos pos;
     private Flex dynamicArea;
     private final Map<String, TextField> intFields = new LinkedHashMap<>();
+    /** Every settings box by key (the int keys are also the payload keys). */
+    private final Map<String, TextField> fields = new LinkedHashMap<>();
+    /** What each box last showed from the server: a box whose text differs is being edited. */
+    private final Map<String, String> shown = new HashMap<>();
     private TextField currencyBase, currencyExp, xpBase, xpExp;
     private TextField nameField, idField;
     private Object lastDynamicSig;
@@ -60,8 +75,31 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    private ArenaControllerBlockEntity controller() {
-        return this.menu.controller;
+    private ArenaControllerAdminData data() {
+        return this.menu.data();
+    }
+
+    /** Whether a snapshot is for this screen's controller: same position and dimension. */
+    public boolean matchesController(BlockPos blockPos, ResourceKey<Level> dimension) {
+        return pos.equals(blockPos) && data().dimension().equals(dimension);
+    }
+
+    /**
+     * Takes a fresh snapshot: a settings box follows the server unless the admin has typed into
+     * it; the instance and leaderboard rows rebuild on the next frame when they changed.
+     */
+    public void applyData(ArenaControllerAdminData data) {
+        menu.applyData(data);
+        Map<String, String> fresh = fieldValues(data);
+        fields.forEach((key, box) -> {
+            String value = fresh.get(key);
+            if (value == null) return;
+            String text = box.text();
+            if (text.equals(shown.get(key)) || text.equals(value)) {
+                if (!text.equals(value)) box.text(value);
+                shown.put(key, value);
+            }
+        });
     }
 
     @Override
@@ -70,8 +108,14 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
     }
 
     private void buildAll() {
+        // A rebuild (resize) keeps what the admin typed but hasn't saved.
+        Map<String, String> typed = new HashMap<>();
+        fields.forEach((key, box) -> {
+            if (!box.text().equals(shown.get(key))) typed.put(key, box.text());
+        });
         canvas.clear();
         intFields.clear();
+        fields.clear();
         Flex root = canvas.add(Flex.column());
         root.sizing(Sizing.fill(), Sizing.fill());
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
@@ -85,14 +129,13 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
 
         Flex content = Flex.column().gap(6).padding(Insets.of(10));
         content.sizing(Sizing.fill(), Sizing.content());
-        ArenaControllerBlockEntity c = controller();
-        if (c == null) {
-            content.item(ArenasUi.text(Component.translatable("gui.arenas_ld.arena.not_loaded"), DANGER));
-        } else {
-            content.item(buildSettings(c));
-            dynamicArea = content.item(Flex.column().gap(4));
-            dynamicArea.sizing(Sizing.fill(), Sizing.content());
-        }
+        content.item(buildSettings(data()));
+        typed.forEach((key, text) -> {
+            TextField box = fields.get(key);
+            if (box != null) box.text(text);
+        });
+        dynamicArea = content.item(Flex.column().gap(4));
+        dynamicArea.sizing(Sizing.fill(), Sizing.content());
         ScrollPanel scroll = new ScrollPanel(100, 100, content);
         scroll.sizing(Sizing.fill(), Sizing.expand());
         shell.item(scroll);
@@ -103,49 +146,69 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
 
     @Override
     protected void onCanvasFrame(float partialTick) {
-        ArenaControllerBlockEntity c = controller();
-        if (c != null && !dynamicSignature(c).equals(lastDynamicSig)) rebuildDynamic();
+        if (!dynamicSignature(data()).equals(lastDynamicSig)) rebuildDynamic();
     }
 
-    /**
-     * Everything the instance and leaderboard rows show. Copies, since the client entity refills its
-     * lists in place; the cooldown countdown is zeroed because it changes every tick.
-     */
-    private static Object dynamicSignature(ArenaControllerBlockEntity c) {
+    /** Everything the instance and leaderboard rows show (cooldowns as the whole seconds shown). */
+    private static Object dynamicSignature(ArenaControllerAdminData d) {
         return List.of(
-            c.getInstances().stream().map(inst -> inst.withStatus(inst.status(), 0)).toList(),
-            Set.copyOf(c.getPendingInstanceRemovals()),
-            List.copyOf(c.getLeaderboard()));
+            d.instances().stream().map(inst -> List.<Object>of(inst.spawnerPos(), inst.dimension(), inst.status(),
+                inst.cooldownTicksRemaining() / 20)).toList(),
+            d.pendingRemovals(),
+            d.leaderboard());
     }
 
-    private Flex buildSettings(ArenaControllerBlockEntity c) {
+    /** Each settings box's text for this data, by key. */
+    private static Map<String, String> fieldValues(ArenaControllerAdminData d) {
+        Map<String, String> v = new HashMap<>();
+        v.put(NAME, d.name());
+        v.put(ID, d.activityId());
+        v.put("maxPartySize", String.valueOf(d.maxPartySize()));
+        v.put("maxWave", String.valueOf(d.maxWave()));
+        v.put("closeTimer", String.valueOf(d.closeTimerSeconds()));
+        v.put("cooldown", String.valueOf(d.cooldownTicks()));
+        v.put("respawnTime", String.valueOf(d.respawnTimeTicks()));
+        v.put("inviteExpiry", String.valueOf(d.inviteExpiryTicks()));
+        v.put("deathPenalty", String.valueOf(d.deathTimePenaltyTicks()));
+        v.put("hpScalePct", String.valueOf((int) Math.round(d.hpScalePerPlayer() * 100.0)));
+        v.put("hpWavePct", String.valueOf((int) Math.round(d.hpScalePerWave() * 100.0)));
+        v.put(CURRENCY_BASE, str(d.rewardCurrencyBase()));
+        v.put(CURRENCY_EXP, str(d.rewardCurrencyExp()));
+        v.put(XP_BASE, str(d.rewardXpBase()));
+        v.put(XP_EXP, str(d.rewardXpExp()));
+        return v;
+    }
+
+    private Flex buildSettings(ArenaControllerAdminData d) {
+        Map<String, String> v = fieldValues(d);
+        shown.clear();
+        shown.putAll(v);
         Flex box = Flex.column().gap(4);
         box.sizing(Sizing.fill(), Sizing.content());
         box.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.identity")));
-        nameField = textRow(box, Component.translatable("gui.arenas_ld.arena.name"), c.getArenaName(), 48);
-        idField = textRow(box, Component.translatable("gui.arenas_ld.arena.activity_id"),
-            c.activityId() == null ? "" : c.activityId().toString(), 128);
+        nameField = textRow(box, NAME, Component.translatable("gui.arenas_ld.arena.name"), v.get(NAME), 48);
+        idField = textRow(box, ID, Component.translatable("gui.arenas_ld.arena.activity_id"), v.get(ID), 128);
 
         box.item(ArenasUi.spacer(4));
         box.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.settings")));
-        box.item(intField("maxPartySize", Component.translatable("gui.arenas_ld.arena.max_party"), c.getMaxPartySize()));
-        box.item(intField("maxWave", Component.translatable("gui.arenas_ld.arena.max_wave"), c.getMaxWave()));
-        box.item(intField("closeTimer", Component.translatable("gui.arenas_ld.arena.close_timer_seconds"), c.getCloseTimerSeconds()));
-        box.item(intField("cooldown", Component.translatable("gui.arenas_ld.arena.cooldown_ticks"), c.getCooldownTicks()));
-        box.item(intField("respawnTime", Component.translatable("gui.arenas_ld.arena.respawn_ticks"), c.getRespawnTimeTicks()));
-        box.item(intField("inviteExpiry", Component.translatable("gui.arenas_ld.arena.invite_expiry_ticks"), c.getInviteExpiryTicks()));
-        box.item(intField("deathPenalty", Component.translatable("gui.arenas_ld.arena.death_penalty_ticks"), c.getDeathTimePenaltyTicks()));
-        box.item(intField("hpScalePct", Component.translatable("gui.arenas_ld.arena.hp_scale_pct"), (int) Math.round(c.getHpScalePerPlayer() * 100.0)));
-        box.item(intField("hpWavePct", Component.translatable("gui.arenas_ld.arena.hp_wave_pct"), (int) Math.round(c.getHpScalePerWave() * 100.0)));
+        box.item(intField("maxPartySize", Component.translatable("gui.arenas_ld.arena.max_party"), v));
+        box.item(intField("maxWave", Component.translatable("gui.arenas_ld.arena.max_wave"), v));
+        box.item(intField("closeTimer", Component.translatable("gui.arenas_ld.arena.close_timer_seconds"), v));
+        box.item(intField("cooldown", Component.translatable("gui.arenas_ld.arena.cooldown_ticks"), v));
+        box.item(intField("respawnTime", Component.translatable("gui.arenas_ld.arena.respawn_ticks"), v));
+        box.item(intField("inviteExpiry", Component.translatable("gui.arenas_ld.arena.invite_expiry_ticks"), v));
+        box.item(intField("deathPenalty", Component.translatable("gui.arenas_ld.arena.death_penalty_ticks"), v));
+        box.item(intField("hpScalePct", Component.translatable("gui.arenas_ld.arena.hp_scale_pct"), v));
+        box.item(intField("hpWavePct", Component.translatable("gui.arenas_ld.arena.hp_wave_pct"), v));
 
         box.item(ArenasUi.spacer(4));
         box.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.reward_curve")));
         Flex curveRow = Flex.row().gap(6);
         curveRow.sizing(Sizing.fill(), Sizing.content());
-        currencyBase = labeledBox(curveRow, Component.literal("$ base"), str(c.getRewardCurrencyBase()));
-        currencyExp = labeledBox(curveRow, Component.literal("$ exp"), str(c.getRewardCurrencyExp()));
-        xpBase = labeledBox(curveRow, Component.literal("xp base"), str(c.getRewardXpBase()));
-        xpExp = labeledBox(curveRow, Component.literal("xp exp"), str(c.getRewardXpExp()));
+        currencyBase = labeledBox(curveRow, CURRENCY_BASE, Component.literal("$ base"), v.get(CURRENCY_BASE));
+        currencyExp = labeledBox(curveRow, CURRENCY_EXP, Component.literal("$ exp"), v.get(CURRENCY_EXP));
+        xpBase = labeledBox(curveRow, XP_BASE, Component.literal("xp base"), v.get(XP_BASE));
+        xpExp = labeledBox(curveRow, XP_EXP, Component.literal("xp exp"), v.get(XP_EXP));
         box.item(curveRow);
 
         box.item(ArenasUi.spacer(4));
@@ -158,23 +221,29 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
 
     private void rebuildDynamic() {
         if (dynamicArea == null) return;
-        ArenaControllerBlockEntity c = controller();
-        if (c == null) return;
-        lastDynamicSig = dynamicSignature(c);
+        ArenaControllerAdminData d = data();
+        lastDynamicSig = dynamicSignature(d);
         dynamicArea.clear();
 
         dynamicArea.item(ArenasUi.spacer(4));
         dynamicArea.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.instances")));
-        List<ArenaControllerBlockEntity.ArenaInstanceState> instances = c.getInstances();
+        List<ArenaControllerAdminData.InstanceEntry> instances = d.instances();
         if (instances.isEmpty()) {
             dynamicArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.arena.no_instances"), INK_DIM));
         }
-        for (ArenaControllerBlockEntity.ArenaInstanceState inst : instances) {
+        for (ArenaControllerAdminData.InstanceEntry inst : instances) {
             Flex row = Flex.row().gap(4).padding(Insets.of(2, 6, 2, 6)).alignItems(Align.CENTER);
             row.sizing(Sizing.fill(), Sizing.fixed(20));
             row.backgroundFill(ROW_BG);
             BlockPos sp = inst.spawnerPos();
-            row.item(ArenasUi.text(Component.literal(sp.toShortString() + "  " + inst.status().name()), INK));
+            // ✕ on a running instance queues its removal for the run's end (✕ again cancels it).
+            String status = inst.status() == InstanceStatus.RUNNING && d.pendingRemovals().contains(sp)
+                ? Component.translatable("gui.arenas_ld.arena.pending_removal").getString()
+                : inst.status().name();
+            if (inst.status() == InstanceStatus.COOLDOWN && inst.cooldownTicksRemaining() > 0) {
+                status += " " + (inst.cooldownTicksRemaining() / 20) + "s";
+            }
+            row.item(ArenasUi.text(Component.literal(sp.toShortString() + "  " + status), INK));
             row.spacer();
             String dim = inst.dimension().location().toString();
             row.item(ArenasUi.button(Component.literal("▲"), 18, 16,
@@ -188,7 +257,7 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
 
         dynamicArea.item(ArenasUi.spacer(4));
         dynamicArea.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.leaderboard")));
-        List<LeaderboardEntry> board = c.getLeaderboard();
+        List<LeaderboardEntry> board = d.leaderboard();
         if (board.isEmpty()) {
             dynamicArea.item(ArenasUi.text(Component.translatable("gui.arenas_ld.arena.no_scores"), INK_DIM));
         }
@@ -200,6 +269,8 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
     }
 
     private void saveSettings() {
+        // Saved: the boxes now follow the server again, which shows what it accepted.
+        fields.forEach((key, box) -> shown.put(key, box.text()));
         ArenasNetwork.sendToServer(new net.ledok.arenas_ld.packet.SetActivityInfoPayload(pos,
             idField.text().trim(), nameField.text().trim()));
         intFields.forEach((key, field) -> {
@@ -217,35 +288,38 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
     }
 
     // ── UI helpers ────────────────────────────────────────────────────────────
-    private Flex intField(String key, Component caption, int value) {
+    private Flex intField(String key, Component caption, Map<String, String> values) {
         Flex row = Flex.row().gap(6).alignItems(Align.CENTER);
         row.sizing(Sizing.fill(), Sizing.fixed(20));
         var label = ArenasUi.label(180, caption, INK_DIM);
         label.sizing(Sizing.fixed(180), Sizing.content());
         row.item(label);
-        TextField box = ArenasUi.textField(80, String.valueOf(value), 32).size(80, 16);
+        TextField box = ArenasUi.textField(80, values.get(key), 32).size(80, 16);
         intFields.put(key, box);
+        fields.put(key, box);
         row.item(box);
         return row;
     }
 
     /** Caption + wide text box (name, id). */
-    private TextField textRow(Flex parent, Component caption, String value, int maxLength) {
+    private TextField textRow(Flex parent, String key, Component caption, String value, int maxLength) {
         Flex row = Flex.row().gap(6).alignItems(Align.CENTER);
         row.sizing(Sizing.fill(), Sizing.fixed(20));
         var label = ArenasUi.label(180, caption, INK_DIM);
         label.sizing(Sizing.fixed(180), Sizing.content());
         row.item(label);
         TextField box = ArenasUi.textField(240, value, maxLength).size(240, 16);
+        fields.put(key, box);
         row.item(box);
         parent.item(row);
         return box;
     }
 
-    private TextField labeledBox(Flex parent, Component caption, String value) {
+    private TextField labeledBox(Flex parent, String key, Component caption, String value) {
         Flex col = Flex.column().gap(2);
         col.item(ArenasUi.text(caption, INK_DIM));
         TextField box = ArenasUi.textField(64, value, 32).size(64, 16);
+        fields.put(key, box);
         col.item(box);
         parent.item(col);
         return box;

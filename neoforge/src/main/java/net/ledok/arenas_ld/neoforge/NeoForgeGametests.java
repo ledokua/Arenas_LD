@@ -6,13 +6,20 @@ import net.ledok.arenas_ld.screen.ModScreenHandlers;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import net.neoforged.neoforge.network.payload.AdvancedOpenScreenPayload;
+import net.neoforged.neoforge.network.registration.ChannelAttributes;
+
+import java.util.Set;
 
 /**
- * Smoke test of the platform layer on NeoForge, mirroring the Fabric gametest. NeoForge picks it
- * up from the holder annotation only when GameTests are enabled (the gameTestServer dev run), so it
- * never runs in production. The template is run-gametest/gameteststructures/empty.snbt.
+ * Smoke test of the platform layer on NeoForge and the shared API tests ({@code ApiGameTests}),
+ * mirroring the Fabric gametests. NeoForge picks it up from the holder annotation only when
+ * GameTests are enabled (the gameTestServer dev run), so it never runs in production. The template
+ * is run-gametest/gameteststructures/empty.snbt.
  */
 @GameTestHolder("arenas_ld")
 @PrefixGameTestTemplate(false)
@@ -76,5 +83,53 @@ public final class NeoForgeGametests {
     @GameTest(template = "empty", timeoutTicks = 6200, skyAccess = true)
     public static void lichMinions(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.lichMinions(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiAdminRename(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminRename(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiAdminForget(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminForget(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiAdminStatus(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminStatus(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiAdminStatusUnloaded(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminStatusUnloaded(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiAdminScreen(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminScreen(helper, NeoForgeGametests::acceptModPayloads);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiAdminTeleport(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminTeleport(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiAdminForceEnd(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminForceEnd(helper, NeoForgeGametests::acceptModPayloads);
+    }
+
+    /**
+     * NeoForge refuses to send a payload to a client that never registered it (it throws), and a
+     * test player's connection negotiated nothing: let it take Arenas_LD's payloads and the
+     * extended menu opening, as a modded client would.
+     */
+    private static void acceptModPayloads(ServerPlayer player) {
+        Set<ResourceLocation> channels = ChannelAttributes.getOrCreateAdHocChannels(player.connection.getConnection());
+        channels.add(AdvancedOpenScreenPayload.TYPE.id());
+        for (ArenasNetwork.PayloadDecl<?> payload : ArenasNetwork.s2cPayloads()) {
+            channels.add(payload.type().id());
+        }
     }
 }

@@ -22,6 +22,9 @@ class RunEventsTest {
         @Override public void setActivityName(String name) { }
         @Override public void clearCopiedState(ActivityHost original) { }
         @Override public List<DifficultyTier> enabledTiers() { return List.of(); }
+        @Override public LiveStatus liveStatus() { return new LiveStatus(List.of(), List.of(), 0, 0, 0); }
+        @Override public int forceEnd(ArenasApi.InstanceRef instance) { return 0; }
+        @Override public void syncViewers() { }
     }
 
     @Test
@@ -33,8 +36,9 @@ class RunEventsTest {
         ResourceLocation crypt = ResourceLocation.fromNamespaceAndPath("arenas_ld", "crypt");
         ResourceLocation pit = ResourceLocation.fromNamespaceAndPath("arenas_ld", "pit");
 
-        RunEvents.fire(new StubHost(ArenasApi.ActivityType.DUNGEON, crypt), DifficultyTier.HARD, true, 100, 1300, 0, List.of(player));
-        RunEvents.fire(new StubHost(ArenasApi.ActivityType.ARENA, pit), null, false, 50, 40, 7, List.of(player));
+        RunEvents.fire(new StubHost(ArenasApi.ActivityType.DUNGEON, crypt), DifficultyTier.HARD, ArenasApi.Outcome.WIN, 100, 1300, 0, List.of(player));
+        RunEvents.fire(new StubHost(ArenasApi.ActivityType.ARENA, pit), null, ArenasApi.Outcome.LOSS, 50, 40, 7, List.of(player));
+        RunEvents.fire(new StubHost(ArenasApi.ActivityType.RAID, crypt), DifficultyTier.EASY, ArenasApi.Outcome.FORCED, 0, 20, 0, List.of());
 
         assertEquals(new ArenasApi.RunResult(crypt, ArenasApi.ActivityType.DUNGEON, "hard", ArenasApi.Outcome.WIN, 1200, 0,
             List.of(player)), seen.get(0));
@@ -43,5 +47,6 @@ class RunEventsTest {
         assertEquals(ArenasApi.Outcome.LOSS, arena.outcome());
         assertEquals(0, arena.durationTicks(), "a clock running backwards never reports a negative duration");
         assertEquals(7, arena.wave());
+        assertEquals(ArenasApi.Outcome.FORCED, seen.get(2).outcome(), "a run ended by staff is reported as forced");
     }
 }

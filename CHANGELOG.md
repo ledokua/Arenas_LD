@@ -1,5 +1,122 @@
 # Changelog
 
+## 4.9.0
+
+Staff tools for hubs: an activity's live status, a teleport to its controller, its admin screen from
+anywhere, renaming and ending runs, all by activity id, for moderation screens such as Eden_LD's.
+Arenas_LD still depends on nobody.
+
+### Admin API
+
+- **`ArenasApi.status(server, id)`**: every instance (free, running, cooling down with the ticks
+  left, waiting to be unlinked), the runs going on, open and queued lobbies and their players, and
+  setup warnings:
+  - a generated id, no name, no difficulty enabled (dungeons and raids), no instance linked,
+    instances waiting to be unlinked;
+  - the controller gone, or its chunk not loaded.
+
+  A run shows its difficulty, players, time elapsed and left (-1 when nothing counts down, such as
+  an untimed raid or an arena wave without a timer), whether it is closing, and a short phase:
+  - dungeons: "Starting", "Room 3", "Room 2/5", "Entering room 2", "Exploring, 4 cleared", "Boss
+    room";
+  - raids: "Starting", "Boss 42%" ("Boss" while the boss isn't loaded);
+  - arenas: "Prepare", "Wave 4/10", "Wave 5" (endless), "Wave 5 incoming";
+  - all: "Closing (won)", "Closing (lost)", "Closing (ended by an admin)".
+
+  It reads only the saved index and what the controller holds in memory and never loads a chunk,
+  so a hub can poll it every couple of seconds for every activity.
+- **`teleportToController(player, id)`** puts a player next to the controller, facing it, from any
+  dimension: the closest free 2-high spot on solid ground within 3 blocks with no liquid, fire or
+  other harmful block or portal, else on top of it. Refused during a run or while BusyLib marks the
+  player busy (naming why), and reported when the teleport didn't happen (a refused dimension change).
+- **`openAdmin(player, id)`** opens the controller's admin screen from any distance or dimension.
+  Operators only; it closes if they are deopped.
+- **`rename(server, id, name)`**: blank or over 48 characters is refused; hubs hear about it once.
+- **`forceEnd(server, id, instance)`** ends the runs of an activity, or of one instance, as staff
+  (see below). Run listeners get the new **`Outcome.FORCED`**: a `switch` over `Outcome` needs a
+  case for it.
+- **`forget(server, id)`** and **`location(server, id)`**.
+- The activity index (`arenas_ld_activities.dat`) now records whether an id was generated. Entries
+  saved before 4.9.0 count as generated only in the position form (`arenas_ld:dungeon_10_64_-3`).
+
+### Ending runs as staff
+
+- **`/arenasld activity stop <id>`** ends every run of the activity, and
+  **`/arenasld activity stop <id> <pos> [dimension]`** only the run at that boss or arena spawner.
+  Op level 2.
+- A run still going ends as a loss marked as ended by staff:
+  - its players get the defeat title and read "Dungeon ended by an admin." (or Raid / Arena; for
+    an arena this replaces "Arena over at wave N.");
+  - no rewards, except that an arena still pays for the waves reached, as on any loss;
+  - the boss is removed as on a loss (a dungeon clears its boss room; the room being fought keeps
+    its mobs until the players leave);
+  - the usual exit timer follows, and `/exit` leaves at once.
+
+  It is reported once, as `FORCED`, never as a win or a loss. Ordinary losses (out of time, wiped
+  out, a missing boss or arena spawner) still report `LOSS`.
+- A run already on its exit timer is closed on the spot: its players are returned now, it keeps its
+  result, and nothing is reported or paid again. A won run is never turned into a forced one.
+- A run stuck after a damaged save (a phase that can't be read) is cleaned up (its mobs removed) and
+  its players are returned, without reporting anything. So is a raid run whose dimension is gone.
+- A dungeon whose boss spawner is gone mid-run used to say "Dungeon ended by admin."; it now says its
+  boss spawner is gone.
+
+### Admin screens
+
+- **Admin screens work from anywhere.** Each knows its controller's dimension and sends its edits
+  to that controller, so `ArenasApi.openAdmin` can open one from any distance or dimension. The mob
+  arena admin screen now gets its data from the server instead of the controller's copy on the
+  client.
+- **Open admin screens stay current.** They are updated when a run starts or ends, when an
+  instance's cooldown runs out, and when another op edits the controller. Those run and cooldown
+  updates never overwrite a field you are typing in; after Save, every field shows what the server
+  accepted, so a refused or clamped value snaps back. On dungeon and raid screens, a settings change
+  by another op re-reads every field (the arena screen keeps each field you are typing in).
+- The arena admin screen shows an instance's cooldown in seconds and PENDING REMOVAL on a running
+  instance unlinked during its run (pressing ✕ again cancels it).
+
+### Commands
+
+- **`/arenasld activity forget` is refused while the controller is still there.** It used to drop a
+  live controller's entry too, which then vanished from hubs until the next restart. Break the block
+  instead; `forget` is for entries whose block a tool removed without a block update.
+- `/arenasld admin` opens through the same op check as the API; a refusal is shown as a command
+  failure.
+
+### Fixed
+
+- **Admin data no longer goes to the wrong players.** A dungeon controller's admin data went to every
+  online player, a raid controller's to every op. Now only ops with that controller's admin screen
+  open get it, and it is built once, only when someone is looking.
+- **Admin screens know their controller's dimension.** Two controllers at the same position in
+  different dimensions could overwrite each other's open admin screen, and an admin edit went to the
+  block at that position in the editor's own dimension.
+- **Admin screens close when they should, and only then.** A dungeon or raid admin screen opened from
+  9 or 10 blocks away (`/arenasld admin` reaches 10) closed at once; the reach is now 16 blocks, and
+  there is no limit when it was opened remotely. A screen now also closes when its controller is
+  broken or the player is deopped.
+- **Arena admin and Arena Spawner edits are op-only**, as every other editor's are; creative mode
+  alone no longer saves them. The Arena Spawner screen opens only for ops too; anyone else is told
+  they lack permission.
+- **A dungeon or raid run can no longer end twice.** A second win or loss on the same run (a run
+  listener ending it again, say) could pay out or report again, or overwrite a win.
+- **A finished dungeon run no longer pulls back players who moved on.** A player who had left a run
+  and joined another dungeon run could be unregistered from the new one, lose its busy flag and team,
+  or be teleported home when the old run finished.
+- Renaming a dungeon now sends a block update, as raids and arenas do, and renaming any controller
+  updates its open lobby and admin screens.
+- **A raid instance unlinked during its run is now unlinked when that run ends.** It used to be
+  marked PENDING REMOVAL forever and kept taking runs. Marks left over from earlier versions on
+  instances that aren't running are dropped.
+- An admin edit that arrives after its admin screen closed (its controller was broken, say) is
+  ignored instead of landing on a controller at the same position in the editor's own dimension.
+
+### Load
+
+- The dungeon admin screen's loot table list is read once and kept until the next `/reload`, instead
+  of being listed for every update.
+- Apply on a raid admin screen's General tab sends it one update instead of seven.
+
 ## 4.8.0
 
 - **Bosses that summon minions.** Mobs a run mob spawns by itself are now its minions: a vanilla

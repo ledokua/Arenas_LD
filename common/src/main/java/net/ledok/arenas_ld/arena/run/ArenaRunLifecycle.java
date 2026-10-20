@@ -1,6 +1,7 @@
 package net.ledok.arenas_ld.arena.run;
 
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.api.ArenasApi;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
@@ -602,16 +603,29 @@ public final class ArenaRunLifecycle {
     }
 
     /** Reports the finished run (after the payout in enterClosing) to {@code ArenasApi} run listeners. */
-    private static void fireRunResult(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run, boolean win) {
-        net.ledok.arenas_ld.activity.RunEvents.fire(controller, null, win, run.startTick(), world.getGameTime(),
+    private static void fireRunResult(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run,
+                                      ArenasApi.Outcome outcome) {
+        net.ledok.arenas_ld.activity.RunEvents.fire(controller, null, outcome,
+            run.startTick(), world.getGameTime(),
             run.currentWave(), run.participants().keySet());
+    }
+
+    /** What the API reports: a missing spawner ({@link ArenaOutcome#FORCED}) is a plain loss, only a staff end is FORCED. */
+    private static ArenasApi.Outcome apiOutcome(ArenaOutcome outcome) {
+        return switch (outcome) {
+            case COMPLETED -> ArenasApi.Outcome.WIN;
+            case STAFF_ENDED -> ArenasApi.Outcome.FORCED;
+            default -> ArenasApi.Outcome.LOSS;
+        };
     }
 
     private static void handleLoss(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run,
                                    ArenaOutcome outcome, String reason) {
         run.setOutcome(outcome);
         ArenasLdMod.LOGGER.info("Arena run ended at {} ({}): {}", run.spawnerPos(), outcome, reason);
-        broadcast(world, run, Component.translatable("message.arenas_ld.arena.run_over", run.currentWave()));
+        broadcast(world, run, outcome == ArenaOutcome.STAFF_ENDED
+            ? Component.translatable("message.arenas_ld.arena.ended_by_admin")
+            : Component.translatable("message.arenas_ld.arena.run_over", run.currentWave()));
         net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
             Component.translatable("title.arenas_ld.defeat").withStyle(net.minecraft.ChatFormatting.RED), null,
             net.minecraft.sounds.SoundEvents.ANVIL_LAND, 0.6f, 0.7f);
@@ -621,12 +635,8 @@ public final class ArenaRunLifecycle {
     private static void enterClosing(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
         payoutSummary(world, controller, run);
         // After the payout, before a zero close timer finalizes and the queue launches the next run.
-        fireRunResult(world, controller, run, run.outcome() == ArenaOutcome.COMPLETED);
-        for (UUID uuid : new ArrayList<>(run.aliveMobs())) {
-            Entity e = world.getEntity(uuid);
-            if (e != null) e.discard();
-        }
-        run.clearAliveMobs();
+        fireRunResult(world, controller, run, apiOutcome(run.outcome()));
+        discardAliveMobs(world, run);
         run.setPhase(ArenaPhase.CLOSING);
         int closeTicks = Math.max(0, controller.getCloseTimerSeconds() * 20);
         run.setInitialCloseTimerTicks(closeTicks);
@@ -655,6 +665,82 @@ public final class ArenaRunLifecycle {
                 player.sendSystemMessage(line);
             }
         }
+    }
+
+    /**
+     * Ends one run as staff ({@code ArenasApi.forceEnd}). A run still going takes the loss path
+     * as {@link ArenaOutcome#STAFF_ENDED}: the usual payout for the waves reached, mobs discarded,
+     * run listeners told {@code Outcome.FORCED} (once), then the normal exit timer. A run already
+     * on its exit timer is closed now, keeping its result (no second payout or event); a stuck DONE
+     * run (an unknown saved phase) has its mobs discarded and is closed the same way.
+     *
+     * @param controllerLevel the controller's level, used when the run's dimension is gone
+     * @return whether the run was ended or closed
+     */
+    public static boolean forceEnd(ServerLevel controllerLevel, ArenaControllerBlockEntity controller, ArenaRun run) {
+        ServerLevel spawnerLevel = controllerLevel.getServer().getLevel(run.spawnerDimension());
+        // Without its dimension the run never ticks; the end itself only needs the server.
+        ServerLevel world = spawnerLevel != null ? spawnerLevel : controllerLevel;
+        switch (run.phase()) {
+            case STARTING, RUNNING -> {
+                if (run.outcome() != ArenaOutcome.IN_PROGRESS) {
+                    return false; // already ending (a run listener reacting to this run's result)
+                }
+                handleLoss(world, controller, run, ArenaOutcome.STAFF_ENDED, "Ended by an admin.");
+                if (spawnerLevel == null && run.phase() == ArenaPhase.CLOSING) {
+                    finalizeRun(world, controller, run); // nothing would count its exit timer down
+                }
+            }
+            case CLOSING -> finalizeRun(world, controller, run);
+            case DONE -> {
+                // Never went through enterClosing: its wave mobs (persistent) would greet the next party.
+                discardAliveMobs(world, run);
+                finalizeRun(world, controller, run);
+            }
+        }
+        controller.markDirtyAndSync();
+        return true;
+    }
+
+    /** Discards the run's mobs that are loaded and forgets them all. */
+    private static void discardAliveMobs(ServerLevel world, ArenaRun run) {
+        for (UUID uuid : new ArrayList<>(run.aliveMobs())) {
+            Entity e = world.getEntity(uuid);
+            if (e != null) e.discard();
+        }
+        run.clearAliveMobs();
+    }
+
+    /** One run as {@code ArenasApi.status} shows it; reads only the run itself. */
+    public static ArenasApi.RunStatus runStatus(ArenaRun run, long gameTime) {
+        Component phase;
+        long ticksLeft;
+        if (run.phase() == ArenaPhase.CLOSING) {
+            phase = Component.translatable(switch (run.outcome()) {
+                case COMPLETED -> "status.arenas_ld.arena.closing_won";
+                case STAFF_ENDED -> "status.arenas_ld.arena.closing_forced";
+                default -> "status.arenas_ld.arena.closing_lost";
+            });
+            ticksLeft = Math.max(0, run.closeTimerTicks());
+        } else if (run.phase() == ArenaPhase.STARTING || run.prepareTicksRemaining() > 0 || run.currentWave() <= 0) {
+            phase = Component.translatable("status.arenas_ld.arena.prepare");
+            ticksLeft = run.prepareTicksRemaining() > 0 ? run.prepareTicksRemaining() : -1;
+        } else if (run.betweenWaveTicksRemaining() > 0) {
+            phase = Component.translatable("status.arenas_ld.arena.next_wave", run.currentWave() + 1);
+            ticksLeft = run.betweenWaveTicksRemaining();
+        } else {
+            phase = run.maxWave() > 0
+                ? Component.translatable("status.arenas_ld.arena.wave_of", run.currentWave(), run.maxWave())
+                : Component.translatable("status.arenas_ld.arena.wave", run.currentWave());
+            // 0 means the wave has no timer (see tickRunning).
+            ticksLeft = run.waveTicksRemaining() > 0 ? run.waveTicksRemaining() : -1;
+        }
+        List<UUID> players = new ArrayList<>();
+        for (RunParticipant participant : run.participants().values()) {
+            if (participant.status() != ParticipantStatus.REMOVED) players.add(participant.playerUuid());
+        }
+        return new ArenasApi.RunStatus(new ArenasApi.InstanceRef(run.spawnerDimension(), run.spawnerPos()), null,
+            players, phase, Math.max(0L, gameTime - run.startTick()), ticksLeft, run.phase() == ArenaPhase.CLOSING);
     }
 
     /**

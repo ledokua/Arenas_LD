@@ -8,8 +8,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
-/** Opens the arena controller admin screen (used by the admin command). */
-public class ArenaControllerAdminMenuProvider implements ExtendedMenuProvider<ArenaControllerMenuData> {
+/** Opens the arena controller admin screen; open it through {@code AdminScreens.open}, which checks op and binds it. */
+public class ArenaControllerAdminMenuProvider implements ExtendedMenuProvider<ArenaControllerAdminData> {
     private final ArenaControllerBlockEntity controller;
 
     public ArenaControllerAdminMenuProvider(ArenaControllerBlockEntity controller) {
@@ -22,13 +22,13 @@ public class ArenaControllerAdminMenuProvider implements ExtendedMenuProvider<Ar
     }
 
     @Override
-    public ArenaControllerMenuData getScreenOpeningData(ServerPlayer player) {
-        return new ArenaControllerMenuData(controller.getBlockPos());
+    public ArenaControllerAdminData getScreenOpeningData(ServerPlayer player) {
+        return controller.buildAdminData();
     }
 
     @Override
-    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, ArenaControllerMenuData> openingDataCodec() {
-        return ArenaControllerMenuData.CODEC;
+    public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, ArenaControllerAdminData> openingDataCodec() {
+        return ArenaControllerAdminData.STREAM_CODEC;
     }
 
     @Override

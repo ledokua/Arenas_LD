@@ -1,6 +1,8 @@
 package net.ledok.arenas_ld.networking;
 
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.activity.AdminScreens;
+import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.run.DungeonRun;
@@ -9,7 +11,6 @@ import net.ledok.arenas_ld.dungeon.packet.DbsClearRoomsPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsMoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.packet.DbsRemoveRoomPayload;
 import net.ledok.arenas_ld.dungeon.packet.DungeonBossSpawnerSnapshotPayload;
-import net.ledok.arenas_ld.dungeon.packet.DungeonControllerAdminSnapshotPayload;
 import net.ledok.arenas_ld.dungeon.packet.AddDungeonInstancePayload;
 import net.ledok.arenas_ld.dungeon.packet.AcceptInvitePayload;
 import net.ledok.arenas_ld.dungeon.packet.AcceptJoinRequestPayload;
@@ -707,20 +708,22 @@ public final class SpawnerPacketHandlers {
             });
         });
 
+        // Dungeon admin screen. AdminScreens.controller finds the controller the open admin screen
+        // is bound to, which may be in another dimension than the player.
         ArenasNetwork.registerServerReceiver(AddDungeonInstancePayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) {
                     return;
                 }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                DungeonControllerBlockEntity controller = AdminScreens.controller(player, payload.controllerPos(),
+                    DungeonControllerBlockEntity.class);
+                if (controller != null) {
                     // Manual admin add has no dimension field; the typed position is in the
                     // controller's own dimension. (Cross-dimension instances go through the linker.)
-                    controller.addInstance(payload.instancePos(), world.dimension());
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                    controller.addInstance(payload.instancePos(), controller.getLevel().dimension());
+                    markDirtyAndSync(controller.getLevel(), controller);
+                    broadcastDungeonControllerAdminSnapshot(controller);
                 }
             });
         });
@@ -731,17 +734,17 @@ public final class SpawnerPacketHandlers {
                 if (!player.hasPermissions(2)) {
                     return;
                 }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                DungeonControllerBlockEntity controller = AdminScreens.controller(player, payload.controllerPos(),
+                    DungeonControllerBlockEntity.class);
+                if (controller != null) {
                     boolean removed = controller.removeInstance(payload.instancePos());
                     if (removed && controller.getPendingInstanceRemovals().contains(payload.instancePos())) {
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.pending_removal")
                             .withStyle(ChatFormatting.YELLOW));
                     }
-                    markDirtyAndSync(world, controller);
+                    markDirtyAndSync(controller.getLevel(), controller);
                     broadcastDungeonControllerSnapshot(player, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                    broadcastDungeonControllerAdminSnapshot(controller);
                 }
             });
         });
@@ -752,12 +755,12 @@ public final class SpawnerPacketHandlers {
                 if (!player.hasPermissions(2)) {
                     return;
                 }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                DungeonControllerBlockEntity controller = AdminScreens.controller(player, payload.controllerPos(),
+                    DungeonControllerBlockEntity.class);
+                if (controller != null) {
                     controller.moveInstance(payload.instancePos(), payload.direction());
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                    markDirtyAndSync(controller.getLevel(), controller);
+                    broadcastDungeonControllerAdminSnapshot(controller);
                 }
             });
         });
@@ -768,16 +771,16 @@ public final class SpawnerPacketHandlers {
                 if (!player.hasPermissions(2)) {
                     return;
                 }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                DungeonControllerBlockEntity controller = AdminScreens.controller(player, payload.controllerPos(),
+                    DungeonControllerBlockEntity.class);
+                if (controller != null) {
                     boolean accepted = controller.setCooldownTicks(payload.ticks());
                     if (!accepted) {
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
                             .withStyle(ChatFormatting.YELLOW));
                     }
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                    markDirtyAndSync(controller.getLevel(), controller);
+                    broadcastDungeonControllerAdminSnapshot(controller);
                 }
             });
         });
@@ -788,16 +791,16 @@ public final class SpawnerPacketHandlers {
                 if (!player.hasPermissions(2)) {
                     return;
                 }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                DungeonControllerBlockEntity controller = AdminScreens.controller(player, payload.controllerPos(),
+                    DungeonControllerBlockEntity.class);
+                if (controller != null) {
                     boolean accepted = controller.setCloseTimerSeconds(payload.seconds());
                     if (!accepted) {
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
                             .withStyle(ChatFormatting.YELLOW));
                     }
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                    markDirtyAndSync(controller.getLevel(), controller);
+                    broadcastDungeonControllerAdminSnapshot(controller);
                 }
             });
         });
@@ -808,16 +811,16 @@ public final class SpawnerPacketHandlers {
                 if (!player.hasPermissions(2)) {
                     return;
                 }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                DungeonControllerBlockEntity controller = AdminScreens.controller(player, payload.controllerPos(),
+                    DungeonControllerBlockEntity.class);
+                if (controller != null) {
                     boolean accepted = controller.setMaxPartySize(payload.size());
                     if (!accepted) {
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
                             .withStyle(ChatFormatting.YELLOW));
                     }
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                    markDirtyAndSync(controller.getLevel(), controller);
+                    broadcastDungeonControllerAdminSnapshot(controller);
                 }
             });
         });
@@ -828,16 +831,16 @@ public final class SpawnerPacketHandlers {
                 if (!player.hasPermissions(2)) {
                     return;
                 }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                DungeonControllerBlockEntity controller = AdminScreens.controller(player, payload.controllerPos(),
+                    DungeonControllerBlockEntity.class);
+                if (controller != null) {
                     boolean accepted = controller.setRespawnTimeTicks(payload.ticks());
                     if (!accepted) {
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
                             .withStyle(ChatFormatting.YELLOW));
                     }
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                    markDirtyAndSync(controller.getLevel(), controller);
+                    broadcastDungeonControllerAdminSnapshot(controller);
                 }
             });
         });
@@ -848,16 +851,16 @@ public final class SpawnerPacketHandlers {
                 if (!player.hasPermissions(2)) {
                     return;
                 }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                DungeonControllerBlockEntity controller = AdminScreens.controller(player, payload.controllerPos(),
+                    DungeonControllerBlockEntity.class);
+                if (controller != null) {
                     boolean accepted = controller.setDeathTimePenaltyTicks(payload.ticks());
                     if (!accepted) {
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
                             .withStyle(ChatFormatting.YELLOW));
                     }
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                    markDirtyAndSync(controller.getLevel(), controller);
+                    broadcastDungeonControllerAdminSnapshot(controller);
                 }
             });
         });
@@ -868,16 +871,16 @@ public final class SpawnerPacketHandlers {
                 if (!player.hasPermissions(2)) {
                     return;
                 }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                DungeonControllerBlockEntity controller = AdminScreens.controller(player, payload.controllerPos(),
+                    DungeonControllerBlockEntity.class);
+                if (controller != null) {
                     boolean accepted = controller.setHpScalePerPlayer(payload.scale());
                     if (!accepted) {
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
                             .withStyle(ChatFormatting.YELLOW));
                     }
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                    markDirtyAndSync(controller.getLevel(), controller);
+                    broadcastDungeonControllerAdminSnapshot(controller);
                 }
             });
         });
@@ -888,16 +891,16 @@ public final class SpawnerPacketHandlers {
                 if (!player.hasPermissions(2)) {
                     return;
                 }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                DungeonControllerBlockEntity controller = AdminScreens.controller(player, payload.controllerPos(),
+                    DungeonControllerBlockEntity.class);
+                if (controller != null) {
                     boolean accepted = controller.setInviteExpiryTicks(payload.ticks());
                     if (!accepted) {
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon_controller_admin.invalid_value")
                             .withStyle(ChatFormatting.YELLOW));
                     }
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                    markDirtyAndSync(controller.getLevel(), controller);
+                    broadcastDungeonControllerAdminSnapshot(controller);
                 }
             });
         });
@@ -908,12 +911,12 @@ public final class SpawnerPacketHandlers {
                 if (!player.hasPermissions(2)) {
                     return;
                 }
-                Level world = player.level();
-                BlockEntity be = world.getBlockEntity(payload.controllerPos());
-                if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
+                DungeonControllerBlockEntity controller = AdminScreens.controller(player, payload.controllerPos(),
+                    DungeonControllerBlockEntity.class);
+                if (controller != null) {
                     controller.setTierConfig(payload.tier(), payload.config());
-                    markDirtyAndSync(world, controller);
-                    broadcastDungeonControllerAdminSnapshot(player, controller);
+                    markDirtyAndSync(controller.getLevel(), controller);
+                    broadcastDungeonControllerAdminSnapshot(controller);
                     broadcastDungeonControllerSnapshot(player, controller);
                 }
             });
@@ -925,13 +928,14 @@ public final class SpawnerPacketHandlers {
 
     /**
      * Admin name and activity id for any controller type (the id is kept unique; a refusal is
-     * explained in chat). The admin screen re-syncs from the next snapshot.
+     * explained in chat). Then everyone looking at the controller gets fresh data: its block
+     * update, lobby screens and admin screens.
      */
     private static void applyActivityInfo(ServerPlayer player, net.ledok.arenas_ld.packet.SetActivityInfoPayload payload) {
         if (!player.hasPermissions(2)) {
             return;
         }
-        BlockEntity be = player.level().getBlockEntity(payload.controllerPos());
+        BlockEntity be = AdminScreens.controller(player, payload.controllerPos(), BlockEntity.class);
         if (!(be instanceof net.ledok.arenas_ld.activity.ActivityHost host)) {
             return;
         }
@@ -942,12 +946,7 @@ public final class SpawnerPacketHandlers {
         if (refusal != null) {
             player.sendSystemMessage(refusal.copy().withStyle(ChatFormatting.YELLOW));
         }
-        markDirtyAndSync(be.getLevel(), be);
-        if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity dungeon) {
-            broadcastDungeonControllerAdminSnapshot(player, dungeon);
-        } else if (be instanceof net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity raid) {
-            net.ledok.arenas_ld.raid.RaidPacketHandlers.broadcastRaidControllerSnapshot(player, raid);
-        }
+        host.syncViewers();
     }
 
     private static void markDirtyAndSync(Level world, BlockEntity blockEntity) {
@@ -1125,17 +1124,8 @@ public final class SpawnerPacketHandlers {
         }
     }
 
-    private static void broadcastDungeonControllerAdminSnapshot(
-        ServerPlayer actor,
-        net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller
-    ) {
-        if (actor.server == null) {
-            return;
-        }
-        net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminMenuProvider provider =
-            new net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminMenuProvider(controller);
-        for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
-            ArenasNetwork.sendToPlayer(target, new DungeonControllerAdminSnapshotPayload(provider.getScreenOpeningData(target)));
-        }
+    /** The admin data, built once, to the ops whose admin screen shows this controller (and nobody else). */
+    private static void broadcastDungeonControllerAdminSnapshot(DungeonControllerBlockEntity controller) {
+        controller.syncAdminViewers();
     }
 }

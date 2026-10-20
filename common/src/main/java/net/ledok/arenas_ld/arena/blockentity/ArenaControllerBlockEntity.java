@@ -3,8 +3,15 @@ package net.ledok.arenas_ld.arena.blockentity;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.activity.AdminScreens;
+import net.ledok.arenas_ld.activity.LobbyScreens;
+import net.ledok.arenas_ld.api.ArenasApi;
+import net.ledok.arenas_ld.arena.packet.ArenaControllerAdminSnapshotPayload;
+import net.ledok.arenas_ld.arena.packet.ArenaControllerSnapshotPayload;
+import net.ledok.arenas_ld.arena.run.ArenaPhase;
 import net.ledok.arenas_ld.arena.run.ArenaRun;
 import net.ledok.arenas_ld.arena.run.ArenaRunLifecycle;
+import net.ledok.arenas_ld.arena.screen.ArenaControllerAdminData;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
@@ -12,6 +19,7 @@ import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
+import net.ledok.arenas_ld.platform.ArenasNetwork;
 import net.ledok.arenas_ld.registry.BlockEntitiesRegistry;
 import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.util.InstanceStatus;
@@ -134,7 +142,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
     private transient boolean activityAttached = false;
     /** Loaded from a save without an activity id (pre-API controller). Transient. */
     private transient boolean loadedWithoutId = false;
-    /** Lobby state changed since the open lobby screens last got a snapshot. Transient. */
+    /** State changed since the open lobby and admin screens last got a snapshot. Transient. */
     private transient boolean viewersDirty = false;
     private transient long lastViewerPushTick = -1000L;
     /** Minimum ticks between snapshot pushes (instance cooldowns change every tick). */
@@ -176,15 +184,33 @@ public class ArenaControllerBlockEntity extends BlockEntity
         be.pushViewersIfDirty(serverLevel);
     }
 
-    /** Sends the lobby snapshot to open lobby screens, at most every few ticks. */
+    /**
+     * Sends the snapshots to open lobby and admin screens, at most every few ticks. Covers run
+     * starts and ends and instance cooldowns (dirty once a second while one counts down).
+     */
     private void pushViewersIfDirty(ServerLevel serverLevel) {
         long now = serverLevel.getGameTime();
         if (!viewersDirty || now - lastViewerPushTick < VIEWER_PUSH_INTERVAL_TICKS) return;
+        pushViewers();
+    }
+
+    /** Sends both snapshots now: each lobby viewer their own view, every admin viewer the same one. */
+    private void pushViewers() {
         viewersDirty = false;
-        lastViewerPushTick = now;
-        for (ServerPlayer viewer : net.ledok.arenas_ld.activity.LobbyScreens.viewers(this)) {
-            net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(viewer,
-                new net.ledok.arenas_ld.arena.packet.ArenaControllerSnapshotPayload(getScreenOpeningData(viewer)));
+        if (level != null) lastViewerPushTick = level.getGameTime();
+        for (ServerPlayer viewer : LobbyScreens.viewers(this)) {
+            ArenasNetwork.sendToPlayer(viewer, new ArenaControllerSnapshotPayload(getScreenOpeningData(viewer)));
+        }
+        sendAdminSnapshot();
+    }
+
+    /** Sends the admin snapshot to the ops whose admin screen shows this controller; built only if there is one. */
+    public void sendAdminSnapshot() {
+        List<ServerPlayer> viewers = AdminScreens.viewers(this);
+        if (viewers.isEmpty()) return;
+        ArenaControllerAdminSnapshotPayload payload = new ArenaControllerAdminSnapshotPayload(buildAdminData());
+        for (ServerPlayer viewer : viewers) {
+            ArenasNetwork.sendToPlayer(viewer, payload);
         }
     }
 
@@ -284,6 +310,64 @@ public class ArenaControllerBlockEntity extends BlockEntity
 
     /** Arenas have no difficulty tiers. */
     @Override public List<DifficultyTier> enabledTiers() { return List.of(); }
+
+    /** From memory only: never touches a spawner or a chunk. */
+    @Override
+    public LiveStatus liveStatus() {
+        long now = level != null ? level.getGameTime() : 0L;
+        List<ArenasApi.InstanceStatus> instanceStatuses = new ArrayList<>(instances.size());
+        for (ArenaInstanceState inst : instances) {
+            ArenasApi.InstanceState state = switch (inst.status()) {
+                case FREE -> ArenasApi.InstanceState.FREE;
+                case RUNNING -> ArenasApi.InstanceState.RUNNING;
+                case COOLDOWN -> ArenasApi.InstanceState.COOLDOWN;
+            };
+            int cooldownLeft = state == ArenasApi.InstanceState.COOLDOWN ? Math.max(0, inst.cooldownTicksRemaining()) : 0;
+            instanceStatuses.add(new ArenasApi.InstanceStatus(new ArenasApi.InstanceRef(inst.dimension(), inst.spawnerPos()),
+                state, cooldownLeft, isPendingRemoval(inst)));
+        }
+        List<ArenasApi.RunStatus> runs = new ArrayList<>();
+        for (ArenaRun run : activeRuns.values()) {
+            if (run.phase() != ArenaPhase.DONE) runs.add(ArenaRunLifecycle.runStatus(run, now));
+        }
+        int openLobbies = 0;
+        int queuedLobbies = 0;
+        int waitingPlayers = 0;
+        for (Lobby lobby : lobbies) {
+            if (lobby.status() != LobbyStatus.FORMING && lobby.status() != LobbyStatus.READY) continue;
+            openLobbies++;
+            waitingPlayers += lobby.members().size();
+            if (queuedLobbyIds.contains(lobby.lobbyId())) queuedLobbies++;
+        }
+        return new LiveStatus(instanceStatuses, runs, openLobbies, queuedLobbies, waitingPlayers);
+    }
+
+    /** Pending removals are kept by position only; a run at that position tells the dimension. */
+    private boolean isPendingRemoval(ArenaInstanceState inst) {
+        if (!pendingInstanceRemovals.contains(inst.spawnerPos())) return false;
+        ArenaRun run = activeRuns.get(inst.spawnerPos());
+        return run == null || run.spawnerDimension().equals(inst.dimension());
+    }
+
+    @Override
+    public int forceEnd(@Nullable ArenasApi.InstanceRef instance) {
+        if (!(level instanceof ServerLevel serverLevel)) return 0;
+        int ended = 0;
+        // A copy: ending a run removes it from the map, and the queue may launch the next one.
+        for (ArenaRun run : new ArrayList<>(activeRuns.values())) {
+            if (instance != null && !(run.spawnerPos().equals(instance.pos())
+                && run.spawnerDimension().equals(instance.dimension()))) continue;
+            if (activeRuns.get(run.spawnerPos()) != run) continue; // closed by an earlier one
+            if (ArenaRunLifecycle.forceEnd(serverLevel, this, run)) ended++;
+        }
+        return ended;
+    }
+
+    @Override
+    public void syncViewers() {
+        markDirtyAndSync();
+        pushViewers();
+    }
 
     private void refreshActivity() {
         if (activityAttached) net.ledok.arenas_ld.activity.ActivityRegistry.refresh(this);
@@ -1093,5 +1177,21 @@ public class ArenaControllerBlockEntity extends BlockEntity
     @Override
     public net.minecraft.network.codec.StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, net.ledok.arenas_ld.arena.screen.ArenaControllerData> openingDataCodec() {
         return net.ledok.arenas_ld.arena.screen.ArenaControllerData.STREAM_CODEC;
+    }
+
+    // ── Admin screen ──────────────────────────────────────────────────────────
+    /** Everything the admin screen shows: its opening data and every admin snapshot. */
+    public ArenaControllerAdminData buildAdminData() {
+        List<ArenaControllerAdminData.InstanceEntry> entries = new ArrayList<>(instances.size());
+        for (ArenaInstanceState inst : instances) {
+            entries.add(new ArenaControllerAdminData.InstanceEntry(inst.spawnerPos(), inst.dimension(),
+                inst.status(), inst.cooldownTicksRemaining()));
+        }
+        return new ArenaControllerAdminData(worldPosition, level != null ? level.dimension() : Level.OVERWORLD,
+            arenaName, activityId == null ? "" : activityId.toString(),
+            getMaxPartySize(), maxWave, closeTimerSeconds, cooldownTicks, getRespawnTimeTicks(),
+            inviteExpiryTicks, deathTimePenaltyTicks, hpScalePerPlayer, hpScalePerWave,
+            rewardCurrencyBase, rewardCurrencyExp, rewardXpBase, rewardXpExp,
+            entries, Set.copyOf(pendingInstanceRemovals), List.copyOf(leaderboard));
     }
 }

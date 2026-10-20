@@ -1,33 +1,49 @@
 package net.ledok.arenas_ld.gametest;
 
+import net.ledok.arenas_ld.activity.ActivityHost;
 import net.ledok.arenas_ld.activity.ActivityRegistry;
+import net.ledok.arenas_ld.activity.AdminMenuBase;
+import net.ledok.arenas_ld.activity.AdminScreens;
 import net.ledok.arenas_ld.api.ArenasApi;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
+import net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.registry.BlockRegistry;
+import net.ledok.arenas_ld.util.BusyStateCompat;
+import net.ledok.arenas_ld.util.RunItemRestrictions;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.ServerOpListEntry;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
 
+import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
  * GameTest bodies for the public API, shared by the Fabric and NeoForge gametest holders. They
- * drive real controllers on a server: id assignment and the index, then the entry gate on a lobby
- * with mock players. Only the gametest servers call these.
+ * drive real controllers on a server: id assignment and the index, the entry gate on a lobby with
+ * mock players, and the admin calls (status, rename, teleport, admin screens, a real arena run
+ * ended by staff). Only the gametest servers call these.
  */
 public final class ApiGameTests {
     private static final BlockPos DUNGEON = new BlockPos(1, 1, 1);
@@ -37,6 +53,9 @@ public final class ApiGameTests {
     /** Players the test gate refuses everywhere in {@code gt_gate_*} activities. */
     private static final Set<UUID> BLOCKED = ConcurrentHashMap.newKeySet();
     private static final AtomicInteger ACTIVITY_EVENTS = new AtomicInteger();
+    /** Every run result reported while the tests run; tests pick theirs by activity id. */
+    private static final List<ArenasApi.RunResult> RUN_RESULTS = new CopyOnWriteArrayList<>();
+    private static final ResourceLocation MISSING = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_missing");
     private static boolean hooksRegistered;
 
     private ApiGameTests() {
@@ -48,6 +67,7 @@ public final class ApiGameTests {
         }
         hooksRegistered = true;
         ArenasApi.addActivitiesListener(ACTIVITY_EVENTS::incrementAndGet);
+        ArenasApi.addRunListener(RUN_RESULTS::add);
         // Only touches this test's activities: "hard" is locked for everyone, BLOCKED players for all.
         ArenasApi.registerEntryGate((player, activity, difficulty) -> {
             if (!activity.getPath().startsWith("gt_gate_")) {
@@ -546,5 +566,381 @@ public final class ApiGameTests {
             }
             helper.succeed();
         });
+    }
+
+    // ── Admin API ────────────────────────────────────────────────────────────
+
+    /** Location from the index; rename's limits and its single listener call; forceEnd with nothing running. */
+    public static void adminRename(GameTestHelper helper) {
+        registerHooksOnce();
+        helper.setBlock(DUNGEON, BlockRegistry.DUNGEON_CONTROLLER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            MinecraftServer server = helper.getLevel().getServer();
+            DungeonControllerBlockEntity controller = helper.getBlockEntity(DUNGEON);
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_admin_" + suffix());
+            helper.assertTrue(ActivityRegistry.changeId(controller, id.toString()) == null, "test id set");
+
+            ArenasApi.ControllerLocation location = ArenasApi.location(server, id).orElse(null);
+            helper.assertTrue(location != null && location.dimension().equals(helper.getLevel().dimension())
+                && location.pos().equals(helper.absolutePos(DUNGEON)), "location from the index: " + location);
+            helper.assertTrue(ArenasApi.location(server, MISSING).isEmpty(), "no location for an unknown id");
+
+            helper.assertTrue(ArenasApi.rename(server, id, "   ") != null, "a blank name is refused");
+            helper.assertTrue(ArenasApi.rename(server, id, "x".repeat(49)) != null, "a name over 48 characters is refused");
+            helper.assertTrue(controller.getDungeonName().isEmpty(), "a refused name changes nothing");
+            int before = ACTIVITY_EVENTS.get();
+            helper.assertTrue(ArenasApi.rename(server, id, "  Sunken Crypt  ") == null, "a valid name is accepted");
+            int fired = ACTIVITY_EVENTS.get() - before;
+            helper.assertTrue(fired == 1, "the activities listener fired once, not " + fired);
+            helper.assertTrue(controller.getDungeonName().equals("Sunken Crypt"), "the controller has the trimmed name");
+            helper.assertTrue(ArenasApi.activity(server, id).orElseThrow().name().getString().equals("Sunken Crypt"),
+                "the API lists the new name");
+            int beforeSame = ACTIVITY_EVENTS.get();
+            helper.assertTrue(ArenasApi.rename(server, id, "Sunken Crypt") == null && ACTIVITY_EVENTS.get() == beforeSame,
+                "the same name again fires nothing");
+            helper.assertTrue(ArenasApi.rename(server, id, "x".repeat(48)) == null
+                && controller.getDungeonName().length() == 48, "48 characters fit");
+            helper.assertTrue(ArenasApi.rename(server, MISSING, "Crypt") != null, "an unknown id is refused");
+
+            ArenasApi.InstanceRef nowhere = new ArenasApi.InstanceRef(helper.getLevel().dimension(),
+                helper.absolutePos(new BlockPos(1, 1, 5)));
+            helper.assertTrue(isKey(ArenasApi.forceEnd(server, id, null), "message.arenas_ld.admin.nothing_running"),
+                "nothing to end: refused");
+            helper.assertTrue(isKey(ArenasApi.forceEnd(server, id, nowhere), "message.arenas_ld.admin.no_run_at"),
+                "no run at that instance: refused");
+            helper.assertTrue(isKey(ArenasApi.forceEnd(server, MISSING, null), "message.arenas_ld.activity.unknown"),
+                "an unknown id is refused");
+            helper.succeed();
+        });
+    }
+
+    /** Forget refuses while the controller is there and drops an entry whose controller is gone. */
+    public static void adminForget(GameTestHelper helper) {
+        helper.setBlock(DUNGEON, BlockRegistry.DUNGEON_CONTROLLER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            DungeonControllerBlockEntity controller = helper.getBlockEntity(DUNGEON);
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_forget_" + suffix());
+            helper.assertTrue(ActivityRegistry.changeId(controller, id.toString()) == null, "test id set");
+            helper.assertTrue(isKey(ArenasApi.forget(server, id), "message.arenas_ld.admin.controller_present"),
+                "refused while the controller is there");
+            helper.assertTrue(ArenasApi.activity(server, id).isPresent(), "still listed");
+
+            // A controller removed without a block update leaves its entry behind. Right above the
+            // real one, so letting go of the gone one's chunk keeps the test area's chunk loaded.
+            ResourceLocation ghostId = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_ghost_" + suffix());
+            ghostController(level, helper.absolutePos(DUNGEON.above()), ghostId);
+            ArenasApi.ActivityStatus gone = ArenasApi.status(server, ghostId).orElse(null);
+            helper.assertTrue(gone != null && gone.warnings().contains(ArenasApi.Warning.CONTROLLER_MISSING)
+                && gone.instances().isEmpty() && gone.runs().isEmpty(), "a gone controller is reported missing: " + gone);
+            helper.assertTrue(ArenasApi.forget(server, ghostId) == null, "a gone controller's activity is forgotten");
+            helper.assertTrue(ArenasApi.activity(server, ghostId).isEmpty() && ArenasApi.status(server, ghostId).isEmpty()
+                && ArenasApi.location(server, ghostId).isEmpty(), "unknown afterwards");
+            helper.assertTrue(isKey(ArenasApi.forget(server, ghostId), "message.arenas_ld.activity.unknown"),
+                "forgetting it again: unknown");
+            helper.assertTrue(level.getBlockEntity(helper.absolutePos(DUNGEON)) == controller
+                && ArenasApi.activity(server, id).isPresent(), "the real controller is untouched");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * Status of fresh controllers (generated id, no name, no instance; no difficulties only for a
+     * dungeon or raid with none enabled), and of a dungeon set up by staff with one free instance.
+     */
+    public static void adminStatus(GameTestHelper helper) {
+        BlockPos dbsRel = new BlockPos(1, 1, 5);
+        helper.setBlock(DUNGEON, BlockRegistry.DUNGEON_CONTROLLER_BLOCK);
+        helper.setBlock(RAID, BlockRegistry.RAID_CONTROLLER_BLOCK);
+        helper.setBlock(ARENA, BlockRegistry.ARENA_CONTROLLER_BLOCK);
+        helper.setBlock(dbsRel, BlockRegistry.DUNGEON_BOSS_SPAWNER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            DungeonControllerBlockEntity dungeon = helper.getBlockEntity(DUNGEON);
+            for (BlockPos rel : List.of(DUNGEON, RAID, ARENA)) {
+                ActivityHost host = (ActivityHost) level.getBlockEntity(helper.absolutePos(rel));
+                ArenasApi.Activity activity = ArenasApi.activity(server, host.activityId()).orElseThrow();
+                EnumSet<ArenasApi.Warning> expected = EnumSet.of(ArenasApi.Warning.GENERATED_ID,
+                    ArenasApi.Warning.UNNAMED, ArenasApi.Warning.NO_INSTANCES);
+                if (activity.type() != ArenasApi.ActivityType.ARENA && activity.difficulties().isEmpty()) {
+                    expected.add(ArenasApi.Warning.NO_DIFFICULTIES);
+                }
+                ArenasApi.ActivityStatus status = ArenasApi.status(server, host.activityId()).orElse(null);
+                helper.assertTrue(status != null && status.activity().equals(host.activityId()), "a status for " + activity.id());
+                helper.assertTrue(status.warnings().equals(expected),
+                    activity.type() + " fresh: " + status.warnings() + ", expected " + expected);
+                helper.assertTrue(status.instances().isEmpty() && status.runs().isEmpty() && status.openLobbies() == 0
+                    && status.queuedLobbies() == 0 && status.waitingPlayers() == 0, activity.type() + " is idle: " + status);
+            }
+            helper.assertTrue(ArenasApi.status(server, MISSING).isEmpty(), "no status for an unknown id");
+
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_status_" + suffix());
+            helper.assertTrue(ActivityRegistry.changeId(dungeon, id.toString()) == null, "test id set");
+            helper.assertTrue(!ArenasApi.status(server, id).orElseThrow().warnings().contains(ArenasApi.Warning.GENERATED_ID),
+                "an id set by staff is not generated");
+            dungeon.setActivityName("Status Crypt");
+            BlockPos dbsPos = helper.absolutePos(dbsRel);
+            helper.assertTrue(dungeon.addInstance(dbsPos, level.dimension()), "instance linked");
+            for (DifficultyTier tier : DifficultyTier.values()) {
+                TierConfig config = dungeon.getTierConfigs().get(tier);
+                dungeon.setTierConfig(tier, new TierConfig(config.healthMultiplier(), config.damageMultiplier(),
+                    config.perPlayerLootTable(), config.dungeonTimeSeconds(), false, config.rewardCurrency(),
+                    config.skillExperiencePerWin()));
+            }
+            ArenasApi.ActivityStatus set = ArenasApi.status(server, id).orElseThrow();
+            helper.assertTrue(set.warnings().equals(EnumSet.of(ArenasApi.Warning.NO_DIFFICULTIES)),
+                "named, linked, every difficulty off: " + set.warnings());
+            helper.assertTrue(set.instances().equals(List.of(new ArenasApi.InstanceStatus(
+                    new ArenasApi.InstanceRef(level.dimension(), dbsPos), ArenasApi.InstanceState.FREE, 0, false))),
+                "one free instance: " + set.instances());
+            helper.assertTrue(set.runs().isEmpty() && set.pendingInstanceRemovals() == 0, "nothing running");
+            helper.succeed();
+        });
+    }
+
+    /** An entry pointing into an unloaded chunk reports CONTROLLER_NOT_LOADED and leaves the chunk unloaded. */
+    public static void adminStatusUnloaded(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        BlockPos near = helper.absolutePos(BlockPos.ZERO);
+        BlockPos far = new BlockPos(near.getX() + 20000, near.getY(), near.getZ() - 20000);
+        helper.assertTrue(!level.isLoaded(far), "the far chunk starts unloaded");
+        ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_unloaded_" + suffix());
+        ghostController(level, far, id);
+        try {
+            ArenasApi.ActivityStatus status = ArenasApi.status(server, id).orElse(null);
+            helper.assertTrue(status != null && status.warnings().contains(ArenasApi.Warning.CONTROLLER_NOT_LOADED)
+                && !status.warnings().contains(ArenasApi.Warning.CONTROLLER_MISSING), "not loaded: " + status);
+            helper.assertTrue(status.instances().isEmpty() && status.runs().isEmpty() && status.openLobbies() == 0,
+                "nothing else is known about it");
+            helper.assertTrue(far.equals(ArenasApi.location(server, id).map(ArenasApi.ControllerLocation::pos).orElse(null)),
+                "its location is still known");
+            helper.assertTrue(!level.isLoaded(far) && level.getChunkSource().getChunkNow(far.getX() >> 4, far.getZ() >> 4) == null,
+                "status and location loaded no chunk");
+        } finally {
+            ActivityRegistry.detach(level, far); // drops the entry without touching the chunk
+        }
+        helper.succeed();
+    }
+
+    /**
+     * openAdmin: refused for a non-op; an op gets a bound remote admin screen that stays valid out
+     * of reach (one opened at the block does not), and every screen closes once deopped.
+     *
+     * @param moddedClient lets the test player's connection take Arenas_LD's payloads (NeoForge
+     *                     refuses payloads a client never registered)
+     */
+    public static void adminScreen(GameTestHelper helper, Consumer<ServerPlayer> moddedClient) {
+        helper.setBlock(DUNGEON, BlockRegistry.DUNGEON_CONTROLLER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            DungeonControllerBlockEntity controller = helper.getBlockEntity(DUNGEON);
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_screen_" + suffix());
+            helper.assertTrue(ActivityRegistry.changeId(controller, id.toString()) == null, "test id set");
+            ServerPlayer player = survivalPlayer(helper, helper.absolutePos(new BlockPos(5, 1, 5)));
+            ServerPlayer op = survivalPlayer(helper, helper.absolutePos(new BlockPos(4, 1, 4)));
+            moddedClient.accept(op);
+            var ops = server.getPlayerList().getOps();
+            try {
+                helper.assertTrue(isKey(ArenasApi.openAdmin(player, id), "message.arenas_ld.admin.no_permission"),
+                    "a non-op is refused");
+                helper.assertTrue(!(player.containerMenu instanceof AdminMenuBase), "and gets no screen");
+
+                // The gametest server makes ops level 0; give this one level 2 by hand.
+                ops.add(new ServerOpListEntry(op.getGameProfile(), 2, false));
+                helper.assertTrue(op.hasPermissions(2), "op level 2");
+                helper.assertTrue(isKey(ArenasApi.openAdmin(op, MISSING), "message.arenas_ld.activity.unknown"),
+                    "an unknown id is refused");
+                helper.assertTrue(ArenasApi.openAdmin(op, id) == null, "an op opens it");
+                AdminMenuBase remote = op.containerMenu instanceof AdminMenuBase menu ? menu : null;
+                helper.assertTrue(remote != null && remote.shows(level.dimension(), controller.getBlockPos())
+                    && level.dimension().equals(remote.boundDimension()), "an admin screen bound to the controller: " + op.containerMenu);
+                helper.assertTrue(AdminScreens.viewers(controller).contains(op), "the op gets its admin snapshots");
+                Vec3 home = op.position();
+                op.setPos(home.x, home.y + 40, home.z); // well out of reach, above the test area
+                helper.assertTrue(remote.stillValid(op), "a remote screen stays open out of reach");
+
+                helper.assertTrue(AdminScreens.open(op, controller, false) == null, "opened as at the block");
+                AdminMenuBase local = op.containerMenu instanceof AdminMenuBase menu ? menu : null;
+                helper.assertTrue(local != null && local != remote && !local.stillValid(op),
+                    "a screen opened at the block closes out of reach");
+                op.setPos(home.x, home.y, home.z);
+                helper.assertTrue(local.stillValid(op), "and stays open within reach");
+
+                ops.remove(op.getGameProfile());
+                helper.assertTrue(!local.stillValid(op) && !remote.stillValid(op), "deopped: every admin screen closes");
+                helper.assertTrue(!AdminScreens.viewers(controller).contains(op), "and gets no more snapshots");
+            } finally {
+                ops.remove(op.getGameProfile());
+                server.getPlayerList().remove(player);
+                server.getPlayerList().remove(op);
+            }
+            helper.succeed();
+        });
+    }
+
+    /** Teleport: next to the controller on a free 2-high spot, facing it; diagonals once the sides are walled; busy players stay. */
+    public static void adminTeleport(GameTestHelper helper) {
+        BlockPos controllerRel = new BlockPos(3, 1, 3);
+        // A floor around the controller: the test area's own ground is a layer lower.
+        for (int x = 1; x <= 5; x++) {
+            for (int z = 1; z <= 5; z++) {
+                helper.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+            }
+        }
+        helper.setBlock(controllerRel, BlockRegistry.ARENA_CONTROLLER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            ArenaControllerBlockEntity controller = helper.getBlockEntity(controllerRel);
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_tp_" + suffix());
+            helper.assertTrue(ActivityRegistry.changeId(controller, id.toString()) == null, "test id set");
+            BlockPos controllerPos = helper.absolutePos(controllerRel);
+            List<BlockPos> sides = Direction.Plane.HORIZONTAL.stream().map(controllerPos::relative).toList();
+            ServerPlayer player = survivalPlayer(helper, helper.absolutePos(new BlockPos(6, 1, 6)));
+            String busyReason = "arenas_ld:gametest_" + suffix();
+            try {
+                helper.assertTrue(ArenasApi.teleportToController(player, id) == null, "teleported");
+                BlockPos feet = player.blockPosition();
+                helper.assertTrue(sides.contains(feet), "beside the controller at " + controllerPos + ": " + feet);
+                assertStandsFacing(helper, player, controllerPos);
+
+                // Walls on all four sides, two high: a diagonal comes next.
+                for (Direction side : Direction.Plane.HORIZONTAL) {
+                    helper.setBlock(controllerRel.relative(side), Blocks.STONE);
+                    helper.setBlock(controllerRel.relative(side).above(), Blocks.STONE);
+                }
+                helper.assertTrue(ArenasApi.teleportToController(player, id) == null, "teleported again");
+                feet = player.blockPosition();
+                helper.assertTrue(feet.getY() == controllerPos.getY() && Math.abs(feet.getX() - controllerPos.getX()) == 1
+                    && Math.abs(feet.getZ() - controllerPos.getZ()) == 1, "on a diagonal: " + feet);
+                assertStandsFacing(helper, player, controllerPos);
+
+                helper.assertTrue(isKey(ArenasApi.teleportToController(player, MISSING), "message.arenas_ld.activity.unknown"),
+                    "an unknown id is refused");
+
+                BusyStateCompat.setBusy(player.getUUID(), busyReason);
+                if (BusyStateCompat.isBusy(player.getUUID())) { // BusyLib is in both dev runs
+                    Vec3 before = player.position();
+                    Component refusal = ArenasApi.teleportToController(player, id);
+                    helper.assertTrue(isKey(refusal, "message.arenas_ld.admin.teleport_busy_because")
+                            && Arrays.asList(((TranslatableContents) refusal.getContents()).getArgs()).contains(busyReason),
+                        "a busy player is refused, with the reason: " + refusal);
+                    helper.assertTrue(player.position().equals(before), "and stays put");
+                }
+            } finally {
+                BusyStateCompat.clearBusy(player.getUUID(), busyReason);
+                server.getPlayerList().remove(player);
+            }
+            helper.succeed();
+        });
+    }
+
+    private static void assertStandsFacing(GameTestHelper helper, ServerPlayer player, BlockPos controllerPos) {
+        ServerLevel level = helper.getLevel();
+        BlockPos feet = player.blockPosition();
+        helper.assertTrue(Math.abs(player.getX() - (feet.getX() + 0.5)) < 1.0E-6 && Math.abs(player.getZ() - (feet.getZ() + 0.5)) < 1.0E-6
+            && player.getY() == feet.getY(), "at the block center, on the ground: " + player.position());
+        helper.assertTrue(level.getBlockState(feet).isAir() && level.getBlockState(feet.above()).isAir()
+            && level.getBlockState(feet.below()).is(Blocks.STONE), "two free blocks over solid ground at " + feet);
+        Vec3 toController = Vec3.atCenterOf(controllerPos).subtract(player.getEyePosition()).normalize();
+        double facing = player.getViewVector(1.0F).dot(toController);
+        helper.assertTrue(facing > 0.99, "facing the controller (" + facing + ")");
+    }
+
+    /**
+     * A real arena run ended by staff: status shows it, a player in it can't teleport, another
+     * instance is refused; ending it reports FORCED once and leaves it closing, and ending it again
+     * closes it at once without a second report.
+     *
+     * @param moddedClient see {@link #adminScreen}: the run player gets the run HUD
+     */
+    public static void adminForceEnd(GameTestHelper helper, Consumer<ServerPlayer> moddedClient) {
+        registerHooksOnce();
+        BlockPos controllerRel = new BlockPos(1, 1, 1);
+        BlockPos spawnerRel = new BlockPos(5, 1, 5);
+        helper.setBlock(controllerRel, BlockRegistry.ARENA_CONTROLLER_BLOCK);
+        helper.setBlock(spawnerRel, BlockRegistry.ARENA_SPAWNER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            ArenaControllerBlockEntity controller = helper.getBlockEntity(controllerRel);
+            ArenaSpawnerBlockEntity spawner = helper.getBlockEntity(spawnerRel);
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_stop_" + suffix());
+            helper.assertTrue(ActivityRegistry.changeId(controller, id.toString()) == null, "test id set");
+            BlockPos spawnerPos = helper.absolutePos(spawnerRel);
+            spawner.setEntrancePosition(helper.absolutePos(new BlockPos(5, 1, 3)), level.dimension());
+            helper.assertTrue(controller.addInstance(spawnerPos, level.dimension()), "instance linked");
+            ArenasApi.InstanceRef instance = new ArenasApi.InstanceRef(level.dimension(), spawnerPos);
+            ServerPlayer player = survivalPlayer(helper, helper.absolutePos(new BlockPos(3, 1, 6)));
+            moddedClient.accept(player);
+            try {
+                helper.assertTrue(controller.createLobby(player), "lobby created");
+                ArenasApi.ActivityStatus waiting = ArenasApi.status(server, id).orElseThrow();
+                helper.assertTrue(waiting.openLobbies() == 1 && waiting.waitingPlayers() == 1 && waiting.runs().isEmpty(),
+                    "one open lobby, nobody playing: " + waiting);
+
+                helper.assertTrue(controller.startRun(player), "the run starts");
+                ArenasApi.ActivityStatus running = ArenasApi.status(server, id).orElseThrow();
+                helper.assertTrue(running.runs().size() == 1 && running.runs().get(0).instance().equals(instance)
+                    && running.runs().get(0).players().equals(List.of(player.getUUID())) && !running.runs().get(0).closing()
+                    && running.runs().get(0).difficulty() == null, "one arena run going: " + running.runs());
+                helper.assertTrue(running.instances().size() == 1
+                    && running.instances().get(0).state() == ArenasApi.InstanceState.RUNNING, "its instance runs: " + running.instances());
+                helper.assertTrue(running.openLobbies() == 0, "its lobby is in the run, not open");
+                helper.assertTrue(isKey(ArenasApi.teleportToController(player, id), "message.arenas_ld.admin.teleport_in_run"),
+                    "a player in a run can't teleport");
+
+                ArenasApi.InstanceRef other = new ArenasApi.InstanceRef(level.dimension(), spawnerPos.above(3));
+                helper.assertTrue(isKey(ArenasApi.forceEnd(server, id, other), "message.arenas_ld.admin.no_run_at"),
+                    "another instance: refused");
+                helper.assertTrue(results(id).isEmpty() && !ArenasApi.status(server, id).orElseThrow().runs().get(0).closing(),
+                    "and nothing ended");
+
+                helper.assertTrue(ArenasApi.forceEnd(server, id, instance) == null, "staff end the run");
+                List<ArenasApi.RunResult> results = results(id);
+                helper.assertTrue(results.size() == 1 && results.get(0).outcome() == ArenasApi.Outcome.FORCED
+                    && results.get(0).players().contains(player.getUUID()), "reported once, as FORCED: " + results);
+                ArenasApi.ActivityStatus closing = ArenasApi.status(server, id).orElseThrow();
+                helper.assertTrue(closing.runs().size() == 1 && closing.runs().get(0).closing(),
+                    "on its exit timer: " + closing.runs());
+
+                helper.assertTrue(ArenasApi.forceEnd(server, id, null) == null, "a closing run is closed at once");
+                helper.assertTrue(results(id).size() == 1, "closing it reports nothing more");
+                ArenasApi.ActivityStatus done = ArenasApi.status(server, id).orElseThrow();
+                helper.assertTrue(done.runs().isEmpty() && done.instances().size() == 1
+                    && done.instances().get(0).state() != ArenasApi.InstanceState.RUNNING, "no run left: " + done);
+                helper.assertTrue(!RunItemRestrictions.isPlayerInRun(player), "the player is out of the run");
+                helper.assertTrue(isKey(ArenasApi.forceEnd(server, id, null), "message.arenas_ld.admin.nothing_running"),
+                    "nothing left to end");
+            } finally {
+                server.getPlayerList().remove(player);
+            }
+            helper.succeed();
+        });
+    }
+
+    private static List<ArenasApi.RunResult> results(ResourceLocation activity) {
+        return RUN_RESULTS.stream().filter(result -> result.activity().equals(activity)).toList();
+    }
+
+    /** Whether a refusal is the given translation key (the server has no translations to compare text with). */
+    private static boolean isKey(Component message, String key) {
+        return message != null && message.getContents() instanceof TranslatableContents contents && contents.getKey().equals(key);
+    }
+
+    /**
+     * An index entry for a dungeon controller that isn't in the world, as one removed without a
+     * block update leaves behind. Touches no block or chunk at {@code pos}.
+     */
+    private static void ghostController(ServerLevel level, BlockPos pos, ResourceLocation id) {
+        DungeonControllerBlockEntity ghost = new DungeonControllerBlockEntity(pos,
+            BlockRegistry.DUNGEON_CONTROLLER_BLOCK.defaultBlockState());
+        ghost.storeActivityId(id); // before it has a level: nothing to sync
+        ghost.setLevel(level);
+        ActivityRegistry.attach(ghost);
     }
 }

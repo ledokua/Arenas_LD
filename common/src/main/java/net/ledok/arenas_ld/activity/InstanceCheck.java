@@ -10,8 +10,8 @@ import net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.run.RoomGraph;
 import net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
+import net.ledok.arenas_ld.util.SafeSpot;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -19,7 +19,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -185,15 +184,9 @@ public final class InstanceCheck {
         return offsets.size();
     }
 
-    /**
-     * A player put here (feet in this block) wouldn't be stuck in a block. Something low at the feet
-     * (a carpet, a slab, snow) only lifts them, so up to half a block there is fine.
-     */
+    /** A player put here (feet in this block) wouldn't be stuck in a block (see {@link SafeSpot#fits}). */
     private static boolean isFree(ServerLevel level, BlockPos feet) {
-        BlockPos head = feet.above();
-        VoxelShape feetShape = level.getBlockState(feet).getCollisionShape(level, feet);
-        return (feetShape.isEmpty() || feetShape.max(Direction.Axis.Y) <= 0.5)
-            && level.getBlockState(head).getCollisionShape(level, head).isEmpty();
+        return SafeSpot.fits(level, feet);
     }
 
     private static Report report(ServerLevel level, BlockPos pos, BlockEntity be, Component summary, List<Problem> problems) {

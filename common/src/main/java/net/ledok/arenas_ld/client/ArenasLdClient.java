@@ -140,7 +140,7 @@ public class ArenasLdClient {
         ArenasClientNetwork.registerReceiver(DungeonControllerAdminSnapshotPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminScreen screen
-                    && screen.matchesController(payload.data().blockPos())) {
+                    && screen.matchesController(payload.data().blockPos(), payload.data().dimension())) {
                     screen.applyData(payload.data());
                 }
             }));
@@ -154,7 +154,14 @@ public class ArenasLdClient {
         ArenasClientNetwork.registerReceiver(RaidControllerAdminSnapshotPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
                 if (Minecraft.getInstance().screen instanceof RaidControllerAdminScreen screen
-                        && screen.matchesController(payload.data().blockPos())) {
+                        && screen.matchesController(payload.data().blockPos(), payload.data().dimension())) {
+                    screen.applyData(payload.data());
+                }
+            }));
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.arena.packet.ArenaControllerAdminSnapshotPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> {
+                if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.arena.screen.ArenaControllerAdminScreen screen
+                        && screen.matchesController(payload.data().blockPos(), payload.data().dimension())) {
                     screen.applyData(payload.data());
                 }
             }));

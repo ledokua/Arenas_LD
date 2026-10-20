@@ -186,5 +186,6 @@ final class ModPacketTypeRegistry {
         ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.LootHudClearPayload.TYPE, net.ledok.arenas_ld.packet.LootHudClearPayload.STREAM_CODEC);
         ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.RunHudPayload.TYPE, net.ledok.arenas_ld.packet.RunHudPayload.STREAM_CODEC);
         ArenasNetwork.playS2C(net.ledok.arenas_ld.arena.packet.ArenaControllerSnapshotPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaControllerSnapshotPayload.STREAM_CODEC);
+        ArenasNetwork.playS2C(net.ledok.arenas_ld.arena.packet.ArenaControllerAdminSnapshotPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaControllerAdminSnapshotPayload.STREAM_CODEC);
     }
 }

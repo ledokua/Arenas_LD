@@ -30,7 +30,6 @@ import net.ledok.arenas_ld.raid.packet.RaidSetLobbyTierPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetLobbyVisibilityPayload;
 import net.ledok.arenas_ld.raid.packet.RaidStartRunPayload;
 import net.ledok.arenas_ld.raid.packet.RaidToggleReadyPayload;
-import net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload;
 import net.ledok.arenas_ld.raid.run.RaidDifficulty;
 import net.ledok.arenas_ld.raid.run.RaidLeaderboardEntry;
 import net.ledok.arenas_ld.util.InstanceStatus;
@@ -255,7 +254,7 @@ public final class RaidPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                RaidControllerBlockEntity controller = findAdminController(player, payload.controllerPos());
                 if (controller == null) return;
                 controller.setRespawnTimeTicks(payload.ticks());
                 broadcastRaidControllerSnapshot(player, controller);
@@ -267,7 +266,7 @@ public final class RaidPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                RaidControllerBlockEntity controller = findAdminController(player, payload.controllerPos());
                 if (controller == null) return;
                 controller.setMaxPartySize(payload.size());
                 broadcastRaidControllerSnapshot(player, controller);
@@ -279,7 +278,7 @@ public final class RaidPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                RaidControllerBlockEntity controller = findAdminController(player, payload.controllerPos());
                 if (controller == null) return;
                 ResourceKey<Level> dim = parseDim(payload.dimension());
                 if (dim == null) return;
@@ -293,7 +292,7 @@ public final class RaidPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                RaidControllerBlockEntity controller = findAdminController(player, payload.controllerPos());
                 if (controller == null) return;
                 ResourceKey<Level> dim = parseDim(payload.dimension());
                 if (dim == null) return;
@@ -307,7 +306,7 @@ public final class RaidPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                RaidControllerBlockEntity controller = findAdminController(player, payload.controllerPos());
                 if (controller == null) return;
                 controller.setCooldownTicks(payload.cooldownTicks());
                 broadcastRaidControllerSnapshot(player, controller);
@@ -319,7 +318,7 @@ public final class RaidPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                RaidControllerBlockEntity controller = findAdminController(player, payload.controllerPos());
                 if (controller == null) return;
                 controller.setCloseTimerSeconds(payload.closeTimerSeconds());
                 broadcastRaidControllerSnapshot(player, controller);
@@ -331,7 +330,7 @@ public final class RaidPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                RaidControllerBlockEntity controller = findAdminController(player, payload.controllerPos());
                 if (controller == null) return;
                 controller.setInviteExpiryTicks(payload.inviteExpiryTicks());
                 broadcastRaidControllerSnapshot(player, controller);
@@ -343,7 +342,7 @@ public final class RaidPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                RaidControllerBlockEntity controller = findAdminController(player, payload.controllerPos());
                 if (controller == null) return;
                 controller.setTierConfig(payload.tier(), payload.config());
                 broadcastRaidControllerSnapshot(player, controller);
@@ -355,7 +354,7 @@ public final class RaidPacketHandlers {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
                 if (!player.hasPermissions(2)) return;
-                RaidControllerBlockEntity controller = findController(player, payload.controllerPos());
+                RaidControllerBlockEntity controller = findAdminController(player, payload.controllerPos());
                 if (controller == null) return;
                 controller.setDeathTimePenaltyTicks(payload.ticks());
                 broadcastRaidControllerSnapshot(player, controller);
@@ -370,6 +369,11 @@ public final class RaidPacketHandlers {
     /** The controller the player's open lobby screen shows (any dimension), else the block at pos here. */
     private static RaidControllerBlockEntity findController(ServerPlayer player, net.minecraft.core.BlockPos pos) {
         return net.ledok.arenas_ld.activity.LobbyScreens.controller(player, pos, RaidControllerBlockEntity.class);
+    }
+
+    /** The controller the player's open admin screen edits (any dimension); null without one. */
+    private static RaidControllerBlockEntity findAdminController(ServerPlayer player, net.minecraft.core.BlockPos pos) {
+        return net.ledok.arenas_ld.activity.AdminScreens.controller(player, pos, RaidControllerBlockEntity.class);
     }
 
     private static RaidControllerBlockEntity findControllerByLobbyId(net.minecraft.server.MinecraftServer server, UUID lobbyId) {
@@ -443,18 +447,18 @@ public final class RaidPacketHandlers {
         invitee.sendSystemMessage(Component.empty().append(accept).append(" ").append(decline).append(" ").append(open));
     }
 
+    /** After a screen action: see {@link #broadcastRaidControllerSnapshot(RaidControllerBlockEntity)}. */
     public static void broadcastRaidControllerSnapshot(ServerPlayer actor, RaidControllerBlockEntity controller) {
-        if (actor.server == null) return;
-        net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload adminSnap =
-            new net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload(controller.buildAdminData());
-        for (ServerPlayer target : net.ledok.arenas_ld.activity.LobbyScreens.viewers(controller)) {
-            ArenasNetwork.sendToPlayer(target, new RaidControllerSnapshotPayload(controller.getScreenOpeningData(target)));
-        }
-        for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
-            if (target.hasPermissions(2)) {
-                ArenasNetwork.sendToPlayer(target, adminSnap);
-            }
-        }
+        broadcastRaidControllerSnapshot(controller);
+    }
+
+    /**
+     * The lobby snapshot to the controller's open lobby screens now, and the admin snapshot to its
+     * open admin screens only ({@code AdminScreens.viewers}) at the end of the tick: built once for
+     * all the edits of that tick, and only when someone is looking.
+     */
+    public static void broadcastRaidControllerSnapshot(RaidControllerBlockEntity controller) {
+        controller.broadcastSnapshots();
     }
 
     /**

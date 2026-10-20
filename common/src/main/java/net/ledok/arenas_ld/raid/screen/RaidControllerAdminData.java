@@ -3,11 +3,15 @@ package net.ledok.arenas_ld.raid.screen;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.ledok.arenas_ld.util.InstanceStatus;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -19,6 +23,8 @@ import java.util.Set;
 
 public record RaidControllerAdminData(
     BlockPos blockPos,
+    /** The controller's dimension: with {@code blockPos}, which controller a snapshot is for. */
+    ResourceKey<Level> dimension,
     List<InstanceEntry> instances,
     Set<BlockPos> pendingRemovals,
     int cooldownTicks,
@@ -40,6 +46,8 @@ public record RaidControllerAdminData(
     /** Tier and party label of the run currently occupying an instance. */
     public record InstanceRun(DifficultyTier tier, String party) {}
 
+    private static final StreamCodec<ByteBuf, ResourceKey<Level>> DIMENSION_CODEC = ResourceKey.streamCodec(Registries.DIMENSION);
+
     public static final StreamCodec<RegistryFriendlyByteBuf, RaidControllerAdminData> STREAM_CODEC = StreamCodec.of(
         RaidControllerAdminData::encode,
         RaidControllerAdminData::decode
@@ -47,6 +55,7 @@ public record RaidControllerAdminData(
 
     private static void encode(RegistryFriendlyByteBuf buf, RaidControllerAdminData data) {
         buf.writeBlockPos(data.blockPos());
+        DIMENSION_CODEC.encode(buf, data.dimension());
 
         buf.writeVarInt(data.instances().size());
         InstanceStatus[] statuses = InstanceStatus.values();
@@ -92,6 +101,7 @@ public record RaidControllerAdminData(
 
     private static RaidControllerAdminData decode(RegistryFriendlyByteBuf buf) {
         BlockPos blockPos = buf.readBlockPos();
+        ResourceKey<Level> dimension = DIMENSION_CODEC.decode(buf);
 
         int instancesSize = buf.readVarInt();
         List<InstanceEntry> instances = new ArrayList<>(instancesSize);
@@ -147,6 +157,7 @@ public record RaidControllerAdminData(
 
         return new RaidControllerAdminData(
             blockPos,
+            dimension,
             instances,
             pendingRemovals,
             cooldownTicks,

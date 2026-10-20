@@ -3,7 +3,9 @@ package net.ledok.arenas_ld.arena.block;
 import com.mojang.serialization.MapCodec;
 import net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.item.DungeonToolItem;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -18,7 +20,7 @@ import net.ledok.arenas_ld.platform.ArenasMenus;
 /**
  * Passive arena anchor block. No ticker — the arena controller drives active runs via
  * {@code ArenaRunLifecycle}. Mirrors {@link net.ledok.arenas_ld.raid.block.RaidBossSpawnerBlock}.
- * (The config screen is wired in a later phase.)
+ * Using it opens the config screen, for ops only.
  */
 public class ArenaSpawnerBlock extends BaseEntityBlock {
 
@@ -50,7 +52,9 @@ public class ArenaSpawnerBlock extends BaseEntityBlock {
             return InteractionResult.PASS;
         }
         if (!world.isClientSide) {
-            if (!player.isCreative() && !player.hasPermissions(2)) {
+            // Op only, like the spawner's save packets: creative alone would open a screen whose saves are dropped.
+            if (!player.hasPermissions(2)) {
+                player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission").withStyle(ChatFormatting.RED));
                 return InteractionResult.FAIL;
             }
             if (world.getBlockEntity(pos) instanceof ArenaSpawnerBlockEntity spawner) {

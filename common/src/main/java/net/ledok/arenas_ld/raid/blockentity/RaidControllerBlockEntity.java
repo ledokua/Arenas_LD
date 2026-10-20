@@ -3,6 +3,7 @@ package net.ledok.arenas_ld.raid.blockentity;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.api.ArenasApi;
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
@@ -144,6 +145,12 @@ public class RaidControllerBlockEntity extends BlockEntity
     private transient boolean loadedWithoutId = false;
     /** Entry-gate locks each open lobby screen last got. Transient. */
     private final transient net.ledok.arenas_ld.activity.LockWatch lockWatch = new net.ledok.arenas_ld.activity.LockWatch();
+    /**
+     * Open admin screens get one fresh snapshot at the end of the tick: something changed, from a
+     * screen (an Apply sends several edits at once) or on its own (a run started or ended, a
+     * cooldown ran out). Transient.
+     */
+    private transient boolean adminSnapshotStale = false;
     /** Per-tier raid configs (health/damage multipliers, time limit, enabled, reward currency). */
     private final Map<DifficultyTier, RaidTierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
     /** Instances queued for removal once their current run ends. */
@@ -289,6 +296,10 @@ public class RaidControllerBlockEntity extends BlockEntity
         for (ServerPlayer viewer : be.lockWatch.changedViewers(be, serverLevel.getGameTime())) {
             net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(viewer,
                 new net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload(be.getScreenOpeningData(viewer)));
+        }
+        // One admin snapshot for everything that changed since the last tick.
+        if (be.adminSnapshotStale) {
+            be.sendAdminSnapshot();
         }
     }
 
@@ -489,6 +500,101 @@ public class RaidControllerBlockEntity extends BlockEntity
             }
         }
         return enabled;
+    }
+
+    @Override
+    public LiveStatus liveStatus() {
+        List<ArenasApi.InstanceStatus> instanceStatuses = new ArrayList<>(instances.size());
+        for (RaidInstanceState inst : instances) {
+            ArenasApi.InstanceState state = switch (inst.status()) {
+                case FREE -> ArenasApi.InstanceState.FREE;
+                case RUNNING -> ArenasApi.InstanceState.RUNNING;
+                case COOLDOWN -> ArenasApi.InstanceState.COOLDOWN;
+            };
+            int cooldownLeft = state == ArenasApi.InstanceState.COOLDOWN ? Math.max(0, inst.cooldownTicksRemaining()) : 0;
+            // Pending removals are kept by position only, and only ever flag a running instance.
+            boolean pendingRemoval = inst.status() == InstanceStatus.RUNNING
+                && pendingInstanceRemovals.contains(inst.spawnerPos());
+            instanceStatuses.add(new ArenasApi.InstanceStatus(new ArenasApi.InstanceRef(inst.dimension(), inst.spawnerPos()),
+                state, cooldownLeft, pendingRemoval));
+        }
+
+        List<ArenasApi.RunStatus> runs = new ArrayList<>();
+        if (level instanceof ServerLevel serverLevel) {
+            List<RaidRun> ordered = new ArrayList<>(activeRuns.values());
+            ordered.sort(Comparator.comparingInt(this::instanceIndex));
+            long now = serverLevel.getGameTime();
+            for (RaidRun run : ordered) {
+                if (!run.isFinished()) {
+                    runs.add(RaidRunLifecycle.status(serverLevel.getServer(), run, now));
+                }
+            }
+        }
+
+        int openLobbies = 0;
+        int waitingPlayers = 0;
+        for (Lobby lobby : lobbies) {
+            if (isOpenLobby(lobby)) {
+                openLobbies++;
+                waitingPlayers += lobby.members().size();
+            }
+        }
+        int queuedLobbies = 0;
+        for (UUID lobbyId : queuedLobbyIds) {
+            Lobby lobby = getLobbyById(lobbyId);
+            if (lobby != null && isOpenLobby(lobby)) {
+                queuedLobbies++;
+            }
+        }
+        return new LiveStatus(instanceStatuses, runs, openLobbies, queuedLobbies, waitingPlayers);
+    }
+
+    /** Forming or ready: not yet in its run. */
+    private static boolean isOpenLobby(Lobby lobby) {
+        return lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.FORMING
+            || lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.READY;
+    }
+
+    /** The run's place in the instance list, so status lists runs in the controller's order. */
+    private int instanceIndex(RaidRun run) {
+        for (int i = 0; i < instances.size(); i++) {
+            RaidInstanceState inst = instances.get(i);
+            if (inst.spawnerPos().equals(run.spawnerPos()) && inst.dimension().equals(run.spawnerDimension())) {
+                return i;
+            }
+        }
+        return Integer.MAX_VALUE;
+    }
+
+    @Override
+    public int forceEnd(@Nullable ArenasApi.InstanceRef instance) {
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return 0;
+        }
+        int ended = 0;
+        // A copy: closing a run takes it out of activeRuns.
+        for (RaidRun run : new ArrayList<>(activeRuns.values())) {
+            if (instance != null
+                && !(run.spawnerPos().equals(instance.pos()) && run.spawnerDimension().equals(instance.dimension()))) {
+                continue;
+            }
+            if (RaidRunLifecycle.forceEnd(serverLevel.getServer(), this, run)) {
+                ended++;
+            }
+        }
+        if (ended > 0) {
+            setChanged(); // a run left on its exit timer must be saved as closing
+        }
+        return ended;
+    }
+
+    @Override
+    public void syncViewers() {
+        markDirtyAndSync();
+        // The admin snapshot waits for the end of the tick like every other admin edit's: the
+        // General tab's Apply sends the name and its settings as separate packets, and the screen
+        // takes the first snapshot after a save as the save's echo.
+        broadcastSnapshots();
     }
 
     private void refreshActivity() {
@@ -1136,14 +1242,21 @@ public class RaidControllerBlockEntity extends BlockEntity
             }
         }
 
-        // Release instance
-        releaseInstance(spawnerPos);
+        // Release the instance, or unlink it when an admin removed it while this run was going.
+        if (pendingInstanceRemovals.remove(spawnerPos)) {
+            ResourceKey<Level> dimension = endingRun != null ? endingRun.spawnerDimension() : null;
+            instances.removeIf(inst -> inst.spawnerPos().equals(spawnerPos) && inst.status() == InstanceStatus.RUNNING
+                && (dimension == null || inst.dimension().equals(dimension)));
+        } else {
+            releaseInstance(spawnerPos);
+        }
 
         // Tear down the run-side mirror entry.
         activeRuns.remove(spawnerPos);
 
         // The freed instance is now on cooldown; tickQueuePriority offers it to the queue front
         // once the cooldown expires (notify-only, never auto-start).
+        adminSnapshotStale = true;
         markDirtyAndSync();
     }
 
@@ -1169,6 +1282,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             freed |= next == InstanceStatus.FREE;
         }
         if (freed) {
+            adminSnapshotStale = true;
             markDirtyAndSync();
             broadcastPlayerSnapshots();
         } else if (counting) {
@@ -1325,7 +1439,16 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
     }
 
-    /** Pushes the player-facing controller snapshot to all online players (live queue/lobby UI). */
+    /**
+     * Pushes fresh data to this controller's open screens after a change: each lobby screen its
+     * player's lobby snapshot now, the admin screens one admin snapshot at the end of the tick.
+     */
+    public void broadcastSnapshots() {
+        broadcastPlayerSnapshots();
+        adminSnapshotStale = true;
+    }
+
+    /** Pushes the player-facing controller snapshot to everyone with its lobby screen open (live queue/lobby UI). */
     private void broadcastPlayerSnapshots() {
         if (!(level instanceof ServerLevel serverLevel) || serverLevel.getServer() == null) {
             return;
@@ -1333,6 +1456,23 @@ public class RaidControllerBlockEntity extends BlockEntity
         for (ServerPlayer target : net.ledok.arenas_ld.activity.LobbyScreens.viewers(this)) {
             net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(target,
                 new net.ledok.arenas_ld.raid.packet.RaidControllerSnapshotPayload(getScreenOpeningData(target)));
+        }
+    }
+
+    /**
+     * Pushes the admin snapshot to the ops whose admin screen shows this controller, and to no one
+     * else: it carries the whole setup. Built once, and only when someone is looking.
+     */
+    private void sendAdminSnapshot() {
+        adminSnapshotStale = false;
+        List<ServerPlayer> viewers = net.ledok.arenas_ld.activity.AdminScreens.viewers(this);
+        if (viewers.isEmpty()) {
+            return;
+        }
+        net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload payload =
+            new net.ledok.arenas_ld.raid.packet.RaidControllerAdminSnapshotPayload(buildAdminData());
+        for (ServerPlayer viewer : viewers) {
+            net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(viewer, payload);
         }
     }
 
@@ -1412,6 +1552,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(p, closePayload);
         }
 
+        adminSnapshotStale = true;
         markDirtyAndSync();
         return true;
     }
@@ -1581,6 +1722,10 @@ public class RaidControllerBlockEntity extends BlockEntity
 
                     pendingInstanceRemovals.clear();
                     pendingInstanceRemovals.addAll(state.pendingInstanceRemovals());
+                    // Before 4.9.0 a pending removal never ran: drop the flags left on instances
+                    // that aren't running, rather than unlinking them out of the blue at some later run's end.
+                    pendingInstanceRemovals.removeIf(pos -> instances.stream()
+                        .noneMatch(inst -> inst.spawnerPos().equals(pos) && inst.status() == InstanceStatus.RUNNING));
 
                     activeRuns.clear();
                     for (InstanceRunEntry ire : state.activeRuns()) {
@@ -1766,6 +1911,7 @@ public class RaidControllerBlockEntity extends BlockEntity
 
         return new net.ledok.arenas_ld.raid.screen.RaidControllerAdminData(
             worldPosition,
+            level != null ? level.dimension() : Level.OVERWORLD,
             instanceEntries,
             new HashSet<>(pendingInstanceRemovals),
             cooldownTicks,

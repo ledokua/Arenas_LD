@@ -33,7 +33,9 @@ import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -116,6 +118,8 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
 
     private Tab currentTab = Tab.INSTANCES;
     private String footerError;
+    /** Snapshots still due in answer to a save: each one re-reads the inputs, so refused values snap back. */
+    private int pendingSaveEchoes;
     private long lastCooldownSecond = -1L;
     private long cooldownSnapshotEpochMs = System.currentTimeMillis();
 
@@ -323,7 +327,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         normalTabButton.enabled(currentTab != Tab.NORMAL);
         hardTabButton.enabled(currentTab != Tab.HARD);
         nightmareTabButton.enabled(currentTab != Tab.NIGHTMARE);
-        instancesTabButton.label(Component.translatable("gui.arenas_ld.dungeon_controller_admin.tab.instances").append(" [" + instances.size() + "]"));
+        updateInstancesTabLabel();
 
         switch (currentTab) {
             case INSTANCES -> buildInstancesTab();
@@ -335,6 +339,10 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         }
 
         footerLabel.text(footerError == null ? Component.empty() : Component.literal(footerError));
+    }
+
+    private void updateInstancesTabLabel() {
+        instancesTabButton.label(Component.translatable("gui.arenas_ld.dungeon_controller_admin.tab.instances").append(" [" + instances.size() + "]"));
     }
 
     private void buildInstancesTab() {
@@ -1022,6 +1030,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         ArenasNetwork.sendToServer(new SetRespawnTimeTicksPayload(menu.getBlockPos(), respawn));
         ArenasNetwork.sendToServer(new SetDeathTimePenaltyPayload(menu.getBlockPos(), death * 20));
         ArenasNetwork.sendToServer(new net.ledok.arenas_ld.dungeon.packet.SetHpScalePerPlayerPayload(menu.getBlockPos(), hpScalePct / 100.0));
+        pendingSaveEchoes += 8; // one snapshot per packet above
     }
 
     private void applyTier(DifficultyTier tier) {
@@ -1044,6 +1053,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         tierConfigs.put(tier, updated);
         footerError = null;
         ArenasNetwork.sendToServer(new SetTierConfigPayload(menu.getBlockPos(), tier, updated));
+        pendingSaveEchoes++;
     }
 
     private Long parseLong(String value) {
@@ -1078,6 +1088,12 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
     }
 
     private void syncFromMenu() {
+        syncStateFromMenu();
+        syncSettingsFromMenu();
+    }
+
+    /** Instances and their runs and cooldowns: what changes while nobody edits. */
+    private void syncStateFromMenu() {
         knownLootTableIds = new ArrayList<>(menu.getKnownLootTableIds());
 
         instances.clear();
@@ -1091,6 +1107,10 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         pendingRemovals.addAll(menu.getPendingRemovals());
         runningInstances.clear();
         runningInstances.putAll(menu.getRunningInstances());
+    }
+
+    /** The settings and every input field. */
+    private void syncSettingsFromMenu() {
         tierConfigs.clear();
         tierConfigs.putAll(menu.getTierConfigs());
 
@@ -1119,13 +1139,43 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         enabledInputs.put(tier, config.enabled());
     }
 
-    public boolean matchesController(BlockPos blockPos) {
-        return menu.getBlockPos().equals(blockPos);
+    /** Whether a snapshot is for this screen's controller: same position and dimension. */
+    public boolean matchesController(BlockPos blockPos, ResourceKey<Level> dimension) {
+        return menu.getBlockPos().equals(blockPos) && menu.getDimension().equals(dimension);
     }
 
     public void applyData(DungeonControllerAdminData data) {
+        // Run starts, run ends and cooldowns send snapshots too: keep what the admin is typing
+        // unless the settings changed, or the snapshot answers a save.
+        boolean resyncSettings = pendingSaveEchoes > 0 || !sameSettings(data);
+        if (pendingSaveEchoes > 0) {
+            pendingSaveEchoes--;
+        }
         menu.applyData(data);
-        syncFromMenu();
-        rebuildUi();
+        if (resyncSettings) {
+            syncFromMenu();
+            rebuildUi();
+            return;
+        }
+        syncStateFromMenu();
+        if (currentTab == Tab.INSTANCES) {
+            rebuildUi();
+        } else {
+            updateInstancesTabLabel(); // leaves the open tab's fields (and their focus) alone
+        }
+    }
+
+    /** Whether the snapshot carries the settings this screen already has. */
+    private boolean sameSettings(DungeonControllerAdminData data) {
+        return menu.getDungeonName().equals(data.dungeonName())
+            && menu.getActivityId().equals(data.activityId())
+            && menu.getCooldownTicks() == data.cooldownTicks()
+            && menu.getCloseTimerSeconds() == data.closeTimerSeconds()
+            && menu.getMaxPartySize() == data.maxPartySize()
+            && menu.getInviteExpiryTicks() == data.inviteExpiryTicks()
+            && menu.getRespawnTimeTicks() == data.respawnTimeTicks()
+            && menu.getDeathTimePenaltyTicks() == data.deathTimePenaltyTicks()
+            && Double.compare(menu.getHpScalePerPlayer(), data.hpScalePerPlayer()) == 0
+            && menu.getTierConfigs().equals(data.tierConfigs());
     }
 }

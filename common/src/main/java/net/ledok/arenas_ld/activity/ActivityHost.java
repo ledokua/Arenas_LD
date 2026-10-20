@@ -41,6 +41,46 @@ public interface ActivityHost {
     /** The enabled difficulties, lowest first; empty for arenas. */
     List<DifficultyTier> enabledTiers();
 
+    /**
+     * What the controller is doing now, for {@code ArenasApi.status}. Polled often: read only what
+     * the controller holds in memory, never a block entity or entity whose chunk may not be loaded
+     * (guard with {@code level.isLoaded}), and never load a chunk.
+     */
+    LiveStatus liveStatus();
+
+    /**
+     * Staff ends runs ({@code ArenasApi.forceEnd}): a run still going ends as a forced loss
+     * ({@code Outcome.FORCED}, players returned after the exit timer); a run already on its exit
+     * timer is closed now, keeping its result. Safe to call from outside the controller's tick.
+     *
+     * @param instance the instance whose run to end, or null for every run
+     * @return how many runs were ended or closed
+     */
+    int forceEnd(@Nullable ArenasApi.InstanceRef instance);
+
+    /**
+     * Sends fresh data to everyone looking at this controller after a change made from outside its
+     * screens (a rename through the API): a block update, the lobby screens' snapshot and the admin
+     * screens' snapshot ({@link AdminScreens#viewers}).
+     */
+    void syncViewers();
+
+    /**
+     * A controller's in-memory state for {@code ArenasApi.status}; {@link ActivityAdmin} adds the
+     * id-level warnings.
+     *
+     * @param openLobbies    lobbies forming or ready (queued included), not those whose run started
+     * @param queuedLobbies  lobbies waiting for a free instance (stale queue ids not counted)
+     * @param waitingPlayers members of the open lobbies
+     */
+    record LiveStatus(List<ArenasApi.InstanceStatus> instances, List<ArenasApi.RunStatus> runs,
+                      int openLobbies, int queuedLobbies, int waitingPlayers) {
+        public LiveStatus {
+            instances = List.copyOf(instances);
+            runs = List.copyOf(runs);
+        }
+    }
+
     default BlockEntity asBlockEntity() {
         return (BlockEntity) this;
     }

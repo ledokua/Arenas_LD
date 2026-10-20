@@ -1,6 +1,8 @@
 package net.ledok.arenas_ld.raid.run;
 
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.activity.ActivityHost;
+import net.ledok.arenas_ld.api.ArenasApi;
 import net.ledok.arenas_ld.compat.PuffishSkillsCompat;
 import net.ledok.arenas_ld.dungeon.blockentity.EntityDefinition;
 import net.ledok.arenas_ld.dungeon.run.DownedPlayer;
@@ -378,7 +380,17 @@ public final class RaidRunLifecycle {
         }
     }
 
+    /**
+     * Whether the run's result is still open. A run is won or lost once: a second win or loss
+     * (a run listener ending it again from inside the first) would pay, report and close twice.
+     */
+    private static boolean undecided(RaidRun run) {
+        return run.outcome() == RaidOutcome.IN_PROGRESS
+            && (run.phase() == RaidPhase.STARTING || run.phase() == RaidPhase.RUNNING);
+    }
+
     static void handleWin(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run) {
+        if (!undecided(run)) return;
         ArenasLdMod.LOGGER.info("Raid battle won at spawner {}", run.spawnerPos());
         run.setOutcome(RaidOutcome.WIN);
         net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
@@ -434,38 +446,108 @@ public final class RaidRunLifecycle {
         }
 
         // Before enterClosing: with no close timer it finalizes and releases the run right away.
-        fireRunResult(world, controller, run, true);
+        fireRunResult(world, controller, run, ArenasApi.Outcome.WIN);
         enterClosing(world, controller, run);
     }
 
     /** Reports the finished run to {@code ArenasApi} run listeners. */
-    private static void fireRunResult(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, boolean win) {
-        net.ledok.arenas_ld.activity.RunEvents.fire(controller, run.tier(), win, run.startTick(), world.getGameTime(), 0,
+    private static void fireRunResult(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run,
+                                      ArenasApi.Outcome outcome) {
+        net.ledok.arenas_ld.activity.RunEvents.fire(controller, run.tier(), outcome,
+            run.startTick(), world.getGameTime(), 0,
             run.participants().keySet());
     }
 
     static void handleLoss(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, String reason) {
+        handleLoss(world, controller, run, reason, false);
+    }
+
+    /**
+     * Ends the fight as a loss: no rewards, the boss discarded, then the exit timer.
+     *
+     * @param byStaff ended by staff ({@link #forceEnd}): players are told so, and it is reported as
+     *                {@code Outcome.FORCED} instead of a loss
+     */
+    private static void handleLoss(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, String reason,
+                                   boolean byStaff) {
+        if (!undecided(run)) return;
         ArenasLdMod.LOGGER.info("Raid battle lost at spawner {}: {}", run.spawnerPos(), reason);
-        run.setOutcome(RaidOutcome.LOSS_FORCED);
+        run.setOutcome(byStaff ? RaidOutcome.LOSS_STAFF : RaidOutcome.LOSS_FORCED);
         net.ledok.arenas_ld.util.RunFeedback.toAll(world, run.participants().keySet(),
             Component.translatable("title.arenas_ld.defeat").withStyle(ChatFormatting.RED), null,
             net.minecraft.sounds.SoundEvents.ANVIL_LAND, 0.6f, 0.7f);
-
-        UUID bossUuid = run.bossUuid();
-        ResourceKey<Level> bossDim = run.bossDimension();
-        if (bossUuid != null && bossDim != null) {
-            ServerLevel bossWorld = world.getServer().getLevel(bossDim);
-            if (bossWorld != null) {
-                Entity bossEntity = bossWorld.getEntity(bossUuid);
-                if (bossEntity != null && bossEntity.isAlive()) {
-                    bossEntity.discard();
-                    ArenasLdMod.LOGGER.info("Despawned boss after battle loss at {}.", run.spawnerPos());
-                }
-            }
+        if (byStaff) {
+            broadcastToParty(world, run, Component.translatable("message.arenas_ld.raid.ended_by_admin")
+                .withStyle(ChatFormatting.RED), null);
         }
 
-        fireRunResult(world, controller, run, false);
+        discardBoss(world, run);
+
+        fireRunResult(world, controller, run, byStaff ? ArenasApi.Outcome.FORCED : ArenasApi.Outcome.LOSS);
         enterClosing(world, controller, run);
+    }
+
+    /**
+     * Staff ends one run ({@code ArenasApi.forceEnd}). A run still being fought is lost as
+     * {@link #handleLoss} would (no rewards, boss discarded, the usual exit timer) but reported as
+     * {@code Outcome.FORCED}; a run on its exit timer is closed now, keeping its result; a finished
+     * run that was never released (an unreadable saved phase reads as DONE) is released without
+     * being reported. Safe outside the controller's tick, on the server thread.
+     *
+     * @return whether the run was ended or closed
+     */
+    public static boolean forceEnd(MinecraftServer server, RaidControllerBlockEntity controller, RaidRun run) {
+        if (controller.getActiveRuns().get(run.spawnerPos()) != run) {
+            return false; // already released
+        }
+        ServerLevel world = resolveSpawnerLevel(server, run);
+        if (world == null) {
+            // Its dimension is gone (a removed dimension mod): the controller never ticks it, so
+            // release it now from the controller's level. Its boss can't be reached any more.
+            if (!(controller.getLevel() instanceof ServerLevel home)) {
+                return false;
+            }
+            if (undecided(run)) {
+                run.setOutcome(RaidOutcome.LOSS_STAFF);
+                fireRunResult(home, controller, run, ArenasApi.Outcome.FORCED);
+            }
+            finalizeRun(home, controller, run, false);
+            return true;
+        }
+        switch (run.phase()) {
+            case STARTING, RUNNING -> {
+                if (!undecided(run)) {
+                    return false; // being won or lost right now (a run listener calling back in)
+                }
+                handleLoss(world, controller, run, "Ended by an admin.", true);
+            }
+            case CLOSING -> finalizeRun(world, controller, run);
+            case DONE -> {
+                discardBoss(world, run);
+                finalizeRun(world, controller, run);
+            }
+        }
+        return true;
+    }
+
+    /** Discards the run's boss if it is loaded and alive (its minions go with it). */
+    private static void discardBoss(ServerLevel world, RaidRun run) {
+        Entity bossEntity = loadedBoss(world.getServer(), run);
+        if (bossEntity != null && bossEntity.isAlive()) {
+            bossEntity.discard();
+            ArenasLdMod.LOGGER.info("Despawned boss of the ended raid at {}.", run.spawnerPos());
+        }
+    }
+
+    /** The run's boss when it is loaded; an in-memory lookup that never loads a chunk. */
+    private static @Nullable Entity loadedBoss(MinecraftServer server, RaidRun run) {
+        UUID bossUuid = run.bossUuid();
+        ResourceKey<Level> bossDim = run.bossDimension();
+        if (bossUuid == null || bossDim == null) {
+            return null;
+        }
+        ServerLevel bossWorld = server.getLevel(bossDim);
+        return bossWorld == null ? null : bossWorld.getEntity(bossUuid);
     }
 
     /**
@@ -561,6 +643,15 @@ public final class RaidRunLifecycle {
 
     /** Teleport players back to their captured return points and tear down the run's transient state. */
     static void finalizeRun(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run) {
+        finalizeRun(world, controller, run, true);
+    }
+
+    /**
+     * @param spawnerLevel {@code world} is the run's spawner level; false when that dimension is
+     *                     gone and {@code world} is the controller's (the spawner can't be looked up)
+     */
+    private static void finalizeRun(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run,
+                                    boolean spawnerLevel) {
         for (UUID uuid : run.participants().keySet()) {
             // Players return to where they were when the run started (captured on entry).
             restoreToReturnPoint(world, run, uuid);
@@ -569,7 +660,7 @@ public final class RaidRunLifecycle {
 
         RunHudSync.hide(world, hudTargets(run));
         run.setPhase(RaidPhase.DONE);
-        RaidBossSpawnerBlockEntity spawner = spawnerFor(world, run);
+        RaidBossSpawnerBlockEntity spawner = spawnerLevel ? spawnerFor(world, run) : null;
         if (spawner != null) {
             ArenasLdMod.RAID_BOSS_MANAGER.unregisterSpawner(spawner);
         }
@@ -842,6 +933,46 @@ public final class RaidRunLifecycle {
 
     private static int resolveRespawnTimeTicks(@Nullable RaidControllerBlockEntity controller) {
         return controller != null ? controller.getRespawnTimeTicks() : DOWNED_RESPAWN_TICKS;
+    }
+
+    // ── Status (ArenasApi.status) ───────────────────────────────────────────────
+
+    /**
+     * The run as {@code ArenasApi.status} reports it. Reads memory only (the boss through
+     * {@code ServerLevel.getEntity}), so it is cheap and never loads a chunk.
+     */
+    public static ArenasApi.RunStatus status(MinecraftServer server, RaidRun run, long gameTime) {
+        List<UUID> players = new ArrayList<>();
+        for (RunParticipant participant : run.participants().values()) {
+            if (participant.status() != ParticipantStatus.REMOVED) {
+                players.add(participant.playerUuid());
+            }
+        }
+        boolean closing = run.phase() == RaidPhase.CLOSING;
+        Component phase;
+        long ticksLeft;
+        if (closing) {
+            phase = Component.translatable(switch (run.outcome()) {
+                case WIN -> "status.arenas_ld.raid.closing_won";
+                case LOSS_STAFF -> "status.arenas_ld.raid.closing_forced";
+                default -> "status.arenas_ld.raid.closing_lost";
+            });
+            ticksLeft = Math.max(0, run.closeTimerTicks());
+        } else {
+            if (run.phase() == RaidPhase.STARTING) {
+                phase = Component.translatable("status.arenas_ld.raid.starting");
+            } else {
+                Entity boss = loadedBoss(server, run);
+                phase = boss instanceof LivingEntity && boss.isAlive()
+                    ? Component.translatable("status.arenas_ld.raid.boss_health", bossHealthPercent(boss))
+                    : Component.translatable("status.arenas_ld.raid.boss");
+            }
+            // Untimed raids have no clock (see updateRaidTimerBossBar).
+            ticksLeft = run.resolvedTierConfig().raidTimeSeconds() > 0 ? Math.max(0, run.timerTicks()) : -1;
+        }
+        return new ArenasApi.RunStatus(new ArenasApi.InstanceRef(run.spawnerDimension(), run.spawnerPos()),
+            ActivityHost.difficultyId(run.tier()), List.copyOf(players), phase,
+            Math.max(0L, gameTime - run.startTick()), ticksLeft, closing);
     }
 
     /** Whole-percent remaining boss health, ceil'd so the bar never reads 0% while the boss lives. */

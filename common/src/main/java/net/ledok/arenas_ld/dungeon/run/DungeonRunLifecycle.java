@@ -191,6 +191,7 @@ public final class DungeonRunLifecycle {
             }
         }
 
+        controller.syncAdminViewers();
         return run;
     }
 
@@ -659,6 +660,9 @@ public final class DungeonRunLifecycle {
     }
 
     static void handleWin(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+        if (!stillPlaying(run)) {
+            return; // already won or lost: never pay or report twice
+        }
         long runDurationTicks = world.getGameTime() - run.startTick();
         int runDurationSeconds = (int) (runDurationTicks / 20);
         String lootTableId = run.resolvedTierConfig().perPlayerLootTable();
@@ -728,16 +732,105 @@ public final class DungeonRunLifecycle {
         // Swap the run timer for the close countdown right away, not on the next second tick.
         RunHudSync.send(world, hudTargets(run), closeHudPayload(run));
         sendExitPrompt(world, run);
-        fireRunResult(world, controller, run, true);
+        fireRunResult(world, controller, run, net.ledok.arenas_ld.api.ArenasApi.Outcome.WIN);
     }
 
     /** Reports the finished run to {@code ArenasApi} run listeners. */
-    private static void fireRunResult(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, boolean win) {
-        net.ledok.arenas_ld.activity.RunEvents.fire(controller, run.tier(), win, run.startTick(), world.getGameTime(), 0,
+    private static void fireRunResult(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run,
+                                      net.ledok.arenas_ld.api.ArenasApi.Outcome outcome) {
+        net.ledok.arenas_ld.activity.RunEvents.fire(controller, run.tier(), outcome,
+            run.startTick(), world.getGameTime(), 0,
             run.participants().keySet());
     }
 
+    /**
+     * Whether the run is still being played. Winning and losing both move it on to CLOSING (or
+     * DONE), so a second win or loss on the same run is refused.
+     */
+    private static boolean stillPlaying(DungeonRun run) {
+        return run.phase() == DungeonPhase.STARTING || run.phase() == DungeonPhase.RUNNING;
+    }
+
+    /**
+     * Staff ends one run ({@code ArenasApi.forceEnd}). A run still being played takes the loss path
+     * as {@link DungeonOutcome#ENDED_BY_STAFF}: no rewards, {@code Outcome.FORCED} reported once,
+     * boss room mobs gone, then the usual exit timer ({@code /exit} works). A run already on its
+     * exit timer, or stuck in a phase it can't leave (a corrupt save), is closed now: players go
+     * home, its result stays, nothing is reported or paid again.
+     *
+     * @return whether the run was ended or closed
+     */
+    public static boolean forceEnd(MinecraftServer server, DungeonControllerBlockEntity controller, DungeonRun run) {
+        if (controller.getActiveRuns().get(run.dbsPos()) != run) {
+            return false; // finalized already
+        }
+        // The same level the controller ticks the run in.
+        ServerLevel world = server.getLevel(run.dbsDimension());
+        if (world == null && controller.getLevel() instanceof ServerLevel own) {
+            world = own;
+        }
+        if (world == null) {
+            return false;
+        }
+        if (stillPlaying(run) && run.outcome() == DungeonOutcome.IN_PROGRESS) {
+            handleLoss(world, controller, run, DungeonOutcome.ENDED_BY_STAFF);
+        } else {
+            finalize(world, controller, run);
+        }
+        return true;
+    }
+
+    /**
+     * The run's phase line for staff ({@code ArenasApi.status}). Reads the run, plus the boss
+     * spawner's room markers when its chunk is loaded (it is while the run holds its tickets);
+     * never loads a chunk.
+     *
+     * @param world the boss spawner's level, or null when it is gone
+     */
+    public static Component statusPhase(@Nullable ServerLevel world, DungeonRun run) {
+        return switch (run.phase()) {
+            case STARTING -> Component.translatable("status.arenas_ld.dungeon.starting");
+            case RUNNING -> runningStatusPhase(world, run);
+            case CLOSING, DONE -> Component.translatable(switch (run.outcome()) {
+                case WIN -> "status.arenas_ld.dungeon.closing_won";
+                case ENDED_BY_STAFF -> "status.arenas_ld.dungeon.closing_forced";
+                default -> "status.arenas_ld.dungeon.closing_lost";
+            });
+        };
+    }
+
+    private static Component runningStatusPhase(@Nullable ServerLevel world, DungeonRun run) {
+        DungeonBossSpawnerBlockEntity dbs = world != null && world.isLoaded(run.dbsPos())
+            && world.getBlockEntity(run.dbsPos()) instanceof DungeonBossSpawnerBlockEntity loaded ? loaded : null;
+        int cleared = run.clearedRooms().size();
+        BlockPos room = run.currentRoomPos();
+        if (room != null) {
+            // Branching, locked into a room.
+            if (dbs != null && room.equals(dbs.getAbsoluteFinalRoomPos())) {
+                return Component.translatable("status.arenas_ld.dungeon.boss_room");
+            }
+            return Component.translatable(run.pendingGraceTicks() > 0
+                ? "status.arenas_ld.dungeon.entering_room" : "status.arenas_ld.dungeon.room", cleared + 1);
+        }
+        if (cleared > 0 || (dbs != null && isBranching(world, dbs))) {
+            return Component.translatable("status.arenas_ld.dungeon.exploring", cleared);
+        }
+        if (dbs == null) {
+            // Legacy or branching with nothing cleared yet: only the spawner can tell.
+            return Component.translatable("status.arenas_ld.dungeon.running");
+        }
+        int rooms = dbs.getRoomOffsets().size();
+        int index = run.currentRoomIndex();
+        if (rooms > 0 && index >= rooms - 1) {
+            return Component.translatable("status.arenas_ld.dungeon.boss_room"); // legacy: the last room
+        }
+        return Component.translatable("status.arenas_ld.dungeon.room_of", index + 1, rooms);
+    }
+
     static void handleLoss(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run, DungeonOutcome reason) {
+        if (!stillPlaying(run)) {
+            return; // already won or lost: never report twice or overwrite the result
+        }
         BlockEntity dbsBe = world.getBlockEntity(run.dbsPos());
         if (dbsBe instanceof DungeonBossSpawnerBlockEntity dbs && !dbs.getRooms().isEmpty() && run.currentRoomIndex() < dbs.getRooms().size()) {
             // Branching dungeons name their boss room explicitly; legacy = last room in the list.
@@ -760,8 +853,9 @@ public final class DungeonRunLifecycle {
         String messageKey = switch (reason) {
             case LOSS_TIMEOUT -> "message.arenas_ld.dungeon.loss_timeout";
             case LOSS_ABANDONED -> "message.arenas_ld.dungeon.loss_abandoned";
-            case LOSS_FORCED -> "message.arenas_ld.dungeon.loss_forced";
+            case LOSS_FORCED -> "message.arenas_ld.dungeon.loss_spawner_missing";
             case LOSS_OBJECTIVE -> "message.arenas_ld.dungeon.loss_objective";
+            case ENDED_BY_STAFF -> "message.arenas_ld.dungeon.loss_forced";
             default -> "message.arenas_ld.dungeon.loss_timeout";
         };
         for (UUID uuid : run.participants().keySet()) {
@@ -775,7 +869,9 @@ public final class DungeonRunLifecycle {
             net.minecraft.sounds.SoundEvents.ANVIL_LAND, 0.6f, 0.7f);
 
         run.setOutcome(reason);
-        fireRunResult(world, controller, run, false);
+        fireRunResult(world, controller, run, reason == DungeonOutcome.ENDED_BY_STAFF
+            ? net.ledok.arenas_ld.api.ArenasApi.Outcome.FORCED
+            : net.ledok.arenas_ld.api.ArenasApi.Outcome.LOSS);
 
         // If nobody is left in the run, there's no one to wait for — close out immediately
         // rather than ticking through the (pointless) close timer.
@@ -796,7 +892,13 @@ public final class DungeonRunLifecycle {
     }
 
     static void finalize(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
+        // Players who left early, or whose run was stuck (a corrupt save), may be in another run
+        // by now: their registration, busy flag, team, HUD and whereabouts belong to that one.
+        Set<UUID> elsewhere = playersInOtherRuns(run);
         for (UUID uuid : run.participants().keySet()) {
+            if (elsewhere.contains(uuid)) {
+                continue;
+            }
             ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
             BusyStateCompat.clearBusy(uuid, BUSY_REASON);
         }
@@ -813,6 +915,9 @@ public final class DungeonRunLifecycle {
         }
 
         for (Map.Entry<UUID, PlayerReturnPoint> entry : run.returnPoints().entrySet()) {
+            if (elsewhere.contains(entry.getKey())) {
+                continue;
+            }
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
             if (player == null) {
                 // Offline at run end — persist the eject so they're sent home on next login.
@@ -822,8 +927,8 @@ public final class DungeonRunLifecycle {
             applyReturnPoint(world.getServer(), player, entry.getValue());
         }
 
-        teardownPartyTeam(world, run);
-        hideBossBars(world, run);
+        teardownPartyTeam(world, run, elsewhere);
+        hideBossBars(world, run, elsewhere);
         run.setPhase(DungeonPhase.DONE);
         controller.removeRun(run.dbsPos());
         controller.startInstanceCooldown(run.dbsPos());
@@ -842,6 +947,7 @@ public final class DungeonRunLifecycle {
             }
         }
         releaseChunksForRun(world, run);
+        controller.syncAdminViewers();
     }
 
     /**
@@ -1048,8 +1154,10 @@ public final class DungeonRunLifecycle {
         RunHudSync.tickSend(world, hudTargets(run), closeHudPayload(run));
     }
 
-    private static void hideBossBars(ServerLevel world, DungeonRun run) {
-        RunHudSync.hide(world, hudTargets(run));
+    private static void hideBossBars(ServerLevel world, DungeonRun run, Set<UUID> except) {
+        List<UUID> targets = hudTargets(run);
+        targets.removeAll(except);
+        RunHudSync.hide(world, targets);
     }
 
     /** Online, non-removed participants — the audience for the run HUD bar. */
@@ -1357,10 +1465,27 @@ public final class DungeonRunLifecycle {
         RunPartyTeams.remove(world, teamNameFor(run), playerName);
     }
 
-    /** Gives every member back their prior team and deletes the temporary run team. */
-    private static void teardownPartyTeam(ServerLevel world, DungeonRun run) {
-        RunPartyTeams.teardown(world, teamNameFor(run),
-            run.participants().values().stream().map(RunParticipant::playerName).toList());
+    /** Gives every member (but {@code except}) back their prior team and deletes the temporary run team. */
+    private static void teardownPartyTeam(ServerLevel world, DungeonRun run, Set<UUID> except) {
+        RunPartyTeams.teardown(world, teamNameFor(run), run.participants().values().stream()
+            .filter(p -> !except.contains(p.playerUuid()))
+            .map(RunParticipant::playerName).toList());
+    }
+
+    /**
+     * Participants the run manager has in a different run now (another instance; a copied
+     * controller's twin of this run counts as this run).
+     */
+    private static Set<UUID> playersInOtherRuns(DungeonRun run) {
+        Set<UUID> elsewhere = new HashSet<>();
+        for (UUID uuid : run.participants().keySet()) {
+            DungeonRun current = ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(uuid);
+            if (current != null && current != run
+                    && !(current.dbsPos().equals(run.dbsPos()) && current.dbsDimension().equals(run.dbsDimension()))) {
+                elsewhere.add(uuid);
+            }
+        }
+        return elsewhere;
     }
 
     /**

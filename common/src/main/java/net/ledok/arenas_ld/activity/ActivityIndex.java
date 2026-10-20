@@ -21,7 +21,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Server-global index of every activity: its id, where its controller is, and a copy of what the
@@ -48,14 +50,20 @@ public final class ActivityIndex extends SavedData {
         Codec.STRING.fieldOf("id").forGetter(ArenasApi.Difficulty::id)
     ).apply(i, ArenasApi.Difficulty::new));
 
-    /** One activity as last reported by its controller. 4.5.0's requiredLevel/cardArt keys are ignored. */
+    /**
+     * One activity as last reported by its controller. 4.5.0's requiredLevel/cardArt keys are ignored.
+     *
+     * @param generatedId the id was made up by Arenas_LD ({@link ActivityRegistry#attach}), not set
+     *                    by staff; saves from before 4.9.0 don't say, see {@link ActivityIndex#looksGenerated}
+     */
     public record Entry(
         ResourceLocation id,
         ArenasApi.ActivityType type,
         ResourceKey<Level> dimension,
         BlockPos pos,
         String name,
-        List<ArenasApi.Difficulty> difficulties
+        List<ArenasApi.Difficulty> difficulties,
+        boolean generatedId
     ) {
         static final Codec<Entry> CODEC = RecordCodecBuilder.create(i -> i.group(
             ResourceLocation.CODEC.fieldOf("id").forGetter(Entry::id),
@@ -63,8 +71,10 @@ public final class ActivityIndex extends SavedData {
             ResourceKey.codec(Registries.DIMENSION).fieldOf("dimension").forGetter(Entry::dimension),
             BlockPos.CODEC.fieldOf("pos").forGetter(Entry::pos),
             Codec.STRING.optionalFieldOf("name", "").forGetter(Entry::name),
-            DIFFICULTY_CODEC.listOf().optionalFieldOf("difficulties", List.of()).forGetter(Entry::difficulties)
-        ).apply(i, Entry::new));
+            DIFFICULTY_CODEC.listOf().optionalFieldOf("difficulties", List.of()).forGetter(Entry::difficulties),
+            Codec.BOOL.optionalFieldOf("generatedId").forGetter(e -> Optional.of(e.generatedId()))
+        ).apply(i, (id, type, dimension, pos, name, difficulties, generatedId) -> new Entry(id, type, dimension, pos,
+            name, difficulties, generatedId.orElseGet(() -> looksGenerated(id, type, pos)))));
 
         public boolean isAt(ResourceKey<Level> dimension, BlockPos pos) {
             return this.dimension.equals(dimension) && this.pos.equals(pos);
@@ -74,6 +84,25 @@ public final class ActivityIndex extends SavedData {
         public String location() {
             return dimension.location() + " " + pos.getX() + " " + pos.getY() + " " + pos.getZ();
         }
+    }
+
+    /**
+     * For entries saved before 4.9.0, which didn't record whether their id was generated: the
+     * position form ({@code arenas_ld:dungeon_10_64_-3}, maybe {@code _2}…) for the entry's own
+     * position is taken as generated. The name form ({@code arenas_ld:dungeon_old_crypt}) can't be
+     * told from one staff typed, so it isn't.
+     */
+    static boolean looksGenerated(ResourceLocation id, ArenasApi.ActivityType type, BlockPos pos) {
+        if (!ArenasLdMod.MOD_ID.equals(id.getNamespace())) {
+            return false;
+        }
+        String base = type.name().toLowerCase(Locale.ROOT) + "_" + pos.getX() + "_" + pos.getY() + "_" + pos.getZ();
+        String path = id.getPath();
+        if (path.equals(base)) {
+            return true;
+        }
+        String suffix = path.startsWith(base + "_") ? path.substring(base.length() + 1) : "";
+        return !suffix.isEmpty() && suffix.chars().allMatch(c -> c >= '0' && c <= '9');
     }
 
     private static final Factory<ActivityIndex> FACTORY = new Factory<>(ActivityIndex::new, ActivityIndex::load, null);

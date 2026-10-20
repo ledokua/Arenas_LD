@@ -3,11 +3,14 @@ package net.ledok.arenas_ld.dungeon.screen;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -19,6 +22,8 @@ import java.util.Set;
 
 public record DungeonControllerAdminData(
     BlockPos blockPos,
+    /** The controller's dimension: with {@link #blockPos} it names the controller (screens open from any dimension). */
+    ResourceKey<Level> dimension,
     List<BlockPos> instances,
     Set<BlockPos> activeRunInstances,
     Map<BlockPos, Integer> instanceCooldownTimers,
@@ -45,8 +50,12 @@ public record DungeonControllerAdminData(
         DungeonControllerAdminData::decode
     );
 
+    private static final StreamCodec<io.netty.buffer.ByteBuf, ResourceKey<Level>> DIMENSION_CODEC =
+        ResourceKey.streamCodec(Registries.DIMENSION);
+
     private static void encode(RegistryFriendlyByteBuf buf, DungeonControllerAdminData data) {
         buf.writeBlockPos(data.blockPos());
+        DIMENSION_CODEC.encode(buf, data.dimension());
 
         buf.writeVarInt(data.instances().size());
         for (BlockPos pos : data.instances()) {
@@ -100,6 +109,7 @@ public record DungeonControllerAdminData(
 
     private static DungeonControllerAdminData decode(RegistryFriendlyByteBuf buf) {
         BlockPos blockPos = buf.readBlockPos();
+        ResourceKey<Level> dimension = DIMENSION_CODEC.decode(buf);
 
         int instancesSize = buf.readVarInt();
         List<BlockPos> instances = new ArrayList<>(instancesSize);
@@ -164,6 +174,7 @@ public record DungeonControllerAdminData(
 
         return new DungeonControllerAdminData(
             blockPos,
+            dimension,
             instances,
             activeRunInstances,
             instanceCooldownTimers,

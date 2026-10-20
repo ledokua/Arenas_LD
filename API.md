@@ -1,9 +1,11 @@
 # Arenas_LD API
 
 Other mods can list the server's dungeons, raids and mob arenas, open an activity's lobby screen for a
-player, veto entry with an **entry gate**, and hear about every finished run. It is what a hub mod
-builds on — Eden_LD's Activities tab uses it — and Arenas_LD never depends on who calls it: with no
-gate registered and nobody listening, it behaves exactly as without the API.
+player, veto entry with an **entry gate**, hear about every finished run, and give staff the
+[admin side](#admin): live status, teleporting to a controller, its admin screen from anywhere,
+renaming, ending runs. It is what a hub mod builds on — Eden_LD's Activities tab uses it — and
+Arenas_LD never depends on who calls it: with no gate registered and nobody listening, it behaves
+exactly as without the API.
 
 Arenas_LD is a standalone mod and holds nothing hub-specific. A hub keeps its own per-activity
 settings keyed by the activity id — Eden_LD keeps whether an activity is shown, its card art and the
@@ -19,15 +21,18 @@ Compile against the Arenas_LD jar for your loader and keep it optional at runtim
 **Fabric** (`build.gradle`):
 
 ```groovy
-modCompileOnly files("libs/arenas_ld-fabric-4.6.0.jar")
+modCompileOnly files("libs/arenas_ld-fabric-4.9.0.jar")
 ```
 
 ```json
-"suggests": { "arenas_ld": ">=4.6.0" }
+"suggests": { "arenas_ld": ">=4.9.0" }
 ```
 
 **NeoForge**: `compileOnly` the NeoForge jar, and an optional `[[dependencies.yourmod]]` entry with
-`modId = "arenas_ld"`, `type = "optional"`, `versionRange = "[4.6.0,)"`.
+`modId = "arenas_ld"`, `type = "optional"`, `versionRange = "[4.9.0,)"`.
+
+The [admin calls](#admin) and `Outcome.FORCED` need 4.9.0 and `spawnAsMinions` 4.8.0; the rest works
+from 4.6.0.
 
 Only touch `ArenasApi` after checking the mod is loaded, from a class nothing else loads when it is
 absent:
@@ -126,7 +131,7 @@ ArenasApi.addRunListener(result -> {
     result.activity();       // arenas_ld:crypt
     result.type();           // DUNGEON, RAID or ARENA
     result.difficulty();     // "hard", or null for arenas
-    result.outcome();        // WIN or LOSS
+    result.outcome();        // WIN, LOSS or FORCED
     result.durationTicks();  // game ticks from run start to the win/loss
     result.wave();           // arenas: last wave reached; 0 otherwise
     result.players();        // every participant, including those who left or died out on hardcore
@@ -137,6 +142,102 @@ Called once per finished run, at the win or loss, after the rewards are paid and
 the player stats. Dungeon leaderboards are already updated by then; raid and arena leaderboards (and an
 arena's best-wave stat) are written when the run closes, after its close timer. An arena run is a WIN when it reached its maximum wave and a
 LOSS otherwise — `wave` tells how far it got. A listener that throws is logged and skipped.
+
+`FORCED` means staff ended the run ([`forceEnd`](#ending-runs), `/arenasld activity stop`) while it was
+still going: neither a win nor a loss for its players, so leave it out of their stats and streaks. It
+is reported once, at the moment it was ended. A run that was already won or lost keeps that result,
+and closing it early reports nothing again. Since 4.9.0: a `switch` over `Outcome` needs a `FORCED` case.
+
+## Admin
+
+For staff tools, such as a hub's moderation screen. Every call is server-side, on the server thread,
+and keyed by activity id. The ones that act return `null` when done, or the reason they were refused
+(a `Component` to show staff as is); an unknown id is refused with "Unknown activity: …".
+
+```java
+ArenasApi.location(server, id);                  // Optional<ControllerLocation(dimension, pos)>
+ArenasApi.status(server, id);                    // Optional<ActivityStatus>, see below
+ArenasApi.teleportToController(player, id);      // @Nullable Component
+ArenasApi.openAdmin(player, id);                 // @Nullable Component
+ArenasApi.rename(server, id, "Sunken Crypt");    // @Nullable Component
+ArenasApi.forceEnd(server, id, instance);        // @Nullable Component; instance null = every run
+ArenasApi.forget(server, id);                    // @Nullable Component
+```
+
+**Who may use them is your call.** Arenas_LD checks a permission only in `openAdmin`: the admin screen
+is for operators (level 2), the same as `/arenasld admin`, and it refuses anyone else ("You need
+operator permission"). The others check nothing; gate them behind your own staff permission. The
+`/arenasld activity` commands that use them need level 2.
+
+### Status
+
+```java
+ArenasApi.status(server, id).ifPresent(status -> {
+    status.instances();       // List<InstanceStatus>, in the controller's order:
+                              //   instance() (InstanceRef(dimension, pos): the boss / arena spawner),
+                              //   state() FREE, RUNNING or COOLDOWN, cooldownTicksLeft(), pendingRemoval()
+    status.runs();            // List<RunStatus>: instance(), difficulty() (null for arenas), players(),
+                              //   phase() (Component), ticksElapsed(), ticksLeft() (-1 = no timer), closing()
+    status.openLobbies();     // forming or ready, queued ones included
+    status.queuedLobbies();   // of those, waiting for a free instance
+    status.waitingPlayers();  // members of the open lobbies
+    status.warnings();        // Set<Warning>
+});
+```
+
+**Poll it freely.** It reads the saved index and what the controller holds in memory, and never loads a
+chunk or drops an entry, so asking every second or two for every activity is fine. Controllers keep
+their own chunk loaded; when it isn't, status says `CONTROLLER_NOT_LOADED` instead of looking (usually
+a controller removed by a tool that skipped block updates).
+
+`phase` is a short translatable line for staff: "Starting", "Room 3", "Exploring, 2 cleared", "Boss
+room" for dungeons; "Boss 42%" for raids (just "Boss" while the boss's chunk isn't loaded); "Prepare",
+"Wave 4/10", "Wave 4" (endless) or "Wave 5 incoming" for arenas; and "Closing (won)", "Closing (lost)"
+or "Closing (ended by an admin)" for a run on its exit timer (`closing()` true). `ticksLeft` is the
+timer counting now: the run timer, the wave or prepare timer, or the exit timer.
+
+| Warning | Means |
+|---|---|
+| `GENERATED_ID` | Arenas_LD made the id up; set a real one on the admin screen before storing it. Saves from before 4.9.0 didn't record this: only the position form (`arenas_ld:dungeon_10_64_-3`) is recognized there. |
+| `UNNAMED` | no display name |
+| `NO_DIFFICULTIES` | a dungeon or raid with every difficulty off: nobody can start it (never for arenas) |
+| `NO_INSTANCES` | nothing linked: nobody can start it |
+| `PENDING_REMOVALS` | instances unlinked during their run, removed once it ends |
+| `CONTROLLER_MISSING` | the controller (or its dimension) is gone; `forget` drops the entry |
+| `CONTROLLER_NOT_LOADED` | its chunk isn't loaded, so nothing is known about its runs |
+
+With either of the last two, the lists are empty and the counts 0; the other warnings still come
+from the index.
+
+### Teleport, admin screen, rename
+
+- **`teleportToController(player, id)`** puts the player beside the controller, facing it, from any
+  dimension: the closest spot with two free blocks over solid ground and no liquid, fire, lava,
+  magma, powder snow or other harmful block, looking at the 4 sides, then the diagonals, at the
+  controller's height and one up or down, then 2 and 3 blocks out, then on top of the controller and
+  straight up from it. It is refused while the player is in a run or busy (BusyLib; the reasons
+  are named), when the dimension is gone, or when there is no such spot. It may load the chunks
+  around the controller.
+- **`openAdmin(player, id)`** opens the controller's admin screen from any distance or dimension.
+  It stays open until the player closes it, is deopped, or the controller is gone; its edits reach
+  that controller, and it is updated when runs start or end.
+- **`rename(server, id, name)`** sets the display name as the admin screen would. The name is
+  trimmed; blank or longer than 48 characters is refused. The activities listener fires once when
+  the name changed, and open lobby and admin screens are updated.
+
+### Ending runs
+
+`forceEnd(server, id, instance)` ends the activity's runs as staff, or only the one at `instance` (the
+`InstanceRef` a `RunStatus` gives). A run still going ends as a loss marked as ended by staff: its
+players read "Dungeon ended by an admin." (Raid, Arena), get no rewards (arenas still pay for the waves
+reached, as on any loss), the boss is removed (a dungeon clears its boss room, as on any loss; the
+room being fought keeps its mobs until the players leave), and they are returned after the usual exit
+timer. The run listener hears `FORCED`. A run already on its exit timer is closed at once instead,
+returning its players and keeping its result. It is refused when nothing is running (at that
+instance).
+
+`forget(server, id)` drops an activity whose controller is gone without its block being broken, and
+lets go of its chunk. It is refused while the controller is still there: break the block instead.
 
 ## Minions
 
@@ -165,5 +266,7 @@ mobs added for it are not spawned (`addFreshEntity` returns false). Server threa
 ## Stability
 
 The methods, records and interfaces on this page are the stable surface: they won't change or
-disappear without a major version, and new features arrive as new methods or types. Anything outside
-`net.ledok.arenas_ld.api` is internal and may change in any release.
+disappear without a major version, and new features arrive as new methods or types. Enums may gain
+constants in a minor version (4.9.0 added `Outcome.FORCED`; `Warning` may grow), so give a `switch`
+over them a default. Anything outside `net.ledok.arenas_ld.api` is internal and may change in any
+release.

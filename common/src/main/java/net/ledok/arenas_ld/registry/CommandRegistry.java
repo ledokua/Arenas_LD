@@ -5,11 +5,11 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.activity.AdminScreens;
+import net.ledok.arenas_ld.api.ArenasApi;
 import net.ledok.arenas_ld.config.ArenasLdConfig;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
-import net.ledok.arenas_ld.dungeon.screen.DungeonControllerAdminMenuProvider;
 import net.ledok.arenas_ld.networking.SpawnerPacketHandlers;
-import net.ledok.arenas_ld.raid.screen.RaidControllerAdminMenuProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.arguments.DimensionArgument;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -22,12 +22,12 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.UUID;
 
 import static net.minecraft.commands.Commands.argument;
 import static net.minecraft.commands.Commands.literal;
-import net.ledok.arenas_ld.platform.ArenasMenus;
 import net.ledok.arenas_ld.platform.ArenasEvents;
 
 public class CommandRegistry {
@@ -50,20 +50,15 @@ public class CommandRegistry {
                         return 0;
                     }
                     var be = player.level().getBlockEntity(hit.getBlockPos());
-                    if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity dungeon) {
-                        ArenasMenus.open(player, new DungeonControllerAdminMenuProvider(dungeon));
-                        return 1;
+                    // At the block (not remote): the screen closes once the player walks off.
+                    Component refusal = be == null
+                        ? Component.translatable("gui.arenas_ld.admin.failure.no_controller")
+                        : AdminScreens.open(player, be, false);
+                    if (refusal != null) {
+                        context.getSource().sendFailure(refusal);
+                        return 0;
                     }
-                    if (be instanceof net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity raid) {
-                        ArenasMenus.open(player, new RaidControllerAdminMenuProvider(raid));
-                        return 1;
-                    }
-                    if (be instanceof net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity arena) {
-                        ArenasMenus.open(player, new net.ledok.arenas_ld.arena.screen.ArenaControllerAdminMenuProvider(arena));
-                        return 1;
-                    }
-                    context.getSource().sendFailure(Component.translatable("gui.arenas_ld.admin.failure.no_controller"));
-                    return 0;
+                    return 1;
                 }))
             .then(literal("exit").executes(CommandRegistry::exitDungeon))
             .then(literal("stats").executes(CommandRegistry::showStats))
@@ -135,7 +130,8 @@ public class CommandRegistry {
 
     /**
      * Admin view of the public API's activities: list them, open one's lobby screen for players
-     * (exactly what {@code ArenasApi.openLobbies} does, gate included), and drop a stale entry.
+     * (exactly what {@code ArenasApi.openLobbies} does, gate included), end its runs
+     * ({@code ArenasApi.forceEnd}), and drop a stale entry ({@code ArenasApi.forget}).
      */
     private static LiteralArgumentBuilder<CommandSourceStack> buildActivityNode() {
         return literal("activity")
@@ -147,6 +143,17 @@ public class CommandRegistry {
                     .executes(ctx -> openActivity(ctx, java.util.List.of(ctx.getSource().getPlayerOrException())))
                     .then(argument("targets", EntityArgument.players())
                         .executes(ctx -> openActivity(ctx, EntityArgument.getPlayers(ctx, "targets"))))))
+            .then(literal("stop")
+                .then(argument("id", ResourceLocationArgument.id())
+                    .suggests(ACTIVITY_IDS)
+                    .executes(ctx -> stopActivity(ctx, null))
+                    .then(argument("pos", BlockPosArgument.blockPos())
+                        .executes(ctx -> stopActivity(ctx, new ArenasApi.InstanceRef(
+                            ctx.getSource().getLevel().dimension(), BlockPosArgument.getBlockPos(ctx, "pos"))))
+                        .then(argument("dimension", DimensionArgument.dimension())
+                            .executes(ctx -> stopActivity(ctx, new ArenasApi.InstanceRef(
+                                DimensionArgument.getDimension(ctx, "dimension").dimension(),
+                                BlockPosArgument.getBlockPos(ctx, "pos"))))))))
             .then(literal("forget")
                 .then(argument("id", ResourceLocationArgument.id())
                     .suggests(ACTIVITY_IDS)
@@ -196,10 +203,28 @@ public class CommandRegistry {
         return opened;
     }
 
+    /** Ends the activity's runs as staff, or only the run at one instance. */
+    private static int stopActivity(CommandContext<CommandSourceStack> ctx, @Nullable ArenasApi.InstanceRef instance) {
+        net.minecraft.resources.ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
+        Component refusal = ArenasApi.forceEnd(ctx.getSource().getServer(), id, instance);
+        if (refusal != null) {
+            ctx.getSource().sendFailure(refusal);
+            return 0;
+        }
+        Component done = instance == null
+            ? Component.translatable("message.arenas_ld.activity.stopped", id.toString())
+            : Component.translatable("message.arenas_ld.activity.stopped_at", id.toString(),
+                instance.pos().toShortString() + " (" + instance.dimension().location() + ")");
+        ctx.getSource().sendSuccess(() -> done, true);
+        return 1;
+    }
+
+    /** Drops an activity whose controller is gone; refused while the controller is still there. */
     private static int forgetActivity(CommandContext<CommandSourceStack> ctx) {
         net.minecraft.resources.ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
-        if (!net.ledok.arenas_ld.activity.ActivityRegistry.forget(ctx.getSource().getServer(), id)) {
-            ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.activity.unknown", id.toString()));
+        Component refusal = ArenasApi.forget(ctx.getSource().getServer(), id);
+        if (refusal != null) {
+            ctx.getSource().sendFailure(refusal);
             return 0;
         }
         ctx.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.activity.forgotten", id.toString()), true);

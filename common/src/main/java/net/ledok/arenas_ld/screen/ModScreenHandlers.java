@@ -61,7 +61,7 @@ public class ModScreenHandlers {
 
     public static final MenuType<net.ledok.arenas_ld.arena.screen.ArenaControllerAdminScreenHandler> ARENA_CONTROLLER_ADMIN_SCREEN_HANDLER =
             RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":arena_controller_admin"),
-                    ArenasPlatform.INSTANCE.extendedMenuType(net.ledok.arenas_ld.arena.screen.ArenaControllerAdminScreenHandler::new, net.ledok.arenas_ld.arena.screen.ArenaControllerMenuData.CODEC));
+                    ArenasPlatform.INSTANCE.extendedMenuType(net.ledok.arenas_ld.arena.screen.ArenaControllerAdminScreenHandler::new, net.ledok.arenas_ld.arena.screen.ArenaControllerAdminData.STREAM_CODEC));
 
     public static final MenuType<net.ledok.arenas_ld.arena.screen.ArenaSpawnerScreenHandler> ARENA_SPAWNER_SCREEN_HANDLER =
             RegistryBridge.register(BuiltInRegistries.MENU, ResourceLocation.parse(ArenasLdMod.MOD_ID + ":arena_spawner"),

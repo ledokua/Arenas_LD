@@ -69,4 +69,42 @@ public final class ArenasLdGametests implements FabricGameTest {
     public void lichMinions(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.lichMinions(helper);
     }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void apiAdminRename(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminRename(helper);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void apiAdminForget(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminForget(helper);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void apiAdminStatus(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminStatus(helper);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void apiAdminStatusUnloaded(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminStatusUnloaded(helper);
+    }
+
+    /** Fabric sends any payload to a test player's connection, so nothing to set up for it. */
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void apiAdminScreen(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminScreen(helper, player -> {
+        });
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void apiAdminTeleport(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminTeleport(helper);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void apiAdminForceEnd(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.adminForceEnd(helper, player -> {
+        });
+    }
 }

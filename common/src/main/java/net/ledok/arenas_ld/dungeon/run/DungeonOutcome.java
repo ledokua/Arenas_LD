@@ -18,10 +18,16 @@ public enum DungeonOutcome {
     LOSS_TIMEOUT,
     /** All players left the run (disconnected past grace period, or hardcore-removed). */
     LOSS_ABANDONED,
-    /** Admin used /arenasld debug endDungeon (or equivalent) to terminate the run. */
+    /** The run's Dungeon Boss Spawner went missing mid-run, so the run could not go on. */
     LOSS_FORCED,
     /** A room objective failed hard — e.g. the PROTECT target died. */
-    LOSS_OBJECTIVE;
+    LOSS_OBJECTIVE,
+    /**
+     * Staff ended the run ({@code ArenasApi.forceEnd}): no rewards, reported as
+     * {@code Outcome.FORCED}. Neither a win nor a loss, so not {@link #isLoss()}. An older build
+     * reads it back as {@link #IN_PROGRESS}; the run still closes on its exit timer.
+     */
+    ENDED_BY_STAFF;
 
     public static final Codec<DungeonOutcome> CODEC = Codec.STRING.xmap(
         DungeonOutcome::fromStringOrDefault,
@@ -36,7 +42,7 @@ public enum DungeonOutcome {
         }
     }
 
-    /** True for any LOSS_* outcome. False for IN_PROGRESS and WIN. */
+    /** True for any LOSS_* outcome. False for IN_PROGRESS, WIN and ENDED_BY_STAFF. */
     public boolean isLoss() {
         return this == LOSS_TIMEOUT
             || this == LOSS_ABANDONED

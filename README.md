@@ -105,16 +105,17 @@ a creative player can remove one.
 | **Arena Controller** | `arenas_ld:arena_controller` | The arena equivalent of the Dungeon Controller. |
 | **Arena Spawner** | `arenas_ld:arena_spawner` | One arena room: geometry, wave timing, cadence, the mob list and the per-wave loot. |
 
-The three **Controllers** open their lobby screen for anyone, with no permission check. The five
-**Spawner / Room Controller** blocks open their editor only in creative or at permission level 2, and
-every edit packet is re-checked server-side. Admin settings are not on any block: they open only with
+The three **Controllers** open their lobby screen for anyone, with no permission check. The Room
+Controller, Mob Spawner, Dungeon Boss Spawner and Raid Boss Spawner open their editor only in creative
+or at permission level 2, the Arena Spawner only at permission level 2, and every edit packet is
+re-checked server-side. Admin settings are not on any block: they open only with
 `/arenasld admin` while looking at a controller.
 
-**Creative alone is not enough to save.** The blocks open their editors on creative *or* operator
+**Creative alone is not enough to save.** Those four blocks open their editors on creative *or* operator
 level 2, but the dungeon and raid save packets check **operator level 2 only** — in creative without
 op the Room Controller, Mob Spawner, Dungeon Boss Spawner and Raid Boss Spawner screens all open and
-Save silently does nothing. The arena screens and the Dungeon Tool's own block actions accept creative
-on its own. Admin screens are operator-only either way.
+Save silently does nothing. The Dungeon Tool's own block actions accept creative on its own. Admin
+screens and the Arena Spawner's editors (settings, mobs, rewards) are operator-only either way.
 
 ### The Dungeon Tool
 
@@ -795,7 +796,9 @@ requirements — the hub keeps itself, keyed by the id.
 - **Breaking a controller** removes its activity. The id index lives in
   `<world>/data/arenas_ld_activities.dat`, so hubs list every activity even when its chunk isn't
   loaded; `/arenasld activity forget <id>` drops an entry whose block was removed by a tool that
-  skipped block updates.
+  skipped block updates. It is refused while the controller is still there (it used to drop a live
+  controller's entry too, which then vanished from hubs until the next restart): break the block
+  instead.
 
 **The entry gate.** A hub registers a gate (see [API.md](API.md)) that may refuse a player with a
 reason, which is shown as is (Eden_LD sends text like "🔒 Lv 25+"). With no gate registered nothing
@@ -819,6 +822,19 @@ them without reopening.
 any distance — the same screen the block opens, kept open until closed. Lobby actions from it reach
 the right controller, and an arena's lobby screen now comes from the server, so it works without the
 controller's chunk on the client. Admins can do the same with `/arenasld activity open <id> [players]`.
+
+**Staff tools.** A hub's moderation screen can do the admin side by id too (see [API.md](API.md#admin)):
+- **Open the admin screen** from anywhere, the same one `/arenasld admin` opens. Operators (level 2)
+  only, and it closes if they are deopped. Opened remotely it stays open at any distance; opened
+  with `/arenasld admin` it closes once you walk more than 16 blocks off.
+- **Teleport to the controller**: the closest free 2-high spot on solid ground within 3 blocks (no
+  liquid, fire or other harmful block), else on top of the controller, facing it. Refused during a
+  run or while BusyLib marks the player busy.
+- **Status**: every instance (free, running, cooling down, waiting to be unlinked), the runs going on
+  (players, a short phase such as "Room 3", "Boss 42%" or "Wave 4/10", time left), open and queued
+  lobbies, and setup warnings: generated id, no name, no difficulty enabled, no instance linked,
+  controller gone or not loaded. It never loads a chunk, so a hub can poll it.
+- **Rename** it, **end its runs** (as `/arenasld activity stop`) and **forget** a stale entry.
 
 ## Rewards and loot
 
@@ -916,7 +932,10 @@ before it. Without LuckPerms every player simply gets the defaults.
 /arenasld lobby decline <dim> <pos> <lobbyId>
 /arenasld activity list            every activity: id, type, name, enabled difficulties
 /arenasld activity open <id> [players]   open its lobby screen from anywhere, entry gate included
-/arenasld activity forget <id>     drop an activity whose controller block is gone (and let go of its chunk)
+/arenasld activity stop <id>       end every run of the activity as staff (see below)
+/arenasld activity stop <id> <pos> [dim]   end only the run at that instance (its boss / arena spawner)
+/arenasld activity forget <id>     drop an activity whose controller block is gone (and let go of its chunk);
+                                   refused while the controller is still there
 /arenasld instance add <activity> <pos> [dim]   link a pasted instance to the activity's controller, then check it
 /arenasld instance check <activity>             check every instance of the activity
 /arenasld instance check at <pos> [dim]         check one Dungeon Boss / Raid Boss / Arena Spawner
@@ -926,6 +945,13 @@ before it. Without LuckPerms every player simply gets the defaults.
 players. The `lobby` subcommands exist as the click targets behind the chat buttons and re-validate
 membership, ownership and invites server-side (and ask the [entry gate](#activity-ids-and-the-entry-gate)),
 which is why they need no permission. `lobby open` opens the screen from any distance.
+
+`activity stop` ends a run that is still going as a loss marked as ended by staff: its players read
+"Dungeon ended by an admin." (or Raid / Arena), get no rewards (an arena still pays for the waves
+reached, as on any loss), the boss is removed (a dungeon clears its boss room, as on any loss: the
+room being fought keeps its mobs until the players leave), and they are returned after the usual exit
+timer (`/exit` leaves at once). A run already on its exit timer is closed on the spot instead, keeping
+its result. Hubs are told the run was `FORCED`, so it counts as neither a win nor a loss.
 
 `/exit` is registered as an unconditional top-level alias and can collide with another mod or plugin
 that registers the same name.
@@ -964,8 +990,9 @@ survive it (and the activity index forgets the broken controller).
 
 `net.ledok.arenas_ld.api.ArenasApi` (common module, server side) lists the activities with their
 enabled difficulties, opens an activity's lobby screen for a player, lets other mods veto entry through
-an entry gate, and reports every finished run. Eden_LD's Activities tab uses it; Arenas_LD never
-depends on its callers. See [API.md](API.md).
+an entry gate, reports every finished run, and gives staff tools each activity's live status, a
+teleport to its controller, its admin screen from anywhere, renaming, ending runs and forgetting stale
+entries. Eden_LD's Activities tab uses it; Arenas_LD never depends on its callers. See [API.md](API.md).
 
 ## Compatibility
 

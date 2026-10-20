@@ -28,18 +28,19 @@ public final class RunEvents {
     /**
      * Reports a finished run.
      *
-     * @param tier  the run's difficulty; null for arenas
-     * @param wave  arenas: the last wave reached; 0 otherwise
+     * @param tier    the run's difficulty; null for arenas
+     * @param outcome how it ended ({@code FORCED} only when staff ended it)
+     * @param wave    arenas: the last wave reached; 0 otherwise
      */
-    public static void fire(ActivityHost host, @Nullable DifficultyTier tier, boolean win, long startTick, long endTick,
-                            int wave, Collection<UUID> players) {
+    public static void fire(ActivityHost host, @Nullable DifficultyTier tier, ArenasApi.Outcome outcome, long startTick,
+                            long endTick, int wave, Collection<UUID> players) {
         ResourceLocation id = host.activityId();
         if (LISTENERS.isEmpty() || id == null) {
             return;
         }
         ArenasApi.RunResult result = new ArenasApi.RunResult(id, host.activityType(),
             tier == null ? null : ActivityHost.difficultyId(tier),
-            win ? ArenasApi.Outcome.WIN : ArenasApi.Outcome.LOSS,
+            outcome,
             Math.max(0L, endTick - startTick), Math.max(0, wave), List.copyOf(players));
         for (Consumer<ArenasApi.RunResult> listener : LISTENERS) {
             try {

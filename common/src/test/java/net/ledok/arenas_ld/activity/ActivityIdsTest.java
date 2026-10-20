@@ -5,10 +5,12 @@ import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.ledok.arenas_ld.api.ArenasApi;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.IntArrayTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
@@ -16,9 +18,11 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The pure parts of the activity id rules (parsing admin input, slugs, uniqueness) and old-save loading. */
+/** The pure parts of the activity id rules (parsing admin input, slugs, uniqueness, generated ids) and old-save loading. */
 class ActivityIdsTest {
 
     @Test
@@ -92,5 +96,43 @@ class ActivityIdsTest {
         assertEquals(List.of(new ArenasApi.Difficulty("hard")), parsed.difficulties());
         assertEquals(new BlockPos(1, 64, -3), parsed.pos());
         assertEquals("nightmare", ActivityHost.difficultyId(DifficultyTier.NIGHTMARE));
+        assertFalse(parsed.generatedId(), "a hand-set id from an old save is not generated");
+    }
+
+    /** Saves before 4.9.0 didn't record a generated id: the position form for the entry's own position counts. */
+    @Test
+    void generatedIdsFromOldSavesAreToldByTheirPosition() {
+        BlockPos pos = new BlockPos(1, 64, -20);
+        assertTrue(ActivityIndex.looksGenerated(id("arenas_ld:raid_1_64_-20"), ArenasApi.ActivityType.RAID, pos));
+        assertTrue(ActivityIndex.looksGenerated(id("arenas_ld:raid_1_64_-20_3"), ArenasApi.ActivityType.RAID, pos));
+        assertFalse(ActivityIndex.looksGenerated(id("arenas_ld:raid_1_64_-20_x"), ArenasApi.ActivityType.RAID, pos));
+        assertFalse(ActivityIndex.looksGenerated(id("arenas_ld:raid_1_64_-20_"), ArenasApi.ActivityType.RAID, pos));
+        assertFalse(ActivityIndex.looksGenerated(id("arenas_ld:dungeon_1_64_-20"), ArenasApi.ActivityType.RAID, pos),
+            "another type's form");
+        assertFalse(ActivityIndex.looksGenerated(id("arenas_ld:raid_1_64_-21"), ArenasApi.ActivityType.RAID, pos),
+            "another position's form (a moved controller keeps its id)");
+        assertFalse(ActivityIndex.looksGenerated(id("myserver:raid_1_64_-20"), ArenasApi.ActivityType.RAID, pos));
+        assertFalse(ActivityIndex.looksGenerated(id("arenas_ld:raid_old_crypt"), ArenasApi.ActivityType.RAID, pos),
+            "the name form can't be told from a typed id");
+    }
+
+    @Test
+    void generatedIdFlagIsSavedAndOldEntriesFallBackToTheirId() {
+        ActivityIndex.Entry generated = new ActivityIndex.Entry(id("arenas_ld:crypt"), ArenasApi.ActivityType.DUNGEON,
+            ResourceKey.create(Registries.DIMENSION, ResourceLocation.withDefaultNamespace("overworld")), new BlockPos(5, 70, 5),
+            "", List.of(), true);
+        CompoundTag saved = (CompoundTag) ActivityIndex.Entry.CODEC.encodeStart(NbtOps.INSTANCE, generated).getOrThrow();
+        assertEquals(generated, ActivityIndex.Entry.CODEC.parse(NbtOps.INSTANCE, saved).getOrThrow(), "the flag round-trips");
+
+        saved.remove("generatedId");
+        assertFalse(ActivityIndex.Entry.CODEC.parse(NbtOps.INSTANCE, saved).getOrThrow().generatedId(),
+            "without the flag, a typed-looking id is not generated");
+        saved.putString("id", "arenas_ld:dungeon_5_70_5");
+        assertTrue(ActivityIndex.Entry.CODEC.parse(NbtOps.INSTANCE, saved).getOrThrow().generatedId(),
+            "without the flag, the position form is");
+    }
+
+    private static ResourceLocation id(String id) {
+        return ResourceLocation.parse(id);
     }
 }

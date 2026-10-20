@@ -132,9 +132,11 @@ public final class ActivityRegistry {
         ActivityIndex index = ActivityIndex.get(server);
         BlockPos pos = be.getBlockPos();
         ResourceLocation id = host.activityId();
+        boolean generated;
         if (id == null) {
             id = generateId(index, host, level, pos);
             host.storeActivityId(id);
+            generated = true;
             if (host.loadedWithoutId()) {
                 ArenasLdMod.LOGGER.warn("{} controller at {} {} had no activity id; assigned {} (change it in the admin screen)",
                     host.activityType(), level.dimension().location(), pos.toShortString(), id);
@@ -154,10 +156,13 @@ public final class ActivityRegistry {
                 host.storeActivityId(fresh);
                 host.clearCopiedState(liveHost(server, existing));
                 id = fresh;
+                generated = true;
+            } else {
+                generated = wasGenerated(existing, host, id, pos);
             }
         }
         boolean changed = index.removeAt(level.dimension(), pos, id);
-        changed |= index.put(entryFor(host, level, id));
+        changed |= index.put(entryFor(host, level, id, generated));
         if (changed) {
             fireChanged();
         }
@@ -170,7 +175,9 @@ public final class ActivityRegistry {
         if (id == null || !(be.getLevel() instanceof ServerLevel level)) {
             return;
         }
-        if (ActivityIndex.get(level.getServer()).put(entryFor(host, level, id))) {
+        ActivityIndex index = ActivityIndex.get(level.getServer());
+        boolean generated = wasGenerated(index.get(id), host, id, be.getBlockPos());
+        if (index.put(entryFor(host, level, id, generated))) {
             fireChanged();
         }
     }
@@ -183,7 +190,10 @@ public final class ActivityRegistry {
         }
     }
 
-    /** Drops an index entry by hand (for a controller removed by a tool that skipped block updates). */
+    /**
+     * Drops an index entry by hand (for a controller removed by a tool that skipped block updates).
+     * {@link ActivityAdmin#forget} checks first that the controller is really gone.
+     */
     public static boolean forget(MinecraftServer server, ResourceLocation id) {
         ActivityIndex index = ActivityIndex.get(server);
         ActivityIndex.Entry entry = index.get(id);
@@ -223,18 +233,29 @@ public final class ActivityRegistry {
         }
         index.removeAt(level.dimension(), be.getBlockPos(), null);
         host.storeActivityId(id);
-        index.put(entryFor(host, level, id));
+        index.put(entryFor(host, level, id, false)); // set by staff: no longer generated
         fireChanged();
         return null;
     }
 
-    private static ActivityIndex.Entry entryFor(ActivityHost host, ServerLevel level, ResourceLocation id) {
+    /**
+     * @param generatedId the id was made up here, not set by staff (kept until {@link #changeId});
+     *                    the API reports it as {@code Warning.GENERATED_ID}
+     */
+    private static ActivityIndex.Entry entryFor(ActivityHost host, ServerLevel level, ResourceLocation id,
+                                                boolean generatedId) {
         List<ArenasApi.Difficulty> difficulties = new ArrayList<>();
         for (DifficultyTier tier : host.enabledTiers()) {
             difficulties.add(new ArenasApi.Difficulty(ActivityHost.difficultyId(tier)));
         }
         return new ActivityIndex.Entry(id, host.activityType(), level.dimension(), host.asBlockEntity().getBlockPos(),
-            host.activityName() == null ? "" : host.activityName(), List.copyOf(difficulties));
+            host.activityName() == null ? "" : host.activityName(), List.copyOf(difficulties), generatedId);
+    }
+
+    /** Whether a kept id was generated: as its entry says, or, with no entry, as the id looks. */
+    private static boolean wasGenerated(@Nullable ActivityIndex.Entry existing, ActivityHost host, ResourceLocation id,
+                                        BlockPos pos) {
+        return existing != null ? existing.generatedId() : ActivityIndex.looksGenerated(id, host.activityType(), pos);
     }
 
     /**

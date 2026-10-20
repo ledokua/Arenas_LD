@@ -1,22 +1,27 @@
 package net.ledok.arenas_ld.dungeon.screen;
 
+import net.ledok.arenas_ld.activity.AdminMenuBase;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.screen.ModScreenHandlers;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
+public class DungeonControllerAdminScreenHandler extends AdminMenuBase {
     private final BlockPos blockPos;
+    /** The controller's dimension, from the opening data and each snapshot. */
+    private ResourceKey<Level> dimension;
     private List<BlockPos> instances;
     private Set<BlockPos> activeRunInstances;
     private Map<BlockPos, Integer> instanceCooldownTimers;
@@ -37,6 +42,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerAdminData data) {
         super(ModScreenHandlers.DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER, syncId);
         this.blockPos = data.blockPos();
+        this.dimension = data.dimension();
         this.instances = List.copyOf(data.instances());
         this.activeRunInstances = Set.copyOf(data.activeRunInstances());
         this.instanceCooldownTimers = Map.copyOf(data.instanceCooldownTimers());
@@ -55,47 +61,23 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
         this.activityId = data.activityId();
     }
 
+    /** Server side: the menu only needs to know which controller it edits. */
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerBlockEntity controller) {
-        this(syncId, inventory, new DungeonControllerAdminData(
-            controller.getBlockPos(),
-            controller.getInstances(),
-            controller.getActiveRuns().keySet(),
-            controller.getInstanceCooldownTimers(),
-            controller.getPendingInstanceRemovals(),
-            controller.getCooldownTicks(),
-            controller.getCloseTimerSeconds(),
-            controller.getMaxPartySize(),
-            controller.getInviteExpiryTicks(),
-            controller.getRespawnTimeTicks(),
-            controller.getDeathTimePenaltyTicks(),
-            controller.getHpScalePerPlayer(),
-            controller.getDungeonName(),
-            controller.getTierConfigs(),
-            Map.of(),
-            enumerateLootTables(controller.getLevel()),
-            controller.activityId() == null ? "" : controller.activityId().toString()
-        ));
+        this(syncId, inventory, DungeonControllerAdminMenuProvider.menuData(controller));
     }
 
-    private static List<String> enumerateLootTables(net.minecraft.world.level.Level level) {
-        if (!(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) return List.of();
-        net.minecraft.server.MinecraftServer server = serverLevel.getServer();
-        if (server == null) return List.of();
-        List<String> ids = new ArrayList<>();
-        try {
-            server.reloadableRegistries().lookup()
-                .lookup(net.minecraft.core.registries.Registries.LOOT_TABLE)
-                .ifPresent(getter -> {
-                    if (getter instanceof net.minecraft.core.HolderLookup.RegistryLookup<?> reg) {
-                        reg.listElementIds().forEach(key -> ids.add(key.location().toString()));
-                    }
-                });
-        } catch (Exception ignored) {}
-        ids.sort(null);
-        return ids;
+    @Override
+    public BlockPos controllerPos() {
+        return blockPos;
+    }
+
+    @Override
+    protected boolean isController(@Nullable BlockEntity be) {
+        return be instanceof DungeonControllerBlockEntity;
     }
 
     public BlockPos getBlockPos() { return blockPos; }
+    public ResourceKey<Level> getDimension() { return dimension; }
     public List<BlockPos> getInstances() { return instances; }
     public Set<BlockPos> getActiveRunInstances() { return activeRunInstances; }
     public Map<BlockPos, Integer> getInstanceCooldownTimers() { return instanceCooldownTimers; }
@@ -114,6 +96,7 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     public String getActivityId() { return activityId == null ? "" : activityId; }
 
     public void applyData(DungeonControllerAdminData data) {
+        this.dimension = data.dimension();
         this.instances = List.copyOf(data.instances());
         this.activeRunInstances = Set.copyOf(data.activeRunInstances());
         this.instanceCooldownTimers = Map.copyOf(data.instanceCooldownTimers());
@@ -135,10 +118,5 @@ public class DungeonControllerAdminScreenHandler extends AbstractContainerMenu {
     @Override
     public ItemStack quickMoveStack(Player player, int index) {
         return ItemStack.EMPTY;
-    }
-
-    @Override
-    public boolean stillValid(Player player) {
-        return player.distanceToSqr(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5) <= 64;
     }
 }

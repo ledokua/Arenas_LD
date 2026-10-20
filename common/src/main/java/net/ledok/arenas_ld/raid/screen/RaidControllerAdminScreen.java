@@ -34,7 +34,9 @@ import net.ledok.vectorlib.client.presentation.Placement;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -104,6 +106,8 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
 
     private Tab currentTab = Tab.INSTANCES;
     private String footerError;
+    /** A save was sent: the next snapshot re-reads every input, so a refused value snaps back. */
+    private boolean saveEchoPending;
     private long lastCooldownSecond = -1L;
     private long cooldownSnapshotEpochMs = System.currentTimeMillis();
     private boolean synced;
@@ -316,7 +320,7 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         normalTabButton.enabled(currentTab != Tab.NORMAL);
         hardTabButton.enabled(currentTab != Tab.HARD);
         nightmareTabButton.enabled(currentTab != Tab.NIGHTMARE);
-        instancesTabButton.label(Component.translatable("gui.arenas_ld.dungeon_controller_admin.tab.instances").append(" [" + instances.size() + "]"));
+        updateInstancesTabLabel();
 
         switch (currentTab) {
             case INSTANCES -> buildInstancesTab();
@@ -328,6 +332,10 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         }
 
         footerLabel.text(footerError == null ? Component.empty() : Component.literal(footerError));
+    }
+
+    private void updateInstancesTabLabel() {
+        instancesTabButton.label(Component.translatable("gui.arenas_ld.dungeon_controller_admin.tab.instances").append(" [" + instances.size() + "]"));
     }
 
     private void buildInstancesTab() {
@@ -1015,6 +1023,7 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         ArenasNetwork.sendToServer(new RaidSetInviteExpiryTicksPayload(menu.getBlockPos(), invite * 20));
         ArenasNetwork.sendToServer(new RaidSetRespawnTimeTicksPayload(menu.getBlockPos(), respawn));
         ArenasNetwork.sendToServer(new RaidSetDeathTimePenaltyPayload(menu.getBlockPos(), death * 20));
+        saveEchoPending = true;
     }
 
     private void applyTier(DifficultyTier tier) {
@@ -1042,6 +1051,7 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         tierConfigs.put(tier, updated);
         footerError = null;
         ArenasNetwork.sendToServer(new RaidSetTierConfigPayload(menu.getBlockPos(), tier, updated));
+        saveEchoPending = true;
     }
 
     private Long parseLong(String value) {
@@ -1076,6 +1086,12 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
     }
 
     private void syncFromMenu() {
+        syncStateFromMenu();
+        syncSettingsFromMenu();
+    }
+
+    /** Instances and their runs and cooldowns: what changes while nobody edits. */
+    private void syncStateFromMenu() {
         knownLootTableIds = new ArrayList<>(menu.getKnownLootTableIds());
 
         instances.clear();
@@ -1085,6 +1101,10 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         pendingRemovals.addAll(menu.getPendingRemovals());
         runningInstances.clear();
         runningInstances.putAll(menu.getRunningInstances());
+    }
+
+    /** The settings and every input field. */
+    private void syncSettingsFromMenu() {
         tierConfigs.clear();
         tierConfigs.putAll(menu.getTierConfigs());
 
@@ -1114,15 +1134,44 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         enabledInputs.put(tier, config.enabled());
     }
 
-    public boolean matchesController(BlockPos blockPos) {
-        return menu.getBlockPos().equals(blockPos);
+    /** Whether a snapshot is for this screen's controller: same position and dimension. */
+    public boolean matchesController(BlockPos blockPos, ResourceKey<Level> dimension) {
+        return menu.getBlockPos().equals(blockPos) && menu.getDimension().equals(dimension);
     }
 
     public void applyData(RaidControllerAdminData data) {
+        // Run starts, run ends and cooldowns send snapshots too: keep what the admin is typing
+        // unless the settings changed, or the snapshot follows a save. Edits are merged into one
+        // snapshot per tick, so a save is answered by one or two; after the first re-read, a later
+        // one with other settings re-reads again.
+        boolean resyncSettings = saveEchoPending || !sameSettings(data);
+        saveEchoPending = false;
         menu.applyData(data);
-        syncFromMenu();
-        if (contentArea != null) {
-            rebuildUi();
+        if (resyncSettings || contentArea == null) {
+            syncFromMenu();
+            if (contentArea != null) {
+                rebuildUi();
+            }
+            return;
         }
+        syncStateFromMenu();
+        if (currentTab == Tab.INSTANCES) {
+            rebuildUi();
+        } else {
+            updateInstancesTabLabel(); // leaves the open tab's fields (and their focus) alone
+        }
+    }
+
+    /** Whether the snapshot carries the settings this screen already has. */
+    private boolean sameSettings(RaidControllerAdminData data) {
+        return menu.getRaidName().equals(data.raidName() == null ? "" : data.raidName())
+            && menu.getActivityId().equals(data.activityId() == null ? "" : data.activityId())
+            && menu.getCooldownTicks() == data.cooldownTicks()
+            && menu.getCloseTimerSeconds() == data.closeTimerSeconds()
+            && menu.getMaxPartySize() == data.maxPartySize()
+            && menu.getInviteExpiryTicks() == data.inviteExpiryTicks()
+            && menu.getRespawnTimeTicks() == data.respawnTimeTicks()
+            && menu.getDeathTimePenaltyTicks() == data.deathTimePenaltyTicks()
+            && menu.getTierConfigs().equals(data.tierConfigs());
     }
 }

@@ -1,5 +1,6 @@
 package net.ledok.arenas_ld.arena;
 
+import net.ledok.arenas_ld.activity.AdminScreens;
 import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
 import net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity;
 import net.ledok.arenas_ld.arena.run.ObjectiveType;
@@ -34,8 +35,9 @@ import net.ledok.arenas_ld.platform.ArenasNetwork;
 
 /**
  * Server-side receivers for arena controller actions. Mirrors
- * {@link net.ledok.arenas_ld.raid.RaidPacketHandlers}; uses compact generic payloads.
- * (Snapshot broadcasting to open screens is added with the screens phase.)
+ * {@link net.ledok.arenas_ld.raid.RaidPacketHandlers}; uses compact generic payloads. Admin and
+ * spawner edits are op only (permission level 2); every admin edit answers the open admin screens
+ * with a fresh snapshot.
  */
 public final class ArenaPacketHandlers {
     private ArenaPacketHandlers() {}
@@ -96,9 +98,7 @@ public final class ArenaPacketHandlers {
         // ── Admin ──────────────────────────────────────────────────────────────
         ArenasNetwork.registerServerReceiver(ArenaAdminSetIntPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!isAdmin(player)) return;
-                ArenaControllerBlockEntity c = findController(player, payload.controllerPos());
+                ArenaControllerBlockEntity c = adminController(context.player(), payload.controllerPos());
                 if (c == null) return;
                 int v = payload.value();
                 switch (payload.key()) {
@@ -115,41 +115,40 @@ public final class ArenaPacketHandlers {
                     case "hpWavePct" -> c.setHpScalePerWave(Math.max(0, v) / 100.0);
                     default -> {}
                 }
+                // Also when the value was refused: the screen then shows what the server kept.
+                c.sendAdminSnapshot();
             }));
 
         ArenasNetwork.registerServerReceiver(ArenaAdminSetBoolPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!isAdmin(player)) return;
-                ArenaControllerBlockEntity c = findController(player, payload.controllerPos());
+                ArenaControllerBlockEntity c = adminController(context.player(), payload.controllerPos());
                 if (c == null) return;
                 // No bool keys currently handled.
             }));
 
         ArenasNetwork.registerServerReceiver(ArenaSetRewardCurvePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!isAdmin(player)) return;
-                ArenaControllerBlockEntity c = findController(player, payload.controllerPos());
-                if (c != null) c.setRewardCurve(payload.currencyBase(), payload.currencyExp(), payload.xpBase(), payload.xpExp());
+                ArenaControllerBlockEntity c = adminController(context.player(), payload.controllerPos());
+                if (c == null) return;
+                c.setRewardCurve(payload.currencyBase(), payload.currencyExp(), payload.xpBase(), payload.xpExp());
+                c.sendAdminSnapshot();
             }));
 
         ArenasNetwork.registerServerReceiver(ArenaMoveInstancePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!isAdmin(player)) return;
-                ArenaControllerBlockEntity c = findController(player, payload.controllerPos());
-                if (c != null) c.moveInstance(payload.spawnerPos(), parseDimension(payload.dimension()), payload.direction());
+                ArenaControllerBlockEntity c = adminController(context.player(), payload.controllerPos());
+                if (c == null) return;
+                c.moveInstance(payload.spawnerPos(), parseDimension(payload.dimension()), payload.direction());
+                c.sendAdminSnapshot();
             }));
 
         ArenasNetwork.registerServerReceiver(ArenaRemoveInstancePayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
-                ServerPlayer player = context.player();
-                if (!isAdmin(player)) return;
-                ArenaControllerBlockEntity c = findController(player, payload.controllerPos());
+                ArenaControllerBlockEntity c = adminController(context.player(), payload.controllerPos());
                 if (c == null) return;
                 ResourceKey<Level> dim = parseDimension(payload.dimension());
                 c.removeInstance(payload.spawnerPos(), dim);
+                c.sendAdminSnapshot();
             }));
 
         // ── Spawner config ──────────────────────────────────────────────────────
@@ -197,7 +196,7 @@ public final class ArenaPacketHandlers {
 
     @Nullable
     private static ArenaSpawnerBlockEntity findSpawner(ServerPlayer player, BlockPos pos) {
-        if (player == null || pos == null) return null;
+        if (player == null || pos == null || !player.level().isLoaded(pos)) return null;
         BlockEntity be = player.level().getBlockEntity(pos);
         return be instanceof ArenaSpawnerBlockEntity s ? s : null;
     }
@@ -208,6 +207,13 @@ public final class ArenaPacketHandlers {
         if (player == null || pos == null) return null;
         // The open lobby screen's controller (any dimension), else the block at pos in this level.
         return net.ledok.arenas_ld.activity.LobbyScreens.controller(player, pos, ArenaControllerBlockEntity.class);
+    }
+
+    /** The controller an admin edit means (the open admin screen's, in any dimension); null unless op. */
+    @Nullable
+    private static ArenaControllerBlockEntity adminController(ServerPlayer player, BlockPos pos) {
+        if (!isAdmin(player) || pos == null) return null;
+        return AdminScreens.controller(player, pos, ArenaControllerBlockEntity.class);
     }
 
     private static boolean busy(ServerPlayer player) {
@@ -223,8 +229,9 @@ public final class ArenaPacketHandlers {
         player.sendSystemMessage(Component.translatable("message.arenas_ld.already_in_party").withStyle(ChatFormatting.RED));
     }
 
+    /** Op only: creative mode alone never edits arenas (the spawner block opens for ops only too). */
     private static boolean isAdmin(ServerPlayer player) {
-        return player != null && (player.hasPermissions(2) || player.isCreative());
+        return player != null && player.hasPermissions(2);
     }
 
     private static ResourceKey<Level> parseDimension(String id) {
