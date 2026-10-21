@@ -86,7 +86,12 @@ public final class RunMinions {
 
     /** Notes the health and damage scaling a run mob was spawned with, for its minions. */
     public static void recordScale(LivingEntity runMob, double healthMultiplier, double damageMultiplier) {
-        runMob.getTags().removeIf(tag -> tag.startsWith(SCALE_TAG_PREFIX));
+        // getTags() may be a read-only copy (another mod in the pack does that): remove through removeTag
+        for (String tag : List.copyOf(runMob.getTags())) {
+            if (tag.startsWith(SCALE_TAG_PREFIX)) {
+                runMob.removeTag(tag);
+            }
+        }
         runMob.addTag(SCALE_TAG_PREFIX + format(healthMultiplier) + ":" + format(damageMultiplier));
     }
 

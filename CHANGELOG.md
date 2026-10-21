@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.9.1
+
+- Fix a server crash when a dungeon wave spawns: `RunMinions.recordScale` removed its scale tag
+  through `getTags()`, which another mod in the pack returns as a read-only copy
+  (`UnsupportedOperationException` in `ImmutableCollections.removeIf`). It goes through `removeTag` now.
+
 ## 4.9.0
 
 Staff tools for hubs: an activity's live status, a teleport to its controller, its admin screen from
