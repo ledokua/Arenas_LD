@@ -180,6 +180,8 @@ public class DungeonBossSpawnerScreen extends FitCanvasHandledScreen<DungeonBoss
         actionRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.attributes"), 110, 18, this::openAttributesScreen));
         actionRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.equipment"), 110, 18, this::openEquipmentScreen));
         contentArea.item(actionRow);
+        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(ArenasUi.minionScalingButton(menu.getBlockPos()));
 
         contentArea.item(ArenasUi.spacer(10));
 

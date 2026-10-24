@@ -834,5 +834,7 @@
   "gui.arenas_ld.admin.activity_id_hint": "унікальний, напр. arenas_ld:crypt",
   "gui.arenas_ld.arena.name": "Назва",
   "gui.arenas_ld.arena.activity_id": "Ідентифікатор активності",
-  "gui.arenas_ld.arena.identity": "Назва та ідентифікатор"
+  "gui.arenas_ld.arena.identity": "Назва та ідентифікатор",
+  "gui.arenas_ld.spawner.scale_minions.on": "Масштабувати поплічників: увімк.",
+  "gui.arenas_ld.spawner.scale_minions.off": "Масштабувати поплічників: вимк."
 }

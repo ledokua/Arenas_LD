@@ -103,6 +103,28 @@ public final class ArenasUi {
         return new Button(w, h, label, onClick);
     }
 
+    /**
+     * A spawner's "Scale minions: On/Off" switch (see MinionScalingHost). Starts from the spawner's
+     * client copy, which the server keeps in step through block updates.
+     */
+    public static Button minionScalingButton(net.minecraft.core.BlockPos spawnerPos) {
+        var level = Minecraft.getInstance().level;
+        boolean[] on = {!(level != null && level.getBlockEntity(spawnerPos)
+            instanceof net.ledok.arenas_ld.util.MinionScalingHost host) || host.scalesMinions()};
+        Button[] button = new Button[1];
+        button[0] = new Button(150, 18, minionScalingLabel(on[0]), () -> {
+            on[0] = !on[0];
+            net.ledok.arenas_ld.platform.ArenasNetwork.sendToServer(
+                new net.ledok.arenas_ld.packet.SetMinionScalingPayload(spawnerPos, on[0]));
+            button[0].label(minionScalingLabel(on[0]));
+        });
+        return button[0];
+    }
+
+    private static Component minionScalingLabel(boolean on) {
+        return Component.translatable(on ? "gui.arenas_ld.spawner.scale_minions.on" : "gui.arenas_ld.spawner.scale_minions.off");
+    }
+
     /** Text field with the max length raised BEFORE the initial value goes in (no silent clipping). */
     public static TextField textField(float width, String initial, int maxLength) {
         TextField field = new TextField(width, "", null);

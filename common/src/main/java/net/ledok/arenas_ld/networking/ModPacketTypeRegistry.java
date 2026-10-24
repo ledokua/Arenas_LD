@@ -168,6 +168,7 @@ final class ModPacketTypeRegistry {
         ArenasNetwork.playC2S(net.ledok.arenas_ld.arena.packet.ArenaSpawnerMobsPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaSpawnerMobsPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(net.ledok.arenas_ld.arena.packet.ArenaSpawnerRewardsPayload.TYPE, net.ledok.arenas_ld.arena.packet.ArenaSpawnerRewardsPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(net.ledok.arenas_ld.packet.SetActivityInfoPayload.TYPE, net.ledok.arenas_ld.packet.SetActivityInfoPayload.STREAM_CODEC);
+        ArenasNetwork.playC2S(net.ledok.arenas_ld.packet.SetMinionScalingPayload.TYPE, net.ledok.arenas_ld.packet.SetMinionScalingPayload.STREAM_CODEC);
     }
 
     static void registerS2CTypes() {

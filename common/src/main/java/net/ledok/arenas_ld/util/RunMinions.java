@@ -84,6 +84,16 @@ public final class RunMinions {
 
     // ── scaling ──────────────────────────────────────────────────────────────
 
+    /**
+     * Notes the health and damage scaling a run mob was spawned with, for its minions; none when its
+     * spawner has minion scaling turned off (a boss that scales its own minions).
+     */
+    public static void recordScale(LivingEntity runMob, MinionScalingHost spawner, double healthMultiplier,
+                                   double damageMultiplier) {
+        boolean scale = spawner.scalesMinions();
+        recordScale(runMob, scale ? healthMultiplier : 1.0, scale ? damageMultiplier : 1.0);
+    }
+
     /** Notes the health and damage scaling a run mob was spawned with, for its minions. */
     public static void recordScale(LivingEntity runMob, double healthMultiplier, double damageMultiplier) {
         // getTags() may be a read-only copy (another mod in the pack does that): remove through removeTag

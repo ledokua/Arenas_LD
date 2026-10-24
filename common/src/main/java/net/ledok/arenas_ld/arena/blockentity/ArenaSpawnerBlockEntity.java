@@ -35,7 +35,24 @@ import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
  * Mirrors {@link net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity}.
  */
 public class ArenaSpawnerBlockEntity extends BlockEntity
-    implements ExtendedMenuProvider<net.ledok.arenas_ld.arena.screen.ArenaSpawnerMenuData> {
+    implements ExtendedMenuProvider<net.ledok.arenas_ld.arena.screen.ArenaSpawnerMenuData>, net.ledok.arenas_ld.util.MinionScalingHost {
+    /** Whether this spawner's mobs pass their scaling on to their minions (see MinionScalingHost). */
+    private boolean scaleMinions = true;
+
+    @Override
+    public boolean scalesMinions() {
+        return scaleMinions;
+    }
+
+    @Override
+    public void setScalesMinions(boolean scale) {
+        this.scaleMinions = scale;
+        setChanged();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
 
     // --- Geometry / identity ---
     private String groupId = "";
@@ -211,6 +228,7 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.saveAdditional(nbt, registryLookup);
+        net.ledok.arenas_ld.util.MinionScalingHost.save(nbt, scaleMinions);
         State state = new State(groupId, entranceOffset, entranceDimension, new ArrayList<>(respawnPointOffsets),
             battleRadius, spawnDistance, attributeScale, entityHighlightTime,
             new WaveTiming(waveTimer, additionalTime, timeBetweenWaves, prepareTime, bossWaveAdditionalTime),
@@ -224,6 +242,7 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
     @Override
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.loadAdditional(nbt, registryLookup);
+        scaleMinions = net.ledok.arenas_ld.util.MinionScalingHost.load(nbt);
         if (nbt.contains("State")) {
             State.CODEC.parse(registryLookup.createSerializationContext(NbtOps.INSTANCE), nbt.get("State"))
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load ArenaSpawner at {}: {}", worldPosition, err))

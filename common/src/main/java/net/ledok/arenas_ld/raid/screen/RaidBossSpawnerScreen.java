@@ -181,6 +181,8 @@ public class RaidBossSpawnerScreen extends FitCanvasHandledScreen<RaidBossSpawne
 
         actions.spacer();
         contentArea.item(actions);
+        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(ArenasUi.minionScalingButton(menu.blockEntity.getBlockPos()));
 
         footerActions.item(ArenasUi.button(
             Component.translatable("gui.arenas_ld.save"), 110, 18,

@@ -205,6 +205,29 @@ public final class ApiGameTests {
         net.ledok.arenas_ld.util.RunMinions.actingAs(boss, () -> level.addFreshEntity(theirVex));
         helper.assertTrue(!net.ledok.arenas_ld.util.RunMinions.isMinion(theirVex), "someone else's mob is left alone");
 
+        // A spawner with "Scale minions" off: its boss's minions are adopted but not scaled.
+        BlockPos spawnerRel = new BlockPos(1, 1, 5);
+        helper.setBlock(spawnerRel, net.ledok.arenas_ld.registry.BlockRegistry.MOB_SPAWNER_BLOCK);
+        var spawner = (net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity) helper.getBlockEntity(spawnerRel);
+        spawner.setScalesMinions(false);
+        var saved = spawner.saveWithoutMetadata(level.registryAccess());
+        helper.assertTrue(!net.ledok.arenas_ld.util.MinionScalingHost.load(saved)
+            && net.ledok.arenas_ld.util.MinionScalingHost.load(new net.minecraft.nbt.CompoundTag()),
+            "the switch is saved, and older spawners count as on");
+        var selfScaling = net.minecraft.world.entity.EntityType.HUSK.create(level);
+        selfScaling.moveTo(at.getX() + 2.5, at.getY(), at.getZ() + 0.5);
+        net.ledok.arenas_ld.util.EntityEquipmentHelper.markRunMob(selfScaling);
+        net.ledok.arenas_ld.util.RunMinions.recordScale(selfScaling, spawner, 2.0, 1.5);
+        selfScaling.setNoAi(true);
+        level.addFreshEntity(selfScaling);
+        var ownVex = net.minecraft.world.entity.EntityType.VEX.create(level);
+        ownVex.moveTo(at.getX() + 2.5, at.getY() + 1, at.getZ() + 0.5);
+        ownVex.setOwner(selfScaling);
+        ownVex.setNoAi(true);
+        level.addFreshEntity(ownVex);
+        helper.assertTrue(net.ledok.arenas_ld.util.RunMinions.isMinion(ownVex) && Math.abs(ownVex.getMaxHealth() - 14.0f) < 0.01f,
+            "scaling off: still a minion, health unscaled (" + ownVex.getMaxHealth() + ")");
+
         // Outside a run, spawnAsMinions just runs the code.
         var plain = net.minecraft.world.entity.EntityType.HUSK.create(level);
         plain.moveTo(at.getX() + 2.5, at.getY(), at.getZ() + 2.5);

@@ -745,7 +745,9 @@ and your own bosses' adds. Arenas_LD spots them in two ways:
 A minion:
 - is a run mob too: it doesn't despawn, convert or break blocks;
 - is on its summoner's team, so it doesn't hurt the boss or other mobs;
-- gets its summoner's health and damage scaling (difficulty tier, party size, arena wave);
+- gets its summoner's health and damage scaling (difficulty tier, party size, arena wave), unless
+  the summoner's spawner has **Scale minions** off (the button in every spawner's editor). Turn it
+  off for a boss that already scales its own minions from its stats;
 - drops no loot and no experience;
 - never holds up a room, wave or raid;
 - **vanishes when its summoner dies** or is cleaned up (room reset, run end). A minion's own minions

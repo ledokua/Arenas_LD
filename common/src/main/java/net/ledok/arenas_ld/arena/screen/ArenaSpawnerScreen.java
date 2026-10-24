@@ -120,6 +120,8 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
         } else {
             content.item(buildSettings(s));
             content.item(ArenasUi.spacer(4));
+            content.item(ArenasUi.minionScalingButton(pos));
+            content.item(ArenasUi.spacer(4));
             content.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.mobs")));
             mobsArea = content.item(Flex.column().gap(3));
             mobsArea.sizing(Sizing.fill(), Sizing.content());

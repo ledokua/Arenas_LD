@@ -41,7 +41,25 @@ import java.util.List;
 import java.util.Optional;
 import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
-public class DungeonBossSpawnerBlockEntity extends BlockEntity implements AttributeProvider, EquipmentProvider, ExtendedMenuProvider<DungeonBossSpawnerData> {
+public class DungeonBossSpawnerBlockEntity extends BlockEntity implements AttributeProvider, EquipmentProvider, ExtendedMenuProvider<DungeonBossSpawnerData>,
+    net.ledok.arenas_ld.util.MinionScalingHost {
+    /** Whether this spawner's mobs pass their scaling on to their minions (see MinionScalingHost). */
+    private boolean scaleMinions = true;
+
+    @Override
+    public boolean scalesMinions() {
+        return scaleMinions;
+    }
+
+    @Override
+    public void setScalesMinions(boolean scale) {
+        this.scaleMinions = scale;
+        setChanged();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
 
     private EntityDefinition entityDefinition = EntityDefinition.DEFAULT.withMobId("minecraft:zombie");
     private BlockPos entranceOffset = BlockPos.ZERO;
@@ -210,7 +228,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         // Owned by the run: never let vanilla despawn or convert the boss.
         EntityEquipmentHelper.markRunMob(living);
         // For its minions: what reached its own health (damage to players is scaled per run).
-        net.ledok.arenas_ld.util.RunMinions.recordScale(living,
+        net.ledok.arenas_ld.util.RunMinions.recordScale(living, this,
             EntityEquipmentHelper.setsMaxHealth(entityDefinition.attributes()) ? healthMultiplier : 1.0, 1.0);
 
         Vec3 spawnPos = EntityEquipmentHelper.resolveBossSpawnPos(worldPosition, entityDefinition.spawnOffsets());
@@ -249,6 +267,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
+        net.ledok.arenas_ld.util.MinionScalingHost.save(nbt, scaleMinions);
         State.CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE),
                 new State(entityDefinition, entranceOffset, entranceDimension, roomOffsets,
                     Optional.ofNullable(startRoomOffset), Optional.ofNullable(finalRoomOffset)))
@@ -260,6 +279,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
     @Override
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.loadAdditional(nbt, registries);
+        scaleMinions = net.ledok.arenas_ld.util.MinionScalingHost.load(nbt);
         if (nbt.contains("State")) {
             State.CODEC.parse(registries.createSerializationContext(NbtOps.INSTANCE), nbt.get("State"))
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error(

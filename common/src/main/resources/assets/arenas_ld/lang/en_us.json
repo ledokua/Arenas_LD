@@ -834,5 +834,7 @@
   "gui.arenas_ld.admin.activity_id_hint": "unique, e.g. arenas_ld:crypt",
   "gui.arenas_ld.arena.name": "Name",
   "gui.arenas_ld.arena.activity_id": "Activity id",
-  "gui.arenas_ld.arena.identity": "Name and id"
+  "gui.arenas_ld.arena.identity": "Name and id",
+  "gui.arenas_ld.spawner.scale_minions.on": "Scale minions: On",
+  "gui.arenas_ld.spawner.scale_minions.off": "Scale minions: Off"
 }

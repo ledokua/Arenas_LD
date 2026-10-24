@@ -219,6 +219,9 @@ public class MobSpawnerScreen extends FitCanvasHandledScreen<MobSpawnerScreenHan
         actions.item(leftCell);
         actions.item(rightCell);
         content.item(actions);
+        Button scaling = ArenasUi.minionScalingButton(menu.getBlockPos());
+        scaling.sizing(Sizing.fill(), Sizing.fixed(20));
+        content.item(scaling);
 
         return content;
     }

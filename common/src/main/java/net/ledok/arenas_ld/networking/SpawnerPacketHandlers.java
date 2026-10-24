@@ -924,6 +924,19 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.SetActivityInfoPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> applyActivityInfo(context.player(), payload));
         });
+        // Any spawner's "Scale minions" switch (op only, like every spawner edit).
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.SetMinionScalingPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2) || !player.level().isLoaded(payload.spawnerPos())) {
+                    return;
+                }
+                if (player.level().getBlockEntity(payload.spawnerPos())
+                    instanceof net.ledok.arenas_ld.util.MinionScalingHost spawner) {
+                    spawner.setScalesMinions(payload.scale());
+                }
+            });
+        });
     }
 
     /**

@@ -42,7 +42,25 @@ import java.util.List;
 import java.util.UUID;
 import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
-public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedMenuProvider<RaidBossSpawnerData>, AttributeProvider, EquipmentProvider {
+public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedMenuProvider<RaidBossSpawnerData>, AttributeProvider, EquipmentProvider,
+    net.ledok.arenas_ld.util.MinionScalingHost {
+    /** Whether this spawner's mobs pass their scaling on to their minions (see MinionScalingHost). */
+    private boolean scaleMinions = true;
+
+    @Override
+    public boolean scalesMinions() {
+        return scaleMinions;
+    }
+
+    @Override
+    public void setScalesMinions(boolean scale) {
+        this.scaleMinions = scale;
+        setChanged();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
     // --- Config (arena geometry + mob definition only) ---
     private String groupId = "";
     private BlockPos entranceOffset = BlockPos.ZERO;
@@ -258,6 +276,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedM
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.saveAdditional(nbt, registryLookup);
+        net.ledok.arenas_ld.util.MinionScalingHost.save(nbt, scaleMinions);
         State.CODEC.encodeStart(registryLookup.createSerializationContext(NbtOps.INSTANCE), new State(
                 entityDefinition, entranceOffset, entranceDimension,
                 new ArrayList<>(respawnPointOffsets), groupId))
@@ -268,6 +287,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedM
     @Override
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.loadAdditional(nbt, registryLookup);
+        scaleMinions = net.ledok.arenas_ld.util.MinionScalingHost.load(nbt);
         if (nbt.contains("State")) {
             State.CODEC.parse(registryLookup.createSerializationContext(NbtOps.INSTANCE), nbt.get("State"))
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to load RaidBossSpawner at {}: {}", worldPosition, err))

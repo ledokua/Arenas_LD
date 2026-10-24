@@ -38,7 +38,25 @@ import java.util.List;
 import java.util.Optional;
 import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
-public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvider, EquipmentProvider, ExtendedMenuProvider<MobSpawnerData> {
+public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvider, EquipmentProvider, ExtendedMenuProvider<MobSpawnerData>,
+    net.ledok.arenas_ld.util.MinionScalingHost {
+    /** Whether this spawner's mobs pass their scaling on to their minions (see MinionScalingHost). */
+    private boolean scaleMinions = true;
+
+    @Override
+    public boolean scalesMinions() {
+        return scaleMinions;
+    }
+
+    @Override
+    public void setScalesMinions(boolean scale) {
+        this.scaleMinions = scale;
+        setChanged();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
 
     private EntityDefinition entityDefinition = EntityDefinition.DEFAULT;
     /** Builder-facing label, like the room name: shown in the Dungeon Tool's spawner list. */
@@ -132,7 +150,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
             // clear) nor convert them (zombie → drowned would swap the tracked UUID).
             EntityEquipmentHelper.markRunMob(living);
             // For its minions: what reached its own health (damage to players is scaled per run).
-            net.ledok.arenas_ld.util.RunMinions.recordScale(living,
+            net.ledok.arenas_ld.util.RunMinions.recordScale(living, this,
                 EntityEquipmentHelper.setsMaxHealth(this.entityDefinition.attributes()) ? healthMultiplier : 1.0, 1.0);
 
             double spawnX, spawnY, spawnZ;
@@ -169,6 +187,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.saveAdditional(nbt, registries);
+        net.ledok.arenas_ld.util.MinionScalingHost.save(nbt, scaleMinions);
         STATE_CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), new State(entityDefinition, spawnerName))
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save MobSpawner at {}: {}", worldPosition, err))
@@ -178,6 +197,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
     @Override
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
         super.loadAdditional(nbt, registries);
+        scaleMinions = net.ledok.arenas_ld.util.MinionScalingHost.load(nbt);
         if (nbt.contains("State")) {
             STATE_CODEC.parse(registries.createSerializationContext(NbtOps.INSTANCE), nbt.get("State"))
                 .resultOrPartial(err -> ArenasLdMod.LOGGER.error(

@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.10.0
+
+- **"Scale minions" switch on every spawner** (Mob Spawner, Dungeon Boss Spawner, Raid Boss Spawner,
+  Arena Spawner), on by default. Turn it off for a boss that already scales its own minions from its
+  health or attack damage, so they aren't scaled twice. Its minions are still minions (its team, no
+  loot or experience, gone with the boss); Arenas_LD just doesn't multiply their health and damage.
+  Saved with the spawner; spawners from earlier versions count as on. Op only, like every spawner edit.
+
 ## 4.9.1
 
 - Fix a server crash when a dungeon wave spawns: `RunMinions.recordScale` removed its scale tag
