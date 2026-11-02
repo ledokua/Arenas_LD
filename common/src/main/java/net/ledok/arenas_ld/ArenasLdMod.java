@@ -66,5 +66,6 @@ public class ArenasLdMod {
         ArenasEvents.SERVER_TICK_END.add(net.ledok.arenas_ld.util.RunMinions::endTick);
         ArenasEvents.SERVER_STOPPED.add(server -> net.ledok.arenas_ld.util.RunMinions.clear());
         net.ledok.arenas_ld.util.RunLeftovers.register();
+        net.ledok.arenas_ld.util.DownedSpectators.register();
     }
 }

@@ -119,6 +119,12 @@ public final class ArenasLdGametests implements FabricGameTest {
         });
     }
 
+    @GameTest(template = EMPTY_STRUCTURE, timeoutTicks = 400)
+    public void downedSpectators(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.downedSpectators(helper, player -> {
+        });
+    }
+
     @GameTest(template = EMPTY_STRUCTURE)
     public void runLeftovers(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.runLeftovers(helper, player -> {

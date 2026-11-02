@@ -750,6 +750,7 @@ public final class RaidRunLifecycle {
             PendingRestoreStore.get(world.getServer()).put(uuid, rp);
             return;
         }
+        net.ledok.arenas_ld.util.DownedSpectators.release(player);
         player.setGameMode(restoreMode);
         player.setHealth(player.getMaxHealth());
         ServerLevel returnWorld = world.getServer().getLevel(rp.dimension());
@@ -781,6 +782,8 @@ public final class RaidRunLifecycle {
         player.setGameMode(GameType.SPECTATOR);
         run.setTimerTicks(Math.max(0, run.timerTicks() - resolveDeathTimePenaltyTicks(controller)));
         run.setDowned(new DownedPlayer(player.getUUID(), resolveRespawnTimeTicks(controller)));
+        // Watching a teammate, or held near where they fell (not a free spectator).
+        net.ledok.arenas_ld.util.DownedSpectators.down(player, net.ledok.arenas_ld.util.DownedSpectators.RunView.of(run));
         player.sendSystemMessage(Component.translatable("message.arenas_ld.raid.you_are_downed"));
     }
 
@@ -837,6 +840,8 @@ public final class RaidRunLifecycle {
         if (downed.isReadyToRespawn()) {
             respawnAtEntrance(world, run, player);
             run.clearDowned(player.getUUID());
+        } else {
+            net.ledok.arenas_ld.util.DownedSpectators.rejoined(player, net.ledok.arenas_ld.util.DownedSpectators.RunView.of(run));
         }
         broadcastToParty(world, run, Component.translatable(
             "message.arenas_ld.raid.party_reconnected", participant.playerName())
@@ -911,6 +916,7 @@ public final class RaidRunLifecycle {
             removeFromPartyTeam(world, run, name);
             run.clearDisconnected(uuid);
             run.clearDowned(uuid);
+            net.ledok.arenas_ld.util.DownedSpectators.forget(uuid);
             BusyStateCompat.clearBusy(uuid, BUSY_REASON);
             // Offline: their summons go now; pets and thrown items wait for them.
             net.ledok.arenas_ld.util.RunLeftovers.left(world.getServer(), uuid, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run));
@@ -936,6 +942,7 @@ public final class RaidRunLifecycle {
         }
 
         ServerLevel entranceWorld = world.getServer().getLevel(spawner.getEntranceDimension());
+        net.ledok.arenas_ld.util.DownedSpectators.release(player);
         player.setGameMode(GameType.ADVENTURE);
         player.setHealth(player.getMaxHealth());
         if (entranceWorld != null) {

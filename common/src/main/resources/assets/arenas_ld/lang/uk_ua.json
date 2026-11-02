@@ -78,6 +78,8 @@
   "message.arenas_ld.run.exit_prompt": "Забіг завершено — вас повернуть автоматично, або вийдіть зараз: ",
   "message.arenas_ld.run.exit_button": "Вийти зараз",
   "message.arenas_ld.run.exit_hover": "Вийти негайно",
+  "message.arenas_ld.run.downed_watching": "Ви спостерігаєте за %s — присядьте, щоб перемкнути",
+  "message.arenas_ld.run.downed_party_only": "Поки ви ослаблені, можна спостерігати лише за своєю групою.",
   "title.arenas_ld.victory": "Перемога!",
   "title.arenas_ld.defeat": "Поразка",
   "title.arenas_ld.dungeon.get_ready": "Приготуйтеся!",

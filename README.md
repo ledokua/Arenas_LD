@@ -779,6 +779,20 @@ the team they had before, even after a restart or while offline. A player is nev
 back, Arenas_LD's mob teams `arenas_ld` / `arenas_dungeon` — anyone found on one at login is taken
 off it, since that team would make every run mob their ally.
 
+**Downed players watch their party.** A downed player in a dungeon, raid or arena run is a spectator,
+but not a free one. Their camera is put on the nearest standing teammate of the run (one in the same
+dimension first), with an action-bar hint "Watching <name> — sneak to switch". Sneaking switches to
+the next teammate instead of leaving the camera. The spectator menu's teleport and clicking an entity
+only work on a standing teammate, and only switch the camera. Anything else (other players, other
+instances, mobs) is refused with "While downed, you can only watch your party." When the watched
+teammate goes down, leaves, logs out or changes dimension, the camera moves to another one. With
+nobody left standing the camera is the player's own, held near where they went down: a downed
+player farther than [`downed_spectator_radius`](#config) blocks from that spot, or in another
+dimension, is put back on it (checked every 5 ticks). This lasts from going down until they respawn,
+leave (`/exit`, hardcore, disconnect expiry) or the run is finalized, so it covers the exit timer too.
+A player who logs out downed is held again on reconnect, on the same spot. Normal spectators and
+admins are not affected. All of this is server-side.
+
 **Bosses that summon minions.** Mobs that a run mob (a boss or a wave mob) spawns by itself become
 its **minions**. That covers a vanilla Evoker's Vexes, a Bosses of Mass Destruction lich's phantoms,
 and your own bosses' adds. Arenas_LD spots them in two ways:
@@ -1035,6 +1049,7 @@ One pretty-printed JSON file at `config/arenas_ld.json`, created with defaults o
 | `run_item_blacklist` | `["minecraft:ender_pearl", "minecraft:chorus_fruit"]` | Items unusable during any run. Item ids, or tags with a `#` prefix. |
 | `run_effect_blacklist` | `[]` | Mob effects stripped from run participants every tick. **Plain ids only** — the `#` tag syntax is not supported here. |
 | `debug_logging` | `false` | Verbose `[debug]` INFO logging of teleports, reconnect decisions and the chunks a run keeps loaded. |
+| `downed_spectator_radius` | `16` | How far (blocks) a downed run player with no standing teammate to watch may fly from where they went down before being put back. `0` or less pins them to the spot (1 block of slack). See [Downed players watch their party](#lobbies-parties-and-instances). |
 
 ## File locations
 

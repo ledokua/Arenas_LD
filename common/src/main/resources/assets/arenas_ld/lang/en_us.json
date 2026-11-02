@@ -78,6 +78,8 @@
   "message.arenas_ld.run.exit_prompt": "Run over — you'll be returned automatically, or leave now: ",
   "message.arenas_ld.run.exit_button": "Exit Now",
   "message.arenas_ld.run.exit_hover": "Leave immediately",
+  "message.arenas_ld.run.downed_watching": "Watching %s — sneak to switch",
+  "message.arenas_ld.run.downed_party_only": "While downed, you can only watch your party.",
   "title.arenas_ld.victory": "Victory!",
   "title.arenas_ld.defeat": "Defeat",
   "title.arenas_ld.dungeon.get_ready": "Get ready!",

@@ -11,7 +11,9 @@
     "LivingEntityMinionMixin",
     "MobMixin",
     "ProjectileMixin",
+    "ServerGamePacketListenerImplDownedMixin",
     "ServerLevelMinionMixin",
+    "ServerPlayerDownedMixin",
     "ZombieMinionMixin"
   ],
   "client": [

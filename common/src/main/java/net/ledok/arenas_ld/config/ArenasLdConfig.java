@@ -30,6 +30,10 @@ public class ArenasLdConfig {
     // Verbose "[debug]" logging of run lifecycle events: teleports (with full player state),
     // reconnect/disconnect decisions, and chunk force-loading. For diagnosing stuck players.
     public boolean debug_logging = false;
+    // How far (blocks) a downed run player may fly from where they went down while they have no
+    // living teammate to watch; farther away, or in another dimension, they are put back on the spot.
+    // 0 or less pins them to it.
+    public int downed_spectator_radius = 16;
 
     public static ArenasLdConfig getInstance() {
         if (instance == null) {

@@ -569,6 +569,7 @@ public final class ArenaRunLifecycle {
                 run.updateParticipant(participant.withStatus(ParticipantStatus.ACTIVE, world.getGameTime()));
             }
             if (player != null) {
+                net.ledok.arenas_ld.util.DownedSpectators.release(player);
                 player.setGameMode(GameType.SURVIVAL);
                 player.setHealth(player.getMaxHealth());
                 teleportToRespawn(world, run, spawner, player);
@@ -879,6 +880,8 @@ public final class ArenaRunLifecycle {
         run.setWaveTicksRemaining(Math.max(0, run.waveTicksRemaining() - resolveDeathPenaltyTicks(controller)));
         player.setHealth(player.getMaxHealth());
         player.setGameMode(GameType.SPECTATOR);
+        // Watching a teammate, or held near where they fell (not a free spectator).
+        net.ledok.arenas_ld.util.DownedSpectators.down(player, net.ledok.arenas_ld.util.DownedSpectators.RunView.of(run));
         player.sendSystemMessage(Component.translatable("message.arenas_ld.arena.you_are_downed"));
     }
 
@@ -916,15 +919,29 @@ public final class ArenaRunLifecycle {
         if (player == null || run == null) return;
         RunParticipant participant = run.participants().get(player.getUUID());
         if (participant == null) return;
+        boolean wasAway = run.disconnectedAt().containsKey(player.getUUID());
         run.clearDisconnected(player.getUUID());
         if (participant.status() == ParticipantStatus.REMOVED) {
             run.clearDowned(player.getUUID());
             restoreToReturnPoint(world, run, player.getUUID());
             return;
         }
+        boolean downed = run.downedPlayers().containsKey(player.getUUID());
+        if (!wasAway && !downed) {
+            return; // never left the run (it started as they joined): nothing to restore
+        }
         // Still part of the run — they wait out the wave as a spectator and are revived next wave.
+        // Downed again if a wave cleared while they were away (it revived them offline), or they
+        // would stay a spectator to the end: reviveDowned only brings back the downed.
+        if (!downed) {
+            run.setDowned(new DownedPlayer(player.getUUID(), resolveRespawnTicks(controller)));
+        }
+        if (participant.status() != ParticipantStatus.DOWNED) {
+            run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
+        }
         player.setGameMode(GameType.SPECTATOR);
         player.setHealth(player.getMaxHealth());
+        net.ledok.arenas_ld.util.DownedSpectators.rejoined(player, net.ledok.arenas_ld.util.DownedSpectators.RunView.of(run));
     }
 
     private static void tickDisconnectedPlayers(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
@@ -939,6 +956,7 @@ public final class ArenaRunLifecycle {
             leavePartyTeam(world, run, uuid); // by name, works while they're offline
             run.clearDisconnected(uuid);
             run.clearDowned(uuid);
+            net.ledok.arenas_ld.util.DownedSpectators.forget(uuid);
             net.ledok.arenas_ld.util.BusyStateCompat.clearBusy(uuid, BUSY_REASON);
             // Offline: their summons go now; pets and thrown items wait for them.
             net.ledok.arenas_ld.util.RunLeftovers.left(world.getServer(), uuid, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run));
@@ -975,6 +993,7 @@ public final class ArenaRunLifecycle {
             net.ledok.arenas_ld.util.PendingRestoreStore.get(world.getServer()).put(uuid, rp);
             return;
         }
+        net.ledok.arenas_ld.util.DownedSpectators.release(player);
         player.setGameMode(restoreMode);
         player.setHealth(player.getMaxHealth());
         // Leaving an arena wipes status effects (skill buffs, potions), as leaving a dungeon does.

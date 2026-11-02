@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.14.0
+
+- **Downed players watch their party instead of flying free.** Downed run players (dungeon, raid,
+  arena) are still spectators, but their camera is now put on the nearest standing teammate of their
+  run (same dimension first), with an action-bar hint "Watching <name> — sneak to switch". Sneaking
+  switches to the next teammate instead of leaving the camera. The spectator menu's teleport and
+  clicking an entity only work on a standing teammate and only switch the camera; any other target
+  (players outside the party, other instances, mobs) is refused. When the watched teammate goes down,
+  leaves, logs out or changes dimension, another one is picked.
+- **Tether.** With nobody left standing, a downed player is held near where they went down: farther
+  than `downed_spectator_radius` blocks (new config key, default `16`; `0` or less pins them to the
+  spot), or in another dimension, puts them back on it, checked every 5 ticks.
+- The hold lasts from going down until respawn, `/exit`, hardcore removal, disconnect expiry or the
+  run's finalize (so it covers the exit timer), and is applied again when a downed player reconnects
+  (on the same spot). Normal spectators and admins are not affected. Server-side only: the two new
+  messages have English fallbacks for clients without this version.
+- Fixed: an arena player whose wave was cleared while they were offline came back as a spectator
+  for the rest of the run (the wave revive had marked them standing while offline). They now come
+  back downed and are revived with the next cleared wave. A participant who never left is no longer
+  turned into a spectator by the join handling.
+
 ## 4.13.0
 
 - **Run leftovers are cleaned up**, in dungeons, raids and arenas, without any setup: Arenas_LD

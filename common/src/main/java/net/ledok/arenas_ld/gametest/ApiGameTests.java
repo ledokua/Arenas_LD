@@ -13,6 +13,7 @@ import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.util.BusyStateCompat;
+import net.ledok.arenas_ld.util.DownedSpectators;
 import net.ledok.arenas_ld.util.RunItemRestrictions;
 import net.ledok.arenas_ld.util.RunLeftovers;
 import net.minecraft.core.BlockPos;
@@ -996,6 +997,120 @@ public final class ApiGameTests {
                 helper.succeed();
             });
         });
+    }
+
+    /**
+     * A downed arena player watches their party instead of flying free: their camera is the nearest
+     * teammate; a spectator-menu teleport or a click on someone outside the party is refused, one to
+     * the other teammate switches the camera; a sneak press switches to the next teammate once. With
+     * both teammates gone the camera is their own, and moved 30 blocks away they are pulled back
+     * within {@code downed_spectator_radius} of where they went down. {@code /exit} frees them.
+     *
+     * @param moddedClient see {@link #adminScreen}: the run players get the run HUD
+     */
+    public static void downedSpectators(GameTestHelper helper, Consumer<ServerPlayer> moddedClient) {
+        registerHooksOnce();
+        BlockPos controllerRel = new BlockPos(1, 1, 1);
+        BlockPos spawnerRel = new BlockPos(5, 1, 5);
+        helper.setBlock(controllerRel, BlockRegistry.ARENA_CONTROLLER_BLOCK);
+        helper.setBlock(spawnerRel, BlockRegistry.ARENA_SPAWNER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            ArenaControllerBlockEntity controller = helper.getBlockEntity(controllerRel);
+            ArenaSpawnerBlockEntity spawner = helper.getBlockEntity(spawnerRel);
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_down_" + suffix());
+            helper.assertTrue(ActivityRegistry.changeId(controller, id.toString()) == null, "test id set");
+            BlockPos spawnerPos = helper.absolutePos(spawnerRel);
+            spawner.setEntrancePosition(helper.absolutePos(new BlockPos(5, 1, 3)), level.dimension());
+            spawner.setPrepareTime(60); // no wave (and so no revive) while the test runs
+            helper.assertTrue(controller.addInstance(spawnerPos, level.dimension()), "instance linked");
+            ServerPlayer downed = survivalPlayer(helper, helper.absolutePos(new BlockPos(2, 1, 2)));
+            ServerPlayer near = survivalPlayer(helper, helper.absolutePos(new BlockPos(3, 1, 2)));
+            ServerPlayer far = survivalPlayer(helper, helper.absolutePos(new BlockPos(4, 1, 2)));
+            ServerPlayer outsider = survivalPlayer(helper, helper.absolutePos(new BlockPos(1, 1, 7)));
+            List<ServerPlayer> all = List.of(downed, near, far, outsider);
+            all.forEach(moddedClient);
+            Runnable cleanup = () -> all.forEach(p -> server.getPlayerList().remove(p));
+            // After their join handling (deferred a tick), which would take them for returning players.
+            helper.runAfterDelay(3, () -> {
+                try {
+                    helper.assertTrue(controller.createLobby(downed), "lobby created");
+                    UUID lobbyId = controller.getLobbyByMember(downed.getUUID()).lobbyId();
+                    helper.assertTrue(controller.joinLobby(near, lobbyId) && controller.joinLobby(far, lobbyId),
+                        "teammates joined");
+                    helper.assertTrue(controller.startRun(downed), "the run starts");
+                    // Spread out from the entrance: near is next to the downed player, far a few blocks off.
+                    place(helper, downed, new BlockPos(3, 1, 3));
+                    place(helper, near, new BlockPos(4, 1, 3));
+                    place(helper, far, new BlockPos(7, 1, 7));
+
+                    helper.assertTrue(net.ledok.arenas_ld.util.LivingEntityHooks.handlePlayerLethal(downed),
+                        "the lethal hit is taken by the run");
+                    helper.assertTrue(downed.isSpectator(), "downed: a spectator");
+                    helper.assertTrue(DownedSpectators.isRestricted(downed), "held as a downed spectator");
+                    helper.assertTrue(downed.getCamera() == near, "watching the nearest teammate: " + downed.getCamera());
+
+                    Vec3 before = downed.position();
+                    downed.connection.handleTeleportToEntityPacket(
+                        new net.minecraft.network.protocol.game.ServerboundTeleportToEntityPacket(outsider.getUUID()));
+                    helper.assertTrue(downed.getCamera() == near && downed.position().distanceTo(before) < 0.01,
+                        "a spectator-menu teleport to a stranger is refused: " + downed.position());
+                    downed.attack(outsider);
+                    helper.assertTrue(downed.getCamera() == near, "spectating a stranger by clicking is refused");
+
+                    downed.connection.handleTeleportToEntityPacket(
+                        new net.minecraft.network.protocol.game.ServerboundTeleportToEntityPacket(far.getUUID()));
+                    helper.assertTrue(downed.getCamera() == far, "a teleport to a teammate switches the camera");
+                    helper.assertTrue(far.getUUID().equals(DownedSpectators.watching(downed)), "and the registry knows it");
+                    downed.setShiftKeyDown(true);
+                } catch (RuntimeException e) {
+                    cleanup.run();
+                    throw e;
+                }
+                // Two teammates: the next one after far is near (the downed player is never in the cycle).
+                whenTrue(helper, 20, () -> downed.getCamera() == near, () -> "sneaking switches to the next teammate: "
+                    + downed.getCamera(), () -> helper.runAfterDelay(5, () -> {
+                    try {
+                        helper.assertTrue(downed.getCamera() == near, "a held sneak switches once");
+                        downed.setShiftKeyDown(false);
+                        helper.assertTrue(net.ledok.arenas_ld.arena.run.ArenaRunLifecycle.exitEarly(server, near)
+                            && net.ledok.arenas_ld.arena.run.ArenaRunLifecycle.exitEarly(server, far), "the teammates leave");
+                    } catch (RuntimeException e) {
+                        cleanup.run();
+                        throw e;
+                    }
+                    whenTrue(helper, 20, () -> downed.getCamera() == downed, "no teammate left: the own camera", () -> {
+                        Vec3 spot = DownedSpectators.downSpot(downed);
+                        double radius = net.ledok.arenas_ld.config.ArenasLdConfig.getInstance().downed_spectator_radius;
+                        try {
+                            helper.assertTrue(spot != null, "still held, with the spot they went down on");
+                            downed.teleportTo(level, spot.x + 30, spot.y, spot.z, 0f, 0f);
+                        } catch (RuntimeException e) {
+                            cleanup.run();
+                            throw e;
+                        }
+                        whenTrue(helper, 30, () -> downed.position().distanceTo(spot) <= Math.max(radius, 1.0),
+                            () -> "pulled back near the spot: " + downed.position() + " vs " + spot, () -> {
+                            try {
+                                helper.assertTrue(net.ledok.arenas_ld.arena.run.ArenaRunLifecycle.exitEarly(server, downed),
+                                    "/exit while downed");
+                                helper.assertTrue(!DownedSpectators.isRestricted(downed) && !downed.isSpectator()
+                                    && downed.getCamera() == downed, "free again, out of spectator");
+                            } finally {
+                                cleanup.run();
+                            }
+                            helper.succeed();
+                        });
+                    });
+                }));
+            });
+        });
+    }
+
+    private static void place(GameTestHelper helper, ServerPlayer player, BlockPos rel) {
+        BlockPos at = helper.absolutePos(rel);
+        player.teleportTo(helper.getLevel(), at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0f, 0f);
     }
 
     /**

@@ -1093,6 +1093,7 @@ public final class DungeonRunLifecycle {
                 }
                 run.clearDowned(uuid);
                 run.clearDisconnected(uuid);
+                net.ledok.arenas_ld.util.DownedSpectators.forget(uuid);
                 removeFromPartyTeam(world, run, name);
                 ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
                 BusyStateCompat.clearBusy(uuid, BUSY_REASON);
@@ -1313,6 +1314,8 @@ public final class DungeonRunLifecycle {
         }
         player.setGameMode(GameType.SPECTATOR);
         player.setHealth(1.0F);
+        // Watching a teammate, or held near where they fell (not a free spectator).
+        net.ledok.arenas_ld.util.DownedSpectators.down(player, net.ledok.arenas_ld.util.DownedSpectators.RunView.of(run));
         player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.you_are_downed"));
     }
 
@@ -1324,6 +1327,7 @@ public final class DungeonRunLifecycle {
 
         BlockEntity dbsBe = world.getBlockEntity(run.dbsPos());
         if (dbsBe instanceof DungeonBossSpawnerBlockEntity dbs) {
+            net.ledok.arenas_ld.util.DownedSpectators.release(player);
             player.setGameMode(GameType.ADVENTURE);
             // In a protect room, revived players come back with the target's HP% — a battered
             // target means battered reinforcements.
@@ -1395,6 +1399,7 @@ public final class DungeonRunLifecycle {
 
     /** Teleports a player to a captured return point and restores their pre-run game mode + health. */
     private static void applyReturnPoint(MinecraftServer server, ServerPlayer player, PlayerReturnPoint rp) {
+        net.ledok.arenas_ld.util.DownedSpectators.release(player);
         ServerLevel target = server.getLevel(rp.dimension());
         DebugLog.log("teleport to return point {} in {}: {}", rp.pos(), rp.dimension().location(), DebugLog.describe(player));
         if (target != null) {
@@ -1573,6 +1578,8 @@ public final class DungeonRunLifecycle {
             if (dbs != null) {
                 teleportToRoomRespawnOrEntrance(world, dbs, run, player);
             }
+            // Held at the respawn point they were put on (or watching a teammate).
+            net.ledok.arenas_ld.util.DownedSpectators.down(player, net.ledok.arenas_ld.util.DownedSpectators.RunView.of(run));
             player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.reconnected_downed")
                 .withStyle(ChatFormatting.YELLOW));
         } else {
