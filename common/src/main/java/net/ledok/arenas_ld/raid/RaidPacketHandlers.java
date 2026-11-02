@@ -16,6 +16,7 @@ import net.ledok.arenas_ld.raid.packet.RaidSetCloseTimerSecondsPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetCooldownTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetInviteExpiryTicksPayload;
 import net.ledok.arenas_ld.raid.packet.RaidSetTierConfigPayload;
+import net.ledok.arenas_ld.raid.run.RaidTierConfig;
 import net.ledok.arenas_ld.raid.packet.RaidSetDeathTimePenaltyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidCreateLobbyPayload;
 import net.ledok.arenas_ld.raid.packet.RaidDeclineInvitePayload;
@@ -344,7 +345,9 @@ public final class RaidPacketHandlers {
                 if (!player.hasPermissions(2)) return;
                 RaidControllerBlockEntity controller = findAdminController(player, payload.controllerPos());
                 if (controller == null) return;
-                controller.setTierConfig(payload.tier(), payload.config());
+                RaidTierConfig config = payload.config();
+                controller.setTierConfig(payload.tier(), config.withRewardCommands(
+                    net.ledok.arenas_ld.util.RewardCommands.sanitize(config.rewardCommands())));
                 broadcastRaidControllerSnapshot(player, controller);
             })
         );

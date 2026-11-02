@@ -143,6 +143,9 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
     private final Map<DifficultyTier, String> regenInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> hpScaleInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, Boolean> enabledInputs = new EnumMap<>(DifficultyTier.class);
+    private final Map<DifficultyTier, List<String>> commandInputs = new EnumMap<>(DifficultyTier.class);
+    /** The "Commands on win" add field per tier, kept across rebuilds. */
+    private final Map<DifficultyTier, String> commandDrafts = new EnumMap<>(DifficultyTier.class);
 
     public RaidControllerAdminScreen(RaidControllerAdminScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
@@ -714,6 +717,11 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
             rewardCurrencyField(tier, config)
         ));
 
+        contentArea.item(ArenasUi.spacer(6));
+        contentArea.item(net.ledok.arenas_ld.screen.RewardCommandsEditor.build(
+            commandInputs.computeIfAbsent(tier, t -> new ArrayList<>(config.rewardCommands())),
+            commandDrafts.getOrDefault(tier, ""), v -> commandDrafts.put(tier, v), this::rebuildUi));
+
         contentArea.item(ArenasUi.spacer(8));
         Flex applyRow = Flex.row().justify(Justify.END).alignItems(Align.CENTER);
         applyRow.sizing(Sizing.fill(), Sizing.content());
@@ -1047,7 +1055,8 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         boolean enabled = enabledInputs.getOrDefault(tier, current.enabled());
         RaidTierConfig updated = new RaidTierConfig(
             health, damage, loot, time, enabled, Math.max(0L, reward),
-            Math.max(0, xp), Math.max(0, regen), hpScale);
+            Math.max(0, xp), Math.max(0, regen), hpScale,
+            commandInputs.getOrDefault(tier, current.rewardCommands()));
         tierConfigs.put(tier, updated);
         footerError = null;
         ArenasNetwork.sendToServer(new RaidSetTierConfigPayload(menu.getBlockPos(), tier, updated));
@@ -1132,6 +1141,7 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         regenInputs.put(tier, Integer.toString(config.regeneration()));
         hpScaleInputs.put(tier, trimDouble(config.hpScalePerPlayer()));
         enabledInputs.put(tier, config.enabled());
+        commandInputs.put(tier, new ArrayList<>(config.rewardCommands()));
     }
 
     /** Whether a snapshot is for this screen's controller: same position and dimension. */

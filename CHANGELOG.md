@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.11.0
+
+- **Commands on win** for dungeon and raid tiers: each tier tab of the Dungeon and Raid Controller
+  admin screens has a command list under the loot, currency and XP fields (✕ to remove, a text field
+  and Add, up to 8 commands of up to 256 chars, saved with the tier's Apply). They run as the server
+  after the tier's loot, currency and XP are paid, with the room reward rules: `@dungeonplayer` or
+  `@s` runs once per loot-eligible winner with their name, anything else runs once. Hardcore and
+  LuckPerms perks don't change them. Tiers saved before 4.11.0 load with none.
+- **Offline winners get their commands on their next join**: their per-player commands are queued in
+  `data/arenas_ld_pending_reward_commands.dat` and run once they are home (after any pending eject).
+- The reward popup is unchanged: it shows loot, currency and XP; what a command gives is delivered by
+  the command itself.
+- Reward commands (rooms too) now accept `@s[...]`: it becomes `@a[name=<player>,...]` instead of a
+  name with brackets, which never parsed. A command that fails is logged instead of failing silently.
+  The server drops a leading `/` and blank entries from room commands as well.
+
 ## 4.10.0
 
 - **"Scale minions" switch on every spawner** (Mob Spawner, Dungeon Boss Spawner, Raid Boss Spawner,

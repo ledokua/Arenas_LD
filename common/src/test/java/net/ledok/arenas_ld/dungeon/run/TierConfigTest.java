@@ -3,7 +3,10 @@ package net.ledok.arenas_ld.dungeon.run;
 import com.mojang.serialization.DataResult;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -47,5 +50,22 @@ class TierConfigTest {
         Tag encoded = TierConfig.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow();
         TierConfig decoded = TierConfig.CODEC.parse(NbtOps.INSTANCE, encoded).getOrThrow();
         assertEquals("", decoded.perPlayerLootTable());
+    }
+
+    @Test
+    void codecRoundTripsRewardCommands() {
+        TierConfig original = new TierConfig(1.0, 1.0, "", 600, true, 0L, 100,
+            List.of("give @dungeonplayer diamond", "say won"));
+        Tag encoded = TierConfig.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow();
+        assertEquals(original, TierConfig.CODEC.parse(NbtOps.INSTANCE, encoded).getOrThrow());
+    }
+
+    @Test
+    void oldDataWithoutCommandsLoadsWithNone() {
+        CompoundTag tag = (CompoundTag) TierConfig.CODEC.encodeStart(NbtOps.INSTANCE, TierConfig.HARD_DEFAULT).getOrThrow();
+        tag.remove("rewardCommands");
+        TierConfig decoded = TierConfig.CODEC.parse(NbtOps.INSTANCE, tag).getOrThrow();
+        assertEquals(List.of(), decoded.rewardCommands());
+        assertEquals(TierConfig.HARD_DEFAULT, decoded);
     }
 }

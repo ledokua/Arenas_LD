@@ -365,9 +365,14 @@ public final class ApiGameTests {
      * mobs never target), kept alive by Resistance V and Regeneration.
      */
     private static ServerPlayer survivalPlayer(GameTestHelper helper, BlockPos at) {
+        return survivalPlayer(helper, at, UUID.randomUUID());
+    }
+
+    /** {@link #survivalPlayer(GameTestHelper, BlockPos)} joining with a given UUID (a returning player). */
+    private static ServerPlayer survivalPlayer(GameTestHelper helper, BlockPos at, UUID uuid) {
         var level = helper.getLevel();
         var cookie = net.minecraft.server.network.CommonListenerCookie.createInitial(
-            new com.mojang.authlib.GameProfile(UUID.randomUUID(), "ald_gt_" + suffix()), false);
+            new com.mojang.authlib.GameProfile(uuid, "ald_gt_" + suffix()), false);
         ServerPlayer player = new ServerPlayer(level.getServer(), level, cookie.gameProfile(), cookie.clientInformation());
         var connection = new net.minecraft.network.Connection(net.minecraft.network.protocol.PacketFlow.SERVERBOUND);
         new io.netty.channel.embedded.EmbeddedChannel(connection);
@@ -944,6 +949,58 @@ public final class ApiGameTests {
             }
             helper.succeed();
         });
+    }
+
+    /**
+     * Tier reward commands: a winner online gets the per-player commands at once, a command without
+     * a placeholder runs once, and an offline winner's per-player commands wait in the store until
+     * they join (the join event runs them two ticks later).
+     */
+    public static void rewardCommands(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        String objective = "gt_once_" + suffix();
+        ServerPlayer online = survivalPlayer(helper, helper.absolutePos(new BlockPos(2, 1, 2)));
+        UUID offline = UUID.randomUUID();
+        List<String> commands = List.of(
+            "tag @dungeonplayer add gt_reward",
+            "/tag @s[tag=gt_reward] add gt_self",
+            "scoreboard objectives add " + objective + " dummy",
+            "this_is_not_a_command @s");
+        ServerPlayer[] joined = new ServerPlayer[1];
+        try {
+            net.ledok.arenas_ld.util.RewardCommands.run(level, Vec3.atCenterOf(helper.absolutePos(BlockPos.ZERO)),
+                List.of(online.getUUID(), offline), commands, true);
+            helper.assertTrue(online.getTags().contains("gt_reward") && online.getTags().contains("gt_self"),
+                "the online winner got both per-player commands: " + online.getTags());
+            helper.assertTrue(server.getScoreboard().getObjective(objective) != null, "the plain command ran");
+            var store = net.ledok.arenas_ld.util.PendingRewardCommandsStore.get(server);
+            helper.assertTrue(store.peek(offline).equals(List.of("tag @dungeonplayer add gt_reward",
+                "tag @s[tag=gt_reward] add gt_self", "this_is_not_a_command @s")),
+                "only the offline winner's per-player commands are queued: " + store.peek(offline));
+            helper.assertTrue(store.peek(online.getUUID()).isEmpty(), "nothing queued for the online winner");
+        } catch (RuntimeException e) {
+            server.getPlayerList().remove(online);
+            throw e;
+        }
+        server.getPlayerList().remove(online);
+
+        joined[0] = survivalPlayer(helper, helper.absolutePos(new BlockPos(3, 1, 3)), offline);
+        whenTrue(helper, 20, () -> joined[0].getTags().contains("gt_self"),
+            () -> "queued commands run on join: " + joined[0].getTags(), () -> {
+                try {
+                    helper.assertTrue(joined[0].getTags().contains("gt_reward"), "both queued commands ran");
+                    helper.assertTrue(net.ledok.arenas_ld.util.PendingRewardCommandsStore.get(server).peek(offline).isEmpty(),
+                        "and the queue entry is gone");
+                } finally {
+                    server.getPlayerList().remove(joined[0]);
+                    var made = server.getScoreboard().getObjective(objective);
+                    if (made != null) {
+                        server.getScoreboard().removeObjective(made);
+                    }
+                }
+                helper.succeed();
+            });
     }
 
     private static List<ArenasApi.RunResult> results(ResourceLocation activity) {

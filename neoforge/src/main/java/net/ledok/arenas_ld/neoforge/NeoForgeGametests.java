@@ -41,6 +41,11 @@ public final class NeoForgeGametests {
     }
 
     @GameTest(template = "empty")
+    public static void rewardCommands(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.rewardCommands(helper);
+    }
+
+    @GameTest(template = "empty")
     public static void apiActivityIndex(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.activityIndex(helper);
     }

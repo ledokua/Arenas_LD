@@ -56,6 +56,8 @@ public class ArenasLdMod {
         ArenasEvents.PLAYER_JOIN.add((player, server) -> net.ledok.arenas_ld.util.RunPartyTeams.leaveMobTeamOnLogin(player));
         DungeonConnectionListener.register();
         net.ledok.arenas_ld.arena.run.ArenaConnectionListener.register();
+        // After the connection listeners: queued reward commands run once their restore teleports have.
+        net.ledok.arenas_ld.util.RewardCommands.register();
         net.ledok.arenas_ld.util.RunItemRestrictions.register();
         net.ledok.arenas_ld.util.RunEffectRestrictions.register();
         ArenasEvents.SERVER_TICK_END.add(net.ledok.arenas_ld.block.entity.PhaseBlockEntity::tickLegacyMains);

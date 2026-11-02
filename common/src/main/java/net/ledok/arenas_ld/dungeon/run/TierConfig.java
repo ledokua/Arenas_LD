@@ -3,6 +3,8 @@ package net.ledok.arenas_ld.dungeon.run;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
+import java.util.List;
+
 /**
  * Per-tier dungeon configuration. Owned by DungeonController, snapshotted onto a DungeonRun
  * at run start (so admin edits during a run don't affect that run).
@@ -14,6 +16,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  * @param enabled whether this tier appears in the lobby tier picker and can be selected.
  * @param rewardCurrency Economy_LD currency delivered to each loot-eligible player's inbox on win. 0 = none.
  * @param skillExperiencePerWin Puffish skills XP granted to each loot-eligible player on win. 0 = none.
+ * @param rewardCommands commands run as the server on win (see {@link net.ledok.arenas_ld.util.RewardCommands}).
  */
 public record TierConfig(
     double healthMultiplier,
@@ -22,8 +25,20 @@ public record TierConfig(
     int dungeonTimeSeconds,
     boolean enabled,
     long rewardCurrency,
-    int skillExperiencePerWin
+    int skillExperiencePerWin,
+    List<String> rewardCommands
 ) {
+    public TierConfig {
+        rewardCommands = rewardCommands == null ? List.of() : List.copyOf(rewardCommands);
+    }
+
+    /** A tier with no reward commands (the shape before 4.11.0). */
+    public TierConfig(double healthMultiplier, double damageMultiplier, String perPlayerLootTable,
+                      int dungeonTimeSeconds, boolean enabled, long rewardCurrency, int skillExperiencePerWin) {
+        this(healthMultiplier, damageMultiplier, perPlayerLootTable, dungeonTimeSeconds, enabled, rewardCurrency,
+            skillExperiencePerWin, List.of());
+    }
+
     public static final TierConfig EASY_DEFAULT =
         new TierConfig(0.75, 0.75, "", 600, true, 0L, 100);
     public static final TierConfig NORMAL_DEFAULT =
@@ -41,9 +56,16 @@ public record TierConfig(
             Codec.INT.fieldOf("dungeonTimeSeconds").forGetter(TierConfig::dungeonTimeSeconds),
             Codec.BOOL.optionalFieldOf("enabled", true).forGetter(TierConfig::enabled),
             Codec.LONG.optionalFieldOf("rewardCurrency", 0L).forGetter(TierConfig::rewardCurrency),
-            Codec.INT.optionalFieldOf("skillExperiencePerWin", 100).forGetter(TierConfig::skillExperiencePerWin)
+            Codec.INT.optionalFieldOf("skillExperiencePerWin", 100).forGetter(TierConfig::skillExperiencePerWin),
+            Codec.STRING.listOf().optionalFieldOf("rewardCommands", List.of()).forGetter(TierConfig::rewardCommands)
         ).apply(instance, TierConfig::new)
     );
+
+    /** This tier with other reward commands. */
+    public TierConfig withRewardCommands(List<String> commands) {
+        return new TierConfig(healthMultiplier, damageMultiplier, perPlayerLootTable, dungeonTimeSeconds, enabled,
+            rewardCurrency, skillExperiencePerWin, commands);
+    }
 
     /**
      * Returns the built-in default configuration for the given tier.

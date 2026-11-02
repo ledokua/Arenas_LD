@@ -26,6 +26,11 @@ public final class ArenasLdGametests implements FabricGameTest {
     }
 
     @GameTest(template = EMPTY_STRUCTURE)
+    public void rewardCommands(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.rewardCommands(helper);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
     public void apiActivityIndex(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.activityIndex(helper);
     }

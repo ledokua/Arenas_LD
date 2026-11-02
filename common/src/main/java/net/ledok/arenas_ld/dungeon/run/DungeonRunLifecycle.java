@@ -13,11 +13,11 @@ import net.ledok.arenas_ld.util.LobbyChatActions;
 import net.ledok.arenas_ld.util.RunPartyTeams;
 import net.ledok.arenas_ld.util.PendingRestoreStore;
 import net.ledok.arenas_ld.util.PlayerStatsStore;
+import net.ledok.arenas_ld.util.RewardCommands;
 import net.ledok.arenas_ld.util.RewardDelivery;
 import net.ledok.arenas_ld.util.ControllerChunks;
 import net.ledok.arenas_ld.util.RunChunkTickets;
 import net.ledok.arenas_ld.util.RunHudSync;
-import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
@@ -713,6 +713,10 @@ public final class DungeonRunLifecycle {
         }
 
         clearRunEffects(world, run);
+        // After the effect wipe, so a command may hand out a buff. Offline winners get their
+        // per-player commands on their next join.
+        RewardCommands.run(world, Vec3.atCenterOf(run.dbsPos()), run.lootEligibleUuids(),
+            run.resolvedTierConfig().rewardCommands(), true);
 
         for (UUID uuid : run.participants().keySet()) {
             ServerPlayer participant = world.getServer().getPlayerList().getPlayer(uuid);
@@ -1213,45 +1217,8 @@ public final class DungeonRunLifecycle {
                 delivered, effectInstances, RewardDelivery.displayableCurrency(reward.currency()), grantedXp);
         }
 
-        executeRewardCommands(world, run, room, reward.commands());
-    }
-
-    /**
-     * Runs reward commands as the server (command-block permission level, output suppressed),
-     * positioned at the room controller. A command containing {@code @dungeonplayer} or {@code @s}
-     * has the placeholder replaced with each eligible online player's name and runs once per
-     * player; a command without a placeholder runs once.
-     */
-    private static void executeRewardCommands(ServerLevel world, DungeonRun run,
-                                              RoomControllerBlockEntity room, List<String> commands) {
-        if (commands.isEmpty()) {
-            return;
-        }
-        MinecraftServer server = world.getServer();
-        CommandSourceStack source = server.createCommandSourceStack()
-            .withLevel(world)
-            .withPosition(Vec3.atCenterOf(room.getBlockPos()))
-            .withPermission(2)
-            .withSuppressedOutput();
-        for (String command : commands) {
-            if (command.isBlank()) {
-                continue;
-            }
-            if (command.contains("@dungeonplayer") || command.contains("@s")) {
-                for (UUID uuid : run.lootEligibleUuids()) {
-                    ServerPlayer player = server.getPlayerList().getPlayer(uuid);
-                    if (player == null) {
-                        continue;
-                    }
-                    String name = player.getGameProfile().getName();
-                    // \b keeps "@s[...]" working while leaving longer selectors like "@a" untouched.
-                    String resolved = command.replace("@dungeonplayer", name).replaceAll("@s\\b", name);
-                    server.getCommands().performPrefixedCommand(source, resolved);
-                }
-            } else {
-                server.getCommands().performPrefixedCommand(source, command);
-            }
-        }
+        // Online winners only: a room clears mid-run, and an offline player there is out of the run.
+        RewardCommands.run(world, Vec3.atCenterOf(room.getBlockPos()), run.lootEligibleUuids(), reward.commands(), false);
     }
 
     /** Resolves configured effect IDs to instances; unknown or malformed IDs are logged and skipped. */

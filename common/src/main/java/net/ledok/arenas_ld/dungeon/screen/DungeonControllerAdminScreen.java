@@ -154,6 +154,9 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
     private final Map<DifficultyTier, String> timeInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> rewardInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, Boolean> enabledInputs = new EnumMap<>(DifficultyTier.class);
+    private final Map<DifficultyTier, List<String>> commandInputs = new EnumMap<>(DifficultyTier.class);
+    /** The "Commands on win" add field per tier, kept across rebuilds. */
+    private final Map<DifficultyTier, String> commandDrafts = new EnumMap<>(DifficultyTier.class);
 
     public DungeonControllerAdminScreen(DungeonControllerAdminScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
@@ -712,6 +715,11 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
                 xpInputs.getOrDefault(tier, Integer.toString(config.skillExperiencePerWin())), v -> xpInputs.put(tier, v))
         ));
 
+        contentArea.item(ArenasUi.spacer(6));
+        contentArea.item(net.ledok.arenas_ld.screen.RewardCommandsEditor.build(
+            commandInputs.computeIfAbsent(tier, t -> new ArrayList<>(config.rewardCommands())),
+            commandDrafts.getOrDefault(tier, ""), v -> commandDrafts.put(tier, v), this::rebuildUi));
+
         contentArea.item(ArenasUi.spacer(8));
         Flex applyRow = Flex.row().justify(Justify.END).alignItems(Align.CENTER);
         applyRow.sizing(Sizing.fill(), Sizing.content());
@@ -1049,7 +1057,8 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         }
 
         boolean enabled = enabledInputs.getOrDefault(tier, current.enabled());
-        TierConfig updated = new TierConfig(health, damage, loot, time, enabled, Math.max(0L, reward), Math.max(0, xp));
+        TierConfig updated = new TierConfig(health, damage, loot, time, enabled, Math.max(0L, reward), Math.max(0, xp),
+            commandInputs.getOrDefault(tier, current.rewardCommands()));
         tierConfigs.put(tier, updated);
         footerError = null;
         ArenasNetwork.sendToServer(new SetTierConfigPayload(menu.getBlockPos(), tier, updated));
@@ -1137,6 +1146,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         rewardInputs.put(tier, Long.toString(config.rewardCurrency()));
         xpInputs.put(tier, Integer.toString(config.skillExperiencePerWin()));
         enabledInputs.put(tier, config.enabled());
+        commandInputs.put(tier, new ArrayList<>(config.rewardCommands()));
     }
 
     /** Whether a snapshot is for this screen's controller: same position and dimension. */

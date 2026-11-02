@@ -45,6 +45,7 @@ import net.ledok.arenas_ld.dungeon.packet.SetRespawnTimeTicksPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetDeathTimePenaltyPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetHpScalePerPlayerPayload;
 import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
+import net.ledok.arenas_ld.dungeon.run.TierConfig;
 import net.ledok.arenas_ld.dungeon.packet.StartRunPayload;
 import net.ledok.arenas_ld.dungeon.packet.ToggleReadyPayload;
 import net.ledok.arenas_ld.dungeon.packet.UpdateDbsEntityDefPayload;
@@ -914,7 +915,9 @@ public final class SpawnerPacketHandlers {
                 DungeonControllerBlockEntity controller = AdminScreens.controller(player, payload.controllerPos(),
                     DungeonControllerBlockEntity.class);
                 if (controller != null) {
-                    controller.setTierConfig(payload.tier(), payload.config());
+                    TierConfig config = payload.config();
+                    controller.setTierConfig(payload.tier(), config.withRewardCommands(
+                        net.ledok.arenas_ld.util.RewardCommands.sanitize(config.rewardCommands())));
                     markDirtyAndSync(controller.getLevel(), controller);
                     broadcastDungeonControllerAdminSnapshot(controller);
                     broadcastDungeonControllerSnapshot(player, controller);
@@ -1095,11 +1098,7 @@ public final class SpawnerPacketHandlers {
                 Math.max(1, Math.min(3600, e.durationSeconds())),
                 Math.max(0, Math.min(9, e.amplifier()))))
             .toList();
-        java.util.List<String> commands = reward.commands().stream()
-            .filter(c -> c != null && !c.isBlank())
-            .limit(8)
-            .map(c -> c.trim().length() > 256 ? c.trim().substring(0, 256) : c.trim())
-            .toList();
+        java.util.List<String> commands = net.ledok.arenas_ld.util.RewardCommands.sanitize(reward.commands());
         return new net.ledok.arenas_ld.dungeon.room.RoomRewardConfig(
             lootTableId, effects, Math.max(0L, reward.currency()), Math.max(0, reward.skillXp()), commands);
     }

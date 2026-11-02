@@ -445,6 +445,10 @@ public final class RaidRunLifecycle {
                 net.ledok.arenas_ld.util.RewardDelivery.displayableCurrency(currency), grantedXp);
         }
 
+        // Offline winners get their per-player commands on their next join.
+        net.ledok.arenas_ld.util.RewardCommands.run(world, Vec3.atCenterOf(run.spawnerPos()), rewardIds,
+            tierCfg.rewardCommands(), true);
+
         // Before enterClosing: with no close timer it finalizes and releases the run right away.
         fireRunResult(world, controller, run, ArenasApi.Outcome.WIN);
         enterClosing(world, controller, run);

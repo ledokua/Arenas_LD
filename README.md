@@ -381,7 +381,8 @@ is exactly the pre-objective behavior.
   participant's status effects, and plays a red **Defeat** title.
 - **A win** pays each loot-eligible player (anyone not removed, online or not) the tier's per-player
   loot table, the tier's currency — **doubled in hardcore** — and the tier's skill XP, and writes online
-  winners to that tier's leaderboard with their run time. All status effects are then stripped.
+  winners to that tier's leaderboard with their run time. All status effects are then stripped, and
+  then the tier's [reward commands](#rewards-and-loot) run (so a command may hand out an effect).
 - Either way a **close timer** runs (default 30 s) with a clickable **[Exit Now]** in chat before
   everyone is teleported back to their captured return point with their original game mode and full
   health. Players who were offline at that moment are sent home on their next login.
@@ -403,9 +404,12 @@ affect runs already going.
 | Tier availability | enabled | enabled | enabled | enabled | toggle (hides it from the lobby picker) |
 | Currency reward | 0 | 0 | 0 | 0 | free text, ± steps of 10, 0–1000000000 |
 | Skill XP per win | 100 | 100 | 100 | 100 | step 10, 0–1000000 |
+| Commands on win | none | none | none | none | up to 8, each up to 256 chars |
 
 Every tier's **per-player loot table** starts unset; the admin screen offers a picker of the server's
-loot tables.
+loot tables. **Commands on win** sit under the reward fields as a list: each row has a ✕ to remove it,
+and a text field with **Add** below appends one (a leading `/` is dropped). Like every tier field they
+are saved with the tier's Apply button. See [reward commands](#rewards-and-loot) for how they run.
 
 The **health multiplier** scales the mob's configured `minecraft:generic.max_health` attribute row,
 boss included. Like the raid tiers, it iterates only the attributes you set on the spawner, so a Mob
@@ -621,6 +625,7 @@ conversions), and put on a no-friendly-fire team.
 | Boss regeneration | 0 | 0 | 0 | 0 |
 | HP scale per player | 0.10 | 0.10 | 0.10 | 0.10 |
 | Loot table / currency | — / 0 | — / 0 | — / 0 | — / 0 |
+| Commands on win | none | none | none | none |
 
 - **Health and damage multipliers scale the boss's configured `max_health` and `attack_damage` base
   values.** They iterate only the attributes you configured, so deleting those two rows in the
@@ -639,7 +644,8 @@ and hides the bar — though the admin stepper's minimum is 1 second, so that st
 through the screen.
 
 **Winning** is simply the boss no longer being alive; it pays the tier's loot, currency (doubled in
-hardcore — loot and XP are not) and skill XP, and records the run time on that tier's top-10
+hardcore — loot and XP are not) and skill XP, runs the tier's [commands on win](#rewards-and-loot)
+(edited in the tier tab like the dungeon's), and records the run time on that tier's top-10
 leaderboard. **Losing** is the timer expiring, the boss vanishing, or everyone being eliminated; the
 boss is despawned and nothing is paid.
 
@@ -863,7 +869,7 @@ granted only when `puffish_skills` is loaded.
 |---|---|---|
 | **Per room** (dungeon) | loot table, currency, skill XP, status effects, commands | the moment the room clears |
 | **Per wave** (arena) | one loot-table row, `rolls` times | each wave a row matches |
-| **Per run** (dungeon, raid) | the tier's loot table, currency and skill XP | on a win |
+| **Per run** (dungeon, raid) | the tier's loot table, currency, skill XP and commands | on a win |
 | **Per run** (arena) | the wave-curve currency and XP summary | on any outcome, win or loss |
 
 **Room clear rewards** are edited from the Room Controller's *Rewards* button into a Room Rewards
@@ -873,11 +879,30 @@ and skill XP require the player to be online. Server-side limits: loot table id 
 at most 16 effects, each 1–3600 s and amplifier 0–9 (shown as level = amplifier + 1); at most 8
 commands, each trimmed to 256 chars; currency and XP clamped to ≥ 0.
 
-**Reward commands** run as the server at permission level 2 with output suppressed, positioned at the
-room controller. A command containing `@dungeonplayer` or `@s` has the placeholder replaced with each
-eligible online player's name and runs once per player; one without a placeholder runs once. Note the
-consequence: anyone who can edit a Room Controller can have arbitrary level-2 commands executed on room
-clear.
+**Reward commands** (a room's, and a dungeon or raid tier's *Commands on win*) run as the server at
+permission level 2 with output suppressed, positioned at the room controller (room) or the boss
+spawner (tier win). A command containing `@dungeonplayer` or `@s` runs once per loot-eligible winner
+with the placeholder replaced by that player's name (`@s[...]` becomes `@a[name=<player>,...]`, so
+selector arguments still work); a command without a placeholder runs once. A command that fails to
+parse or throws is logged and skipped; it never breaks the rest of the reward. At most 8 commands,
+each trimmed to 256 chars, a leading `/` dropped.
+
+- **Tier win, winner offline**: their per-player commands are queued in
+  `<world>/data/arenas_ld_pending_reward_commands.dat` and run when they next join (after any
+  pending eject has sent them home), with their current name, positioned at the player. Commands
+  without a placeholder are never queued; they already ran once.
+- **Room clear**: online players only, nothing is queued (a room clears mid-run).
+- Hardcore and [LuckPerms reward perks](#luckperms-reward-perks) don't change commands.
+- The reward popup shows loot, currency and XP only. Whatever a command gives is delivered by the
+  command itself (`give` puts items straight into the inventory) and does not appear in the popup.
+
+Note the consequence: anyone who can edit a Room Controller or a controller's tiers (operators) can
+have arbitrary level-2 commands executed on room clear or a win. Example for a raid:
+
+```
+give @dungeonplayer minecraft:diamond 3
+tellraw @a {"text":"The Fallen Icon has been defeated!"}
+```
 
 **Arena per-wave rows** fire on wave *W* when `W ≥ minWave && W ≤ maxWave && every > 0 && (W − minWave) % every == 0`
 — so "every" counts from that row's `minWave`, not from wave 1 (minWave 3, every 5 pays on 3, 8, 13…),
@@ -982,6 +1007,7 @@ One pretty-printed JSON file at `config/arenas_ld.json`, created with defaults o
 | Lifetime player stats | `<world>/data/arenas_ld_player_stats.dat` |
 | Activity ids and what the API reports about each | `<world>/data/arenas_ld_activities.dat` |
 | Pending ejects for players offline when a run ended | `<world>/data/arenas_ld_pending_restores.dat` |
+| Reward commands waiting for winners who were offline | `<world>/data/arenas_ld_pending_reward_commands.dat` |
 | Saved pre-run scoreboard teams | `<world>/data/arenas_ld_party_teams.dat` |
 
 Because lobbies, instance links, tier settings and leaderboards live in the controller's block entity,
