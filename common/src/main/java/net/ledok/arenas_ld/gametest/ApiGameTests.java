@@ -14,6 +14,7 @@ import net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity;
 import net.ledok.arenas_ld.registry.BlockRegistry;
 import net.ledok.arenas_ld.util.BusyStateCompat;
 import net.ledok.arenas_ld.util.RunItemRestrictions;
+import net.ledok.arenas_ld.util.RunLeftovers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -995,6 +996,161 @@ public final class ApiGameTests {
                 helper.succeed();
             });
         });
+    }
+
+    /**
+     * What a player leaves in an arena run is cleaned up when the run ends: their arrow and
+     * snowball, a tamed wolf and a thrown item are tagged for the run while it goes; after staff end
+     * and close it, the projectiles are gone, the wolf (sitting, so it can't walk over by itself) is
+     * next to its owner at home, and the item is back in their inventory.
+     *
+     * @param moddedClient see {@link #adminScreen}: the run player gets the run HUD
+     */
+    public static void runLeftovers(GameTestHelper helper, Consumer<ServerPlayer> moddedClient) {
+        registerHooksOnce();
+        BlockPos controllerRel = new BlockPos(1, 1, 1);
+        BlockPos spawnerRel = new BlockPos(5, 1, 5);
+        helper.setBlock(controllerRel, BlockRegistry.ARENA_CONTROLLER_BLOCK);
+        helper.setBlock(spawnerRel, BlockRegistry.ARENA_SPAWNER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            ArenaControllerBlockEntity controller = helper.getBlockEntity(controllerRel);
+            ArenaSpawnerBlockEntity spawner = helper.getBlockEntity(spawnerRel);
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_left_" + suffix());
+            helper.assertTrue(ActivityRegistry.changeId(controller, id.toString()) == null, "test id set");
+            BlockPos spawnerPos = helper.absolutePos(spawnerRel);
+            spawner.setEntrancePosition(helper.absolutePos(new BlockPos(5, 1, 3)), level.dimension());
+            helper.assertTrue(controller.addInstance(spawnerPos, level.dimension()), "instance linked");
+            ArenasApi.InstanceRef instance = new ArenasApi.InstanceRef(level.dimension(), spawnerPos);
+            ServerPlayer player = survivalPlayer(helper, helper.absolutePos(new BlockPos(3, 1, 6)));
+            moddedClient.accept(player);
+            try {
+                helper.assertTrue(controller.createLobby(player) && controller.startRun(player), "the run starts");
+                helper.assertTrue(RunLeftovers.isInRun(player.getUUID()), "the participant index has the player");
+
+                net.minecraft.world.entity.projectile.Arrow arrow = new net.minecraft.world.entity.projectile.Arrow(
+                    level, player, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ARROW), null);
+                arrow.setNoGravity(true);
+                arrow.setDeltaMovement(Vec3.ZERO);
+                helper.assertTrue(level.addFreshEntity(arrow), "arrow added");
+                net.minecraft.world.entity.projectile.Snowball snowball =
+                    new net.minecraft.world.entity.projectile.Snowball(level, player);
+                snowball.setNoGravity(true);
+                snowball.setDeltaMovement(Vec3.ZERO);
+                helper.assertTrue(level.addFreshEntity(snowball), "snowball added");
+                net.minecraft.world.entity.animal.Wolf wolf = net.minecraft.world.entity.EntityType.WOLF.create(level);
+                wolf.tame(player);
+                wolf.setOrderedToSit(true);
+                wolf.setInSittingPose(true);
+                BlockPos wolfAt = helper.absolutePos(new BlockPos(7, 1, 2));
+                wolf.moveTo(wolfAt.getX() + 0.5, wolfAt.getY(), wolfAt.getZ() + 0.5, 0, 0);
+                helper.assertTrue(level.addFreshEntity(wolf), "wolf added");
+                net.minecraft.world.entity.item.ItemEntity thrown = player.drop(
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 3), false, true);
+                helper.assertTrue(thrown != null, "item thrown");
+                thrown.setPickUpDelay(32767);
+
+                for (net.minecraft.world.entity.Entity entity : List.of(arrow, snowball, wolf, thrown)) {
+                    RunLeftovers.OwnedTag tag = RunLeftovers.ownedTag(entity);
+                    helper.assertTrue(tag != null && tag.owner().equals(player.getUUID()),
+                        entity.getType() + " tagged for the player's run: " + entity.getTags());
+                }
+
+                helper.assertTrue(ArenasApi.forceEnd(server, id, instance) == null, "staff end the run");
+                helper.assertTrue(ArenasApi.forceEnd(server, id, null) == null, "and close it");
+                helper.assertTrue(!RunLeftovers.isInRun(player.getUUID()), "the player is out of the index");
+
+                helper.assertTrue(arrow.isRemoved() && snowball.isRemoved(), "the projectiles are gone");
+                net.minecraft.world.entity.Entity wolfNow = level.getEntity(wolf.getUUID());
+                helper.assertTrue(wolfNow != null && !wolfNow.isRemoved(), "the wolf is kept");
+                helper.assertTrue(wolfNow.distanceTo(player) < 1.5f,
+                    "the wolf is next to its owner: " + wolfNow.position() + " vs " + player.position());
+                helper.assertTrue(RunLeftovers.ownedTag(wolfNow) == null, "the wolf's tag is gone");
+                helper.assertTrue(thrown.isRemoved(), "the thrown item entity is gone");
+                helper.assertTrue(player.getInventory().countItem(net.minecraft.world.item.Items.DIAMOND) == 3,
+                    "the diamonds are back in the inventory");
+                wolfNow.discard();
+            } finally {
+                server.getPlayerList().remove(player);
+            }
+            helper.succeed();
+        });
+    }
+
+    /**
+     * Leftovers that load from disk after their run is gone: tagged for a run nobody is in, an arrow
+     * is discarded, the online owner's wolf comes to them and a thrown item goes back into their
+     * inventory, while an offline owner's wolf stays where it is with its tag (tried again later).
+     */
+    public static void runLeftoversOnLoad(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        ServerPlayer player = survivalPlayer(helper, helper.absolutePos(new BlockPos(2, 1, 2)));
+        UUID offline = UUID.randomUUID();
+        String oldRun = "0ffbea70";
+        try {
+            net.minecraft.world.entity.projectile.Arrow arrow = new net.minecraft.world.entity.projectile.Arrow(
+                level, player, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ARROW), null);
+            arrow.setNoGravity(true);
+            arrow.setDeltaMovement(Vec3.ZERO);
+            level.addFreshEntity(arrow);
+            net.minecraft.world.entity.animal.Wolf wolf = sittingWolf(helper, new BlockPos(6, 1, 6));
+            wolf.tame(player);
+            level.addFreshEntity(wolf);
+            net.minecraft.world.entity.animal.Wolf strayWolf = sittingWolf(helper, new BlockPos(7, 1, 2));
+            strayWolf.setOwnerUUID(offline);
+            strayWolf.setTame(true, true);
+            level.addFreshEntity(strayWolf);
+            BlockPos itemAt = helper.absolutePos(new BlockPos(6, 1, 2));
+            net.minecraft.world.entity.item.ItemEntity item = new net.minecraft.world.entity.item.ItemEntity(level,
+                itemAt.getX() + 0.5, itemAt.getY(), itemAt.getZ() + 0.5,
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EMERALD, 5));
+            item.setThrower(player);
+            item.setPickUpDelay(32767);
+            level.addFreshEntity(item);
+
+            arrow.addTag(RunLeftovers.tag(oldRun, player.getUUID()));
+            wolf.addTag(RunLeftovers.tag(oldRun, player.getUUID()));
+            item.addTag(RunLeftovers.tag(oldRun, player.getUUID()));
+            strayWolf.addTag(RunLeftovers.tag(oldRun, offline));
+            for (net.minecraft.world.entity.Entity entity : List.of(arrow, wolf, item, strayWolf)) {
+                RunLeftovers.onLoaded(entity); // as if read back from disk with its chunk
+            }
+            helper.assertTrue(!arrow.isRemoved(), "nothing happens inside the load itself");
+
+            whenTrue(helper, 5, arrow::isRemoved, "the leftover arrow is discarded at the end of the tick", () -> {
+                try {
+                    helper.assertTrue(!wolf.isRemoved() && wolf.distanceTo(player) < 1.5f,
+                        "the wolf came to its owner: " + wolf.position() + " vs " + player.position());
+                    helper.assertTrue(RunLeftovers.ownedTag(wolf) == null, "and lost its tag");
+                    helper.assertTrue(item.isRemoved()
+                            && player.getInventory().countItem(net.minecraft.world.item.Items.EMERALD) == 5,
+                        "the thrown emeralds are back in the inventory");
+                    BlockPos strayAt = helper.absolutePos(new BlockPos(7, 1, 2));
+                    helper.assertTrue(!strayWolf.isRemoved() && strayWolf.blockPosition().equals(strayAt),
+                        "an offline owner's wolf stays: " + strayWolf.blockPosition());
+                    helper.assertTrue(RunLeftovers.ownedTag(strayWolf) != null, "and keeps its tag");
+                } finally {
+                    wolf.discard();
+                    strayWolf.discard();
+                    server.getPlayerList().remove(player);
+                }
+                helper.succeed();
+            });
+        } catch (RuntimeException e) {
+            server.getPlayerList().remove(player);
+            throw e;
+        }
+    }
+
+    private static net.minecraft.world.entity.animal.Wolf sittingWolf(GameTestHelper helper, BlockPos rel) {
+        net.minecraft.world.entity.animal.Wolf wolf = net.minecraft.world.entity.EntityType.WOLF.create(helper.getLevel());
+        wolf.setOrderedToSit(true);
+        wolf.setInSittingPose(true);
+        BlockPos at = helper.absolutePos(rel);
+        wolf.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
+        return wolf;
     }
 
     /**

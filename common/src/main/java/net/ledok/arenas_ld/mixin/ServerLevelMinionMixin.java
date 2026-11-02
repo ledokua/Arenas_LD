@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import net.ledok.arenas_ld.util.RunLeftovers;
 import net.ledok.arenas_ld.util.RunMinions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -52,8 +53,18 @@ public abstract class ServerLevelMinionMixin {
         }
     }
 
+    /**
+     * A fresh entity made it into the world: a minion joins its summoner's team, and something a
+     * run player owns (a summon, projectile, pet, thrown item) is tracked for their run's cleanup
+     * ({@link RunLeftovers}). Never called for entities loading from disk with their chunk.
+     */
     @Inject(method = "addFreshEntity", at = @At("RETURN"))
     private void arenas_ld$minionAdded(Entity entity, CallbackInfoReturnable<Boolean> cir) {
-        RunMinions.afterAdd((ServerLevel) (Object) this, entity, cir.getReturnValueZ());
+        ServerLevel level = (ServerLevel) (Object) this;
+        boolean added = cir.getReturnValueZ();
+        RunMinions.afterAdd(level, entity, added);
+        if (added) {
+            RunLeftovers.onFreshEntity(level, entity);
+        }
     }
 }

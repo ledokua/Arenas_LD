@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.13.0
+
+- **Run leftovers are cleaned up**, in dungeons, raids and arenas, without any setup: Arenas_LD
+  follows the players rather than sweeping an area (instances have no bounds, and raid copies sit
+  close together). Whatever a run player spawns during the run (Spell Engine summons, projectiles,
+  pets, thrown items; a summon's projectiles count as its player's) is tagged with the run. When the
+  run is over for a player (the run closes in any way, including staff force-end, or they `/exit`,
+  die out in hardcore or stay away past the disconnect grace), they are sent home first, then their
+  Spell Engine summons and projectiles are removed, their pets (tamed wolves, Saint's Dragons dragons,
+  horses…) are teleported to them and never deleted, and items they threw (and a thrown trident) go
+  back into their inventory. An offline owner's pets and items stay put and come over when they join or the next time
+  they load. Leftovers in chunks that weren't loaded are handled when they load (one tick later, never
+  inside the chunk load), unless their owner is in that very run again. Run mobs, minions and
+  fixtures (armor stands, item frames, paintings, display entities, NPCs_LD NPCs) are never touched.
+- At run start, the party's Spell Engine summons left by an earlier run within 48 blocks of where
+  each player landed are removed; real pets stay.
+- Each cleanup is logged with counts by entity type: `[Arenas] Run cleanup (<activity id> <instance>,
+  <player>): removed {...}, returned N pet(s), returned M item stack(s)`.
+- The fresh-entity check costs one map lookup per owned entity: Arenas_LD keeps an index of run
+  players, updated where players enter and leave runs and rebuilt from the loaded controllers every
+  5 s and after a join (a restart).
+
 ## 4.12.0
 
 - **`/exit` works mid-run in raids and arenas**, as it already did in dungeons. It's a forfeit: the

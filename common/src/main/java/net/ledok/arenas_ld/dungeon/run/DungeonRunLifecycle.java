@@ -141,6 +141,7 @@ public final class DungeonRunLifecycle {
             // Everyone is online now; the snapshot pays an offline winner their perks later.
             net.ledok.arenas_ld.util.EndRewardPerks.snapshot(run.perkSnapshots(), uuid, net.ledok.arenas_ld.util.EndRewardPerks.Mode.DUNGEON);
             ArenasLdMod.DUNGEON_MANAGER.registerParticipant(uuid, run);
+            net.ledok.arenas_ld.util.RunLeftovers.enter(controller, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run), uuid);
             BusyStateCompat.setBusy(uuid, BUSY_REASON);
             addToPartyTeam(world, run, player);
             PlayerStatsStore.get(world.getServer()).recordRunStart(uuid, PlayerStatsStore.Mode.DUNGEON);
@@ -177,9 +178,11 @@ public final class DungeonRunLifecycle {
         BlockPos entrance = dbs.getAbsoluteEntrancePos();
         DebugLog.log("startRun: dbs={} in {} -> entrance={} in {}, party={}",
             dbsPos, world.dimension().location(), entrance, targetLevel.dimension().location(), partyUuids.size());
+        List<ServerPlayer> arrived = new ArrayList<>();
         for (UUID uuid : partyUuids) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
             if (player == null) continue;
+            arrived.add(player);
             try {
                 DebugLog.log("startRun: teleporting {}", DebugLog.describe(player));
                 player.setGameMode(GameType.ADVENTURE);
@@ -190,6 +193,9 @@ public final class DungeonRunLifecycle {
                     player.getGameProfile().getName(), dbsPos, e);
             }
         }
+
+        // Their spell summons left here by an earlier run go; this run's own and real pets stay.
+        net.ledok.arenas_ld.util.RunLeftovers.startSweep(net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run), arrived);
 
         controller.syncAdminViewers();
         return run;
@@ -930,6 +936,10 @@ public final class DungeonRunLifecycle {
             }
             applyReturnPoint(world.getServer(), player, entry.getValue());
         }
+        // Everyone is home: what they leave behind follows (pets, thrown items) or goes (summons).
+        for (UUID uuid : run.participants().keySet()) {
+            net.ledok.arenas_ld.util.RunLeftovers.left(world.getServer(), uuid, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run));
+        }
 
         teardownPartyTeam(world, run, elsewhere);
         hideBossBars(world, run, elsewhere);
@@ -1018,6 +1028,7 @@ public final class DungeonRunLifecycle {
         if (world != null) {
             removeFromPartyTeam(world, run, participant.playerName());
         }
+        net.ledok.arenas_ld.util.RunLeftovers.left(server, uuid, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run));
 
         RunHudSync.hide(player);
 
@@ -1085,6 +1096,8 @@ public final class DungeonRunLifecycle {
                 removeFromPartyTeam(world, run, name);
                 ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
                 BusyStateCompat.clearBusy(uuid, BUSY_REASON);
+                // Offline: their summons go now; pets and thrown items wait for them.
+                net.ledok.arenas_ld.util.RunLeftovers.left(world.getServer(), uuid, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run));
                 broadcastToParty(world, run,
                     Component.translatable("message.arenas_ld.dungeon.party_removed", name).withStyle(ChatFormatting.RED), uuid);
             }
@@ -1282,6 +1295,7 @@ public final class DungeonRunLifecycle {
             removeFromPartyTeam(world, run, player.getScoreboardName());
             ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(player.getUUID());
             BusyStateCompat.clearBusy(player.getUUID(), BUSY_REASON);
+            net.ledok.arenas_ld.util.RunLeftovers.left(world.getServer(), player.getUUID(), net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run));
             player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.hardcore_death").withStyle(ChatFormatting.RED));
             return;
         }
@@ -1526,6 +1540,7 @@ public final class DungeonRunLifecycle {
             removeFromPartyTeam(player.serverLevel(), run, player.getScoreboardName());
             ArenasLdMod.DUNGEON_MANAGER.unregisterParticipant(uuid);
             BusyStateCompat.clearBusy(uuid, BUSY_REASON);
+            net.ledok.arenas_ld.util.RunLeftovers.left(server, uuid, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run));
             player.sendSystemMessage(Component.translatable("message.arenas_ld.dungeon.run_ended_while_away")
                 .withStyle(ChatFormatting.YELLOW));
             return;
@@ -1537,6 +1552,7 @@ public final class DungeonRunLifecycle {
             if (rp != null) {
                 applyReturnPoint(server, player, rp);
             }
+            net.ledok.arenas_ld.util.RunLeftovers.left(server, uuid, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run));
             return;
         }
 

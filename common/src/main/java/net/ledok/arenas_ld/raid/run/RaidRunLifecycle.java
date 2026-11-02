@@ -225,9 +225,12 @@ public final class RaidRunLifecycle {
         RaidTierConfig runTier = run.resolvedTierConfig();
         int raidTimeTicks = Math.max(0, runTier.raidTimeSeconds() * 20);
 
+        net.ledok.arenas_ld.util.RunLeftovers.RunKey leftoversKey = net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run);
+        RaidControllerBlockEntity owningController = findOwningController(world, run.spawnerPos());
         for (ServerPlayer p : players) {
             run.addParticipant(new RunParticipant(
                 p.getUUID(), p.getGameProfile().getName(), ParticipantStatus.ACTIVE, now));
+            net.ledok.arenas_ld.util.RunLeftovers.enter(owningController, leftoversKey, p.getUUID());
             run.setReturnPoint(p.getUUID(), PlayerReturnPoint.capture(p, false));
             // Everyone is online now; the snapshot pays an offline winner their perks later.
             net.ledok.arenas_ld.util.EndRewardPerks.snapshot(run.perkSnapshots(), p.getUUID(), net.ledok.arenas_ld.util.EndRewardPerks.Mode.RAID);
@@ -285,6 +288,8 @@ public final class RaidRunLifecycle {
             }
             addToPartyTeam(world, run, player);
         }
+        // Their spell summons left here by an earlier run go; this run's own and real pets stay.
+        net.ledok.arenas_ld.util.RunLeftovers.startSweep(leftoversKey, players);
 
         // Spawn drama: smoke burst at the boss and a title/sting for the party.
         world.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
@@ -727,6 +732,12 @@ public final class RaidRunLifecycle {
      * game mode. If the player is offline, queue a pending restore so they're moved on next login.
      */
     private static void restoreToReturnPoint(ServerLevel world, RaidRun run, UUID uuid) {
+        sendHome(world, run, uuid);
+        // Then what they leave behind: summons go, pets and thrown items follow them home.
+        net.ledok.arenas_ld.util.RunLeftovers.left(world.getServer(), uuid, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run));
+    }
+
+    private static void sendHome(ServerLevel world, RaidRun run, UUID uuid) {
         // No captured entry point means there's nothing to restore — e.g. a player already sent
         // out on hardcore death (whose return point was consumed). Don't touch their game mode.
         PlayerReturnPoint rp = run.returnPoints().get(uuid);
@@ -901,6 +912,8 @@ public final class RaidRunLifecycle {
             run.clearDisconnected(uuid);
             run.clearDowned(uuid);
             BusyStateCompat.clearBusy(uuid, BUSY_REASON);
+            // Offline: their summons go now; pets and thrown items wait for them.
+            net.ledok.arenas_ld.util.RunLeftovers.left(world.getServer(), uuid, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run));
             broadcastToParty(world, run, Component.translatable("message.arenas_ld.raid.party_removed", name)
                 .withStyle(ChatFormatting.RED), uuid);
         }

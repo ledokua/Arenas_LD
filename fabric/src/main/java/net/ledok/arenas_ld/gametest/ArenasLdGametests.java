@@ -120,6 +120,17 @@ public final class ArenasLdGametests implements FabricGameTest {
     }
 
     @GameTest(template = EMPTY_STRUCTURE)
+    public void runLeftovers(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runLeftovers(helper, player -> {
+        });
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void runLeftoversOnLoad(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runLeftoversOnLoad(helper);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
     public void raidBossChunks(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.raidBossChunks(helper, player -> {
         });

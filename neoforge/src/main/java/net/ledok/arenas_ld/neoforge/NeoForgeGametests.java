@@ -131,6 +131,16 @@ public final class NeoForgeGametests {
     }
 
     @GameTest(template = "empty")
+    public static void runLeftovers(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runLeftovers(helper, NeoForgeGametests::acceptModPayloads);
+    }
+
+    @GameTest(template = "empty")
+    public static void runLeftoversOnLoad(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runLeftoversOnLoad(helper);
+    }
+
+    @GameTest(template = "empty")
     public static void raidBossChunks(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.raidBossChunks(helper, NeoForgeGametests::acceptModPayloads);
     }

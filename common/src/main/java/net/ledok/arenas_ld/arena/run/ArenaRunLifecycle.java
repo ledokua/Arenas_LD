@@ -78,6 +78,7 @@ public final class ArenaRunLifecycle {
             run.setReturnPoint(player.getUUID(), PlayerReturnPoint.capture(player, true));
             run.addParticipant(new RunParticipant(player.getUUID(), player.getGameProfile().getName(),
                 ParticipantStatus.ACTIVE, now));
+            net.ledok.arenas_ld.util.RunLeftovers.enter(controller, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run), player.getUUID());
             // Everyone is online now; the snapshot pays an offline player their summary perks later.
             net.ledok.arenas_ld.util.EndRewardPerks.snapshot(run.perkSnapshots(), player.getUUID(), net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA);
             net.ledok.arenas_ld.util.PlayerStatsStore.get(world.getServer())
@@ -92,6 +93,9 @@ public final class ArenaRunLifecycle {
                     player.getYRot(), player.getXRot());
             }
         }
+
+        // Their spell summons left here by an earlier run go; this run's own and real pets stay.
+        net.ledok.arenas_ld.util.RunLeftovers.startSweep(net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run), players);
 
         run.setCurrentWave(0);
         run.clearAliveMobs();
@@ -936,6 +940,8 @@ public final class ArenaRunLifecycle {
             run.clearDisconnected(uuid);
             run.clearDowned(uuid);
             net.ledok.arenas_ld.util.BusyStateCompat.clearBusy(uuid, BUSY_REASON);
+            // Offline: their summons go now; pets and thrown items wait for them.
+            net.ledok.arenas_ld.util.RunLeftovers.left(world.getServer(), uuid, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run));
         }
     }
 
@@ -952,6 +958,12 @@ public final class ArenaRunLifecycle {
     }
 
     private static void restoreToReturnPoint(ServerLevel world, ArenaRun run, UUID uuid) {
+        sendHome(world, run, uuid);
+        // Then what they leave behind: summons go, pets and thrown items follow them home.
+        net.ledok.arenas_ld.util.RunLeftovers.left(world.getServer(), uuid, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run));
+    }
+
+    private static void sendHome(ServerLevel world, ArenaRun run, UUID uuid) {
         // Every way out of the run (exit, hardcore death-out, disconnect expiry, the end) passes here.
         leavePartyTeam(world, run, uuid);
         PlayerReturnPoint rp = run.returnPoints().get(uuid);

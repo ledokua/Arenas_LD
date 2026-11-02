@@ -29,15 +29,20 @@ public abstract class EntityMixin {
         }
     }
 
-    /** A minion read back from disk is remembered with its summoner again (see RunMinions). */
+    /**
+     * A minion read back from disk is remembered with its summoner again (see RunMinions); a run
+     * player's leftover is queued for its run's cleanup (see RunLeftovers).
+     */
     @Inject(method = "load", at = @At("TAIL"))
     private void arenas_ld$minionLoaded(net.minecraft.nbt.CompoundTag tag, CallbackInfo ci) {
         net.ledok.arenas_ld.util.RunMinions.onLoaded((Entity) (Object) this);
+        net.ledok.arenas_ld.util.RunLeftovers.onLoaded((Entity) (Object) this);
     }
 
-    /** A run mob killed or discarded takes its minions with it (see RunMinions). */
+    /** A run mob killed or discarded takes its minions with it (see RunMinions); a dead leftover is forgotten. */
     @Inject(method = "remove", at = @At("HEAD"))
     private void arenas_ld$minionsLeaveWithSummoner(Entity.RemovalReason reason, CallbackInfo ci) {
         net.ledok.arenas_ld.util.RunMinions.onRemoved((Entity) (Object) this, reason);
+        net.ledok.arenas_ld.util.RunLeftovers.onRemoved((Entity) (Object) this, reason);
     }
 }

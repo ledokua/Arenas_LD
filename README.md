@@ -391,6 +391,26 @@ is exactly the pre-objective behavior.
 home, loses all reward eligibility, the party is told, and the run is lost (as abandoned) if they were
 the last one in.
 
+**Leftovers and summons** (dungeons, raids and arenas). Arenas_LD follows the players, not an area:
+whatever a run player spawns during the run — Spell Engine summons, arrows and other projectiles, a
+tamed wolf, a Saint's Dragons dragon, a horse, items they throw — is tagged with that run
+(`arenas_ld_run_owned:<run id>:<owner>`; a summon's own arrows count as its player's). Run mobs and
+minions, armor stands, item frames, paintings, display entities and NPCs_LD NPCs never are; nothing
+needs setting up. When the run is over for a player (it closes, or they leave alone: `/exit`,
+hardcore death, disconnect expiry), they are sent home first, then:
+- **Spell Engine summons and projectiles are removed**, except a thrown trident (or any other
+  one-of-a-kind projectile its owner could pick up), which goes back like an item.
+- **Pets are never deleted**: they are teleported to their owner. An offline owner's pet stays where
+  it is and comes over when they join again or the next time it loads.
+- **Thrown items go back** into the thrower's inventory (or at their feet when it's full); an offline
+  thrower's items wait the same way.
+
+Anything whose chunk wasn't loaded at that moment is handled the same way when it loads, unless its
+owner is in that very run again. When a run starts, the party's Spell Engine summons left within 48
+blocks of where they landed by an earlier run are removed (real pets stay). Each cleanup is logged
+with counts by type, e.g. `[Arenas] Run cleanup (<activity id> <instance>, <player>): removed
+{minecraft:arrow=3}, returned 1 pet(s), returned 2 item stack(s)`.
+
 ### Difficulty tiers
 
 Four tiers per Dungeon Controller — Easy, Normal, Hard, Nightmare — each its own tab on the admin
