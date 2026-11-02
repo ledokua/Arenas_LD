@@ -952,6 +952,141 @@ public final class ApiGameTests {
     }
 
     /**
+     * /exit in the middle of an arena run: the player is sent out of it, and with nobody left the
+     * run is lost as abandoned on its next tick (reported once, as a LOSS).
+     *
+     * @param moddedClient see {@link #adminScreen}: the run player gets the run HUD
+     */
+    public static void arenaForfeit(GameTestHelper helper, Consumer<ServerPlayer> moddedClient) {
+        registerHooksOnce();
+        BlockPos controllerRel = new BlockPos(1, 1, 1);
+        BlockPos spawnerRel = new BlockPos(5, 1, 5);
+        helper.setBlock(controllerRel, BlockRegistry.ARENA_CONTROLLER_BLOCK);
+        helper.setBlock(spawnerRel, BlockRegistry.ARENA_SPAWNER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            ArenaControllerBlockEntity controller = helper.getBlockEntity(controllerRel);
+            ArenaSpawnerBlockEntity spawner = helper.getBlockEntity(spawnerRel);
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_exit_" + suffix());
+            helper.assertTrue(ActivityRegistry.changeId(controller, id.toString()) == null, "test id set");
+            BlockPos spawnerPos = helper.absolutePos(spawnerRel);
+            spawner.setEntrancePosition(helper.absolutePos(new BlockPos(5, 1, 3)), level.dimension());
+            helper.assertTrue(controller.addInstance(spawnerPos, level.dimension()), "instance linked");
+            ServerPlayer player = survivalPlayer(helper, helper.absolutePos(new BlockPos(3, 1, 6)));
+            moddedClient.accept(player);
+            try {
+                helper.assertTrue(controller.createLobby(player) && controller.startRun(player), "the run starts");
+                helper.assertTrue(RunItemRestrictions.isPlayerInRun(player), "the player is in the run");
+                helper.assertTrue(net.ledok.arenas_ld.arena.run.ArenaRunLifecycle.exitEarly(server, player),
+                    "/exit works mid-run");
+                helper.assertTrue(!RunItemRestrictions.isPlayerInRun(player), "the player is out of the run");
+                helper.assertTrue(ArenasApi.status(server, id).orElseThrow().runs().get(0).players().isEmpty(),
+                    "the run has nobody in it");
+            } catch (RuntimeException e) {
+                server.getPlayerList().remove(player);
+                throw e;
+            }
+            whenTrue(helper, 40, () -> !results(id).isEmpty(), () -> "the empty run ends", () -> {
+                server.getPlayerList().remove(player);
+                List<ArenasApi.RunResult> results = results(id);
+                helper.assertTrue(results.size() == 1 && results.get(0).outcome() == ArenasApi.Outcome.LOSS,
+                    "lost once, as abandoned: " + results);
+                helper.succeed();
+            });
+        });
+    }
+
+    /**
+     * A real raid keeps its chunks with tickets: the spawner's and the boss's, and the boss ticket
+     * follows the boss into another chunk. Starting it discards a stray run-mob of the boss's type
+     * left by an earlier run (but not an untagged one), and ending it discards the boss and gives
+     * the tickets back. The boss is an iron golem: no other test uses one, and the sweep covers
+     * nearby test areas too.
+     *
+     * @param moddedClient see {@link #adminScreen}: the run player gets the run HUD
+     */
+    public static void raidBossChunks(GameTestHelper helper, Consumer<ServerPlayer> moddedClient) {
+        registerHooksOnce();
+        BlockPos controllerRel = new BlockPos(1, 1, 1);
+        BlockPos spawnerRel = new BlockPos(5, 1, 5);
+        helper.setBlock(controllerRel, BlockRegistry.RAID_CONTROLLER_BLOCK);
+        helper.setBlock(spawnerRel, BlockRegistry.RAID_BOSS_SPAWNER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            RaidControllerBlockEntity controller = helper.getBlockEntity(controllerRel);
+            net.ledok.arenas_ld.raid.blockentity.RaidBossSpawnerBlockEntity spawner = helper.getBlockEntity(spawnerRel);
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_raid_" + suffix());
+            helper.assertTrue(ActivityRegistry.changeId(controller, id.toString()) == null, "test id set");
+            BlockPos spawnerPos = helper.absolutePos(spawnerRel);
+            spawner.setMobId("minecraft:iron_golem");
+            spawner.setEntrancePosition(helper.absolutePos(new BlockPos(5, 1, 2)), level.dimension());
+            helper.assertTrue(controller.addInstance(spawnerPos, level.dimension()), "instance linked");
+            ArenasApi.InstanceRef instance = new ArenasApi.InstanceRef(level.dimension(), spawnerPos);
+
+            var stray = helper.spawn(net.minecraft.world.entity.EntityType.IRON_GOLEM, new BlockPos(2, 1, 6));
+            net.ledok.arenas_ld.util.EntityEquipmentHelper.markRunMob(stray);
+            var wild = helper.spawn(net.minecraft.world.entity.EntityType.IRON_GOLEM, new BlockPos(6, 1, 2));
+            ServerPlayer player = survivalPlayer(helper, helper.absolutePos(new BlockPos(3, 1, 6)));
+            moddedClient.accept(player);
+            net.ledok.arenas_ld.raid.run.RaidRun run;
+            net.minecraft.world.entity.Entity boss;
+            net.ledok.arenas_ld.util.RunChunkTickets.Owner owner;
+            net.minecraft.world.level.ChunkPos moved;
+            try {
+                helper.assertTrue(controller.createLobby(player) && controller.startRaid(player), "the raid starts");
+                helper.assertTrue(stray.isRemoved(), "the stray tagged golem left by an earlier run was discarded");
+                helper.assertTrue(!wild.isRemoved(), "an untagged golem is left alone");
+                run = controller.getActiveRuns().get(spawnerPos);
+                helper.assertTrue(run != null && run.bossUuid() != null, "the run has a boss");
+                boss = level.getEntity(run.bossUuid());
+                helper.assertTrue(boss != null && boss.isAlive(), "the boss is loaded");
+                owner = net.ledok.arenas_ld.raid.run.RaidRunLifecycle.chunkOwner(run);
+                var held = net.ledok.arenas_ld.util.RunChunkTickets.held(owner);
+                helper.assertTrue(held.contains(new net.ledok.arenas_ld.util.RunChunkTickets.HeldChunk(
+                        level.dimension(), boss.chunkPosition()))
+                    && held.contains(new net.ledok.arenas_ld.util.RunChunkTickets.HeldChunk(
+                        level.dimension(), new net.minecraft.world.level.ChunkPos(spawnerPos))),
+                    "tickets on the boss's and the spawner's chunks: " + held);
+                helper.assertTrue(net.ledok.arenas_ld.raid.run.RaidRunLifecycle.sweepStrayBosses(level, spawnerPos,
+                    boss.getType()) == 0, "the run's own boss is never swept");
+
+                ((net.minecraft.world.entity.Mob) boss).setNoAi(true);
+                moved = new net.minecraft.world.level.ChunkPos(boss.chunkPosition().x + 1, boss.chunkPosition().z);
+            } catch (RuntimeException e) {
+                server.getPlayerList().remove(player);
+                throw e;
+            }
+            var movedChunk = new net.ledok.arenas_ld.util.RunChunkTickets.HeldChunk(level.dimension(), moved);
+            // The neighbor chunk is in the boss ticket's loaded area, but a fresh test world
+            // generates it over a few ticks: move the boss there once its entities are loaded.
+            whenTrue(helper, 200, () -> level.areEntitiesLoaded(moved.toLong()), "the next chunk loads", () -> {
+                boss.teleportTo(boss.getX() + 16, boss.getY(), boss.getZ());
+                helper.assertTrue(boss.chunkPosition().equals(moved), "the boss moved to " + moved);
+            whenTrue(helper, 60, () -> net.ledok.arenas_ld.util.RunChunkTickets.held(owner).contains(movedChunk),
+                () -> "the boss ticket follows the boss to " + moved + ": " + net.ledok.arenas_ld.util.RunChunkTickets.held(owner),
+                () -> {
+                    try {
+                        helper.assertTrue(run.bossLastPos() != null
+                            && new net.minecraft.world.level.ChunkPos(run.bossLastPos()).equals(moved),
+                            "its last position is noted: " + run.bossLastPos());
+                        helper.assertTrue(ArenasApi.forceEnd(server, id, instance) == null, "staff end the raid");
+                        helper.assertTrue(boss.isRemoved(), "the boss is discarded");
+                        helper.assertTrue(ArenasApi.forceEnd(server, id, null) == null, "a closing raid is closed at once");
+                        helper.assertTrue(controller.getActiveRuns().isEmpty(), "no raid left");
+                        helper.assertTrue(net.ledok.arenas_ld.util.RunChunkTickets.held(owner).isEmpty(),
+                            "its tickets are given back");
+                    } finally {
+                        server.getPlayerList().remove(player);
+                    }
+                    helper.succeed();
+                });
+            });
+        });
+    }
+
+    /**
      * Tier reward commands: a winner online gets the per-player commands at once, a command without
      * a placeholder runs once, and an offline winner's per-player commands wait in the store until
      * they join (the join event runs them two ticks later).

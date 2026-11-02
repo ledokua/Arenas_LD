@@ -387,8 +387,9 @@ is exactly the pre-objective behavior.
   everyone is teleported back to their captured return point with their original game mode and full
   health. Players who were offline at that moment are sent home on their next login.
 
-`/exit` during a dungeon run that is still going is a **forfeit**: the leaver goes home, loses all
-reward eligibility, the party is told, and the run ends as abandoned if they were the last one in.
+`/exit` during a run that is still going (dungeon, raid or arena) is a **forfeit**: the leaver goes
+home, loses all reward eligibility, the party is told, and the run is lost (as abandoned) if they were
+the last one in.
 
 ### Difficulty tiers
 
@@ -594,6 +595,22 @@ Raids have **no rooms, no doors, no waves and no adds**: the run creates exactly
 in the raid code spawns anything else. There are no boss phases either — the lifecycle is
 STARTING → RUNNING → CLOSING → DONE at the run level only.
 
+**The boss's chunk stays loaded.** A running raid holds chunk tickets (owned by its instance, not
+saved, taken again on the first tick after a restart) on the spawner's chunk, the entrance chunk and
+the chunk the boss was last seen in, in the boss's dimension. The boss's position is noted once a
+second (and saved with the run) and the ticket moves with it, so a boss that wanders far from the
+spawner or below it is not unloaded when the party is downed (downed players are spectators, which
+may not load chunks). If the boss still can't be found, the raid **waits** instead of losing: it
+takes a ticket on the boss's last-known chunk and pauses the timer until the boss is loaded again.
+It is lost ("Boss entity disappeared") only when that chunk has its entities loaded and the boss
+stays missing for 5 seconds, or after 30 seconds in all. The tickets are given back when the run ends.
+
+**No leftover bosses.** Whatever ends a raid (win, loss, `/exit` by everyone, staff force-end), its
+boss is discarded if it is loaded, and its minions go with it. A boss that wasn't loaded then is
+cleaned up by the next fight in that instance: when a battle starts, and every 5 seconds while it
+runs, mobs of the boss's type that were spawned by a run (they carry the run-mob tag) and are no
+raid's current boss are discarded within 96 blocks of the spawner horizontally and 64 up or down.
+
 The **Raid Boss Spawner screen** holds only a mob id (with an entity dropdown), a read-only count of
 linked respawn points, **Attributes**, **Equipment** and **Save**. Everything numeric lives on the
 controller's tier tabs. A fresh spawner is a `minecraft:zombie` with `minecraft:generic.max_health` 300
@@ -717,8 +734,10 @@ server start too, so runs saved in it come back after a restart. Only breaking t
 go of that chunk, unless another controller shares it. A running **dungeon** also keeps its
 instance's chunks and the entrance chunk (in its own dimension) loaded, with tickets that belong
 to that run alone. They are let go when the run ends, even if the rooms were edited meanwhile, and
-they never clear another run's chunks or an admin `/forceload`. Raid and arena runs keep only
-their controller's chunk loaded, so keep those instances inside an area that stays loaded.
+they never clear another run's chunks or an admin `/forceload`. A running **raid** holds the
+same kind of tickets on its spawner's chunk, the entrance chunk and the chunk the boss stands in,
+which follows the boss as it moves (see [Raids](#raids)). Arena runs keep only their controller's
+chunk loaded, so keep arena instances inside an area that stays loaded.
 
 **The run HUD** replaces vanilla boss bars entirely (they are suppressed while it is up): a dark panel
 at the top with a large MM:SS countdown, a red *Hardcore* tag, an objective line, and an optional

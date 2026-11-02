@@ -46,6 +46,14 @@ public final class RaidRun {
     private int regenerationTickTimer;
     private final long startTick;
     @Nullable private BossRef bossRef;
+    /** Where the boss last stood while loaded (saved; null = unknown, as in saves before 4.12.0). */
+    @Nullable private BlockPos bossLastPos;
+    /** Not saved: game time the boss was first not found (-1 = found), see {@link BossPresence}. */
+    private long bossMissingSince = -1L;
+    /** Not saved: game time its last-known chunk was first seen with entities loaded while missing. */
+    private long bossMissingLoadedSince = -1L;
+    /** Not saved: the boss chunk this run's tickets cover now (null = none taken yet). */
+    @Nullable private net.ledok.arenas_ld.util.RunChunkTickets.HeldChunk heldBossChunk;
     /** LuckPerms reward perks captured while each player was online in this run (see EndRewardPerks). */
     private final Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots = new HashMap<>();
     private final Map<UUID, RunParticipant> participants;
@@ -138,6 +146,10 @@ public final class RaidRun {
     public long startTick() { return startTick; }
     @Nullable public UUID bossUuid() { return bossRef == null ? null : bossRef.bossUuid(); }
     @Nullable public ResourceKey<Level> bossDimension() { return bossRef == null ? null : bossRef.bossDimension(); }
+    @Nullable public BlockPos bossLastPos() { return bossLastPos; }
+    long bossMissingSince() { return bossMissingSince; }
+    long bossMissingLoadedSince() { return bossMissingLoadedSince; }
+    @Nullable net.ledok.arenas_ld.util.RunChunkTickets.HeldChunk heldBossChunk() { return heldBossChunk; }
 
     public Map<UUID, RunParticipant> participants() {
         return Collections.unmodifiableMap(participants);
@@ -161,6 +173,11 @@ public final class RaidRun {
     void setBossRef(@Nullable UUID bossUuid, @Nullable ResourceKey<Level> bossDimension) {
         this.bossRef = (bossUuid == null || bossDimension == null) ? null : new BossRef(bossUuid, bossDimension);
     }
+
+    void setBossLastPos(@Nullable BlockPos pos) { this.bossLastPos = pos == null ? null : pos.immutable(); }
+    void setBossMissingSince(long tick) { this.bossMissingSince = tick; }
+    void setBossMissingLoadedSince(long tick) { this.bossMissingLoadedSince = tick; }
+    void setHeldBossChunk(@Nullable net.ledok.arenas_ld.util.RunChunkTickets.HeldChunk chunk) { this.heldBossChunk = chunk; }
 
     /** Mutable on purpose: the lifecycle snapshots at run start and refreshes at payout. */
     public Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots() { return perkSnapshots; }
@@ -254,9 +271,11 @@ public final class RaidRun {
     public static final Codec<RaidRun> CODEC = RecordCodecBuilder.create(instance ->
         instance.group(
             BASE_CODEC.forGetter(run -> run),
-            net.ledok.arenas_ld.util.EndRewardPerks.SNAPSHOT_CODEC.optionalFieldOf("perkSnapshots", Map.of()).forGetter(RaidRun::perkSnapshots)
-        ).apply(instance, (run, perkSnapshots) -> {
+            net.ledok.arenas_ld.util.EndRewardPerks.SNAPSHOT_CODEC.optionalFieldOf("perkSnapshots", Map.of()).forGetter(RaidRun::perkSnapshots),
+            BlockPos.CODEC.optionalFieldOf("bossLastPos").forGetter(run -> Optional.ofNullable(run.bossLastPos))
+        ).apply(instance, (run, perkSnapshots, bossLastPos) -> {
             run.perkSnapshots.putAll(perkSnapshots);
+            run.bossLastPos = bossLastPos.orElse(null);
             return run;
         })
     );

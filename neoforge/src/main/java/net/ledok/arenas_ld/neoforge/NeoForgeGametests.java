@@ -125,6 +125,16 @@ public final class NeoForgeGametests {
         net.ledok.arenas_ld.gametest.ApiGameTests.adminForceEnd(helper, NeoForgeGametests::acceptModPayloads);
     }
 
+    @GameTest(template = "empty")
+    public static void arenaForfeit(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.arenaForfeit(helper, NeoForgeGametests::acceptModPayloads);
+    }
+
+    @GameTest(template = "empty")
+    public static void raidBossChunks(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.raidBossChunks(helper, NeoForgeGametests::acceptModPayloads);
+    }
+
     /**
      * NeoForge refuses to send a payload to a client that never registered it (it throws), and a
      * test player's connection negotiated nothing: let it take Arenas_LD's payloads and the

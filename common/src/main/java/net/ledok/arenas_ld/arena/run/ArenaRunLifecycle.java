@@ -130,9 +130,10 @@ public final class ArenaRunLifecycle {
         pruneDeadMobs(world, run);
         updateWaveBossBar(world, run, spawner);
 
-        // Abandoned: nobody from the party is online any more.
-        boolean anyOnline = run.participants().keySet().stream()
-            .anyMatch(uuid -> world.getServer().getPlayerList().getPlayer(uuid) != null);
+        // Abandoned: nobody from the party is still in it and online (left with /exit, timed out).
+        boolean anyOnline = run.participants().values().stream()
+            .filter(p -> p.status() != ParticipantStatus.REMOVED)
+            .anyMatch(p -> world.getServer().getPlayerList().getPlayer(p.playerUuid()) != null);
         if (!anyOnline) {
             handleLoss(world, controller, run, ArenaOutcome.ABANDONED, "All players left.");
             return;
@@ -744,10 +745,16 @@ public final class ArenaRunLifecycle {
     }
 
     /**
-     * Pulls a single player out of a run that has already ended (CLOSING phase) before the
-     * shared close timer elapses. Mirrors {@code DungeonRunLifecycle#exitEarly}.
+     * Pulls a single player out of their arena run before its shared timers elapse. Mirrors
+     * {@code DungeonRunLifecycle#exitEarly}:
+     * <ul>
+     *   <li>CLOSING — the run already ended; they skip the close-timer wait.</li>
+     *   <li>STARTING/RUNNING — a voluntary mid-run forfeit: they're sent home and removed (no
+     *       payout), and the run goes on for the rest of the party, or ends as abandoned next tick
+     *       if nobody is left in it.</li>
+     * </ul>
      *
-     * @return true if the player was in a finished arena run and was removed; false otherwise.
+     * @return true if the player was in an arena run and was removed; false otherwise.
      */
     public static boolean exitEarly(net.minecraft.server.MinecraftServer server, ServerPlayer player) {
         UUID uuid = player.getUUID();
@@ -756,9 +763,10 @@ public final class ArenaRunLifecycle {
             if (world == null) continue;
             if (!(world.getBlockEntity(key.pos()) instanceof ArenaControllerBlockEntity controller)) continue;
             for (ArenaRun run : controller.getActiveRuns().values()) {
-                if (run.phase() != ArenaPhase.CLOSING) continue;
+                if (run.phase() == ArenaPhase.DONE) continue;
                 RunParticipant participant = run.participants().get(uuid);
                 if (participant == null || participant.status() == ParticipantStatus.REMOVED) continue;
+                boolean midRun = run.phase() != ArenaPhase.CLOSING;
 
                 restoreToReturnPoint(world, run, uuid);
                 run.removeReturnPoint(uuid);
@@ -767,6 +775,21 @@ public final class ArenaRunLifecycle {
                 run.clearDisconnected(uuid);
                 net.ledok.arenas_ld.util.BusyStateCompat.clearBusy(uuid, BUSY_REASON);
                 RunHudSync.hide(player);
+
+                if (midRun) {
+                    // Forfeit: the leaver is out of the payout; tickRunning ends the run as
+                    // abandoned if nobody is left in it.
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.arena.exited_mid_run")
+                        .withStyle(net.minecraft.ChatFormatting.YELLOW));
+                    Component left = Component.translatable("message.arenas_ld.arena.party_exited",
+                        participant.playerName()).withStyle(net.minecraft.ChatFormatting.YELLOW);
+                    for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
+                        if (entry.getValue().status() == ParticipantStatus.REMOVED) continue;
+                        ServerPlayer mate = server.getPlayerList().getPlayer(entry.getKey());
+                        if (mate != null) mate.sendSystemMessage(left);
+                    }
+                    return true;
+                }
 
                 boolean anyRemaining = run.participants().values().stream()
                     .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);

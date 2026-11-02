@@ -17,9 +17,12 @@ import net.ledok.arenas_ld.util.EntityEquipmentHelper;
 import net.ledok.arenas_ld.util.RunPartyTeams;
 import net.ledok.arenas_ld.util.PendingRestoreStore;
 import net.ledok.arenas_ld.util.PlayerStatsStore;
+import net.ledok.arenas_ld.util.RunChunkTickets;
 import net.ledok.arenas_ld.util.RunHudSync;
+import net.ledok.arenas_ld.util.RunMinions;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -30,9 +33,11 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
@@ -41,8 +46,10 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -154,6 +161,10 @@ public final class RaidRunLifecycle {
      * not the controller's.
      */
     public static void tick(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run) {
+        if (run.phase() != RaidPhase.DONE && !RunChunkTickets.isHeld(chunkOwner(run))) {
+            // A run restored after a restart: tickets aren't saved, so take them again.
+            holdChunks(world, run);
+        }
         switch (run.phase()) {
             case STARTING -> run.setPhase(RaidPhase.RUNNING);
             case RUNNING -> tickRunning(world, controller, run);
@@ -254,6 +265,10 @@ public final class RaidRunLifecycle {
             scoreboard.addPlayerToTeam(livingBoss.getScoreboardName(), team);
         }
 
+        // A boss left behind by an earlier run (its chunk was unloaded when that run ended) must not
+        // fight alongside this one.
+        sweepStrayBosses(world, run.spawnerPos(), entityTypeOpt.get());
+
         Vec3 bossSpawnPos = EntityEquipmentHelper.resolveBossSpawnPos(run.spawnerPos(), entityDefinition.spawnOffsets());
         boss.moveTo(bossSpawnPos.x, bossSpawnPos.y, bossSpawnPos.z, 0, 0);
         world.addFreshEntity(boss);
@@ -283,7 +298,9 @@ public final class RaidRunLifecycle {
         }
 
         run.setBossRef(boss.getUUID(), world.dimension());
+        run.setBossLastPos(boss.blockPosition());
         run.setRegenerationTickTimer(0);
+        holdChunks(world, run);
         ArenasLdMod.RAID_BOSS_MANAGER.registerSpawner(spawner);
         ArenasLdMod.LOGGER.info("Raid battle started at {} with boss {}, tier={}, players={}",
                 run.spawnerPos(), entityDefinition.mobId(), diff, players.size());
@@ -311,10 +328,24 @@ public final class RaidRunLifecycle {
         }
 
         Entity bossEntity = bossWorld.getEntity(bossUuid);
+        if (bossEntity != null && bossEntity.isRemoved() && !bossEntity.getRemovalReason().shouldDestroy()) {
+            bossEntity = null; // unloaded to its chunk (or moved away), not dead
+        }
         if (bossEntity == null) {
-            handleLoss(world, controller, run, "Boss entity disappeared.");
+            if (waitForMissingBoss(world, bossWorld, controller, run)) {
+                // The fight is paused (no timer, no regeneration) until the boss is back.
+                tickDownedPlayers(world, run);
+                tickDisconnectedPlayers(world, controller, run);
+            }
             return;
         }
+        if (run.bossMissingSince() >= 0) {
+            ArenasLdMod.LOGGER.info("Raid at {}: boss {} is loaded again after {} ticks, the fight goes on.",
+                run.spawnerPos(), bossUuid, world.getGameTime() - run.bossMissingSince());
+            run.setBossMissingSince(-1L);
+            run.setBossMissingLoadedSince(-1L);
+        }
+        trackBoss(world, controller, run, bossEntity);
 
         if (!bossEntity.isAlive()) {
             handleWin(world, controller, run);
@@ -526,10 +557,7 @@ public final class RaidRunLifecycle {
                 handleLoss(world, controller, run, "Ended by an admin.", true);
             }
             case CLOSING -> finalizeRun(world, controller, run);
-            case DONE -> {
-                discardBoss(world, run);
-                finalizeRun(world, controller, run);
-            }
+            case DONE -> finalizeRun(world, controller, run); // discards the boss too
         }
         return true;
     }
@@ -597,10 +625,16 @@ public final class RaidRunLifecycle {
     }
 
     /**
-     * Pulls a single player out of a battle that has already ended (CLOSING phase) before the
-     * shared close timer elapses. Mirrors {@code DungeonRunLifecycle#exitEarly}.
+     * Pulls a single player out of their raid before its shared timers elapse. Mirrors
+     * {@code DungeonRunLifecycle#exitEarly}:
+     * <ul>
+     *   <li>CLOSING — the battle already ended; they skip the close-timer wait.</li>
+     *   <li>STARTING/RUNNING — a voluntary mid-run forfeit: they're sent home and removed (no
+     *       rewards), and the raid goes on for the rest of the party, or is lost next tick if
+     *       nobody is left in it.</li>
+     * </ul>
      *
-     * @return true if the player was in a finished raid and was removed; false otherwise.
+     * @return true if the player was in a raid and was removed; false otherwise.
      */
     public static boolean exitEarly(net.minecraft.server.MinecraftServer server, ServerPlayer player) {
         UUID uuid = player.getUUID();
@@ -609,9 +643,10 @@ public final class RaidRunLifecycle {
             if (world == null) continue;
             if (!(world.getBlockEntity(key.pos()) instanceof RaidControllerBlockEntity controller)) continue;
             for (RaidRun run : controller.getActiveRuns().values()) {
-                if (run.phase() != RaidPhase.CLOSING) continue;
+                if (run.phase() == RaidPhase.DONE) continue;
                 RunParticipant participant = run.participants().get(uuid);
                 if (participant == null || participant.status() == ParticipantStatus.REMOVED) continue;
+                boolean midRun = run.phase() != RaidPhase.CLOSING;
 
                 restoreToReturnPoint(world, run, uuid);
                 run.removeReturnPoint(uuid);
@@ -621,6 +656,15 @@ public final class RaidRunLifecycle {
                 BusyStateCompat.clearBusy(uuid, BUSY_REASON);
                 removeFromPartyTeam(world, run, participant.playerName());
                 RunHudSync.hide(player);
+
+                if (midRun) {
+                    // Forfeit: no rewards for the leaver; tickRunning loses the raid if nobody is left.
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.raid.exited_mid_run")
+                        .withStyle(ChatFormatting.YELLOW));
+                    broadcastToParty(world, run, Component.translatable("message.arenas_ld.raid.party_exited",
+                        participant.playerName()).withStyle(ChatFormatting.YELLOW), uuid);
+                    return true;
+                }
 
                 boolean anyRemaining = run.participants().values().stream()
                     .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
@@ -656,6 +700,9 @@ public final class RaidRunLifecycle {
      */
     private static void finalizeRun(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run,
                                     boolean spawnerLevel) {
+        // Whatever ended the run, its boss must not outlive it (a loss already discarded it; a won
+        // boss is dead). One not loaded now is swept by the next battle here.
+        discardBoss(world, run);
         for (UUID uuid : run.participants().keySet()) {
             // Players return to where they were when the run started (captured on entry).
             restoreToReturnPoint(world, run, uuid);
@@ -668,6 +715,8 @@ public final class RaidRunLifecycle {
         if (spawner != null) {
             ArenasLdMod.RAID_BOSS_MANAGER.unregisterSpawner(spawner);
         }
+        RunChunkTickets.release(world.getServer(), chunkOwner(run));
+        run.setHeldBossChunk(null);
         // Notify the controller LAST: onRaidEnded removes the run from activeRuns and
         // releases the instance, so everything above must have run first.
         notifyController(world, controller, run, run.outcome() == RaidOutcome.WIN);
@@ -937,6 +986,163 @@ public final class RaidRunLifecycle {
 
     private static int resolveRespawnTimeTicks(@Nullable RaidControllerBlockEntity controller) {
         return controller != null ? controller.getRespawnTimeTicks() : DOWNED_RESPAWN_TICKS;
+    }
+
+    // ── Chunk tickets and the boss's whereabouts ────────────────────────────────
+
+    /** How often (ticks) the boss's position is noted and its chunk ticket moved after it. */
+    private static final int BOSS_TRACK_INTERVAL = 20;
+    /** How often (ticks) a running raid sweeps its arena for bosses left by earlier runs. */
+    private static final int STRAY_SWEEP_INTERVAL = 100;
+    /** The stray-boss sweep box around the spawner: blocks each way horizontally / vertically. */
+    public static final int SWEEP_HORIZONTAL = 96;
+    public static final int SWEEP_VERTICAL = 64;
+
+    /** Who holds this run's chunk tickets: its instance (spawner dimension + position). */
+    public static RunChunkTickets.Owner chunkOwner(RaidRun run) {
+        return RunChunkTickets.owner(run.spawnerDimension(), run.spawnerPos());
+    }
+
+    /**
+     * Keeps the run's chunks loaded with tickets owned by its instance: the spawner, the entrance
+     * (in its own dimension) and the chunk the boss was last seen in (in the boss's dimension). A
+     * raid can't rely on its players for this: downed players are spectators, which may not load
+     * chunks, and the boss may stand far from the spawner.
+     */
+    static void holdChunks(ServerLevel world, RaidRun run) {
+        Set<RunChunkTickets.HeldChunk> chunks = new HashSet<>();
+        chunks.add(new RunChunkTickets.HeldChunk(run.spawnerDimension(), new ChunkPos(run.spawnerPos())));
+        RaidBossSpawnerBlockEntity spawner = spawnerFor(world, run);
+        if (spawner != null) {
+            ResourceKey<Level> entranceDim = spawner.getEntranceDimension() != null
+                ? spawner.getEntranceDimension() : run.spawnerDimension();
+            chunks.add(new RunChunkTickets.HeldChunk(entranceDim, new ChunkPos(spawner.getAbsoluteEntrancePos())));
+        }
+        RunChunkTickets.HeldChunk bossChunk = bossChunk(run);
+        chunks.add(bossChunk);
+        run.setHeldBossChunk(bossChunk);
+        RunChunkTickets.hold(world.getServer(), chunkOwner(run), chunks);
+    }
+
+    /** The chunk the boss was last seen in, in its dimension (the spawner's when not known yet). */
+    private static RunChunkTickets.HeldChunk bossChunk(RaidRun run) {
+        ResourceKey<Level> dim = run.bossDimension() != null ? run.bossDimension() : run.spawnerDimension();
+        BlockPos pos = run.bossLastPos() != null ? run.bossLastPos() : run.spawnerPos();
+        return new RunChunkTickets.HeldChunk(dim, new ChunkPos(pos));
+    }
+
+    /** Moves the boss-chunk ticket when the boss's last-known chunk is not the one held. */
+    private static void followBossChunk(ServerLevel world, RaidRun run) {
+        if (!Objects.equals(bossChunk(run), run.heldBossChunk()) || !RunChunkTickets.isHeld(chunkOwner(run))) {
+            holdChunks(world, run);
+        }
+    }
+
+    /** Once a second: notes where the boss is (saved with the run) and keeps its chunk held. */
+    private static void trackBoss(ServerLevel world, RaidControllerBlockEntity controller, RaidRun run, Entity boss) {
+        long now = world.getGameTime();
+        if (run.bossLastPos() != null && now % BOSS_TRACK_INTERVAL != 0) {
+            return;
+        }
+        BlockPos pos = boss.blockPosition();
+        if (!pos.equals(run.bossLastPos())) {
+            run.setBossLastPos(pos);
+            controller.setChanged();
+        }
+        followBossChunk(world, run);
+        if ((now - run.startTick()) % STRAY_SWEEP_INTERVAL < BOSS_TRACK_INTERVAL
+                && world.dimension().equals(boss.level().dimension())) {
+            // A boss left by an earlier run whose chunk only loaded now (players walked near it).
+            sweepStrayBosses(world, run.spawnerPos(), boss.getType());
+        }
+    }
+
+    /**
+     * The boss isn't found. It is usually not gone but unloaded with its chunk (saved to disk):
+     * take a ticket on its last-known chunk and wait for the entities there to load, which takes a
+     * few ticks. Lost only as {@link BossPresence#decide} says.
+     *
+     * @return true while waiting; false when the raid was lost
+     */
+    private static boolean waitForMissingBoss(ServerLevel world, ServerLevel bossWorld,
+                                              RaidControllerBlockEntity controller, RaidRun run) {
+        long now = world.getGameTime();
+        BlockPos last = run.bossLastPos() != null ? run.bossLastPos() : run.spawnerPos();
+        ChunkPos chunk = new ChunkPos(last);
+        boolean entitiesLoaded = bossWorld.areEntitiesLoaded(chunk.toLong());
+        if (run.bossMissingSince() < 0) {
+            run.setBossMissingSince(now);
+            run.setBossMissingLoadedSince(-1L);
+            ArenasLdMod.LOGGER.info("Raid at {}: boss {} is not loaded (last seen at {} in {}, entities there loaded: {});"
+                    + " waiting for it to load.", run.spawnerPos(), run.bossUuid(),
+                run.bossLastPos() != null ? run.bossLastPos().toShortString() : "unknown",
+                bossWorld.dimension().location(), entitiesLoaded);
+        }
+        if (entitiesLoaded) {
+            if (run.bossMissingLoadedSince() < 0) {
+                run.setBossMissingLoadedSince(now);
+            }
+        } else {
+            run.setBossMissingLoadedSince(-1L);
+            followBossChunk(world, run);
+        }
+        long missingFor = now - run.bossMissingSince();
+        long loadedFor = entitiesLoaded ? now - run.bossMissingLoadedSince() : -1L;
+        if (BossPresence.decide(missingFor, loadedFor) == BossPresence.Verdict.LOSE) {
+            handleLoss(world, controller, run, "Boss entity disappeared (not found for " + missingFor
+                + " ticks; last seen at " + (run.bossLastPos() != null ? run.bossLastPos().toShortString() : "unknown")
+                + ", entities there loaded: " + entitiesLoaded + ").");
+            return false;
+        }
+        return true;
+    }
+
+    /** The bosses of every raid run going on now, on every loaded raid controller. */
+    private static Set<UUID> activeRaidBosses(MinecraftServer server) {
+        Set<UUID> bosses = new HashSet<>();
+        for (ControllerKey key : RaidControllerBlockEntity.getControllers()) {
+            ServerLevel level = server.getLevel(key.dimension());
+            if (level == null) continue;
+            if (level.getBlockEntity(key.pos()) instanceof RaidControllerBlockEntity controller) {
+                for (RaidRun run : controller.getActiveRuns().values()) {
+                    if (run.bossUuid() != null) {
+                        bosses.add(run.bossUuid());
+                    }
+                }
+            }
+        }
+        return bosses;
+    }
+
+    /**
+     * Discards loaded mobs of the boss's type around a raid spawner that were spawned by a run
+     * (they carry the run-mob tag) but are the boss of no raid going on now: bosses left behind
+     * by runs that ended while their chunk was unloaded. Minions are left to {@code RunMinions}
+     * (they vanish with their discarded summoner). The box is {@link #SWEEP_HORIZONTAL} blocks
+     * each way horizontally and {@link #SWEEP_VERTICAL} up and down, within the build height.
+     *
+     * @return how many were discarded
+     */
+    public static int sweepStrayBosses(ServerLevel level, BlockPos spawnerPos, EntityType<?> bossType) {
+        Set<UUID> active = activeRaidBosses(level.getServer());
+        AABB box = new AABB(
+            spawnerPos.getX() - SWEEP_HORIZONTAL, Math.max(level.getMinBuildHeight(), spawnerPos.getY() - SWEEP_VERTICAL),
+            spawnerPos.getZ() - SWEEP_HORIZONTAL,
+            spawnerPos.getX() + SWEEP_HORIZONTAL + 1, Math.min(level.getMaxBuildHeight(), spawnerPos.getY() + SWEEP_VERTICAL + 1),
+            spawnerPos.getZ() + SWEEP_HORIZONTAL + 1);
+        List<? extends Entity> strays = level.getEntities(bossType, box, entity -> entity.isAlive()
+            && entity.getTags().contains(EntityEquipmentHelper.RUN_MOB_TAG)
+            && !RunMinions.isMinion(entity)
+            && !active.contains(entity.getUUID()));
+        for (Entity stray : strays) {
+            ArenasLdMod.LOGGER.info("Raid at {}: discarding a stray {} left by an earlier run at {}.",
+                spawnerPos, BuiltInRegistries.ENTITY_TYPE.getKey(bossType), stray.blockPosition().toShortString());
+            stray.discard();
+        }
+        if (!strays.isEmpty()) {
+            ArenasLdMod.LOGGER.info("Raid at {}: discarded {} stray boss(es).", spawnerPos, strays.size());
+        }
+        return strays.size();
     }
 
     // ── Status (ArenasApi.status) ───────────────────────────────────────────────

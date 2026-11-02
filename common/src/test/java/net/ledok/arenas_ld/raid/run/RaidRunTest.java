@@ -159,4 +159,21 @@ class RaidRunTest {
         assertNull(decoded.bossUuid());
         assertNull(decoded.bossDimension());
     }
+
+    @Test
+    void codecKeepsBossLastPosAndOldSavesHaveNone() {
+        RaidRun original = freshRun();
+        original.setBossRef(BOSS_UUID, Level.OVERWORLD);
+        original.setBossLastPos(new BlockPos(6, 106, 77));
+        Tag encoded = RaidRun.CODEC.encodeStart(NbtOps.INSTANCE, original).getOrThrow();
+        RaidRun decoded = RaidRun.CODEC.parse(NbtOps.INSTANCE, encoded).getOrThrow();
+        assertEquals(new BlockPos(6, 106, 77), decoded.bossLastPos());
+
+        // A save from before 4.12.0 has no bossLastPos: unknown, not an error.
+        net.minecraft.nbt.CompoundTag old = (net.minecraft.nbt.CompoundTag) encoded.copy();
+        old.remove("bossLastPos");
+        RaidRun legacy = RaidRun.CODEC.parse(NbtOps.INSTANCE, old).getOrThrow();
+        assertNull(legacy.bossLastPos());
+        assertEquals(BOSS_UUID, legacy.bossUuid());
+    }
 }

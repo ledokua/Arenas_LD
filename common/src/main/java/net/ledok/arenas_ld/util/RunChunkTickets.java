@@ -51,6 +51,11 @@ public final class RunChunkTickets {
         return HELD.containsKey(owner);
     }
 
+    /** The chunks this owner holds tickets on now (empty when none). */
+    public static Set<HeldChunk> held(Owner owner) {
+        return HELD.getOrDefault(owner, Set.of());
+    }
+
     /** Takes tickets on {@code chunks}, replacing whatever this owner held before. */
     public static void hold(MinecraftServer server, Owner owner, Set<HeldChunk> chunks) {
         release(server, owner);

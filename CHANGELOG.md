@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.12.0
+
+- **`/exit` works mid-run in raids and arenas**, as it already did in dungeons. It's a forfeit: the
+  player goes home at once (game mode and health restored, busy cleared, off the party team), gets no
+  rewards from that run, and the party is told. The run goes on for the others; if nobody is left, a
+  raid is lost and an arena run ends as abandoned on the next tick. Before, `/exit` only worked once
+  a raid or arena run was over.
+- An arena run whose remaining players all left with `/exit` now ends as abandoned (a forfeiter who
+  stays online no longer counts as still in it).
+- Fixed: a raid could lose its boss when the boss's chunk unloaded ("Boss entity disappeared" with
+  the boss alive and saved in its chunk), and the next party found two bosses. Raids now hold chunk
+  tickets on the spawner, the entrance and the boss's chunk (following the boss, whose last position
+  is saved with the run), wait for an unloaded boss to load instead of losing at once (lost only
+  after 5 s with its chunk loaded and no boss, or 30 s in all; the timer pauses meanwhile), discard
+  their boss whatever ends the run, and sweep the arena for stray run-spawned mobs of the boss's
+  type at battle start and every 5 s while running.
+
 ## 4.11.0
 
 - **Commands on win** for dungeon and raid tiers: each tier tab of the Dungeon and Raid Controller
