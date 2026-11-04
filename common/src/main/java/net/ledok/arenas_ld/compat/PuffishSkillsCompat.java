@@ -1,6 +1,5 @@
 package net.ledok.arenas_ld.compat;
 
-import net.ledok.arenas_ld.ArenasLdMod;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
@@ -22,7 +21,7 @@ public class PuffishSkillsCompat {
             return 0;
         }
         // Use the skill tree ID from the config file.
-        Optional<Category> skillTree = SkillsAPI.getCategory(ResourceLocation.tryParse(ArenasLdMod.CONFIG.puffish_skills_tree_id));
+        Optional<Category> skillTree = SkillsAPI.getCategory(ResourceLocation.tryParse(net.ledok.arenas_ld.config.ArenasLdConfig.getInstance().puffish_skills_tree_id));
         return skillTree.map(tree -> tree.getPointsTotal(serverPlayer)).orElse(0);
     }
 
@@ -33,7 +32,7 @@ public class PuffishSkillsCompat {
      */
     public static void addExperience(ServerPlayer player, int amount) {
         // Find the skill tree using the ID from your config file.
-        Optional<Category> skillTree = SkillsAPI.getCategory(ResourceLocation.tryParse(ArenasLdMod.CONFIG.puffish_skills_tree_id));
+        Optional<Category> skillTree = SkillsAPI.getCategory(ResourceLocation.tryParse(net.ledok.arenas_ld.config.ArenasLdConfig.getInstance().puffish_skills_tree_id));
 
         // If the category exists, get its experience handler and add the experience.
         skillTree.ifPresent(category -> {

@@ -730,6 +730,7 @@
   "message.arenas_ld.lobby_owner_transferred": "You are now the lobby owner.",
   "message.arenas_ld.raid_out_of_bounds": "You were moved back into the raid area.",
   "message.arenas_ld.config_reloaded": "Arenas LD config reloaded!",
+  "message.arenas_ld.config_reload_failed": "Arenas LD config could not be read; the previous settings stay in effect. See the server log.",
   "gui.arenas_ld.accept": "Accept",
   "gui.arenas_ld.decline": "Decline",
   "gui.arenas_ld.hardcore": "Hardcore",

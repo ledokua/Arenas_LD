@@ -36,7 +36,10 @@ public class CommandRegistry {
             .then(literal("reload")
                 .requires(source -> source.hasPermission(2))
                 .executes(context -> {
-                    ArenasLdConfig.reload();
+                    if (!ArenasLdConfig.reload()) {
+                        context.getSource().sendFailure(Component.translatable("message.arenas_ld.config_reload_failed"));
+                        return 0;
+                    }
                     context.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.config_reloaded"), true);
                     return 1;
                 }))

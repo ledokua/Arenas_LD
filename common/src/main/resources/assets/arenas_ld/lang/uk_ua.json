@@ -730,6 +730,7 @@
   "message.arenas_ld.lobby_owner_transferred": "Тепер ви власник лобі.",
   "message.arenas_ld.raid_out_of_bounds": "Вас повернуто в межі рейду.",
   "message.arenas_ld.config_reloaded": "Конфігурацію Arenas LD перезавантажено!",
+  "message.arenas_ld.config_reload_failed": "Не вдалося прочитати конфігурацію Arenas LD; діють попередні налаштування. Подробиці в журналі сервера.",
   "gui.arenas_ld.accept": "Прийняти",
   "gui.arenas_ld.decline": "Відхилити",
   "gui.arenas_ld.hardcore": "Хардкор",

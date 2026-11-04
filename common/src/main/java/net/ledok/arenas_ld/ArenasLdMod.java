@@ -18,7 +18,10 @@ public class ArenasLdMod {
 
     public static final RaidBossManager RAID_BOSS_MANAGER = new RaidBossManager();
     public static final DungeonManager DUNGEON_MANAGER = new DungeonManager();
-    public static final ArenasLdConfig CONFIG = ArenasLdConfig.load();
+    /** @deprecated Snapshot taken at class init; it goes stale on {@code /arenasld reload}.
+     *  Use {@link ArenasLdConfig#getInstance()}. */
+    @Deprecated
+    public static final ArenasLdConfig CONFIG = ArenasLdConfig.getInstance();
 
     /** Full Fabric-style init: content registration plus runtime wiring. Loader events and packets
      *  are only recorded here (ArenasEvents, ArenasNetwork); the loader glue wires them. */

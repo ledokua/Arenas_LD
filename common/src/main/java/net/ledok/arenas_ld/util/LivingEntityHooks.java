@@ -60,7 +60,7 @@ public final class LivingEntityHooks {
         if (source == null) {
             return true;
         }
-        String filter = ArenasLdMod.CONFIG.dungeon_damage_source_filter;
+        String filter = net.ledok.arenas_ld.config.ArenasLdConfig.getInstance().dungeon_damage_source_filter;
         if (filter == null) {
             return true;
         }

@@ -2,18 +2,28 @@ package net.ledok.arenas_ld.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
 import net.ledok.arenas_ld.ArenasLdMod;
 
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import net.ledok.arenas_ld.platform.ArenasPlatform;
 
+/**
+ * The mod's JSON config. Always read it through {@link #getInstance()} — {@link #reload()} replaces
+ * the instance, so a reference kept elsewhere goes stale after {@code /arenasld reload}.
+ */
 public class ArenasLdConfig {
     private static final Path CONFIG_PATH = ArenasPlatform.INSTANCE.configDir().resolve(ArenasLdMod.MOD_ID + ".json");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static ArenasLdConfig instance;
+    private static volatile ArenasLdConfig instance;
 
     // Config fields with default values
     public String puffish_skills_tree_id = "puffish_skills:combat";
@@ -36,34 +46,94 @@ public class ArenasLdConfig {
     public int downed_spectator_radius = 16;
 
     public static ArenasLdConfig getInstance() {
-        if (instance == null) {
-            instance = load();
-        }
-        return instance;
-    }
-
-    public static ArenasLdConfig load() {
-        try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
-            instance = GSON.fromJson(reader, ArenasLdConfig.class);
-            if (instance == null) {
-                instance = new ArenasLdConfig();
+        ArenasLdConfig current = instance;
+        if (current == null) {
+            synchronized (ArenasLdConfig.class) {
+                if (instance == null) {
+                    read();
+                }
+                current = instance;
             }
-        } catch (IOException e) {
-            instance = new ArenasLdConfig();
         }
-        save();
+        return current;
+    }
+
+    /** Loads (or reloads) the config and returns the instance now in effect. */
+    public static ArenasLdConfig load() {
+        read();
         return instance;
     }
 
-    public static void save() {
-        try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
-            GSON.toJson(instance, writer);
+    /**
+     * Re-reads the config file. Returns false when the file could not be read or parsed; the
+     * config then in effect stays as it was (defaults on first load), and the file is left
+     * untouched so the admin's edits are not overwritten.
+     */
+    public static synchronized boolean reload() {
+        return read();
+    }
+
+    private static synchronized boolean read() {
+        ArenasLdConfig loaded;
+        if (Files.notExists(CONFIG_PATH)) {
+            loaded = new ArenasLdConfig();
+        } else {
+            try (Reader reader = Files.newBufferedReader(CONFIG_PATH, StandardCharsets.UTF_8)) {
+                loaded = GSON.fromJson(reader, ArenasLdConfig.class);
+            } catch (IOException | JsonParseException e) {
+                ArenasLdMod.LOGGER.error("Failed to read Arenas LD config {} — keeping the {} settings; "
+                        + "fix the file and run /arenasld reload", CONFIG_PATH,
+                    instance == null ? "default" : "previous", e);
+                if (instance == null) {
+                    instance = new ArenasLdConfig();
+                }
+                return false;
+            }
+            if (loaded == null) { // empty file
+                loaded = new ArenasLdConfig();
+            }
+        }
+        loaded.sanitize();
+        instance = loaded;
+        // Writes back so keys added by a newer mod version appear in the file.
+        save();
+        return true;
+    }
+
+    /** Explicit JSON nulls would otherwise reach callers that iterate these lists. */
+    private void sanitize() {
+        if (run_item_blacklist == null) {
+            run_item_blacklist = new ArrayList<>();
+        }
+        if (run_effect_blacklist == null) {
+            run_effect_blacklist = new ArrayList<>();
+        }
+        if (dungeon_damage_source_filter == null) {
+            dungeon_damage_source_filter = "ALL";
+        }
+        if (puffish_skills_tree_id == null) {
+            puffish_skills_tree_id = "puffish_skills:combat";
+        }
+    }
+
+    /** Writes the current config through a temp file, so a crash mid-write cannot truncate it. */
+    public static synchronized void save() {
+        if (instance == null) {
+            return;
+        }
+        Path tmp = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
+        try {
+            Files.createDirectories(CONFIG_PATH.getParent());
+            try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
+                GSON.toJson(instance, writer);
+            }
+            try {
+                Files.move(tmp, CONFIG_PATH, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmp, CONFIG_PATH, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             ArenasLdMod.LOGGER.error("Failed to save Arenas LD config", e);
         }
-    }
-
-    public static void reload() {
-        load();
     }
 }
