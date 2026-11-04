@@ -41,7 +41,7 @@
     "fabric": "*",
     "minecraft": "${minecraft_version}",
     "busylib": "*",
-    "vectorlib": ">=0.2.6"
+    "vectorlib": ">=0.7.2"
   },
   "suggests": {
     "economy_ld": "*"

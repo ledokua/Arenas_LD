@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+env:
+  # VectorLib is not on a public Maven, so CI builds it from source into ~/.m2 (mavenLocal) first.
+  # Keep this commit in step with vectorlib_version in gradle.properties (9be5c1c = "Release 0.7.2").
+  VECTORLIB_REF: 9be5c1cc5eaaecf7c904022405551d31fbdf2edd
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,6 +31,28 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
+
+      - name: Cache VectorLib
+        id: vectorlib-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/net/ledok
+          key: vectorlib-${{ env.VECTORLIB_REF }}
+
+      - name: Checkout VectorLib
+        if: steps.vectorlib-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ledokua/VectorLib
+          ref: ${{ env.VECTORLIB_REF }}
+          path: vectorlib
+
+      - name: Publish VectorLib to mavenLocal
+        if: steps.vectorlib-cache.outputs.cache-hit != 'true'
+        working-directory: vectorlib
+        run: |
+          chmod +x gradlew
+          ./gradlew publishToMavenLocal --no-daemon --stacktrace
 
       - name: Grant execute permission to gradlew
         run: chmod +x gradlew

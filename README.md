@@ -1081,7 +1081,7 @@ entries. Eden_LD's Activities tab uses it; Arenas_LD never depends on its caller
 | Mod | Required | What it adds |
 |---|---|---|
 | Fabric API | Fabric only | Required on Fabric. The NeoForge build needs nothing extra — no Forgified Fabric API; the shared code talks to each loader through its own small platform layer. |
-| VectorLib ≥ 0.2.6 | yes | Every screen and HUD. **Bundled in both jars** — no separate download. |
+| VectorLib ≥ 0.7.2 | yes | Every screen and HUD. **Bundled in both jars** — no separate download. |
 | [BusyLib](https://github.com/ledokua/BusyLib) | yes | The cross-mod "player is busy" flag that stops a player being in two activities at once. **Not bundled**, and it has no published release yet — build it from source (`./gradlew build`) and drop the jar in the server's `mods/` folder next to Arenas_LD. |
 | Economy_LD | optional | Currency rewards and the inbox that delivers loot to offline players or a full inventory. Without it, currency is skipped silently and an offline player's items are logged and lost. |
 | [Pufferfish's Skills](https://modrinth.com/mod/pufferfishs-skills) | optional | Skill XP on tier and room rewards. Every call is guarded, so the XP part of a reward is simply skipped when absent. |
