@@ -323,6 +323,11 @@ public class RaidControllerBlockEntity extends BlockEntity
             if (spawnerLevel == null) continue;
             RaidRunLifecycle.tick(spawnerLevel, this, run);
         }
+        // Run state (timers, phases, participants, return points) changes every tick, yet nothing
+        // else marks this chunk unsaved; without this, a restart can bring back stale run state
+        // (a player who left listed as ACTIVE, a finished run as RUNNING). Cheaper than
+        // setChanged(), which also pokes neighbouring comparators.
+        controllerLevel.blockEntityChanged(worldPosition);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -735,7 +740,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         for (int i = 0; i < instances.size(); i++) {
             RaidInstanceState inst = instances.get(i);
             if (inst.spawnerPos().equals(spawnerPos) && inst.status() == InstanceStatus.RUNNING) {
-                int cooldown = Math.max(0, respawnTimeTicks);
+                int cooldown = Math.max(0, cooldownTicks);
                 InstanceStatus next = cooldown > 0 ? InstanceStatus.COOLDOWN : InstanceStatus.FREE;
                 instances.set(i, inst.withStatus(next, cooldown));
                 return;

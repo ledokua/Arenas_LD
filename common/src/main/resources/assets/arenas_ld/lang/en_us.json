@@ -84,6 +84,7 @@
   "title.arenas_ld.defeat": "Defeat",
   "title.arenas_ld.dungeon.get_ready": "Get ready!",
   "title.arenas_ld.dungeon.go": "GO!",
+  "message.arenas_ld.dungeon.no_rooms": "Cannot start: this dungeon has no rooms. Link its Room Controllers to the dungeon boss spawner.",
   "message.arenas_ld.dungeon.no_start_final_marker": "Cannot start: mark a Start and a Final room on the dungeon boss spawner.",
   "message.arenas_ld.dungeon.start_room_no_entrance": "Cannot start: the Start room needs a boundary door (a door not shared with another room) as the way in.",
   "title.arenas_ld.wave": "Wave %s",

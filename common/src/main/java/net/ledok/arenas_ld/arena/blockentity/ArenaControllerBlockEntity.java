@@ -228,6 +228,11 @@ public class ArenaControllerBlockEntity extends BlockEntity
             if (spawnerLevel == null) continue;
             ArenaRunLifecycle.tick(spawnerLevel, this, run);
         }
+        // Run state (timers, phases, participants, return points) changes every tick, yet nothing
+        // else marks this chunk unsaved; without this, a restart can bring back stale run state
+        // (a player who left listed as ACTIVE, a finished run as RUNNING). Cheaper than
+        // setChanged(), which also pokes neighbouring comparators.
+        controllerLevel.blockEntityChanged(worldPosition);
     }
 
     // ── Accessors ──────────────────────────────────────────────────────────

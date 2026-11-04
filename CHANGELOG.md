@@ -1,5 +1,49 @@
 # Changelog
 
+## Unreleased
+
+**Security** (a modified client could do all of these):
+- The boss mob id, attribute and equipment editors of spawners had no permission check on save, so
+  any survival player could rewrite them. They now need creative or permission level 2, the same as
+  opening those screens.
+- Lobby and spawner-editor packets no longer load chunks at positions the client names. Spamming
+  them with far-away coordinates generated chunks on the server thread.
+- Client-sent list sizes are checked before anything is allocated. A forged size made the server
+  try to allocate gigabytes.
+- Room and spawner editor data (reward commands, loot tables, mob setups) is sent only to players
+  who can open those editors, instead of to everyone online.
+- Controllers no longer sync their saved state to nearby clients. That state included every run
+  participant's return point (where they came from, often their base), plus lobbies, invites and
+  tier configs with reward commands. Clients now get only the instance list, which is all the
+  Dungeon Tool overlay uses.
+- Reward commands skip a winner whose name isn't a plain Minecraft name, logging a warning. On
+  offline-mode servers a player named `@a` could turn `give @dungeonplayer …` into a command for
+  everyone. Floodgate's `.` prefix for Bedrock players is allowed.
+
+**Fixes:**
+- A player who left a raid (`/exit`, hardcore death, disconnect expiry) couldn't die until the raid
+  ended. Raid damage scaling and item restrictions also kept applying to them anywhere.
+- Raid instance cooldown used the "respawn time" setting instead of the cooldown setting.
+- A death penalty larger than the time left in an arena wave switched the wave timer off, so the
+  wave could no longer be lost on time. The wave now times out on the next tick.
+- An arena player who came back after the disconnect grace ran out was sent home, then teleported
+  back to their old entry point when the run ended.
+- A dungeon with no rooms linked was won on its first tick, with full rewards. Starting one now
+  fails with "this dungeon has no rooms", and if every room is unlinked mid-run it ends as a loss.
+- Active runs now mark their controller's chunk for saving every tick. Before, a restart could bring
+  back stale run state, such as a player who had left still listed as in the run.
+- An Economy_LD build without the newer `give`/`deliverItem` API turned off all currency rewards.
+  Economy_LD call failures are now logged instead of losing the reward silently.
+- One failing event listener no longer skips the others. For example, an error in one activity's
+  disconnect handling stopped the next activity from starting its grace timer.
+- Config: a syntax error in `arenas_ld.json` crashed the game on startup. The defaults (or, on
+  `/arenasld reload`, the previous settings) now stay in effect, and the file isn't overwritten.
+  `/arenasld reload` reports when the file couldn't be read. `dungeon_damage_source_filter` and
+  `puffish_skills_tree_id` weren't applied by a reload. Saves can no longer leave a truncated file.
+
+**Build:** VectorLib 0.7.2 (was 0.2.6). CI now builds VectorLib from its public repository first.
+Every CI run since the VectorLib migration had failed on the missing dependency.
+
 ## 4.14.0
 
 - **Downed players watch their party instead of flying free.** Downed run players (dungeon, raid,

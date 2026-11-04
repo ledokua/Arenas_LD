@@ -1358,11 +1358,19 @@ public class DungeonControllerBlockEntity extends BlockEntity
                 new net.ledok.arenas_ld.dungeon.packet.DungeonControllerSnapshotPayload(be.getScreenOpeningData(viewer)));
         }
 
+        if (be.activeRuns.isEmpty()) {
+            return;
+        }
         for (DungeonRun run : new ArrayList<>(be.activeRuns.values())) {
             // The run's DBS may live in a different dimension than this controller; tick it there.
             ServerLevel runLevel = serverLevel.getServer().getLevel(run.dbsDimension());
             DungeonRunLifecycle.tick(runLevel != null ? runLevel : serverLevel, be, run);
         }
+        // Run state (timers, phases, participants, return points) changes every tick, yet nothing
+        // else marks this chunk unsaved; without this, a restart can bring back stale run state
+        // (a player who left listed as ACTIVE, a finished run as RUNNING). Cheaper than
+        // setChanged(), which also pokes neighbouring comparators.
+        serverLevel.blockEntityChanged(pos);
     }
 
     /**

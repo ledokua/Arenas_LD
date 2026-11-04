@@ -1,5 +1,6 @@
 package net.ledok.arenas_ld.util;
 
+import net.ledok.arenas_ld.ArenasLdMod;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
 
@@ -23,14 +24,19 @@ public final class EconomyCompat {
             managerClass = Class.forName("net.ledok.economy_ld.manager.EconomyManager");
             getInstance = managerClass.getMethod("getInstance");
             currency = managerClass.getMethod("deliverCurrency", UUID.class, long.class, String.class);
-            item = managerClass.getMethod("deliverItem", UUID.class, ItemStack.class, int.class, String.class);
-            give = managerClass.getMethod("give", UUID.class, String.class, long.class);
-        } catch (Throwable ignored) {
+        } catch (ClassNotFoundException e) {
+            managerClass = null; // Economy_LD not installed
+        } catch (Throwable e) {
+            ArenasLdMod.LOGGER.warn("[Arenas] Economy_LD found but its API doesn't match; currency rewards are off", e);
             managerClass = null;
             getInstance = null;
             currency = null;
-            item = null;
-            give = null;
+        }
+        if (managerClass != null) {
+            // Optional: newer API. Looked up on their own so an older Economy_LD build keeps the
+            // required currency path working (giveCurrency falls back to deliverCurrency).
+            item = optionalMethod(managerClass, "deliverItem", UUID.class, ItemStack.class, int.class, String.class);
+            give = optionalMethod(managerClass, "give", UUID.class, String.class, long.class);
         }
         MANAGER_CLASS = managerClass;
         GET_INSTANCE = getInstance;
@@ -40,6 +46,21 @@ public final class EconomyCompat {
     }
 
     private EconomyCompat() {
+    }
+
+    private static Method optionalMethod(Class<?> owner, String name, Class<?>... parameterTypes) {
+        try {
+            return owner.getMethod(name, parameterTypes);
+        } catch (NoSuchMethodException e) {
+            return null;
+        }
+    }
+
+    /** A failed call loses a reward, so it must at least leave a trace in the log. */
+    private static void logFailure(String call, UUID playerUuid, Throwable t) {
+        Throwable cause = t instanceof java.lang.reflect.InvocationTargetException ite && ite.getCause() != null
+            ? ite.getCause() : t;
+        ArenasLdMod.LOGGER.warn("[Arenas] Economy_LD {} failed for {}; that reward was not delivered", call, playerUuid, cause);
     }
 
     public static boolean isAvailable() {
@@ -76,7 +97,8 @@ public final class EconomyCompat {
         }
         try {
             GIVE.invoke(instance, playerUuid, username, amount);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            logFailure("give", playerUuid, t);
         }
     }
 
@@ -90,7 +112,8 @@ public final class EconomyCompat {
         }
         try {
             DELIVER_CURRENCY.invoke(instance, playerUuid, amount, reason == null ? "ARENA_REWARD" : reason);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            logFailure("deliverCurrency", playerUuid, t);
         }
     }
 
@@ -117,7 +140,8 @@ public final class EconomyCompat {
         }
         try {
             DELIVER_ITEM.invoke(instance, playerUuid, stack, quantity, reason == null ? "ARENA_REWARD" : reason);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            logFailure("deliverItem", playerUuid, t);
         }
     }
 

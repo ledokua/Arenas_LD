@@ -50,14 +50,28 @@ public final class ArenasEvents {
 
     public static void fire(List<Consumer<MinecraftServer>> event, MinecraftServer server) {
         for (Consumer<MinecraftServer> listener : event) {
-            listener.accept(server);
+            // Isolated: one failing listener must not skip the others (e.g. a SERVER_STOPPED
+            // cleanup, leaking state into the next singleplayer world).
+            try {
+                listener.accept(server);
+            } catch (RuntimeException e) {
+                net.ledok.arenas_ld.ArenasLdMod.LOGGER.error("[Arenas] Server event listener failed", e);
+            }
         }
     }
 
     public static void firePlayer(List<BiConsumer<ServerPlayer, MinecraftServer>> event, ServerPlayer player,
                                   MinecraftServer server) {
         for (BiConsumer<ServerPlayer, MinecraftServer> listener : event) {
-            listener.accept(player, server);
+            // Isolated: listeners are raid, dungeon, arena, then spectator handling in turn; one
+            // failure must not skip the rest (a skipped disconnect handler never starts its grace
+            // timer) nor escape into vanilla's login/logout code.
+            try {
+                listener.accept(player, server);
+            } catch (RuntimeException e) {
+                net.ledok.arenas_ld.ArenasLdMod.LOGGER.error("[Arenas] Player event listener failed for {}",
+                    player.getGameProfile().getName(), e);
+            }
         }
     }
 }

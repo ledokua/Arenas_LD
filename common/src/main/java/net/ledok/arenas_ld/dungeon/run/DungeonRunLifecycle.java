@@ -87,12 +87,16 @@ public final class DungeonRunLifecycle {
         BlockEntity dbsBe = world.getBlockEntity(dbsPos);
         if (!(dbsBe instanceof DungeonBossSpawnerBlockEntity dbs)) return null;
 
-        // Branching dungeons need explicit Start/Final markers before a run may begin.
-        if (isBranching(world, dbs)) {
+        // A dungeon with no rooms would count as cleared on its first tick and pay out in full.
+        // Branching dungeons also need explicit Start/Final markers before a run may begin.
+        boolean branching = isBranching(world, dbs);
+        if (dbs.getRooms().isEmpty() || branching) {
             BlockPos startRoom = dbs.getAbsoluteStartRoomPos();
             BlockPos finalRoom = dbs.getAbsoluteFinalRoomPos();
             String errorKey = null;
-            if (startRoom == null || finalRoom == null) {
+            if (dbs.getRooms().isEmpty()) {
+                errorKey = "message.arenas_ld.dungeon.no_rooms";
+            } else if (startRoom == null || finalRoom == null) {
                 errorKey = "message.arenas_ld.dungeon.no_start_final_marker";
             } else if (!(world.getBlockEntity(startRoom) instanceof RoomControllerBlockEntity)) {
                 errorKey = "message.arenas_ld.dungeon.start_room_no_entrance";
@@ -267,6 +271,11 @@ public final class DungeonRunLifecycle {
         }
 
         List<BlockPos> rooms = dbs.getRooms();
+        if (rooms.isEmpty()) {
+            // Every room was unlinked mid-run: nothing was cleared, so this is no win.
+            handleLoss(world, controller, run, DungeonOutcome.LOSS_FORCED);
+            return;
+        }
         if (run.currentRoomIndex() >= rooms.size()) {
             handleWin(world, controller, run);
             return;

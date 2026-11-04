@@ -84,6 +84,7 @@
   "title.arenas_ld.defeat": "Поразка",
   "title.arenas_ld.dungeon.get_ready": "Приготуйтеся!",
   "title.arenas_ld.dungeon.go": "ВПЕРЕД!",
+  "message.arenas_ld.dungeon.no_rooms": "Неможливо почати: у підземеллі немає кімнат. Прив’яжіть контролери кімнат до спавнера боса.",
   "message.arenas_ld.dungeon.no_start_final_marker": "Неможливо почати: позначте Стартову і Фінальну кімнати на спавнері боса.",
   "message.arenas_ld.dungeon.start_room_no_entrance": "Неможливо почати: стартовій кімнаті потрібні межові двері (двері, не спільні з іншою кімнатою) як вхід.",
   "title.arenas_ld.wave": "Хвиля %s",

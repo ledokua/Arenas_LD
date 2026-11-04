@@ -877,7 +877,12 @@ public final class ArenaRunLifecycle {
 
         run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
         run.setDowned(new DownedPlayer(player.getUUID(), resolveRespawnTicks(controller)));
-        run.setWaveTicksRemaining(Math.max(0, run.waveTicksRemaining() - resolveDeathPenaltyTicks(controller)));
+        // 0 means "this wave has no timer", and the timeout fires on the tick that counts down to 0.
+        // So penalize only a running timer, and stop at 1: the next tick then times the wave out.
+        // Clamping to 0 here would switch the timer off and make the wave unlosable on time.
+        if (run.waveTicksRemaining() > 0) {
+            run.setWaveTicksRemaining(Math.max(1, run.waveTicksRemaining() - resolveDeathPenaltyTicks(controller)));
+        }
         player.setHealth(player.getMaxHealth());
         player.setGameMode(GameType.SPECTATOR);
         // Watching a teammate, or held near where they fell (not a free spectator).
@@ -924,6 +929,9 @@ public final class ArenaRunLifecycle {
         if (participant.status() == ParticipantStatus.REMOVED) {
             run.clearDowned(player.getUUID());
             restoreToReturnPoint(world, run, player.getUUID());
+            // Consumed, as exit and hardcore death-out do: otherwise finalizeRun restores them again
+            // when the run ends, pulling them back from wherever they have gone since.
+            run.removeReturnPoint(player.getUUID());
             return;
         }
         boolean downed = run.downedPlayers().containsKey(player.getUUID());
