@@ -30,7 +30,7 @@ public record UpdateMobSpawnerEntityDefPayload(BlockPos blockPos, String mobId, 
             String mobId = buf.readUtf();
             int spawnCount = buf.readVarInt();
             int wave = buf.readVarInt();
-            int offsetCount = buf.readVarInt();
+            int offsetCount = net.minecraft.network.codec.ByteBufCodecs.readCount(buf, net.ledok.arenas_ld.networking.ModPackets.MAX_C2S_LIST);
             List<BlockPos> offsets = new ArrayList<>(offsetCount);
             for (int i = 0; i < offsetCount; i++) {
                 offsets.add(buf.readBlockPos());

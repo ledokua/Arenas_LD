@@ -37,7 +37,7 @@ public record ArenaSpawnerSettingsPayload(
             int wt = buf.readVarInt(), at = buf.readVarInt(), tbw = buf.readVarInt();
             int pt = buf.readVarInt(), bwt = buf.readVarInt();
             int bn = buf.readVarInt(), en = buf.readVarInt(), on = buf.readVarInt();
-            int n = buf.readVarInt();
+            int n = net.minecraft.network.codec.ByteBufCodecs.readCount(buf, net.ledok.arenas_ld.networking.ModPackets.MAX_C2S_LIST);
             List<String> objs = new ArrayList<>(n);
             for (int i = 0; i < n; i++) objs.add(buf.readUtf());
             return new ArenaSpawnerSettingsPayload(pos, br, sd, as, eh, wt, at, tbw, pt, bwt, bn, en, on, objs);

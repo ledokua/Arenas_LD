@@ -34,6 +34,11 @@ public final class RewardCommands {
     private static final Pattern SELF = Pattern.compile("@s\\b");
     private static final Pattern SELF_EMPTY_ARGS = Pattern.compile("@s\\[\\s*]");
     private static final Pattern SELF_ARGS = Pattern.compile("@s\\[");
+    // What Mojang accounts allow. Offline-mode servers accept far more (vanilla only rejects
+    // control characters), and a name like "@a" would turn "give @dungeonplayer ..." into a
+    // command for everyone, run at permission level 2. The optional leading '.' is Floodgate's
+    // default prefix for Bedrock players; it can't change what a selector targets.
+    private static final Pattern SAFE_NAME = Pattern.compile("\\.?[A-Za-z0-9_]{1,16}");
 
     private RewardCommands() {
     }
@@ -81,6 +86,21 @@ public final class RewardCommands {
         return SELF.matcher(resolved).replaceAll(Matcher.quoteReplacement(playerName));
     }
 
+    /** Whether a player name can be substituted into a command without changing its meaning. */
+    public static boolean isSafePlayerName(String name) {
+        return name != null && SAFE_NAME.matcher(name).matches();
+    }
+
+    /** Runs a per-player command for one winner, unless their name could rewrite the command. */
+    private static void executeFor(CommandSourceStack source, String command, String playerName) {
+        if (!isSafePlayerName(playerName)) {
+            ArenasLdMod.LOGGER.warn("Skipping reward command '{}' for player '{}': the name is not a plain "
+                + "Minecraft name and could change what the command targets", command, playerName);
+            return;
+        }
+        execute(source, resolve(command, playerName));
+    }
+
     /**
      * Runs reward commands for a set of winners.
      *
@@ -112,7 +132,7 @@ public final class RewardCommands {
             for (UUID uuid : winners) {
                 ServerPlayer player = server.getPlayerList().getPlayer(uuid);
                 if (player != null) {
-                    execute(source, resolve(command, player.getGameProfile().getName()));
+                    executeFor(source, command, player.getGameProfile().getName());
                 } else if (queueOffline) {
                     PendingRewardCommandsStore.get(server).add(uuid, command);
                 }
@@ -151,7 +171,7 @@ public final class RewardCommands {
             .withSuppressedOutput();
         String name = player.getGameProfile().getName();
         for (String command : pending) {
-            execute(source, resolve(command, name));
+            executeFor(source, command, name);
         }
     }
 

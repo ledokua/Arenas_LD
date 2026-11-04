@@ -1630,7 +1630,8 @@ public class DungeonControllerBlockEntity extends BlockEntity
 
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registryLookup) {
-        return saveWithoutMetadata(registryLookup);
+        // Clients only need the instance list; runs, lobbies and tier configs stay on the server.
+        return net.ledok.arenas_ld.util.ControllerSyncTag.redact(saveWithoutMetadata(registryLookup));
     }
 
     @Override

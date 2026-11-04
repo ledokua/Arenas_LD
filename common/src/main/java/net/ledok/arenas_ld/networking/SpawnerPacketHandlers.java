@@ -81,7 +81,7 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(UpdateBossSpawnerPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 Level world = context.player().level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
+                BlockEntity be = editableSpawner(context.player(), payload.pos());
                 if (be instanceof RaidBossSpawnerBlockEntity blockEntity) {
                     blockEntity.setMobId(payload.mobId());
                     markDirtyAndSync(world, blockEntity);
@@ -92,7 +92,7 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(UpdateAttributesPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 Level world = context.player().level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
+                BlockEntity be = editableSpawner(context.player(), payload.pos());
                 if (be instanceof AttributeProvider provider) {
                     provider.setAttributes(payload.attributes());
                     markDirtyAndSync(world, be);
@@ -103,7 +103,7 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(UpdateEquipmentPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 Level world = context.player().level();
-                BlockEntity be = world.getBlockEntity(payload.pos());
+                BlockEntity be = editableSpawner(context.player(), payload.pos());
                 if (be instanceof EquipmentProvider provider) {
                     provider.setEquipment(payload.equipment());
                     markDirtyAndSync(world, be);
@@ -114,7 +114,7 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.networking.ModPackets.OpenEquipmentEditorPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayer player = context.player();
-                BlockEntity be = player.level().getBlockEntity(payload.pos());
+                BlockEntity be = editableSpawner(player, payload.pos());
                 if (be instanceof EquipmentProvider) {
                     ArenasMenus.open(player, new net.ledok.arenas_ld.screen.EquipmentMenuProvider(be));
                 }
@@ -965,6 +965,22 @@ public final class SpawnerPacketHandlers {
         host.syncViewers();
     }
 
+    /**
+     * The block entity a spawner-editor packet (boss mob id, attributes, equipment) targets, or null
+     * when the sender may not edit it. Same gate as opening those editors on the block — creative or
+     * permission level 2 — so a modified survival client can't rewrite spawners. Never loads a chunk:
+     * {@code getBlockEntity} on an unloaded position would load (or generate) it on the server thread.
+     * No reach check, as the Dungeon Tool opens these editors for spawners anywhere in the level.
+     */
+    private static BlockEntity editableSpawner(ServerPlayer player, net.minecraft.core.BlockPos pos) {
+        if (!canOpenSpawnerEditor(player)) {
+            player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+            return null;
+        }
+        Level world = player.level();
+        return world.isLoaded(pos) ? world.getBlockEntity(pos) : null;
+    }
+
     private static void markDirtyAndSync(Level world, BlockEntity blockEntity) {
         blockEntity.setChanged();
         world.sendBlockUpdated(blockEntity.getBlockPos(), blockEntity.getBlockState(), blockEntity.getBlockState(), 3);
@@ -1103,11 +1119,23 @@ public final class SpawnerPacketHandlers {
             lootTableId, effects, Math.max(0L, reward.currency()), Math.max(0, reward.skillXp()), commands);
     }
 
+    /**
+     * Who may receive a room/spawner editor snapshot: only players who could have that editor open
+     * (creative or permission level 2, the block's own gate). The snapshot carries reward commands,
+     * loot tables and mob setups, which other players have no business seeing.
+     */
+    private static boolean canOpenSpawnerEditor(ServerPlayer player) {
+        return player.isCreative() || player.hasPermissions(2);
+    }
+
     private static void broadcastRoomControllerSnapshot(ServerPlayer actor, RoomControllerBlockEntity room) {
         if (actor.server == null) {
             return;
         }
         for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
+            if (!canOpenSpawnerEditor(target)) {
+                continue;
+            }
             ArenasNetwork.sendToPlayer(target, new RoomControllerSnapshotPayload(room.getScreenOpeningData(target)));
         }
     }
@@ -1120,6 +1148,9 @@ public final class SpawnerPacketHandlers {
             return;
         }
         for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
+            if (!canOpenSpawnerEditor(target)) {
+                continue;
+            }
             ArenasNetwork.sendToPlayer(target, new MobSpawnerSnapshotPayload(spawner.getScreenOpeningData(target)));
         }
     }
@@ -1132,6 +1163,9 @@ public final class SpawnerPacketHandlers {
             return;
         }
         for (ServerPlayer target : actor.server.getPlayerList().getPlayers()) {
+            if (!canOpenSpawnerEditor(target)) {
+                continue;
+            }
             ArenasNetwork.sendToPlayer(target, new DungeonBossSpawnerSnapshotPayload(spawner.getScreenOpeningData(target)));
         }
     }

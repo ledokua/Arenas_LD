@@ -25,7 +25,7 @@ public record ArenaSpawnerRewardsPayload(BlockPos spawnerPos, List<MobArenaRewar
         },
         buf -> {
             BlockPos pos = buf.readBlockPos();
-            int n = buf.readVarInt();
+            int n = net.minecraft.network.codec.ByteBufCodecs.readCount(buf, net.ledok.arenas_ld.networking.ModPackets.MAX_C2S_LIST);
             List<MobArenaRewardData> rewards = new ArrayList<>(n);
             for (int i = 0; i < n; i++) {
                 CompoundTag tag = buf.readNbt();

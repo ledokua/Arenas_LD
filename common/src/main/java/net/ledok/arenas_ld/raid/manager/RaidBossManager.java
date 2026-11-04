@@ -56,13 +56,27 @@ public class RaidBossManager {
         }
     }
 
+    /**
+     * The raid an online player is still taking part in. Participants who already left it (exit,
+     * hardcore death, grace expiry) stay in the run's roster until it ends, but must not have their
+     * deaths intercepted (they'd be unkillable), their damage scaled or their items restricted.
+     */
     public RaidBossSpawnerBlockEntity getSpawnerForPlayer(ServerPlayer player) {
         if (player == null) {
             return null;
         }
-        return getSpawnerForOfflinePlayer(player.getUUID());
+        for (RaidBossSpawnerBlockEntity spawner : activeSpawners) {
+            if (spawner.isActiveParticipant(player.getUUID())) {
+                return spawner;
+            }
+        }
+        return null;
     }
 
+    /**
+     * The running raid that lists this player at all, including participants who already left it —
+     * reconnect handling needs those to send them home.
+     */
     public RaidBossSpawnerBlockEntity getSpawnerForOfflinePlayer(UUID uuid) {
         if (uuid == null) {
             return null;

@@ -34,6 +34,21 @@ import java.util.List;
 import java.util.UUID;
 
 public class ModPackets {
+    /**
+     * Upper bound on the element count of any list a client sends. A serverbound custom payload is at
+     * most 32767 bytes and every element takes at least one, so no honest list is longer; checking the
+     * count before allocating stops a forged varint from pre-sizing a multi-gigabyte array.
+     */
+    public static final int MAX_C2S_LIST = 32767;
+
+    /** List factory for {@code readCollection} that rejects a forged element count. */
+    static <T> java.util.List<T> boundedList(int size) {
+        if (size < 0 || size > MAX_C2S_LIST) {
+            throw new io.netty.handler.codec.DecoderException(size + " elements exceeds the limit of " + MAX_C2S_LIST);
+        }
+        return new java.util.ArrayList<>(size);
+    }
+
 
     public record UpdateBossSpawnerPayload(
             BlockPos pos, String mobId
@@ -166,7 +181,7 @@ public class ModPackets {
         public UpdateAttributesPayload(FriendlyByteBuf buf) {
             this(
                     buf.readBlockPos(),
-                    buf.readList(b -> new AttributeData(b.readUtf(), b.readDouble(), b.readDouble()))
+                    buf.readCollection(ModPackets::boundedList, b -> new AttributeData(b.readUtf(), b.readDouble(), b.readDouble()))
             );
         }
 

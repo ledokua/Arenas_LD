@@ -97,7 +97,9 @@ public final class LobbyScreens {
             BlockEntity be = level != null && level.isLoaded(pos) ? level.getBlockEntity(pos) : null;
             return type.isInstance(be) ? type.cast(be) : null;
         }
-        BlockEntity be = player.level().getBlockEntity(pos);
+        // isLoaded first: the position is client-supplied, and getBlockEntity would load (or
+        // generate) its chunk on the server thread — a lag lever for any player spamming packets.
+        BlockEntity be = player.level().isLoaded(pos) ? player.level().getBlockEntity(pos) : null;
         return type.isInstance(be) ? type.cast(be) : null;
     }
 

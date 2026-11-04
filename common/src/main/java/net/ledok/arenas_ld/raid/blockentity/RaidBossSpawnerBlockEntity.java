@@ -220,6 +220,16 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedM
         return run != null && run.participants().containsKey(playerId);
     }
 
+    /** Whether the player is in the running raid and has not left it (exit, hardcore death, grace expiry). */
+    public boolean isActiveParticipant(UUID playerId) {
+        if (playerId == null) return false;
+        RaidRun run = findRun();
+        if (run == null) return false;
+        net.ledok.arenas_ld.dungeon.run.RunParticipant participant = run.participants().get(playerId);
+        return participant != null
+            && participant.status() != net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus.REMOVED;
+    }
+
     public boolean isRaidRunning() {
         return findRun() != null;
     }

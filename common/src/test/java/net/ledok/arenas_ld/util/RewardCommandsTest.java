@@ -63,4 +63,18 @@ class RewardCommandsTest {
         // A name is inserted literally, never read as a regex replacement.
         assertEquals("tag A$1 add x", RewardCommands.resolve("tag @s add x", "A$1"));
     }
+
+    @Test
+    void onlyPlainNamesAreSafeToSubstitute() {
+        assertTrue(RewardCommands.isSafePlayerName("Steve_123"));
+        assertTrue(RewardCommands.isSafePlayerName(".BedrockSteve")); // Floodgate prefix
+        assertFalse(RewardCommands.isSafePlayerName("@a"));
+        assertFalse(RewardCommands.isSafePlayerName("!x"));
+        assertFalse(RewardCommands.isSafePlayerName("a,b"));
+        assertFalse(RewardCommands.isSafePlayerName("x]"));
+        assertFalse(RewardCommands.isSafePlayerName("two words"));
+        assertFalse(RewardCommands.isSafePlayerName(""));
+        assertFalse(RewardCommands.isSafePlayerName(null));
+        assertFalse(RewardCommands.isSafePlayerName("a".repeat(17)));
+    }
 }
