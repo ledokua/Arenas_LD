@@ -171,12 +171,21 @@ public final class ArenaRunLifecycle {
         pruneDeadMobs(world, run);
         updateWaveBossBar(world, run, spawner);
 
-        // Abandoned: nobody from the party is still in it and online (left with /exit, timed out).
+        // Abandoned: nobody from the party is still in it (left with /exit, timed out past grace).
+        boolean anyRemaining = run.participants().values().stream()
+            .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
+        if (!anyRemaining) {
+            handleLoss(world, controller, run, ArenaOutcome.ABANDONED, "All players left.");
+            return;
+        }
         boolean anyOnline = run.participants().values().stream()
             .filter(p -> p.status() != ParticipantStatus.REMOVED)
             .anyMatch(p -> world.getServer().getPlayerList().getPlayer(p.playerUuid()) != null);
         if (!anyOnline) {
-            handleLoss(world, controller, run, ArenaOutcome.ABANDONED, "All players left.");
+            // Everyone still in the run is away within disconnect grace (a dropped connection, a
+            // server restart): the run holds still — no wave timer, no wipe, no next wave — until
+            // someone is back or grace runs out for all of them. It used to be lost on the spot.
+            recordUnrecordedDisconnects(world, controller, run);
             return;
         }
 
@@ -954,12 +963,14 @@ public final class ArenaRunLifecycle {
         if (player == null || run == null) return;
         RunParticipant participant = run.participants().get(player.getUUID());
         if (participant == null || participant.status() == ParticipantStatus.REMOVED) return;
-        if (run.hardcoreEnabled()) {
+        // The disconnect every player gets when the server stops is no rage-quit: not a hardcore death.
+        if (run.hardcoreEnabled() && world.getServer().isRunning()) {
             run.clearDisconnected(player.getUUID());
             handlePlayerHardcoreDeath(world, run, player);
             return;
         }
         run.markDisconnected(player.getUUID(), world.getGameTime());
+        controller.setChanged(); // after the last tick at shutdown, so it reaches the save
         if (!run.downedPlayers().containsKey(player.getUUID())) {
             run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
             run.setDowned(new DownedPlayer(player.getUUID(), resolveRespawnTicks(controller)));
@@ -984,6 +995,21 @@ public final class ArenaRunLifecycle {
         if (!wasAway && !downed) {
             return; // never left the run (it started as they joined): nothing to restore
         }
+        boolean partyAway = run.participants().values().stream()
+            .filter(p -> p.status() != ParticipantStatus.REMOVED && !p.playerUuid().equals(player.getUUID()))
+            .noneMatch(p -> world.getServer().getPlayerList().getPlayer(p.playerUuid()) != null);
+        ArenaSpawnerBlockEntity spawner = spawnerFor(world, run);
+        if (wasAway && partyAway && spawner != null) {
+            // The whole party was away and the run held still. Nobody is standing to be revived
+            // with, and coming back downed as the only one here would read as a wipe: back in now.
+            run.clearDowned(player.getUUID());
+            run.updateParticipant(participant.withStatus(ParticipantStatus.ACTIVE, world.getGameTime()));
+            net.ledok.arenas_ld.util.DownedSpectators.release(player);
+            player.setGameMode(GameType.SURVIVAL);
+            player.setHealth(player.getMaxHealth());
+            teleportToRespawn(world, run, spawner, player);
+            return;
+        }
         // Still part of the run — they wait out the wave as a spectator and are revived next wave.
         // Downed again if a wave cleared while they were away (it revived them offline), or they
         // would stay a spectator to the end: reviveDowned only brings back the downed.
@@ -996,6 +1022,26 @@ public final class ArenaRunLifecycle {
         player.setGameMode(GameType.SPECTATOR);
         player.setHealth(player.getMaxHealth());
         net.ledok.arenas_ld.util.DownedSpectators.rejoined(player, net.ledok.arenas_ld.util.DownedSpectators.RunView.of(run));
+    }
+
+    /**
+     * Participants offline with no disconnect on record (the server stopped without one, a crash):
+     * handled as if they had just disconnected, so their grace starts now.
+     */
+    private static void recordUnrecordedDisconnects(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
+        long now = world.getGameTime();
+        for (RunParticipant participant : new ArrayList<>(run.participants().values())) {
+            UUID uuid = participant.playerUuid();
+            if (participant.status() == ParticipantStatus.REMOVED || run.disconnectedAt().containsKey(uuid)
+                    || world.getServer().getPlayerList().getPlayer(uuid) != null) {
+                continue;
+            }
+            run.markDisconnected(uuid, now);
+            if (!run.downedPlayers().containsKey(uuid)) {
+                run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, now));
+                run.setDowned(new DownedPlayer(uuid, resolveRespawnTicks(controller)));
+            }
+        }
     }
 
     private static void tickDisconnectedPlayers(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {

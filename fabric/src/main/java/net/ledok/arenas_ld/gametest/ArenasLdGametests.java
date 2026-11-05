@@ -118,6 +118,12 @@ public final class ArenasLdGametests implements FabricGameTest {
         });
     }
 
+    @GameTest(template = EMPTY_STRUCTURE, timeoutTicks = 400)
+    public void arenaDisconnectGrace(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.arenaDisconnectGrace(helper, player -> {
+        });
+    }
+
     @GameTest(template = EMPTY_STRUCTURE)
     public void arenaForfeit(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.arenaForfeit(helper, player -> {

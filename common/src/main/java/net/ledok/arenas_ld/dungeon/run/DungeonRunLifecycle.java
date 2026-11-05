@@ -247,12 +247,7 @@ public final class DungeonRunLifecycle {
             return;
         }
 
-        // Only non-removed participants count: a hardcore-dead player is still online but no longer
-        // in the run, so they must not keep an empty run alive.
-        boolean anyOnline = run.participants().entrySet().stream()
-            .anyMatch(e -> e.getValue().status() != ParticipantStatus.REMOVED
-                && world.getPlayerByUUID(e.getKey()) != null);
-        if (!anyOnline) {
+        if (!anyParticipantPresent(world, run)) {
             handleLoss(world, controller, run, DungeonOutcome.LOSS_ABANDONED);
             return;
         }
@@ -1083,6 +1078,35 @@ public final class DungeonRunLifecycle {
         }
     }
 
+    /**
+     * Whether anyone is still in the run: a non-removed participant who is online (in any
+     * dimension — the entrance may be in another one), or offline but still inside disconnect
+     * grace. Only when nobody is, the run is abandoned. It used to end the moment nobody was
+     * online in the boss spawner's level, so the last player's grace never applied: a dropped
+     * connection, and every server restart, lost the run.
+     *
+     * <p>A participant who is offline with no disconnect on record (the server stopped without one,
+     * a crash, or the run predates this check) starts their grace now.
+     */
+    private static boolean anyParticipantPresent(ServerLevel world, DungeonRun run) {
+        long now = world.getGameTime();
+        boolean present = false;
+        for (Map.Entry<UUID, RunParticipant> entry : new ArrayList<>(run.participants().entrySet())) {
+            RunParticipant participant = entry.getValue();
+            if (participant.status() == ParticipantStatus.REMOVED) {
+                continue; // a hardcore-dead or forfeited player must not keep an empty run alive
+            }
+            present = true;
+            UUID uuid = entry.getKey();
+            if (world.getServer().getPlayerList().getPlayer(uuid) == null && !run.isDisconnected(uuid)) {
+                DebugLog.log("tick: {} is offline with no disconnect on record; grace starts now", uuid);
+                run.updateParticipant(participant.withStatus(ParticipantStatus.DISCONNECTED, now));
+                run.markDisconnected(uuid, now);
+            }
+        }
+        return present;
+    }
+
     private static void tickDisconnectedPlayers(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
         long now = world.getGameTime();
         int grace = controller.getDisconnectGraceTicks();
@@ -1508,6 +1532,11 @@ public final class DungeonRunLifecycle {
         run.markDisconnected(uuid, now);
 
         DungeonControllerBlockEntity controller = ArenasLdMod.DUNGEON_MANAGER.findControllerForRun(server, run);
+        if (controller != null) {
+            // At shutdown this runs after the last tick (whose autosave may have saved the chunk
+            // already): mark it again so the disconnect is in the save and grace carries over.
+            controller.setChanged();
+        }
         int graceSeconds = controller != null ? Math.max(0, controller.getDisconnectGraceTicks() / 20) : 0;
         broadcastToParty(world, run, Component.translatable(
             "message.arenas_ld.dungeon.party_disconnected", participant.playerName(), graceSeconds)

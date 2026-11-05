@@ -55,7 +55,9 @@ public class ArenasLdMod {
         CommandRegistry.initialize();
         net.ledok.arenas_ld.util.ServerTaskScheduler.register();
         RAID_BOSS_MANAGER.initialize();
-        ArenasEvents.SERVER_STOPPING.add(server -> DUNGEON_MANAGER.clearForServerStop());
+        // STOPPED, not STOPPING: players are disconnected in between, and the dungeon's disconnect
+        // handling needs the manager to record them (their grace then carries over the restart).
+        ArenasEvents.SERVER_STOPPED.add(server -> DUNGEON_MANAGER.clearForServerStop());
         ArenasEvents.PLAYER_JOIN.add((player, server) -> net.ledok.arenas_ld.util.RunPartyTeams.leaveMobTeamOnLogin(player));
         DungeonConnectionListener.register();
         net.ledok.arenas_ld.arena.run.ArenaConnectionListener.register();

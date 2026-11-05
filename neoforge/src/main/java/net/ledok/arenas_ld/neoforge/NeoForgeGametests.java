@@ -130,6 +130,11 @@ public final class NeoForgeGametests {
         net.ledok.arenas_ld.gametest.ApiGameTests.adminForceEnd(helper, NeoForgeGametests::acceptModPayloads);
     }
 
+    @GameTest(template = "empty", timeoutTicks = 400)
+    public static void arenaDisconnectGrace(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.arenaDisconnectGrace(helper, NeoForgeGametests::acceptModPayloads);
+    }
+
     @GameTest(template = "empty")
     public static void arenaForfeit(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.arenaForfeit(helper, NeoForgeGametests::acceptModPayloads);

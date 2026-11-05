@@ -992,6 +992,56 @@ public final class ApiGameTests {
     }
 
     /**
+     * The only player of an arena run disconnects: the run holds still within disconnect grace
+     * instead of being lost on the spot, and when they come back they stand in it again (not
+     * downed, which with nobody else there would read as a wipe).
+     */
+    public static void arenaDisconnectGrace(GameTestHelper helper, Consumer<ServerPlayer> moddedClient) {
+        registerHooksOnce();
+        BlockPos controllerRel = new BlockPos(1, 1, 1);
+        BlockPos spawnerRel = new BlockPos(5, 1, 5);
+        helper.setBlock(controllerRel, BlockRegistry.ARENA_CONTROLLER_BLOCK);
+        helper.setBlock(spawnerRel, BlockRegistry.ARENA_SPAWNER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            ArenaControllerBlockEntity controller = helper.getBlockEntity(controllerRel);
+            ArenaSpawnerBlockEntity spawner = helper.getBlockEntity(spawnerRel);
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_grace_" + suffix());
+            helper.assertTrue(ActivityRegistry.changeId(controller, id.toString()) == null, "test id set");
+            spawner.setEntrancePosition(helper.absolutePos(new BlockPos(5, 1, 3)), level.dimension());
+            helper.assertTrue(controller.addInstance(helper.absolutePos(spawnerRel), level.dimension()), "instance linked");
+            BlockPos at = helper.absolutePos(new BlockPos(3, 1, 6));
+            ServerPlayer player = survivalPlayer(helper, at);
+            moddedClient.accept(player);
+            UUID uuid = player.getUUID();
+            helper.assertTrue(controller.createLobby(player) && controller.startRun(player), "the run starts");
+            server.getPlayerList().remove(player); // the connection drops
+            helper.runAfterDelay(40, () -> {
+                helper.assertTrue(results(id).isEmpty(), "the run is not lost while its player is away: " + results(id));
+                helper.assertTrue(controller.getActiveRuns().size() == 1, "the run is still going");
+                ServerPlayer back = survivalPlayer(helper, at, uuid);
+                moddedClient.accept(back);
+                java.util.function.Supplier<net.ledok.arenas_ld.dungeon.run.RunParticipant> participant = () ->
+                    controller.getActiveRuns().values().iterator().next().participants().get(uuid);
+                whenTrue(helper, 40, () -> participant.get() != null && participant.get().status()
+                        == net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus.ACTIVE,
+                    () -> "back in the run standing: " + participant.get(), () -> {
+                        try {
+                            helper.assertTrue(back.gameMode.getGameModeForPlayer() == net.minecraft.world.level.GameType.SURVIVAL,
+                                "in survival, not a spectator");
+                            helper.assertTrue(results(id).isEmpty(), "still not lost: " + results(id));
+                            helper.assertTrue(net.ledok.arenas_ld.arena.run.ArenaRunLifecycle.exitEarly(server, back), "they can leave");
+                        } finally {
+                            server.getPlayerList().remove(back);
+                        }
+                        helper.succeed();
+                    });
+            });
+        });
+    }
+
+    /**
      * /exit in the middle of an arena run: the player is sent out of it, and with nobody left the
      * run is lost as abandoned on its next tick (reported once, as a LOSS).
      *

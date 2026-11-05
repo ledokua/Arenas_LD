@@ -798,16 +798,20 @@ public final class RaidRunLifecycle {
         // Not a participant, or already removed past the grace window: nothing to track.
         if (participant == null || participant.status() == ParticipantStatus.REMOVED) return;
 
-        if (run.hardcoreEnabled()) {
+        // Every player is disconnected when the server stops: that is no rage-quit, so it neither
+        // counts as a hardcore death (wiping every hardcore raid on restart) nor costs time.
+        boolean serverStopping = !world.getServer().isRunning();
+        if (run.hardcoreEnabled() && !serverStopping) {
             run.clearDisconnected(player.getUUID());
             handlePlayerHardcoreDeath(world, run, player);
             return;
         }
 
         run.markDisconnected(player.getUUID(), world.getGameTime());
+        controller.setChanged(); // after the last tick at shutdown, so it reaches the save
         if (!run.downedPlayers().containsKey(player.getUUID())) {
             run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
-            if (run.resolvedTierConfig().raidTimeSeconds() > 0) {
+            if (run.resolvedTierConfig().raidTimeSeconds() > 0 && !serverStopping) {
                 run.setTimerTicks(Math.max(0, run.timerTicks() - resolveDeathTimePenaltyTicks(controller)));
             }
             run.setDowned(new DownedPlayer(player.getUUID(), resolveRespawnTimeTicks(controller)));

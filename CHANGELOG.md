@@ -41,6 +41,22 @@
   `/arenasld reload` reports when the file couldn't be read. `dungeon_damage_source_filter` and
   `puffish_skills_tree_id` weren't applied by a reload. Saves can no longer leave a truncated file.
 
+**Runs survive disconnects and restarts:**
+- Dungeon and arena runs were lost the moment nobody in them was online. A solo player's dropped
+  connection, and every server restart, ended the run, even though disconnect grace exists for that.
+  A run now ends as abandoned only once everyone still in it has stayed away past the grace.
+- A dungeon run counted only players in the boss spawner's dimension as online, so a party standing
+  at an entrance in another dimension was "gone".
+- While everyone in an arena run is away, the run holds still: no wave timer, no wipe, no next wave.
+  The first player back stands in it again, at a respawn point, instead of coming back downed. As the
+  only one there, coming back downed counted as a wipe.
+- Disconnects at server shutdown are now recorded (dungeon players were saved as still in the run),
+  and disconnect grace carries over the restart. A player offline with no disconnect on record, after
+  a crash, gets their grace from the first tick after the restart.
+- The disconnect every player gets when the server stops no longer counts as a hardcore death (it
+  wiped every hardcore raid and arena on restart). It also no longer costs a raid its death-time
+  penalty once per player.
+
 **Doors and chunk loading:**
 - Doors are now always set as a whole, and the run loads a door's chunks before changing it. Before,
   at run start the run's chunks were still loading, so a door outside its Room Controller's own
