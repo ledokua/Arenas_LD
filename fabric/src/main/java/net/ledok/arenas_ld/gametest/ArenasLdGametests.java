@@ -125,6 +125,12 @@ public final class ArenasLdGametests implements FabricGameTest {
     }
 
     @GameTest(template = EMPTY_STRUCTURE)
+    public void controllerBrokenMidRun(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.controllerBrokenMidRun(helper, player -> {
+        });
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
     public void arenaForfeit(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.arenaForfeit(helper, player -> {
         });

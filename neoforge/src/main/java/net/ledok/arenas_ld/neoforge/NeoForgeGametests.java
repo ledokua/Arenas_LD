@@ -136,6 +136,11 @@ public final class NeoForgeGametests {
     }
 
     @GameTest(template = "empty")
+    public static void controllerBrokenMidRun(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.controllerBrokenMidRun(helper, NeoForgeGametests::acceptModPayloads);
+    }
+
+    @GameTest(template = "empty")
     public static void arenaForfeit(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.arenaForfeit(helper, NeoForgeGametests::acceptModPayloads);
     }

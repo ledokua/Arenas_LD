@@ -70,6 +70,10 @@ public class ArenaControllerBlock extends BaseEntityBlock {
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (!state.is(newState.getBlock())) {
+            // Before the block entity goes (super.onRemove removes it): its runs end properly.
+            if (level.getBlockEntity(pos) instanceof net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity controller) {
+                controller.endRunsForRemoval();
+            }
             net.ledok.arenas_ld.activity.ActivityRegistry.detach(level, pos);
             net.ledok.arenas_ld.util.ControllerChunks.release(level, pos);
         }

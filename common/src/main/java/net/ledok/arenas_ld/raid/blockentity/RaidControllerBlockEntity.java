@@ -265,6 +265,27 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
     }
 
+    /**
+     * The controller block is being broken or replaced while runs are going: end each one now, as
+     * staff force-end does, and close it at once (nothing will tick its exit timer any more). It
+     * used to just vanish with the block, leaving its players in the instance in Adventure or
+     * Spectator with their busy flag, team and mobs, and its chunk tickets held until the server
+     * stopped.
+     */
+    public void endRunsForRemoval() {
+        if (!(level instanceof ServerLevel own)) {
+            return;
+        }
+        net.minecraft.server.MinecraftServer server = own.getServer();
+        for (RaidRun run : new java.util.ArrayList<>(activeRuns.values())) {
+            int calls = 0;
+            // First call: a running run is lost (or won/lost already and closing); second: closed.
+            while (activeRuns.get(run.spawnerPos()) == run && calls++ < 2) {
+                net.ledok.arenas_ld.raid.run.RaidRunLifecycle.forceEnd(server, this, run);
+            }
+        }
+    }
+
     @Override
     public void setRemoved() {
         if (level instanceof ServerLevel serverLevel) {

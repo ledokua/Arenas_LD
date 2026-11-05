@@ -1042,6 +1042,48 @@ public final class ApiGameTests {
     }
 
     /**
+     * Breaking an arena controller mid-run ends its run properly: the player is sent home and out of
+     * the run, the run reports a result, and its chunk tickets are given back.
+     */
+    public static void controllerBrokenMidRun(GameTestHelper helper, Consumer<ServerPlayer> moddedClient) {
+        registerHooksOnce();
+        BlockPos controllerRel = new BlockPos(1, 1, 1);
+        BlockPos spawnerRel = new BlockPos(5, 1, 5);
+        helper.setBlock(controllerRel, BlockRegistry.ARENA_CONTROLLER_BLOCK);
+        helper.setBlock(spawnerRel, BlockRegistry.ARENA_SPAWNER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            ArenaControllerBlockEntity controller = helper.getBlockEntity(controllerRel);
+            ArenaSpawnerBlockEntity spawner = helper.getBlockEntity(spawnerRel);
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath("arenas_ld", "gt_broken_" + suffix());
+            helper.assertTrue(ActivityRegistry.changeId(controller, id.toString()) == null, "test id set");
+            spawner.setEntrancePosition(helper.absolutePos(new BlockPos(5, 1, 3)), level.dimension());
+            BlockPos spawnerPos = helper.absolutePos(spawnerRel);
+            helper.assertTrue(controller.addInstance(spawnerPos, level.dimension()), "instance linked");
+            BlockPos home = helper.absolutePos(new BlockPos(3, 1, 6));
+            ServerPlayer player = survivalPlayer(helper, home);
+            moddedClient.accept(player);
+            try {
+                helper.assertTrue(controller.createLobby(player) && controller.startRun(player), "the run starts");
+                helper.assertTrue(!player.blockPosition().equals(home), "the player is in the arena");
+                var owner = net.ledok.arenas_ld.util.RunChunkTickets.owner(level.dimension(), spawnerPos);
+                helper.assertTrue(net.ledok.arenas_ld.util.RunChunkTickets.isHeld(owner), "the run holds its chunks");
+                helper.setBlock(controllerRel, Blocks.AIR); // broken mid-run
+                helper.assertTrue(player.blockPosition().equals(home),
+                    "the player is sent back to where they stood: " + player.blockPosition() + " vs " + home);
+                helper.assertTrue(!net.ledok.arenas_ld.util.RunChunkTickets.isHeld(owner), "its chunk tickets are given back");
+                List<ArenasApi.RunResult> results = results(id);
+                helper.assertTrue(results.size() == 1 && results.get(0).outcome() != ArenasApi.Outcome.WIN,
+                    "the run reported one non-winning result: " + results);
+            } finally {
+                server.getPlayerList().remove(player);
+            }
+            helper.succeed();
+        });
+    }
+
+    /**
      * /exit in the middle of an arena run: the player is sent out of it, and with nobody left the
      * run is lost as abandoned on its next tick (reported once, as a LOSS).
      *

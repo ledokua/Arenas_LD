@@ -57,6 +57,11 @@
   wiped every hardcore raid and arena on restart). It also no longer costs a raid its death-time
   penalty once per player.
 
+**Breaking a controller mid-run:** its runs are now ended as staff force-end does, and closed at
+once. Before, they vanished with the block: the players stayed in the instance in Adventure or
+Spectator, still marked busy and on the run's team, with the mobs alive and the chunks held until
+the server stopped.
+
 **Doors and chunk loading:**
 - Doors are now always set as a whole, and the run loads a door's chunks before changing it. Before,
   at run start the run's chunks were still loading, so a door outside its Room Controller's own
