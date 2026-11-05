@@ -294,7 +294,7 @@ public final class DungeonRunLifecycle {
                 ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
             }
         } else {
-            room.refreshAliveMobs(world);
+            room.refreshAliveMobs(world, RunChunkTickets.entitiesLoaded(world, RunChunkTickets.owner(run.dbsDimension(), run.dbsPos())));
             if (room.pollProtectTargetDied()) {
                 handleLoss(world, controller, run, DungeonOutcome.LOSS_OBJECTIVE);
                 return;
@@ -422,7 +422,7 @@ public final class DungeonRunLifecycle {
         }
 
         // ---- ACTIVE (wave machine, mirrors the legacy activated branch) ----
-        room.refreshAliveMobs(world);
+        room.refreshAliveMobs(world, RunChunkTickets.entitiesLoaded(world, RunChunkTickets.owner(run.dbsDimension(), run.dbsPos())));
         if (room.pollProtectTargetDied()) {
             handleLoss(world, controller, run, DungeonOutcome.LOSS_OBJECTIVE);
             return;
@@ -1678,6 +1678,21 @@ public final class DungeonRunLifecycle {
             if (roomBe instanceof RoomControllerBlockEntity roomController) {
                 for (BlockPos spawnerPos : roomController.getSpawnerPositions()) {
                     chunks.add(new ChunkPos(spawnerPos));
+                    // Where the mobs stand, which can be chunks away from the spawner block: a held
+                    // chunk keeps run mobs loaded (an unloaded one reads as a dead mob, clearing the
+                    // room) and is the only chunk of its 5x5 area where entities tick.
+                    BlockEntity spawnerBe = world.getBlockEntity(spawnerPos);
+                    List<BlockPos> spawnOffsets = spawnerBe instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity mobSpawner
+                        ? mobSpawner.getEntityDefinition().spawnOffsets()
+                        : spawnerBe instanceof DungeonBossSpawnerBlockEntity bossSpawner
+                            ? bossSpawner.getEntityDefinition().spawnOffsets()
+                            : List.of();
+                    for (BlockPos offset : spawnOffsets) {
+                        chunks.add(new ChunkPos(spawnerPos.offset(offset)));
+                    }
+                }
+                for (BlockPos respawnPos : roomController.getRespawnPositions()) {
+                    chunks.add(new ChunkPos(respawnPos));
                 }
                 for (BlockPos doorPos : roomController.getDoorPositions()) {
                     chunks.add(new ChunkPos(doorPos));

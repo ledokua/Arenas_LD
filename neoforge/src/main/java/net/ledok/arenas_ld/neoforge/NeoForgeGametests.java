@@ -70,6 +70,11 @@ public final class NeoForgeGametests {
         net.ledok.arenas_ld.gametest.ApiGameTests.instanceCheck(helper);
     }
 
+    @GameTest(template = "empty")
+    public static void doorGroups(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.doorGroups(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 1200)
     public static void controllerChunks(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.controllerChunks(helper);

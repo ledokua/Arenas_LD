@@ -14,8 +14,10 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.WeakHashMap;
@@ -98,8 +100,9 @@ public class PhaseBlockEntity extends BlockEntity {
         boolean shouldBeSolid = !allSpawnersWon;
 
         if (state.getValue(PhaseBlock.SOLID) != shouldBeSolid) {
-            world.setBlock(pos, state.setValue(PhaseBlock.SOLID, shouldBeSolid).setValue(PhaseBlock.ARMED, false), 3);
-            be.propagateState(shouldBeSolid, false, new ArrayList<>());
+            // Ticked again every second, so loaded blocks only: a part beyond an unloaded chunk is
+            // caught up on a later check once it loads.
+            applyToDoor(world, pos, shouldBeSolid, false, false);
         }
     }
 
@@ -125,28 +128,65 @@ public class PhaseBlockEntity extends BlockEntity {
         return true; // All watched spawners are cleared.
     }
 
-    public void propagateState(boolean solid, List<BlockPos> visited) {
-        propagateState(solid, false, visited);
-    }
+    /** Backstop against runaway phase-block walls; a real doorway is far smaller. */
+    public static final int MAX_DOOR_BLOCKS = 1024;
 
-    public void propagateState(boolean solid, boolean armed, List<BlockPos> visited) {
-        if (visited.contains(getBlockPos())) {
-            return;
+    /**
+     * Every Phase Block face-connected to {@code start} (empty when {@code start} isn't one).
+     *
+     * @param loadChunks load chunks the door reaches into. Server-driven door changes need the
+     *                   whole door: a part in an unloaded chunk would silently keep its old state.
+     *                   Only for trusted callers (run logic, tools, admin commands) — never for a
+     *                   position a client sent. With {@code false} the fill stops at unloaded chunks.
+     */
+    public static Set<BlockPos> connectedGroup(Level level, BlockPos start, boolean loadChunks) {
+        Set<BlockPos> group = new HashSet<>();
+        if (!isPhaseBlock(level, start, loadChunks)) {
+            return group;
         }
-        visited.add(getBlockPos());
-
-        for (Direction direction : Direction.values()) {
-            BlockPos neighborPos = getBlockPos().relative(direction, 1);
-            if (level.isLoaded(neighborPos) && level.getBlockEntity(neighborPos) instanceof PhaseBlockEntity neighbor) {
-                BlockState neighborState = level.getBlockState(neighborPos);
-                if (neighborState.getValue(PhaseBlock.SOLID) != solid
-                        || neighborState.getValue(PhaseBlock.ARMED) != armed) {
-                    level.setBlock(neighborPos,
-                        neighborState.setValue(PhaseBlock.SOLID, solid).setValue(PhaseBlock.ARMED, armed), 3);
-                    neighbor.propagateState(solid, armed, visited);
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        group.add(start.immutable());
+        queue.add(start.immutable());
+        while (!queue.isEmpty()) {
+            BlockPos pos = queue.poll();
+            for (Direction direction : Direction.values()) {
+                if (group.size() >= MAX_DOOR_BLOCKS) {
+                    return group;
+                }
+                BlockPos neighbor = pos.relative(direction);
+                if (!group.contains(neighbor) && isPhaseBlock(level, neighbor, loadChunks)) {
+                    group.add(neighbor);
+                    queue.add(neighbor);
                 }
             }
         }
+        return group;
+    }
+
+    private static boolean isPhaseBlock(Level level, BlockPos pos, boolean loadChunks) {
+        if (!loadChunks && !level.isLoaded(pos)) {
+            return false;
+        }
+        return level.getBlockState(pos).getBlock() instanceof PhaseBlock;
+    }
+
+    /**
+     * Puts a whole door (the group connected to {@code anyBlock}) into the given state. Every block
+     * is checked, not only the ones next to a block that changed: a door left partly in another
+     * state (an earlier change that couldn't reach an unloaded part) heals on the next change.
+     *
+     * @return how many blocks changed
+     */
+    public static int applyToDoor(Level level, BlockPos anyBlock, boolean solid, boolean armed, boolean loadChunks) {
+        int changed = 0;
+        for (BlockPos pos : connectedGroup(level, anyBlock, loadChunks)) {
+            BlockState state = level.getBlockState(pos);
+            if (state.getValue(PhaseBlock.SOLID) != solid || state.getValue(PhaseBlock.ARMED) != armed) {
+                level.setBlock(pos, state.setValue(PhaseBlock.SOLID, solid).setValue(PhaseBlock.ARMED, armed), 3);
+                changed++;
+            }
+        }
+        return changed;
     }
 
     @Override

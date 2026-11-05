@@ -389,6 +389,44 @@ public final class ApiGameTests {
     }
 
     /**
+     * Doors are set as a whole: a block already in the target state no longer stops the fill, so a
+     * door left half-changed (part of it was in an unloaded chunk) heals on the next change, and the
+     * door group the run logic sees is the whole connected doorway.
+     */
+    public static void doorGroups(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos[] door = new BlockPos[4];
+        for (int i = 0; i < door.length; i++) {
+            helper.setBlock(new BlockPos(1 + i, 1, 1), BlockRegistry.PHASE_BLOCK);
+            door[i] = helper.absolutePos(new BlockPos(1 + i, 1, 1));
+        }
+        // Block 2 already open/armed, as an earlier change that reached only part of the door left it.
+        level.setBlockAndUpdate(door[1], level.getBlockState(door[1])
+            .setValue(net.ledok.arenas_ld.block.PhaseBlock.SOLID, false)
+            .setValue(net.ledok.arenas_ld.block.PhaseBlock.ARMED, true));
+
+        var group = net.ledok.arenas_ld.block.entity.PhaseBlockEntity.connectedGroup(level, door[0], true);
+        helper.assertTrue(group.size() == 4, "the group is the whole doorway, got " + group.size());
+        helper.assertTrue(net.ledok.arenas_ld.dungeon.run.RoomGraph.expandDoorGroup(level, door[3]).size() == 4,
+            "the run graph sees the whole doorway from any block");
+        helper.assertTrue(net.ledok.arenas_ld.block.entity.PhaseBlockEntity.connectedGroup(
+            level, helper.absolutePos(new BlockPos(1, 2, 1)), true).isEmpty(), "no group from a non-door block");
+
+        int changed = net.ledok.arenas_ld.block.entity.PhaseBlockEntity.applyToDoor(level, door[0], false, true, true);
+        helper.assertTrue(changed == 3, "the three blocks in the old state change, got " + changed);
+        for (BlockPos pos : door) {
+            var state = level.getBlockState(pos);
+            helper.assertTrue(!state.getValue(net.ledok.arenas_ld.block.PhaseBlock.SOLID)
+                && state.getValue(net.ledok.arenas_ld.block.PhaseBlock.ARMED), "every block is open and armed: " + pos);
+        }
+        helper.assertTrue(net.ledok.arenas_ld.block.entity.PhaseBlockEntity.applyToDoor(level, door[2], true, false, true) == 4,
+            "closing from any block closes the whole door");
+        helper.assertTrue(net.ledok.arenas_ld.util.RunChunkTickets.entitiesLoaded(level,
+            net.ledok.arenas_ld.util.RunChunkTickets.owner(level.dimension(), door[0])), "an owner with no tickets is settled");
+        helper.succeed();
+    }
+
+    /**
      * A controller keeps its chunk force-loaded when its block entity is unloaded (every clean server
      * stop does that), and lets go of it only when the last controller in the chunk is broken.
      * Far from the test area, whose chunks the GameTest framework force-loads itself.
@@ -1333,6 +1371,11 @@ public final class ApiGameTests {
             // The neighbor chunk is in the boss ticket's loaded area, but a fresh test world
             // generates it over a few ticks: move the boss there once its entities are loaded.
             whenTrue(helper, 200, () -> level.areEntitiesLoaded(moved.toLong()), "the next chunk loads", () -> {
+                // Frozen: a boss that wanders back over the border before the next tracking tick
+                // rightly keeps its ticket on the old chunk, which made this step flaky.
+                if (boss instanceof net.minecraft.world.entity.Mob mob) {
+                    mob.setNoAi(true);
+                }
                 boss.teleportTo(boss.getX() + 16, boss.getY(), boss.getZ());
                 helper.assertTrue(boss.chunkPosition().equals(moved), "the boss moved to " + moved);
             whenTrue(helper, 60, () -> net.ledok.arenas_ld.util.RunChunkTickets.held(owner).contains(movedChunk),

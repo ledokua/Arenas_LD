@@ -55,6 +55,11 @@ public final class ArenasLdGametests implements FabricGameTest {
         net.ledok.arenas_ld.gametest.ApiGameTests.instanceCheck(helper);
     }
 
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void doorGroups(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.doorGroups(helper);
+    }
+
     @GameTest(template = EMPTY_STRUCTURE, timeoutTicks = 1200)
     public void controllerChunks(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.controllerChunks(helper);

@@ -41,6 +41,27 @@
   `/arenasld reload` reports when the file couldn't be read. `dungeon_damage_source_filter` and
   `puffish_skills_tree_id` weren't applied by a reload. Saves can no longer leave a truncated file.
 
+**Doors and chunk loading:**
+- Doors are now always set as a whole, and the run loads a door's chunks before changing it. Before,
+  at run start the run's chunks were still loading, so a door outside its Room Controller's own
+  chunk could silently keep the previous run's state (the way in staying shut). A door that crossed
+  an unloaded chunk border could end up half open, and one block already in the new state stopped
+  the change from reaching the rest. Such doors now heal on their next change.
+- Entering a room is noticed on every block of the doorway. The door list the run watches was built
+  one tick after run start, while chunks were loading, so it could hold just one corner block of a
+  doorway and the run sat on "Explore".
+- Dungeon runs also keep their mobs' spawn positions and the rooms' respawn points loaded. Before,
+  only the spawner blocks were kept loaded, and mobs could stand in other chunks.
+- Arena runs now keep their battle area (the battle radius, up to 128 blocks) and entrance loaded,
+  as dungeons and raids already did. Before, an arena unloaded as soon as its players left or
+  disconnected, or the server restarted. Its mobs unloaded with it, counted as killed, and the wave
+  was cleared and paid out with the mobs still there.
+- Dungeon rooms and arena waves no longer count a mob that isn't loaded yet as dead (or a protect
+  target as lost) in the first ticks after a run starts or the server restarts.
+- `/exit` from a raid or arena whose spawner is in another dimension than its controller looked the
+  spawner up at the same coordinates in the controller's dimension, loading a chunk there, and its
+  end missed the spawner.
+
 **Build:** VectorLib 0.7.2 (was 0.2.6). CI now builds VectorLib from its public repository first.
 Every CI run since the VectorLib migration had failed on the missing dependency.
 

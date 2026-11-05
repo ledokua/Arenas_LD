@@ -56,6 +56,20 @@ public final class RunChunkTickets {
         return HELD.getOrDefault(owner, Set.of());
     }
 
+    /**
+     * Whether the entities of every chunk this owner holds in {@code level} are loaded, i.e. a run
+     * mob that can't be found there is really gone rather than still on disk. Chunks and their
+     * entities load over a few ticks after the tickets are taken (run start, server restart).
+     */
+    public static boolean entitiesLoaded(ServerLevel level, Owner owner) {
+        for (HeldChunk held : held(owner)) {
+            if (held.level().equals(level.dimension()) && !level.areEntitiesLoaded(held.chunk().toLong())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** Takes tickets on {@code chunks}, replacing whatever this owner held before. */
     public static void hold(MinecraftServer server, Owner owner, Set<HeldChunk> chunks) {
         release(server, owner);

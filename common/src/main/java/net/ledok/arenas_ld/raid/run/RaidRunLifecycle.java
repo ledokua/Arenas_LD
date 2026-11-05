@@ -652,21 +652,26 @@ public final class RaidRunLifecycle {
                 RunParticipant participant = run.participants().get(uuid);
                 if (participant == null || participant.status() == ParticipantStatus.REMOVED) continue;
                 boolean midRun = run.phase() != RaidPhase.CLOSING;
+                // The run lives in its spawner's dimension, which needn't be the controller's: using
+                // the controller's level here looked the spawner up (loading a chunk) at the right
+                // coordinates in the wrong dimension, and finalize then missed it.
+                ServerLevel runWorld = server.getLevel(run.spawnerDimension());
+                if (runWorld == null) runWorld = world;
 
-                restoreToReturnPoint(world, run, uuid);
+                restoreToReturnPoint(runWorld, run, uuid);
                 run.removeReturnPoint(uuid);
-                run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, world.getGameTime()));
+                run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, runWorld.getGameTime()));
                 run.clearDowned(uuid);
                 run.clearDisconnected(uuid);
                 BusyStateCompat.clearBusy(uuid, BUSY_REASON);
-                removeFromPartyTeam(world, run, participant.playerName());
+                removeFromPartyTeam(runWorld, run, participant.playerName());
                 RunHudSync.hide(player);
 
                 if (midRun) {
                     // Forfeit: no rewards for the leaver; tickRunning loses the raid if nobody is left.
                     player.sendSystemMessage(Component.translatable("message.arenas_ld.raid.exited_mid_run")
                         .withStyle(ChatFormatting.YELLOW));
-                    broadcastToParty(world, run, Component.translatable("message.arenas_ld.raid.party_exited",
+                    broadcastToParty(runWorld, run, Component.translatable("message.arenas_ld.raid.party_exited",
                         participant.playerName()).withStyle(ChatFormatting.YELLOW), uuid);
                     return true;
                 }
@@ -674,7 +679,7 @@ public final class RaidRunLifecycle {
                 boolean anyRemaining = run.participants().values().stream()
                     .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
                 if (!anyRemaining) {
-                    finalizeRun(world, controller, run);
+                    finalizeRun(runWorld, controller, run);
                 }
                 return true;
             }

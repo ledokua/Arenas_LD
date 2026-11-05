@@ -103,10 +103,47 @@ public final class ArenaRunLifecycle {
         run.setPartyHealthMultiplier(controller.resolvePartyHealthMultiplier(players.size()));
         run.setPrepareTicksRemaining(spawner != null ? spawner.getPrepareTime() * 20 : 200);
         run.setPhase(ArenaPhase.RUNNING);
+        holdChunks(world, run, spawner);
         ArenasLdMod.LOGGER.info("Arena run started at {} with {} players", run.spawnerPos(), players.size());
     }
 
+    // ── Chunks ───────────────────────────────────────────────────────────────
+
+    /** Bound on the held battle area, so a mistyped radius can't keep thousands of chunks loaded. */
+    private static final int MAX_HELD_BATTLE_RADIUS = 128;
+
+    public static net.ledok.arenas_ld.util.RunChunkTickets.Owner chunkOwner(ArenaRun run) {
+        return net.ledok.arenas_ld.util.RunChunkTickets.owner(run.spawnerDimension(), run.spawnerPos());
+    }
+
+    /**
+     * Keeps the battle area (every chunk within the battle radius of the spawner) and the entrance
+     * loaded for the whole run, like dungeon and raid runs. Without it the arena unloaded whenever
+     * its players left, disconnected or the server restarted: its wave mobs unloaded with it, read
+     * as killed, and the wave counted as cleared (and paid out) with the mobs still there.
+     */
+    private static void holdChunks(ServerLevel world, ArenaRun run, @Nullable ArenaSpawnerBlockEntity spawner) {
+        java.util.Set<net.ledok.arenas_ld.util.RunChunkTickets.HeldChunk> chunks = new java.util.HashSet<>();
+        BlockPos center = run.spawnerPos();
+        int radius = spawner != null ? Math.max(0, Math.min(spawner.getBattleRadius(), MAX_HELD_BATTLE_RADIUS)) : 0;
+        for (int cx = (center.getX() - radius) >> 4; cx <= (center.getX() + radius) >> 4; cx++) {
+            for (int cz = (center.getZ() - radius) >> 4; cz <= (center.getZ() + radius) >> 4; cz++) {
+                chunks.add(new net.ledok.arenas_ld.util.RunChunkTickets.HeldChunk(
+                    world.dimension(), new net.minecraft.world.level.ChunkPos(cx, cz)));
+            }
+        }
+        if (spawner != null) {
+            chunks.add(new net.ledok.arenas_ld.util.RunChunkTickets.HeldChunk(spawner.getEntranceDimension(),
+                new net.minecraft.world.level.ChunkPos(spawner.getAbsoluteEntrancePos())));
+        }
+        net.ledok.arenas_ld.util.RunChunkTickets.hold(world.getServer(), chunkOwner(run), chunks);
+    }
+
     public static void tick(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
+        if (run.phase() != ArenaPhase.DONE && !net.ledok.arenas_ld.util.RunChunkTickets.isHeld(chunkOwner(run))) {
+            // A run restored after a restart (or started before this version): tickets aren't saved.
+            holdChunks(world, run, spawnerFor(world, run));
+        }
         switch (run.phase()) {
             case STARTING -> run.setPhase(ArenaPhase.RUNNING);
             case RUNNING -> tickRunning(world, controller, run);
@@ -209,9 +246,12 @@ public final class ArenaRunLifecycle {
     }
 
     private static void pruneDeadMobs(ServerLevel world, ArenaRun run) {
+        // A mob that isn't found counts as gone only once the held area's entities are loaded;
+        // before that it is most likely still on disk (run start, server restart).
+        boolean settled = net.ledok.arenas_ld.util.RunChunkTickets.entitiesLoaded(world, chunkOwner(run));
         for (UUID uuid : new ArrayList<>(run.aliveMobs())) {
             Entity entity = world.getEntity(uuid);
-            if (entity == null || !entity.isAlive()) run.removeAliveMob(uuid);
+            if (entity == null ? settled : !entity.isAlive()) run.removeAliveMob(uuid);
         }
     }
 
@@ -772,10 +812,15 @@ public final class ArenaRunLifecycle {
                 RunParticipant participant = run.participants().get(uuid);
                 if (participant == null || participant.status() == ParticipantStatus.REMOVED) continue;
                 boolean midRun = run.phase() != ArenaPhase.CLOSING;
+                // The run lives in its spawner's dimension, which needn't be the controller's: using
+                // the controller's level here looked the spawner up (loading a chunk) at the right
+                // coordinates in the wrong dimension, and finalize then missed it.
+                ServerLevel runWorld = server.getLevel(run.spawnerDimension());
+                if (runWorld == null) runWorld = world;
 
-                restoreToReturnPoint(world, run, uuid);
+                restoreToReturnPoint(runWorld, run, uuid);
                 run.removeReturnPoint(uuid);
-                run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, world.getGameTime()));
+                run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, runWorld.getGameTime()));
                 run.clearDowned(uuid);
                 run.clearDisconnected(uuid);
                 net.ledok.arenas_ld.util.BusyStateCompat.clearBusy(uuid, BUSY_REASON);
@@ -799,7 +844,7 @@ public final class ArenaRunLifecycle {
                 boolean anyRemaining = run.participants().values().stream()
                     .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
                 if (!anyRemaining) {
-                    finalizeRun(world, controller, run);
+                    finalizeRun(runWorld, controller, run);
                 }
                 return true;
             }
@@ -860,6 +905,7 @@ public final class ArenaRunLifecycle {
             run.participants().values().stream().map(RunParticipant::playerName).toList());
         RunHudSync.hide(world, hudTargets(run));
         run.setPhase(ArenaPhase.DONE);
+        net.ledok.arenas_ld.util.RunChunkTickets.release(world.getServer(), chunkOwner(run));
         controller.onArenaEnded(run.spawnerPos(), run.currentWave(), names);
     }
 

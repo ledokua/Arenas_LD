@@ -150,25 +150,14 @@ public final class RoomGraph {
      * client-side selection overlay can expand door groups from synced block entities too.
      */
     public static Set<BlockPos> expandDoorGroup(Level world, BlockPos anchor) {
-        Set<BlockPos> group = new HashSet<>();
-        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
-        if (world.isLoaded(anchor) && world.getBlockEntity(anchor) instanceof PhaseBlockEntity) {
-            queue.add(anchor);
-        } else {
+        // Server: load what the door reaches into. A group cut short at an unloaded chunk border
+        // made the cached entrance-detection map miss part of a doorway (built one tick after run
+        // start, while the run's chunks were still loading), so crossing it was never noticed.
+        // Every server caller is run logic, a tool action or an admin command, never client input.
+        Set<BlockPos> group = PhaseBlockEntity.connectedGroup(world, anchor, !world.isClientSide());
+        if (group.isEmpty()) {
             // Anchor missing or not a phase block (broken link): still detect on the anchor itself.
             group.add(anchor);
-            return group;
-        }
-        while (!queue.isEmpty() && group.size() < 1024) {
-            BlockPos pos = queue.poll();
-            if (!group.add(pos)) continue;
-            for (Direction direction : Direction.values()) {
-                BlockPos neighbor = pos.relative(direction);
-                if (!group.contains(neighbor) && world.isLoaded(neighbor)
-                        && world.getBlockEntity(neighbor) instanceof PhaseBlockEntity) {
-                    queue.add(neighbor);
-                }
-            }
         }
         return group;
     }

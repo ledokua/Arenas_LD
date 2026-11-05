@@ -846,8 +846,13 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
         setDoorState(world, doorAbsolute, solid, armed);
     }
 
+    /**
+     * Sets a whole door. Loads the door's chunks if needed: these changes are one-off events (run
+     * start, lock-in, clear, reset) that are never re-applied, so a door in a chunk that wasn't
+     * loaded yet — normal at run start, when the run's chunk tickets are still loading — used to
+     * keep the previous run's state for the whole run.
+     */
     private void setDoorState(ServerLevel world, BlockPos doorAbsolute, boolean solid, boolean armed) {
-        if (!world.isLoaded(doorAbsolute)) return;
         BlockState state = world.getBlockState(doorAbsolute);
         if (!(state.getBlock() instanceof PhaseBlock)) {
             ArenasLdMod.LOGGER.warn(
@@ -855,13 +860,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
                 worldPosition, doorAbsolute, state.getBlock());
             return;
         }
-        if (state.getValue(PhaseBlock.SOLID) != solid || state.getValue(PhaseBlock.ARMED) != armed) {
-            world.setBlock(doorAbsolute,
-                state.setValue(PhaseBlock.SOLID, solid).setValue(PhaseBlock.ARMED, armed), 3);
-            if (world.getBlockEntity(doorAbsolute) instanceof net.ledok.arenas_ld.block.entity.PhaseBlockEntity phaseBlock) {
-                phaseBlock.propagateState(solid, armed, new java.util.ArrayList<>());
-            }
-        }
+        net.ledok.arenas_ld.block.entity.PhaseBlockEntity.applyToDoor(world, doorAbsolute, solid, armed, true);
     }
 
     /**
@@ -876,12 +875,24 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
      * It does NOT open the door — that's the controller's job after observing {@code isCleared()}.
      */
     public void refreshAliveMobs(ServerLevel world) {
+        refreshAliveMobs(world, true);
+    }
+
+    /**
+     * @param entitiesSettled whether the run's chunks have their entities loaded. While they don't
+     *                        (just after run start or a server restart), a mob or protect target
+     *                        that isn't found is kept: it is most likely still on disk, and dropping
+     *                        it would clear the room, or lose it, with the mobs still there.
+     */
+    public void refreshAliveMobs(ServerLevel world, boolean entitiesSettled) {
         // PROTECT: notice the target dying before anything else this tick.
         LivingEntity protectTarget = null;
         if (protectTargetUuid != null && activated && !cleared) {
             Entity targetEntity = world.getEntity(protectTargetUuid);
             if (targetEntity instanceof LivingEntity livingTarget && livingTarget.isAlive() && !livingTarget.isRemoved()) {
                 protectTarget = livingTarget;
+            } else if (targetEntity == null && !entitiesSettled) {
+                // Not loaded yet; decide once it could be.
             } else {
                 protectTargetUuid = null;
                 protectTargetDied = true;
@@ -894,6 +905,9 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
         while (it.hasNext()) {
             UUID uuid = it.next();
             Entity entity = world.getEntity(uuid);
+            if (entity == null && !entitiesSettled) {
+                continue; // not loaded yet, see above
+            }
             if (entity == null || !entity.isAlive() || entity.isRemoved() || entity.level() != world) {
                 it.remove();
                 bossMobs.remove(uuid);
