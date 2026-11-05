@@ -842,11 +842,7 @@ public final class ArenaRunLifecycle {
                         .withStyle(net.minecraft.ChatFormatting.YELLOW));
                     Component left = Component.translatable("message.arenas_ld.arena.party_exited",
                         participant.playerName()).withStyle(net.minecraft.ChatFormatting.YELLOW);
-                    for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
-                        if (entry.getValue().status() == ParticipantStatus.REMOVED) continue;
-                        ServerPlayer mate = server.getPlayerList().getPlayer(entry.getKey());
-                        if (mate != null) mate.sendSystemMessage(left);
-                    }
+                    net.ledok.arenas_ld.util.ReturnPoints.broadcast(server, run.participants(), left, null);
                     return true;
                 }
 
@@ -1087,22 +1083,10 @@ public final class ArenaRunLifecycle {
         leavePartyTeam(world, run, uuid);
         PlayerReturnPoint rp = run.returnPoints().get(uuid);
         if (rp == null) return;
-        GameType restoreMode = rp.previousGameMode();
-        ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-        if (player == null) {
-            // Offline at run end / forfeit — persist the eject so they're sent home on next login.
-            net.ledok.arenas_ld.util.PendingRestoreStore.get(world.getServer()).put(uuid, rp);
-            return;
-        }
-        net.ledok.arenas_ld.util.DownedSpectators.release(player);
-        player.setGameMode(restoreMode);
-        player.setHealth(player.getMaxHealth());
-        // Leaving an arena wipes status effects (skill buffs, potions), as leaving a dungeon does.
-        player.removeAllEffects();
-        ServerLevel returnWorld = world.getServer().getLevel(rp.dimension());
-        if (returnWorld != null) {
-            player.teleportTo(returnWorld, rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
-        }
+        // Offline at run end / forfeit: persisted, and they're sent home on next login. Leaving an
+        // arena wipes status effects (skill buffs, potions), as leaving a dungeon does — also for
+        // return points saved before they carried that flag.
+        net.ledok.arenas_ld.util.ReturnPoints.sendHome(world.getServer(), uuid, rp, true);
     }
 
     // ── Boss bars ──────────────────────────────────────────────────────────────

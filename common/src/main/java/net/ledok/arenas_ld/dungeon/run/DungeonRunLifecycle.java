@@ -1432,36 +1432,14 @@ public final class DungeonRunLifecycle {
 
     /** Teleports a player to a captured return point and restores their pre-run game mode + health. */
     private static void applyReturnPoint(MinecraftServer server, ServerPlayer player, PlayerReturnPoint rp) {
-        net.ledok.arenas_ld.util.DownedSpectators.release(player);
-        ServerLevel target = server.getLevel(rp.dimension());
-        DebugLog.log("teleport to return point {} in {}: {}", rp.pos(), rp.dimension().location(), DebugLog.describe(player));
-        if (target != null) {
-            player.teleportTo(target, rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
-        }
-        player.setGameMode(rp.previousGameMode());
-        player.setHealth(player.getMaxHealth());
-        // Leaving a dungeon or arena wipes all status effects — covers players who were offline when
-        // the run ended (pending-restore on next login) as well as early exits during CLOSING. A
-        // raid's pending restore picked up here keeps them, as a raid exit does.
-        if (rp.clearEffects()) {
-            player.removeAllEffects();
-        }
+        // Wipes effects as the return point says: a dungeon's always, a raid's pending restore
+        // picked up here never (as a raid exit does).
+        net.ledok.arenas_ld.util.ReturnPoints.apply(server, player, rp, false);
     }
 
     /** Sends a message to every online, non-removed participant except {@code except} (nullable). */
     private static void broadcastToParty(ServerLevel world, DungeonRun run, Component message, @Nullable UUID except) {
-        for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
-            if (entry.getValue().status() == ParticipantStatus.REMOVED) {
-                continue;
-            }
-            if (except != null && entry.getKey().equals(except)) {
-                continue;
-            }
-            ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
-            if (player != null) {
-                player.sendSystemMessage(message);
-            }
-        }
+        net.ledok.arenas_ld.util.ReturnPoints.broadcast(world.getServer(), run.participants(), message, except);
     }
 
     private static String shortUuid(UUID uuid) {

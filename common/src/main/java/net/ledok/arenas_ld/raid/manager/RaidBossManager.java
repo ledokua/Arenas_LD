@@ -101,16 +101,8 @@ public class RaidBossManager {
         if (rp == null) {
             return;
         }
-        player.setGameMode(rp.previousGameMode());
-        player.setHealth(player.getMaxHealth());
         // A pending restore from a dungeon or arena run (the store is shared) wipes effects as those exits do.
-        if (rp.clearEffects()) {
-            player.removeAllEffects();
-        }
-        ServerLevel target = player.server.getLevel(rp.dimension());
-        if (target != null) {
-            player.teleportTo(target, rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
-        }
+        net.ledok.arenas_ld.util.ReturnPoints.apply(player.server, player, rp, false);
         player.sendSystemMessage(Component.translatable("message.arenas_ld.raid.run_ended_while_away")
             .withStyle(ChatFormatting.YELLOW));
     }

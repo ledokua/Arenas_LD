@@ -747,22 +747,8 @@ public final class RaidRunLifecycle {
         // out on hardcore death (whose return point was consumed). Don't touch their game mode.
         PlayerReturnPoint rp = run.returnPoints().get(uuid);
         if (rp == null) return;
-
-        GameType restoreMode = rp.previousGameMode();
-        ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-        if (player == null) {
-            // Offline at run end / forfeit — persist the eject so they're sent home on next login.
-            PendingRestoreStore.get(world.getServer()).put(uuid, rp);
-            return;
-        }
-        net.ledok.arenas_ld.util.DownedSpectators.release(player);
-        player.setGameMode(restoreMode);
-        player.setHealth(player.getMaxHealth());
-        ServerLevel returnWorld = world.getServer().getLevel(rp.dimension());
-        if (returnWorld != null) {
-            player.teleportTo(returnWorld,
-                rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
-        }
+        // Offline at run end / forfeit: persisted, and they're sent home on next login.
+        net.ledok.arenas_ld.util.ReturnPoints.sendHome(world.getServer(), uuid, rp, false);
     }
 
     /** Tell the controller the run ended so it records the leaderboard and releases the instance. */
@@ -990,14 +976,7 @@ public final class RaidRunLifecycle {
 
     /** Sends a message to every online, non-removed participant except {@code except} (nullable). */
     private static void broadcastToParty(ServerLevel world, RaidRun run, Component message, @Nullable UUID except) {
-        for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
-            if (entry.getValue().status() == ParticipantStatus.REMOVED) continue;
-            if (except != null && entry.getKey().equals(except)) continue;
-            ServerPlayer player = world.getServer().getPlayerList().getPlayer(entry.getKey());
-            if (player != null) {
-                player.sendSystemMessage(message);
-            }
-        }
+        net.ledok.arenas_ld.util.ReturnPoints.broadcast(world.getServer(), run.participants(), message, except);
     }
 
     private static void updateRaidTimerBossBar(ServerLevel world, RaidRun run, @Nullable Entity boss) {
