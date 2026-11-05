@@ -911,11 +911,12 @@ public final class ArenaRunLifecycle {
             restoreToReturnPoint(world, run, uuid);
         }
         net.ledok.arenas_ld.util.RunPartyTeams.teardown(world, partyTeamNameFor(run),
+            net.ledok.arenas_ld.util.RunPartyTeams.legacyTeamName("ald_a_", run.spawnerPos()),
             run.participants().values().stream().map(RunParticipant::playerName).toList());
         RunHudSync.hide(world, hudTargets(run));
         run.setPhase(ArenaPhase.DONE);
         net.ledok.arenas_ld.util.RunChunkTickets.release(world.getServer(), chunkOwner(run));
-        controller.onArenaEnded(run.spawnerPos(), run.currentWave(), names);
+        controller.onArenaEnded(run.instanceKey(), run.currentWave(), names);
     }
 
     // ── Per-player handlers (invoked from the mixin via the manager in a later phase) ──
@@ -1065,7 +1066,7 @@ public final class ArenaRunLifecycle {
 
     /** The run's no-friendly-fire player team. */
     private static String partyTeamNameFor(ArenaRun run) {
-        return "ald_a_" + Integer.toHexString(run.spawnerPos().hashCode());
+        return net.ledok.arenas_ld.util.RunPartyTeams.teamName("ald_a_", run.spawnerDimension(), run.spawnerPos());
     }
 
     private static void leavePartyTeam(ServerLevel world, ArenaRun run, UUID uuid) {

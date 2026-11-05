@@ -73,6 +73,8 @@ public class ArenaControllerBlockEntity extends BlockEntity
 
     public record ArenaInstanceState(BlockPos spawnerPos, ResourceKey<Level> dimension,
                                      InstanceStatus status, int cooldownTicksRemaining) {
+        public net.ledok.arenas_ld.activity.InstanceKey key() { return new net.ledok.arenas_ld.activity.InstanceKey(dimension, spawnerPos); }
+
         public ArenaInstanceState withStatus(InstanceStatus s, int cd) {
             return new ArenaInstanceState(spawnerPos, dimension, s, cd);
         }
@@ -110,11 +112,11 @@ public class ArenaControllerBlockEntity extends BlockEntity
     private final List<UUID> queuedLobbyIds = new ArrayList<>();
     private final List<PendingInvite> pendingInvites = new ArrayList<>();
     private final List<PendingJoinRequest> pendingJoinRequests = new ArrayList<>();
-    private final Map<BlockPos, ArenaRun> activeRuns = new HashMap<>();
+    private final Map<net.ledok.arenas_ld.activity.InstanceKey, ArenaRun> activeRuns = new HashMap<>();
     private final Map<UUID, Long> offlineSinceTick = new HashMap<>();
     /** Single leaderboard keyed by deepest wave reached (higher is better). */
     private final List<LeaderboardEntry> leaderboard = new ArrayList<>();
-    private final Set<BlockPos> pendingInstanceRemovals = new HashSet<>();
+    private final Set<net.ledok.arenas_ld.activity.InstanceKey> pendingInstanceRemovals = new HashSet<>();
 
     private int respawnTimeTicks = DEFAULT_RESPAWN_TIME_TICKS;
     private int maxPartySize = DEFAULT_MAX_PARTY_SIZE;
@@ -175,7 +177,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
         for (ArenaRun run : new java.util.ArrayList<>(activeRuns.values())) {
             int calls = 0;
             // First call: a running run is lost (or won/lost already and closing); second: closed.
-            while (activeRuns.get(run.spawnerPos()) == run && calls++ < 2) {
+            while (activeRuns.get(run.instanceKey()) == run && calls++ < 2) {
                 net.ledok.arenas_ld.arena.run.ArenaRunLifecycle.forceEnd(own, this, run);
             }
         }
@@ -262,8 +264,9 @@ public class ArenaControllerBlockEntity extends BlockEntity
     public List<UUID> getQueuedLobbyIds() { return Collections.unmodifiableList(queuedLobbyIds); }
     public List<PendingInvite> getPendingInvites() { return Collections.unmodifiableList(pendingInvites); }
     public List<PendingJoinRequest> getPendingJoinRequests() { return Collections.unmodifiableList(pendingJoinRequests); }
-    public Map<BlockPos, ArenaRun> getActiveRuns() { return Collections.unmodifiableMap(activeRuns); }
-    public Set<BlockPos> getPendingInstanceRemovals() { return Collections.unmodifiableSet(pendingInstanceRemovals); }
+    /** In-progress runs, keyed by instance (spawner dimension and position). */
+    public Map<net.ledok.arenas_ld.activity.InstanceKey, ArenaRun> getActiveRuns() { return Collections.unmodifiableMap(activeRuns); }
+    public Set<net.ledok.arenas_ld.activity.InstanceKey> getPendingInstanceRemovals() { return Collections.unmodifiableSet(pendingInstanceRemovals); }
     public List<LeaderboardEntry> getLeaderboard() { return Collections.unmodifiableList(leaderboard); }
 
     public int getRespawnTimeTicks() { return Math.max(0, respawnTimeTicks); }
@@ -368,11 +371,8 @@ public class ArenaControllerBlockEntity extends BlockEntity
         return new LiveStatus(instanceStatuses, runs, openLobbies, queuedLobbies, waitingPlayers);
     }
 
-    /** Pending removals are kept by position only; a run at that position tells the dimension. */
     private boolean isPendingRemoval(ArenaInstanceState inst) {
-        if (!pendingInstanceRemovals.contains(inst.spawnerPos())) return false;
-        ArenaRun run = activeRuns.get(inst.spawnerPos());
-        return run == null || run.spawnerDimension().equals(inst.dimension());
+        return pendingInstanceRemovals.contains(inst.key());
     }
 
     @Override
@@ -383,7 +383,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
         for (ArenaRun run : new ArrayList<>(activeRuns.values())) {
             if (instance != null && !(run.spawnerPos().equals(instance.pos())
                 && run.spawnerDimension().equals(instance.dimension()))) continue;
-            if (activeRuns.get(run.spawnerPos()) != run) continue; // closed by an earlier one
+            if (activeRuns.get(run.instanceKey()) != run) continue; // closed by an earlier one
             if (ArenaRunLifecycle.forceEnd(serverLevel, this, run)) ended++;
         }
         return ended;
@@ -437,14 +437,13 @@ public class ArenaControllerBlockEntity extends BlockEntity
             ArenaInstanceState inst = it.next();
             if (inst.spawnerPos().equals(spawnerPos) && inst.dimension().equals(dimension)) {
                 if (inst.status() == InstanceStatus.RUNNING) {
-                    if (pendingInstanceRemovals.contains(spawnerPos)) pendingInstanceRemovals.remove(spawnerPos);
-                    else pendingInstanceRemovals.add(spawnerPos);
+                    if (!pendingInstanceRemovals.remove(inst.key())) pendingInstanceRemovals.add(inst.key());
                     markDirtyAndSync();
                     return true;
                 }
                 it.remove();
-                activeRuns.remove(spawnerPos);
-                pendingInstanceRemovals.remove(spawnerPos);
+                activeRuns.remove(inst.key());
+                pendingInstanceRemovals.remove(inst.key());
                 markDirtyAndSync();
                 return true;
             }
@@ -482,10 +481,10 @@ public class ArenaControllerBlockEntity extends BlockEntity
         return instances.stream().anyMatch(i -> i.status() == InstanceStatus.FREE);
     }
 
-    private void releaseInstance(BlockPos spawnerPos) {
+    private void releaseInstance(net.ledok.arenas_ld.activity.InstanceKey key) {
         for (int i = 0; i < instances.size(); i++) {
             ArenaInstanceState inst = instances.get(i);
-            if (inst.spawnerPos().equals(spawnerPos) && inst.status() == InstanceStatus.RUNNING) {
+            if (inst.key().equals(key) && inst.status() == InstanceStatus.RUNNING) {
                 int cooldown = Math.max(0, cooldownTicks);
                 InstanceStatus next = cooldown > 0 ? InstanceStatus.COOLDOWN : InstanceStatus.FREE;
                 instances.set(i, inst.withStatus(next, cooldown));
@@ -756,7 +755,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
     }
 
     // ── Run end notification (called by ArenaRunLifecycle) ─────────────────────
-    public void onArenaEnded(BlockPos spawnerPos, int wavesReached, List<String> playerNames) {
+    public void onArenaEnded(net.ledok.arenas_ld.activity.InstanceKey key, int wavesReached, List<String> playerNames) {
         if (playerNames != null && wavesReached > 0) {
             long now = System.currentTimeMillis();
             for (String name : playerNames) {
@@ -772,7 +771,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
             }
         }
 
-        ArenaRun endingRun = activeRuns.get(spawnerPos);
+        ArenaRun endingRun = activeRuns.get(key);
         UUID lobbyId = endingRun != null ? endingRun.lobbyId() : null;
         if (lobbyId != null) {
             Lobby lobby = getLobbyById(lobbyId);
@@ -791,12 +790,13 @@ public class ArenaControllerBlockEntity extends BlockEntity
             }
         }
 
-        if (pendingInstanceRemovals.remove(spawnerPos)) {
-            instances.removeIf(inst -> inst.spawnerPos().equals(spawnerPos));
+        if (pendingInstanceRemovals.remove(key)) {
+            // This instance only: the same position in another dimension is another instance.
+            instances.removeIf(inst -> inst.key().equals(key));
         } else {
-            releaseInstance(spawnerPos);
+            releaseInstance(key);
         }
-        activeRuns.remove(spawnerPos);
+        activeRuns.remove(key);
         promoteNextQueuedLobby();
         markDirtyAndSync();
     }
@@ -916,7 +916,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
             spawnerLevel.dimension(),
             maxWave,
             serverLevel.getGameTime());
-        activeRuns.put(instance.spawnerPos(), run);
+        activeRuns.put(run.instanceKey(), run);
 
         ArenaRunLifecycle.beginRun(spawnerLevel, this, run, players);
         for (ServerPlayer p : players) BusyStateCompat.setBusy(p.getUUID(), BUSY_REASON);
@@ -1042,7 +1042,8 @@ public class ArenaControllerBlockEntity extends BlockEntity
         List<PendingJoinRequest> pendingJoinRequests,
         List<LeaderboardEntry> leaderboard,
         List<BlockPos> pendingInstanceRemovals,
-        List<InstanceRunEntry> activeRuns
+        List<InstanceRunEntry> activeRuns,
+        List<net.ledok.arenas_ld.activity.InstanceKey> pendingRemovalKeys
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             LifecycleTimings.CODEC.optionalFieldOf("lifecycle", LifecycleTimings.DEFAULT).forGetter(State::lifecycle),
@@ -1059,7 +1060,8 @@ public class ArenaControllerBlockEntity extends BlockEntity
             PendingJoinRequest.CODEC.listOf().optionalFieldOf("pendingJoinRequests", List.of()).forGetter(State::pendingJoinRequests),
             LeaderboardEntry.CODEC.listOf().optionalFieldOf("leaderboard", List.of()).forGetter(State::leaderboard),
             BlockPos.CODEC.listOf().optionalFieldOf("pendingInstanceRemovals", List.of()).forGetter(State::pendingInstanceRemovals),
-            InstanceRunEntry.CODEC.listOf().optionalFieldOf("activeRuns", List.of()).forGetter(State::activeRuns)
+            InstanceRunEntry.CODEC.listOf().optionalFieldOf("activeRuns", List.of()).forGetter(State::activeRuns),
+            net.ledok.arenas_ld.activity.InstanceKey.CODEC.listOf().optionalFieldOf("pendingRemovalKeys", List.of()).forGetter(State::pendingRemovalKeys)
         ).apply(i, State::new));
     }
 
@@ -1072,8 +1074,8 @@ public class ArenaControllerBlockEntity extends BlockEntity
                 inst.status().name(), inst.cooldownTicksRemaining()));
         }
         List<InstanceRunEntry> runEntries = new ArrayList<>(activeRuns.size());
-        for (Map.Entry<BlockPos, ArenaRun> entry : activeRuns.entrySet()) {
-            runEntries.add(new InstanceRunEntry(entry.getKey(), entry.getValue()));
+        for (ArenaRun run : activeRuns.values()) {
+            runEntries.add(new InstanceRunEntry(run.spawnerPos(), run));
         }
         State state = new State(
             new LifecycleTimings(disconnectGraceTicks, lobbyOfflineTimeoutTicks, respawnTimeTicks, deathTimePenaltyTicks, hpScalePerPlayer, hpScalePerWave),
@@ -1081,7 +1083,9 @@ public class ArenaControllerBlockEntity extends BlockEntity
             new RewardCurve(rewardCurrencyBase, rewardCurrencyExp, rewardXpBase, rewardXpExp),
             instanceEntries, new ArrayList<>(lobbies), new ArrayList<>(queuedLobbyIds),
             new ArrayList<>(pendingInvites), new ArrayList<>(pendingJoinRequests),
-            new ArrayList<>(leaderboard), new ArrayList<>(pendingInstanceRemovals), runEntries);
+            new ArrayList<>(leaderboard),
+            pendingInstanceRemovals.stream().map(net.ledok.arenas_ld.activity.InstanceKey::pos).toList(), // read by versions before keys
+            runEntries, new ArrayList<>(pendingInstanceRemovals));
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error("Failed to save ArenaController at {}: {}", worldPosition, err))
             .ifPresent(tag -> nbt.put("State", tag));
@@ -1126,9 +1130,21 @@ public class ArenaControllerBlockEntity extends BlockEntity
                 pendingInvites.clear(); pendingInvites.addAll(state.pendingInvites());
                 pendingJoinRequests.clear(); pendingJoinRequests.addAll(state.pendingJoinRequests());
                 leaderboard.clear(); leaderboard.addAll(state.leaderboard());
-                pendingInstanceRemovals.clear(); pendingInstanceRemovals.addAll(state.pendingInstanceRemovals());
+                pendingInstanceRemovals.clear();
+                if (!state.pendingRemovalKeys().isEmpty()) {
+                    pendingInstanceRemovals.addAll(state.pendingRemovalKeys());
+                } else {
+                    // Saved by position only (before dimension-aware keys): the running instance(s) there.
+                    for (BlockPos pos : state.pendingInstanceRemovals()) {
+                        for (ArenaInstanceState inst : instances) {
+                            if (inst.spawnerPos().equals(pos) && inst.status() == InstanceStatus.RUNNING) {
+                                pendingInstanceRemovals.add(inst.key());
+                            }
+                        }
+                    }
+                }
                 activeRuns.clear();
-                for (InstanceRunEntry ire : state.activeRuns()) activeRuns.put(ire.spawnerPos(), ire.run());
+                for (InstanceRunEntry ire : state.activeRuns()) activeRuns.put(ire.run().instanceKey(), ire.run());
             });
     }
 
@@ -1219,6 +1235,6 @@ public class ArenaControllerBlockEntity extends BlockEntity
             getMaxPartySize(), maxWave, closeTimerSeconds, cooldownTicks, getRespawnTimeTicks(),
             inviteExpiryTicks, deathTimePenaltyTicks, hpScalePerPlayer, hpScalePerWave,
             rewardCurrencyBase, rewardCurrencyExp, rewardXpBase, rewardXpExp,
-            entries, Set.copyOf(pendingInstanceRemovals), List.copyOf(leaderboard));
+            entries, pendingInstanceRemovals.stream().map(net.ledok.arenas_ld.activity.InstanceKey::pos).collect(java.util.stream.Collectors.toUnmodifiableSet()), List.copyOf(leaderboard));
     }
 }

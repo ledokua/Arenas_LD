@@ -62,6 +62,18 @@ once. Before, they vanished with the block: the players stayed in the instance i
 Spectator, still marked busy and on the run's team, with the mobs alive and the chunks held until
 the server stopped.
 
+**Instances at the same coordinates in different dimensions** (copied instance dimensions):
+- Raid and arena controllers tracked runs, and instances flagged for removal, by spawner position
+  only. A second run at the same position in another dimension replaced the first, which then never
+  ticked again, leaving its players stuck. Runs are now keyed by dimension and position. Older saves
+  still load, and removal flags saved by position are matched to the running instance there.
+- When a run ended on an arena instance flagged for removal, every instance at that position was
+  unlinked, in all dimensions. Now only that instance is.
+- Each run's no-friendly-fire team is now named from its instance's dimension and exact position.
+  The old names came from the position's hash code, so two instances could share a team, and one
+  run's end deleted it from under the other. A team left under the old name by a run that was going
+  during the update is deleted when that run ends.
+
 **Doors and chunk loading:**
 - Doors are now always set as a whole, and the run loads a door's chunks before changing it. Before,
   at run start the run's chunks were still loading, so a door outside its Room Controller's own

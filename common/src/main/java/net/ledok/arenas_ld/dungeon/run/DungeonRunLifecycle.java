@@ -1471,7 +1471,7 @@ public final class DungeonRunLifecycle {
     // ── Party team (temporary no-PvP team for the duration of the run) ──────────
 
     private static String teamNameFor(DungeonRun run) {
-        return "ald_d_" + Integer.toHexString(run.dbsPos().hashCode());
+        return RunPartyTeams.teamName("ald_d_", run.dbsDimension(), run.dbsPos());
     }
 
     /** Moves the player onto the run's no-PvP team, remembering their prior team. */
@@ -1486,7 +1486,8 @@ public final class DungeonRunLifecycle {
 
     /** Gives every member (but {@code except}) back their prior team and deletes the temporary run team. */
     private static void teardownPartyTeam(ServerLevel world, DungeonRun run, Set<UUID> except) {
-        RunPartyTeams.teardown(world, teamNameFor(run), run.participants().values().stream()
+        RunPartyTeams.teardown(world, teamNameFor(run), RunPartyTeams.legacyTeamName("ald_d_", run.dbsPos()),
+            run.participants().values().stream()
             .filter(p -> !except.contains(p.playerUuid()))
             .map(RunParticipant::playerName).toList());
     }

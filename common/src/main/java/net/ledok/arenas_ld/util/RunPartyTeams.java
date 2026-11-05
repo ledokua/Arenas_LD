@@ -25,6 +25,34 @@ public final class RunPartyTeams {
     private RunPartyTeams() {
     }
 
+    /**
+     * The run team of an instance: {@code prefix} plus the instance's dimension and exact position.
+     * It used to be the position's hash code alone, which two instances share when they sit at the
+     * same coordinates in two dimensions (copied instance dimensions) or merely collide; one run's
+     * end then deleted the other's team, and with it the party's no-friendly-fire protection.
+     */
+    public static String teamName(String prefix, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
+                                  net.minecraft.core.BlockPos pos) {
+        return prefix + Integer.toHexString(dimension.location().toString().hashCode()) + "_" + Long.toHexString(pos.asLong());
+    }
+
+    /** The team name runs started before {@link #teamName} used, for cleaning up after them. */
+    public static String legacyTeamName(String prefix, net.minecraft.core.BlockPos pos) {
+        return prefix + Integer.toHexString(pos.hashCode());
+    }
+
+    /**
+     * {@link #teardown}, plus deleting a team left under the legacy name by a run that was going when
+     * the server updated (its members leave it with it).
+     */
+    public static void teardown(ServerLevel world, String teamName, String legacyTeamName, Iterable<String> playerNames) {
+        teardown(world, teamName, playerNames);
+        PlayerTeam legacy = world.getScoreboard().getPlayerTeam(legacyTeamName);
+        if (legacy != null) {
+            world.getScoreboard().removePlayerTeam(legacy);
+        }
+    }
+
     /** Creates the run team if needed and moves the player onto it, remembering their prior team. */
     public static void add(ServerLevel world, String teamName, ServerPlayer player) {
         Scoreboard scoreboard = world.getScoreboard();

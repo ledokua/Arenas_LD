@@ -139,6 +139,8 @@ public final class RaidRun {
     public boolean hardcoreEnabled() { return hardcoreEnabled; }
     public BlockPos spawnerPos() { return spawnerPos; }
     public ResourceKey<Level> spawnerDimension() { return spawnerDimension; }
+    /** The instance this run is in: its spawner, by dimension and position. */
+    public net.ledok.arenas_ld.activity.InstanceKey instanceKey() { return new net.ledok.arenas_ld.activity.InstanceKey(spawnerDimension, spawnerPos); }
     public int timerTicks() { return timerTicks; }
     public int closeTimerTicks() { return closeTimerTicks; }
     public int initialCloseTimerTicks() { return initialCloseTimerTicks; }

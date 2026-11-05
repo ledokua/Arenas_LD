@@ -95,7 +95,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedM
     @Nullable
     private RaidRun findRun() {
         if (!(level instanceof ServerLevel sl)) return null;
-        return RaidRunLifecycle.findRun(sl.getServer(), worldPosition);
+        return RaidRunLifecycle.findRun(sl.getServer(), new net.ledok.arenas_ld.activity.InstanceKey(sl.dimension(), worldPosition));
     }
 
     public BlockPos getEntranceOffset() { return entranceOffset; }
@@ -201,7 +201,7 @@ public class RaidBossSpawnerBlockEntity extends BlockEntity implements ExtendedM
     @Nullable
     private RaidControllerBlockEntity owningController() {
         if (!(level instanceof ServerLevel sl) || sl.getServer() == null) return null;
-        return RaidRunLifecycle.findOwningController(sl.getServer(), worldPosition);
+        return RaidRunLifecycle.findOwningController(sl.getServer(), new net.ledok.arenas_ld.activity.InstanceKey(sl.dimension(), worldPosition));
     }
 
     public boolean isHardcoreEnabled() {

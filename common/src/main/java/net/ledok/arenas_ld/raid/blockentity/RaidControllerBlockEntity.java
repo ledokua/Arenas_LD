@@ -71,6 +71,8 @@ public class RaidControllerBlockEntity extends BlockEntity
         InstanceStatus status,
         int cooldownTicksRemaining
     ) {
+        public net.ledok.arenas_ld.activity.InstanceKey key() { return new net.ledok.arenas_ld.activity.InstanceKey(dimension, spawnerPos); }
+
         public RaidInstanceState withStatus(InstanceStatus nextStatus, int nextCooldownTicks) {
             return new RaidInstanceState(spawnerPos, dimension, nextStatus, nextCooldownTicks);
         }
@@ -122,7 +124,7 @@ public class RaidControllerBlockEntity extends BlockEntity
      * In-progress raid runs, keyed by spawner position. Sole index of active raids; each
      * {@link RaidRun} carries its lobby id, so reverse lookups iterate this map.
      */
-    private final Map<BlockPos, RaidRun> activeRuns = new HashMap<>();
+    private final Map<net.ledok.arenas_ld.activity.InstanceKey, RaidRun> activeRuns = new HashMap<>();
     /** Per-player offline timestamp for grace-period tracking. */
     private final Map<UUID, Long> offlineSinceTick = new HashMap<>();
     /** Leaderboard entries, top 10 per tier. */
@@ -154,7 +156,7 @@ public class RaidControllerBlockEntity extends BlockEntity
     /** Per-tier raid configs (health/damage multipliers, time limit, enabled, reward currency). */
     private final Map<DifficultyTier, RaidTierConfig> tierConfigs = new EnumMap<>(DifficultyTier.class);
     /** Instances queued for removal once their current run ends. */
-    private final Set<BlockPos> pendingInstanceRemovals = new HashSet<>();
+    private final Set<net.ledok.arenas_ld.activity.InstanceKey> pendingInstanceRemovals = new HashSet<>();
 
     /**
      * Whether this controller has force-loaded its own chunk this session. The controller drives
@@ -223,7 +225,8 @@ public class RaidControllerBlockEntity extends BlockEntity
         Map<DifficultyTier, List<LeaderboardEntry>> leaderboards,
         Map<DifficultyTier, RaidTierConfig> tierConfigs,
         List<BlockPos> pendingInstanceRemovals,
-        List<InstanceRunEntry> activeRuns
+        List<InstanceRunEntry> activeRuns,
+        List<net.ledok.arenas_ld.activity.InstanceKey> pendingRemovalKeys
     ) {
         static final Codec<State> CODEC = RecordCodecBuilder.create(i -> i.group(
             LifecycleTimings.CODEC.optionalFieldOf("lifecycle", LifecycleTimings.DEFAULT).forGetter(State::lifecycle),
@@ -241,7 +244,8 @@ public class RaidControllerBlockEntity extends BlockEntity
             Codec.unboundedMap(DifficultyTier.CODEC, RaidTierConfig.CODEC)
                 .optionalFieldOf("tierConfigs", Map.of()).forGetter(State::tierConfigs),
             BlockPos.CODEC.listOf().optionalFieldOf("pendingInstanceRemovals", List.of()).forGetter(State::pendingInstanceRemovals),
-            InstanceRunEntry.CODEC.listOf().optionalFieldOf("activeRuns", List.of()).forGetter(State::activeRuns)
+            InstanceRunEntry.CODEC.listOf().optionalFieldOf("activeRuns", List.of()).forGetter(State::activeRuns),
+            net.ledok.arenas_ld.activity.InstanceKey.CODEC.listOf().optionalFieldOf("pendingRemovalKeys", List.of()).forGetter(State::pendingRemovalKeys)
         ).apply(i, State::new));
     }
 
@@ -280,7 +284,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         for (RaidRun run : new java.util.ArrayList<>(activeRuns.values())) {
             int calls = 0;
             // First call: a running run is lost (or won/lost already and closing); second: closed.
-            while (activeRuns.get(run.spawnerPos()) == run && calls++ < 2) {
+            while (activeRuns.get(run.instanceKey()) == run && calls++ < 2) {
                 net.ledok.arenas_ld.raid.run.RaidRunLifecycle.forceEnd(server, this, run);
             }
         }
@@ -538,9 +542,9 @@ public class RaidControllerBlockEntity extends BlockEntity
                 case COOLDOWN -> ArenasApi.InstanceState.COOLDOWN;
             };
             int cooldownLeft = state == ArenasApi.InstanceState.COOLDOWN ? Math.max(0, inst.cooldownTicksRemaining()) : 0;
-            // Pending removals are kept by position only, and only ever flag a running instance.
+            // Pending removals only ever flag a running instance.
             boolean pendingRemoval = inst.status() == InstanceStatus.RUNNING
-                && pendingInstanceRemovals.contains(inst.spawnerPos());
+                && pendingInstanceRemovals.contains(inst.key());
             instanceStatuses.add(new ArenasApi.InstanceStatus(new ArenasApi.InstanceRef(inst.dimension(), inst.spawnerPos()),
                 state, cooldownLeft, pendingRemoval));
         }
@@ -644,12 +648,12 @@ public class RaidControllerBlockEntity extends BlockEntity
         refreshActivity();
     }
 
-    /** Live read-only view of in-progress raid runs, keyed by spawner position. */
-    public Map<BlockPos, RaidRun> getActiveRuns() {
+    /** Live read-only view of in-progress raid runs, keyed by instance (spawner dimension and position). */
+    public Map<net.ledok.arenas_ld.activity.InstanceKey, RaidRun> getActiveRuns() {
         return Collections.unmodifiableMap(activeRuns);
     }
 
-    public Set<BlockPos> getPendingInstanceRemovals() {
+    public Set<net.ledok.arenas_ld.activity.InstanceKey> getPendingInstanceRemovals() {
         return Collections.unmodifiableSet(pendingInstanceRemovals);
     }
 
@@ -709,17 +713,15 @@ public class RaidControllerBlockEntity extends BlockEntity
             if (inst.spawnerPos().equals(spawnerPos) && inst.dimension().equals(dimension)) {
                 if (inst.status() == InstanceStatus.RUNNING) {
                     // Toggle pending-removal flag — actual removal happens when the run ends.
-                    if (pendingInstanceRemovals.contains(spawnerPos)) {
-                        pendingInstanceRemovals.remove(spawnerPos);
-                    } else {
-                        pendingInstanceRemovals.add(spawnerPos);
+                    if (!pendingInstanceRemovals.remove(inst.key())) {
+                        pendingInstanceRemovals.add(inst.key());
                     }
                     markDirtyAndSync();
                     return true;
                 }
                 it.remove();
-                activeRuns.remove(spawnerPos);
-                pendingInstanceRemovals.remove(spawnerPos);
+                activeRuns.remove(inst.key());
+                pendingInstanceRemovals.remove(inst.key());
                 markDirtyAndSync();
                 return true;
             }
@@ -757,10 +759,10 @@ public class RaidControllerBlockEntity extends BlockEntity
         return instances.stream().anyMatch(i -> i.status() == InstanceStatus.FREE);
     }
 
-    private void releaseInstance(BlockPos spawnerPos) {
+    private void releaseInstance(net.ledok.arenas_ld.activity.InstanceKey key) {
         for (int i = 0; i < instances.size(); i++) {
             RaidInstanceState inst = instances.get(i);
-            if (inst.spawnerPos().equals(spawnerPos) && inst.status() == InstanceStatus.RUNNING) {
+            if (inst.key().equals(key) && inst.status() == InstanceStatus.RUNNING) {
                 int cooldown = Math.max(0, cooldownTicks);
                 InstanceStatus next = cooldown > 0 ? InstanceStatus.COOLDOWN : InstanceStatus.FREE;
                 instances.set(i, inst.withStatus(next, cooldown));
@@ -1218,7 +1220,7 @@ public class RaidControllerBlockEntity extends BlockEntity
     // ─────────────────────────────────────────────────────────────────────────
 
     public void onRaidEnded(
-        BlockPos spawnerPos,
+        net.ledok.arenas_ld.activity.InstanceKey key,
         boolean wasWin,
         RaidDifficulty difficulty,
         List<String> playerNames,
@@ -1244,7 +1246,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
 
         // Find which lobby this spawner belonged to via the active run
-        RaidRun endingRun = activeRuns.get(spawnerPos);
+        RaidRun endingRun = activeRuns.get(key);
         UUID lobbyId = endingRun != null ? endingRun.lobbyId() : null;
 
         // Clear busy state
@@ -1269,16 +1271,14 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
 
         // Release the instance, or unlink it when an admin removed it while this run was going.
-        if (pendingInstanceRemovals.remove(spawnerPos)) {
-            ResourceKey<Level> dimension = endingRun != null ? endingRun.spawnerDimension() : null;
-            instances.removeIf(inst -> inst.spawnerPos().equals(spawnerPos) && inst.status() == InstanceStatus.RUNNING
-                && (dimension == null || inst.dimension().equals(dimension)));
+        if (pendingInstanceRemovals.remove(key)) {
+            instances.removeIf(inst -> inst.key().equals(key) && inst.status() == InstanceStatus.RUNNING);
         } else {
-            releaseInstance(spawnerPos);
+            releaseInstance(key);
         }
 
         // Tear down the run-side mirror entry.
-        activeRuns.remove(spawnerPos);
+        activeRuns.remove(key);
 
         // The freed instance is now on cooldown; tickQueuePriority offers it to the queue front
         // once the cooldown expires (notify-only, never auto-start).
@@ -1381,7 +1381,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         for (RaidInstanceState inst : instances) {
             int untilFree;
             if (inst.status() == InstanceStatus.RUNNING) {
-                RaidRun run = activeRuns.get(inst.spawnerPos());
+                RaidRun run = activeRuns.get(inst.key());
                 int remaining = run != null ? Math.max(0, run.timerTicks()) : 0;
                 untilFree = remaining + cooldownTicks;
             } else if (inst.status() == InstanceStatus.COOLDOWN) {
@@ -1554,7 +1554,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             spawnerLevel.dimension(),
             serverLevel.getGameTime()
         );
-        activeRuns.put(instance.spawnerPos(), run);
+        activeRuns.put(run.instanceKey(), run);
 
         RaidRunLifecycle.startBattle(
             spawnerLevel,
@@ -1664,8 +1664,8 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
 
         List<InstanceRunEntry> runEntries = new ArrayList<>(activeRuns.size());
-        for (Map.Entry<BlockPos, RaidRun> entry : activeRuns.entrySet()) {
-            runEntries.add(new InstanceRunEntry(entry.getKey(), entry.getValue()));
+        for (RaidRun run : activeRuns.values()) {
+            runEntries.add(new InstanceRunEntry(run.spawnerPos(), run));
         }
 
         State state = new State(
@@ -1681,8 +1681,9 @@ public class RaidControllerBlockEntity extends BlockEntity
             new ArrayList<>(pendingJoinRequests),
             new EnumMap<>(leaderboards),
             new EnumMap<>(tierConfigs),
-            new ArrayList<>(pendingInstanceRemovals),
-            runEntries
+            pendingInstanceRemovals.stream().map(net.ledok.arenas_ld.activity.InstanceKey::pos).toList(), // read by versions before keys
+            runEntries,
+            new ArrayList<>(pendingInstanceRemovals)
         );
 
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
@@ -1747,15 +1748,25 @@ public class RaidControllerBlockEntity extends BlockEntity
                     }
 
                     pendingInstanceRemovals.clear();
-                    pendingInstanceRemovals.addAll(state.pendingInstanceRemovals());
+                    if (!state.pendingRemovalKeys().isEmpty()) {
+                        pendingInstanceRemovals.addAll(state.pendingRemovalKeys());
+                    } else {
+                        // Saved by position only (before dimension-aware keys): the running
+                        // instance(s) at that position.
+                        for (BlockPos pos : state.pendingInstanceRemovals()) {
+                            for (RaidInstanceState inst : instances) {
+                                if (inst.spawnerPos().equals(pos)) pendingInstanceRemovals.add(inst.key());
+                            }
+                        }
+                    }
                     // Before 4.9.0 a pending removal never ran: drop the flags left on instances
                     // that aren't running, rather than unlinking them out of the blue at some later run's end.
-                    pendingInstanceRemovals.removeIf(pos -> instances.stream()
-                        .noneMatch(inst -> inst.spawnerPos().equals(pos) && inst.status() == InstanceStatus.RUNNING));
+                    pendingInstanceRemovals.removeIf(key -> instances.stream()
+                        .noneMatch(inst -> inst.key().equals(key) && inst.status() == InstanceStatus.RUNNING));
 
                     activeRuns.clear();
                     for (InstanceRunEntry ire : state.activeRuns()) {
-                        activeRuns.put(ire.spawnerPos(), ire.run());
+                        activeRuns.put(ire.run().instanceKey(), ire.run());
                     }
                 });
         }
@@ -1912,11 +1923,11 @@ public class RaidControllerBlockEntity extends BlockEntity
 
         // Running instances: spawnerPos → (tier, ownerName).
         Map<BlockPos, net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.InstanceRun> running = new HashMap<>();
-        for (Map.Entry<BlockPos, RaidRun> entry : activeRuns.entrySet()) {
+        for (Map.Entry<net.ledok.arenas_ld.activity.InstanceKey, RaidRun> entry : activeRuns.entrySet()) {
             RaidRun run = entry.getValue();
             Lobby lobby = getLobbyById(run.lobbyId());
             String owner = lobby != null ? lobby.ownerName() : run.ownerName();
-            running.put(entry.getKey(), new net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.InstanceRun(run.tier(), owner == null ? "" : owner));
+            running.put(entry.getKey().pos(), new net.ledok.arenas_ld.raid.screen.RaidControllerAdminData.InstanceRun(run.tier(), owner == null ? "" : owner));
         }
 
         List<String> knownLootTableIds = new ArrayList<>();
@@ -1940,7 +1951,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             worldPosition,
             level != null ? level.dimension() : Level.OVERWORLD,
             instanceEntries,
-            new HashSet<>(pendingInstanceRemovals),
+            pendingInstanceRemovals.stream().map(net.ledok.arenas_ld.activity.InstanceKey::pos).collect(java.util.stream.Collectors.toCollection(HashSet::new)),
             cooldownTicks,
             closeTimerSeconds,
             getMaxPartySize(),

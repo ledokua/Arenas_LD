@@ -1439,7 +1439,7 @@ public final class ApiGameTests {
                 helper.assertTrue(controller.createLobby(player) && controller.startRaid(player), "the raid starts");
                 helper.assertTrue(stray.isRemoved(), "the stray tagged golem left by an earlier run was discarded");
                 helper.assertTrue(!wild.isRemoved(), "an untagged golem is left alone");
-                run = controller.getActiveRuns().get(spawnerPos);
+                run = controller.getActiveRuns().get(new net.ledok.arenas_ld.activity.InstanceKey(level.dimension(), spawnerPos));
                 helper.assertTrue(run != null && run.bossUuid() != null, "the run has a boss");
                 boss = level.getEntity(run.bossUuid());
                 helper.assertTrue(boss != null && boss.isAlive(), "the boss is loaded");

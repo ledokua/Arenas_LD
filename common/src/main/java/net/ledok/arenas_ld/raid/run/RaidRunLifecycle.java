@@ -72,35 +72,35 @@ public final class RaidRunLifecycle {
     private RaidRunLifecycle() {}
 
     /**
-     * Locate the {@link RaidControllerBlockEntity} that owns the run anchored at the given
-     * spawner position. Walks the registered controller set and returns the first one whose
-     * {@code activeRuns} map contains the spawner key.
+     * Locate the {@link RaidControllerBlockEntity} that owns the run in the given instance (spawner
+     * dimension and position). Walks the registered controller set and returns the first one whose
+     * {@code activeRuns} map contains the instance.
      */
     @Nullable
-    public static RaidControllerBlockEntity findOwningController(MinecraftServer server, BlockPos spawnerPos) {
+    public static RaidControllerBlockEntity findOwningController(MinecraftServer server, net.ledok.arenas_ld.activity.InstanceKey instance) {
         for (ControllerKey key : RaidControllerBlockEntity.getControllers()) {
             ServerLevel level = server.getLevel(key.dimension());
             if (level == null) continue;
             BlockEntity be = level.getBlockEntity(key.pos());
             if (be instanceof RaidControllerBlockEntity controller
-                && controller.getActiveRuns().containsKey(spawnerPos)) {
+                && controller.getActiveRuns().containsKey(instance)) {
                 return controller;
             }
         }
         return null;
     }
 
-    /** Convenience overload taking a level and resolving the server from it. */
+    /** Convenience overload: the spawner at {@code spawnerPos} in {@code level}. */
     @Nullable
     public static RaidControllerBlockEntity findOwningController(ServerLevel level, BlockPos spawnerPos) {
-        return findOwningController(level.getServer(), spawnerPos);
+        return findOwningController(level.getServer(), new net.ledok.arenas_ld.activity.InstanceKey(level.dimension(), spawnerPos));
     }
 
-    /** Look up the live run for a spawner across all loaded controllers. */
+    /** Look up the live run in an instance across all loaded controllers. */
     @Nullable
-    public static RaidRun findRun(MinecraftServer server, BlockPos spawnerPos) {
-        RaidControllerBlockEntity controller = findOwningController(server, spawnerPos);
-        return controller == null ? null : controller.getActiveRuns().get(spawnerPos);
+    public static RaidRun findRun(MinecraftServer server, net.ledok.arenas_ld.activity.InstanceKey instance) {
+        RaidControllerBlockEntity controller = findOwningController(server, instance);
+        return controller == null ? null : controller.getActiveRuns().get(instance);
     }
 
     /** Resolve the dimension stored on the run, returning null if the server hasn't loaded it. */
@@ -226,7 +226,7 @@ public final class RaidRunLifecycle {
         int raidTimeTicks = Math.max(0, runTier.raidTimeSeconds() * 20);
 
         net.ledok.arenas_ld.util.RunLeftovers.RunKey leftoversKey = net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run);
-        RaidControllerBlockEntity owningController = findOwningController(world, run.spawnerPos());
+        RaidControllerBlockEntity owningController = findOwningController(world.getServer(), run.instanceKey());
         for (ServerPlayer p : players) {
             run.addParticipant(new RunParticipant(
                 p.getUUID(), p.getGameProfile().getName(), ParticipantStatus.ACTIVE, now));
@@ -537,7 +537,7 @@ public final class RaidRunLifecycle {
      * @return whether the run was ended or closed
      */
     public static boolean forceEnd(MinecraftServer server, RaidControllerBlockEntity controller, RaidRun run) {
-        if (controller.getActiveRuns().get(run.spawnerPos()) != run) {
+        if (controller.getActiveRuns().get(run.instanceKey()) != run) {
             return false; // already released
         }
         ServerLevel world = resolveSpawnerLevel(server, run);
@@ -770,7 +770,7 @@ public final class RaidRunLifecycle {
         List<String> names = run.participants().values().stream().map(RunParticipant::playerName).toList();
         int elapsed = Math.max(0, (int) ((world.getGameTime() - run.startTick()) / 20L));
         RaidDifficulty diff = RaidDifficulty.from(run.tier());
-        controller.onRaidEnded(run.spawnerPos(), wasWin, diff, new ArrayList<>(names), elapsed);
+        controller.onRaidEnded(run.instanceKey(), wasWin, diff, new ArrayList<>(names), elapsed);
     }
 
     // ── Per-player handlers (called from mixins/manager via spawner shims) ──────
@@ -969,7 +969,7 @@ public final class RaidRunLifecycle {
     // ── Party team (temporary no-PvP team for the duration of the raid) ─────────
 
     private static String partyTeamNameFor(RaidRun run) {
-        return "ald_r_" + Integer.toHexString(run.spawnerPos().hashCode());
+        return RunPartyTeams.teamName("ald_r_", run.spawnerDimension(), run.spawnerPos());
     }
 
     /** Moves the player onto the run's no-PvP party team, remembering their prior team. */
@@ -984,7 +984,7 @@ public final class RaidRunLifecycle {
 
     /** Gives every member back their prior team and deletes the temporary party team. */
     private static void teardownPartyTeam(ServerLevel world, RaidRun run) {
-        RunPartyTeams.teardown(world, partyTeamNameFor(run),
+        RunPartyTeams.teardown(world, partyTeamNameFor(run), RunPartyTeams.legacyTeamName("ald_r_", run.spawnerPos()),
             run.participants().values().stream().map(RunParticipant::playerName).toList());
     }
 
