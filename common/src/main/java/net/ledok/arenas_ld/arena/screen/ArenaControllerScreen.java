@@ -290,6 +290,7 @@ public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControlle
         sig = sig * 31 + c.instances().size();
         sig = sig * 31 + c.leaderboard().size();
         sig = sig * 31 + c.maxWave();
+        sig = sig * 31 + c.requirement().getString().hashCode();
         for (InstanceView inst : c.instances()) {
             sig = sig * 31 + inst.status().ordinal();
             sig = sig * 31 + (inst.cooldownTicksRemaining() / 20);
@@ -470,6 +471,11 @@ public class ArenaControllerScreen extends FitCanvasHandledScreen<ArenaControlle
             ? Component.translatable("gui.arenas_ld.arena.endless").getString()
             : String.valueOf(maxWave);
         meta.item(smallMeta(Component.translatable("gui.arenas_ld.arena.max_wave_meta", waveMeta).getString()));
+        // The entry requirement this player meets (the screen only opens for those who may enter).
+        Component requirement = data().requirement();
+        if (!requirement.getString().isEmpty()) {
+            meta.item(text(requirement, GOOD));
+        }
         Flex live = Flex.row().gap(4).alignItems(Align.CENTER);
         live.sizing(Sizing.content(), Sizing.content());
         live.item(text(Component.literal("●"), GOOD));

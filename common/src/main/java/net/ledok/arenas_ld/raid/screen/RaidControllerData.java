@@ -40,7 +40,9 @@ public record RaidControllerData(
     Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards,
     Set<DifficultyTier> enabledTiers,
     /** Enabled tiers the entry gate refuses this viewer, with the reason to show. */
-    Map<DifficultyTier, Component> lockedTiers
+    Map<DifficultyTier, Component> lockedTiers,
+    /** Enabled tiers this viewer may enter that have a requirement label (shown green). */
+    Map<DifficultyTier, Component> metRequirements
 ) {
     /**
      * Flat data representation of a single raid instance, suitable for sending to the client.
@@ -112,6 +114,11 @@ public record RaidControllerData(
 
         buf.writeVarInt(data.lockedTiers().size());
         for (Map.Entry<DifficultyTier, Component> entry : data.lockedTiers().entrySet()) {
+            DifficultyTier.STREAM_CODEC.encode(buf, entry.getKey());
+            ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, entry.getValue());
+        }
+        buf.writeVarInt(data.metRequirements().size());
+        for (Map.Entry<DifficultyTier, Component> entry : data.metRequirements().entrySet()) {
             DifficultyTier.STREAM_CODEC.encode(buf, entry.getKey());
             ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, entry.getValue());
         }
@@ -193,11 +200,17 @@ public record RaidControllerData(
             DifficultyTier tier = DifficultyTier.STREAM_CODEC.decode(buf);
             lockedTiers.put(tier, ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf));
         }
+        int metCount = buf.readVarInt();
+        Map<DifficultyTier, Component> metRequirements = new EnumMap<>(DifficultyTier.class);
+        for (int i = 0; i < metCount; i++) {
+            DifficultyTier tier = DifficultyTier.STREAM_CODEC.decode(buf);
+            metRequirements.put(tier, ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf));
+        }
 
         return new RaidControllerData(
             blockPos, visible, own, invites, joinReqs, instances,
             queuePosition, estimatedWaitSeconds, maxPartySize, respawnTimeTicks, serverGameTick, busyPlayers,
-            topLeaderboards, enabledTiers, lockedTiers
+            topLeaderboards, enabledTiers, lockedTiers, metRequirements
         );
     }
 

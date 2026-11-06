@@ -339,7 +339,7 @@ public final class RaidRunLifecycle {
         if (bossEntity == null) {
             if (waitForMissingBoss(world, bossWorld, controller, run)) {
                 // The fight is paused (no timer, no regeneration) until the boss is back.
-                tickDownedPlayers(world, run);
+                tickDownedPlayers(world, controller, run);
                 tickDisconnectedPlayers(world, controller, run);
             }
             return;
@@ -385,7 +385,7 @@ public final class RaidRunLifecycle {
         boolean hardcore = run.hardcoreEnabled();
 
         // Downs are detected through the lethal-damage hook in LivingEntityMixin; no health polling here.
-        tickDownedPlayers(world, run);
+        tickDownedPlayers(world, controller, run);
         tickDisconnectedPlayers(world, controller, run);
 
         if (hardcore) {
@@ -768,11 +768,12 @@ public final class RaidRunLifecycle {
         if (player.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) return;
         if (run.downedPlayers().containsKey(player.getUUID())) return;
 
-        run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
+        run.updateParticipant(participant.downed(world.getGameTime()));
+        run.setRespawnWaveTicks(net.ledok.arenas_ld.util.RespawnDelays.raidWave(resolveRespawnTimeTicks(controller)));
         player.setHealth(1.0F);
         player.setGameMode(GameType.SPECTATOR);
         run.setTimerTicks(Math.max(0, run.timerTicks() - resolveDeathTimePenaltyTicks(controller)));
-        run.setDowned(new DownedPlayer(player.getUUID(), resolveRespawnTimeTicks(controller)));
+        run.setDowned(new DownedPlayer(player.getUUID(), ownRespawnWait(controller, participant.deaths())));
         // Watching a teammate, or held near where they fell (not a free spectator).
         net.ledok.arenas_ld.util.DownedSpectators.down(player, net.ledok.arenas_ld.util.DownedSpectators.RunView.of(run));
         player.sendSystemMessage(Component.translatable("message.arenas_ld.raid.you_are_downed"));
@@ -800,7 +801,7 @@ public final class RaidRunLifecycle {
             if (run.resolvedTierConfig().raidTimeSeconds() > 0 && !serverStopping) {
                 run.setTimerTicks(Math.max(0, run.timerTicks() - resolveDeathTimePenaltyTicks(controller)));
             }
-            run.setDowned(new DownedPlayer(player.getUUID(), resolveRespawnTimeTicks(controller)));
+            run.setDowned(new DownedPlayer(player.getUUID(), ownRespawnWait(controller, participant.deaths())));
         }
         int graceSeconds = Math.max(0, controller.getDisconnectGraceTicks() / 20);
         broadcastToParty(world, run, Component.translatable(
@@ -827,12 +828,12 @@ public final class RaidRunLifecycle {
 
         DownedPlayer downed = run.downedPlayers().get(player.getUUID());
         if (downed == null) {
-            downed = new DownedPlayer(player.getUUID(), resolveRespawnTimeTicks(controller));
+            downed = new DownedPlayer(player.getUUID(), ownRespawnWait(controller, participant.deaths()));
             run.setDowned(downed);
         }
         player.setGameMode(GameType.SPECTATOR);
         player.setHealth(player.getMaxHealth());
-        if (downed.isReadyToRespawn()) {
+        if (downed.isReadyToRespawn() && respawnClockFires(world, controller, run)) {
             respawnAtEntrance(world, run, player);
             run.clearDowned(player.getUUID());
         } else {
@@ -861,8 +862,10 @@ public final class RaidRunLifecycle {
         player.sendSystemMessage(Component.translatable("message.arenas_ld.raid.hardcore_death").withStyle(ChatFormatting.RED));
     }
 
-    private static void tickDownedPlayers(ServerLevel world, RaidRun run) {
+    private static void tickDownedPlayers(ServerLevel world, @Nullable RaidControllerBlockEntity controller, RaidRun run) {
         if (run.downedPlayers().isEmpty()) return;
+        run.setRespawnWaveTicks(net.ledok.arenas_ld.util.RespawnDelays.raidWave(resolveRespawnTimeTicks(controller)));
+        boolean clockFires = respawnClockFires(world, controller, run);
 
         for (UUID uuid : new ArrayList<>(run.downedPlayers().keySet())) {
             DownedPlayer downed = run.downedPlayers().get(uuid);
@@ -874,7 +877,7 @@ public final class RaidRunLifecycle {
             }
             player.setDeltaMovement(0, 0, 0);
             DownedPlayer ticked = downed.tick();
-            if (ticked.isReadyToRespawn()) {
+            if (ticked.isReadyToRespawn() && clockFires) {
                 respawnAtEntrance(world, run, player);
                 run.clearDowned(uuid);
             } else {
@@ -994,6 +997,38 @@ public final class RaidRunLifecycle {
 
     private static int resolveRespawnTimeTicks(@Nullable RaidControllerBlockEntity controller) {
         return controller != null ? controller.getRespawnTimeTicks() : DOWNED_RESPAWN_TICKS;
+    }
+
+    /**
+     * A downed player's own wait, before {@link #respawnClockFires} lets them back: with the shared
+     * clock ({@code raid_respawn_together}) only the per-death extra, else the controller's respawn
+     * time plus it.
+     */
+    private static int ownRespawnWait(@Nullable RaidControllerBlockEntity controller, int priorDeaths) {
+        int extra = net.ledok.arenas_ld.util.RespawnDelays.perDeathExtra(priorDeaths);
+        return net.ledok.arenas_ld.util.RespawnDelays.raidTogether() ? extra : resolveRespawnTimeTicks(controller) + extra;
+    }
+
+    /** Whether downed players whose own wait is over may come back now: always, or on a shared clock tick. */
+    private static boolean respawnClockFires(ServerLevel world, @Nullable RaidControllerBlockEntity controller, RaidRun run) {
+        if (!net.ledok.arenas_ld.util.RespawnDelays.raidTogether()) {
+            return true;
+        }
+        int wave = net.ledok.arenas_ld.util.RespawnDelays.raidWave(resolveRespawnTimeTicks(controller));
+        return net.ledok.arenas_ld.util.RespawnDelays.ticksToTogetherRespawn(world.getGameTime() - run.startTick(), 0, wave) == 0;
+    }
+
+    /** Ticks until a downed player is back (for the countdown); -1 when not downed. */
+    public static long respawnTicksLeft(long gameTime, RaidRun run, UUID uuid) {
+        DownedPlayer downed = run.downedPlayers().get(uuid);
+        if (downed == null) {
+            return -1;
+        }
+        if (!net.ledok.arenas_ld.util.RespawnDelays.raidTogether()) {
+            return downed.ticksRemaining();
+        }
+        return net.ledok.arenas_ld.util.RespawnDelays.ticksToTogetherRespawn(gameTime - run.startTick(),
+            downed.ticksRemaining(), run.respawnWaveTicks());
     }
 
     // ── Chunk tickets and the boss's whereabouts ────────────────────────────────

@@ -27,12 +27,59 @@ public final class EntryGates {
     /** Own logger: these run third-party callbacks and must not need the mod bootstrapped. */
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(ArenasLdMod.MOD_ID);
     private static final List<ArenasApi.EntryGate> GATES = new CopyOnWriteArrayList<>();
+    private static final List<ArenasApi.EntryRequirement> REQUIREMENTS = new CopyOnWriteArrayList<>();
 
     private EntryGates() {
     }
 
     public static void register(ArenasApi.EntryGate gate) {
         GATES.add(gate);
+    }
+
+    public static void registerRequirement(ArenasApi.EntryRequirement requirement) {
+        REQUIREMENTS.add(requirement);
+    }
+
+    /** First requirement label of the registered requirements, or null. One that throws is logged and skipped. */
+    public static @Nullable Component requirement(ServerPlayer player, ActivityHost host, @Nullable DifficultyTier tier) {
+        ResourceLocation id = host.activityId();
+        if (REQUIREMENTS.isEmpty() || id == null) {
+            return null;
+        }
+        String difficulty = tier == null ? null : ActivityHost.difficultyId(tier);
+        for (ArenasApi.EntryRequirement requirement : REQUIREMENTS) {
+            try {
+                Component label = requirement.describe(player, id, difficulty);
+                if (label != null) {
+                    return label;
+                }
+            } catch (Throwable t) {
+                LOGGER.error("Entry requirement {} failed for {} ({} / {})", requirement,
+                    player.getGameProfile().getName(), id, difficulty, t);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The requirement label of each enabled difficulty the viewer may enter (for the lobby screen,
+     * shown in green; the {@link #lockedTiers} ones show their refusal instead).
+     */
+    public static Map<DifficultyTier, Component> metRequirements(ServerPlayer viewer, ActivityHost host,
+                                                                 Map<DifficultyTier, Component> locked) {
+        Map<DifficultyTier, Component> met = new EnumMap<>(DifficultyTier.class);
+        if (REQUIREMENTS.isEmpty()) {
+            return met;
+        }
+        for (DifficultyTier tier : host.enabledTiers()) {
+            if (!locked.containsKey(tier)) {
+                Component label = requirement(viewer, host, tier);
+                if (label != null) {
+                    met.put(tier, label);
+                }
+            }
+        }
+        return met;
     }
 
     /** Whether any gate is registered (every check is a no-op otherwise). */

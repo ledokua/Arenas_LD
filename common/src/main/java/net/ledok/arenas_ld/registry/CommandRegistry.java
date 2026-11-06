@@ -67,6 +67,11 @@ public class CommandRegistry {
             .then(literal("stats").executes(CommandRegistry::showStats))
             .then(buildLobbyNode())
             .then(buildActivityNode())
+            .then(literal("team")
+                .requires(source -> source.hasPermission(2))
+                .then(literal("release")
+                    .then(argument("player", net.minecraft.commands.arguments.GameProfileArgument.gameProfile())
+                        .executes(CommandRegistry::releaseRunTeam))))
             .then(net.ledok.arenas_ld.activity.InstanceCommands.node());
 
         dispatcher.register(arenasLdNode);
@@ -161,6 +166,30 @@ public class CommandRegistry {
                 .then(argument("id", ResourceLocationArgument.id())
                     .suggests(ACTIVITY_IDS)
                     .executes(CommandRegistry::forgetActivity)));
+    }
+
+    /**
+     * {@code /arenasld team release <player>}: takes a player off a run team ({@code ald_*}) that no
+     * run has them on any more, giving back their prior team. Refused while they are in a run.
+     */
+    private static int releaseRunTeam(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        var profiles = net.minecraft.commands.arguments.GameProfileArgument.getGameProfiles(ctx, "player");
+        int released = 0;
+        for (com.mojang.authlib.GameProfile profile : profiles) {
+            String name = profile.getName();
+            if (net.ledok.arenas_ld.util.RunLeftovers.isInRun(profile.getId())) {
+                ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.team.in_run", name));
+                continue;
+            }
+            String team = net.ledok.arenas_ld.util.RunPartyTeams.release(ctx.getSource().getServer().overworld(), name);
+            if (team == null) {
+                ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.team.not_on_run_team", name));
+                continue;
+            }
+            ctx.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.team.released", name, team), true);
+            released++;
+        }
+        return released;
     }
 
     private static final com.mojang.brigadier.suggestion.SuggestionProvider<CommandSourceStack> ACTIVITY_IDS =

@@ -40,7 +40,9 @@ public record DungeonControllerAdminData(
     Map<BlockPos, InstanceRun> runningInstances,
     List<String> knownLootTableIds,
     /** The API id ({@code ActivityHost}); empty only before the first server tick. */
-    String activityId
+    String activityId,
+    /** The op who last saved through an admin screen; empty if none since the restart. */
+    String lastEditor
 ) {
     /** Tier and party label of the run currently occupying an instance. */
     public record InstanceRun(DifficultyTier tier, String party) {}
@@ -105,6 +107,7 @@ public record DungeonControllerAdminData(
             buf.writeUtf(id);
         }
         buf.writeUtf(data.activityId());
+        buf.writeUtf(data.lastEditor());
     }
 
     private static DungeonControllerAdminData decode(RegistryFriendlyByteBuf buf) {
@@ -171,6 +174,7 @@ public record DungeonControllerAdminData(
             knownLootTableIds.add(buf.readUtf());
         }
         String activityId = buf.readUtf();
+        String lastEditor = buf.readUtf();
 
         return new DungeonControllerAdminData(
             blockPos,
@@ -190,7 +194,8 @@ public record DungeonControllerAdminData(
             tierConfigs,
             runningInstances,
             knownLootTableIds,
-            activityId
+            activityId,
+            lastEditor
         );
     }
 }

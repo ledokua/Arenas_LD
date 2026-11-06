@@ -45,7 +45,9 @@ public record ArenaControllerAdminData(
     double rewardXpExp,
     List<InstanceEntry> instances,
     Set<BlockPos> pendingRemovals,
-    List<LeaderboardEntry> leaderboard
+    List<LeaderboardEntry> leaderboard,
+    /** The op who last saved through an admin screen; empty if none since the restart. */
+    String lastEditor
 ) {
     /** One linked Arena Spawner, in the controller's order. */
     public record InstanceEntry(BlockPos spawnerPos, ResourceKey<Level> dimension, InstanceStatus status,
@@ -90,6 +92,7 @@ public record ArenaControllerAdminData(
             buf.writeBlockPos(pos);
         }
         LEADERBOARD.encode(buf, data.leaderboard());
+        buf.writeUtf(data.lastEditor());
     }
 
     private static ArenaControllerAdminData decode(RegistryFriendlyByteBuf buf) {
@@ -126,9 +129,10 @@ public record ArenaControllerAdminData(
             pendingRemovals.add(buf.readBlockPos());
         }
         List<LeaderboardEntry> leaderboard = LEADERBOARD.decode(buf);
+        String lastEditor = buf.readUtf();
         return new ArenaControllerAdminData(blockPos, dimension, name, activityId, maxPartySize, maxWave,
             closeTimerSeconds, cooldownTicks, respawnTimeTicks, inviteExpiryTicks, deathTimePenaltyTicks,
             hpScalePerPlayer, hpScalePerWave, rewardCurrencyBase, rewardCurrencyExp, rewardXpBase, rewardXpExp,
-            List.copyOf(instances), Set.copyOf(pendingRemovals), List.copyOf(leaderboard));
+            List.copyOf(instances), Set.copyOf(pendingRemovals), List.copyOf(leaderboard), lastEditor);
     }
 }

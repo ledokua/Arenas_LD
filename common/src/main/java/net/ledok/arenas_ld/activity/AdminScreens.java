@@ -24,6 +24,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * Opening controller admin screens, and finding the controller and viewers behind them. Every admin
@@ -31,6 +33,9 @@ import java.util.List;
  * and the dimension binding always apply. The counterpart of {@link LobbyScreens}.
  */
 public final class AdminScreens {
+    /** Who last edited each controller through its admin screen; in memory only. */
+    private static final Map<BlockEntity, String> LAST_EDITOR = new WeakHashMap<>();
+
     private AdminScreens() {
     }
 
@@ -103,7 +108,21 @@ public final class AdminScreens {
         }
         ServerLevel level = player.server.getLevel(menu.boundDimension());
         BlockEntity be = level != null && level.isLoaded(pos) ? level.getBlockEntity(pos) : null;
-        return type.isInstance(be) ? type.cast(be) : null;
+        if (!type.isInstance(be)) {
+            return null;
+        }
+        if (player.hasPermissions(2)) {
+            LAST_EDITOR.put(be, player.getGameProfile().getName()); // every admin packet is an edit
+        }
+        return type.cast(be);
+    }
+
+    /**
+     * The op who last edited the controller through an admin screen (empty if none since the
+     * restart). Snapshots carry it, so a screen whose unsaved edit collided can say who saved.
+     */
+    public static String lastEditor(BlockEntity controller) {
+        return LAST_EDITOR.getOrDefault(controller, "");
     }
 
     /** Ops whose open admin screen shows this controller: who gets its admin snapshots. */

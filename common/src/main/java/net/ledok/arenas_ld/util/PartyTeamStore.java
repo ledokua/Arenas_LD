@@ -35,6 +35,11 @@ public class PartyTeamStore extends SavedData {
         setDirty();
     }
 
+    /** Whether the player has a stored prior team (they are, or were left, on a run team). */
+    public boolean has(String playerName) {
+        return priorTeamByPlayer.containsKey(playerName);
+    }
+
     /**
      * Returns and removes the player's stored prior team name. Returns {@code null} if no record
      * exists, or an empty string if they had no prior team.

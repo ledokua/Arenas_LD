@@ -572,15 +572,8 @@ public final class ArenaRunLifecycle {
     }
 
     private static void rollLootTableToWorld(ServerLevel world, ArenaRun run, String lootTableId, ServerPlayer player) {
-        ResourceLocation id = ResourceLocation.tryParse(lootTableId);
-        if (id == null) return;
-        LootTable table = Objects.requireNonNull(world.getServer()).reloadableRegistries()
-            .getLootTable(ResourceKey.create(Registries.LOOT_TABLE, id));
-        LootParams params = new LootParams.Builder(world)
-            .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(run.spawnerPos()))
-            .withParameter(LootContextParams.THIS_ENTITY, player)
-            .create(LootContextParamSets.GIFT);
-        table.getRandomItems(params).forEach(stack -> {
+        // Through RewardDelivery: same GIFT roll, and a failing table is logged instead of thrown.
+        RewardDelivery.rollLoot(world, lootTableId, player, Vec3.atCenterOf(run.spawnerPos())).forEach(stack -> {
             double x = run.spawnerPos().getX() + 0.5 + (world.random.nextDouble() * 8.0) - 4.0;
             double y = run.spawnerPos().getY() + 3.5;
             double z = run.spawnerPos().getZ() + 0.5 + (world.random.nextDouble() * 8.0) - 4.0;

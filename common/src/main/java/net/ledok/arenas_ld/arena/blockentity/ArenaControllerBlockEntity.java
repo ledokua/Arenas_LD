@@ -1214,7 +1214,13 @@ public class ArenaControllerBlockEntity extends BlockEntity
         }
         return new net.ledok.arenas_ld.arena.screen.ArenaControllerData(worldPosition, shown, queuePosition,
             instanceViews, List.copyOf(leaderboard), myInvites, myRequests, inLobby, inRun,
-            getMaxPartySize(), maxWave);
+            getMaxPartySize(), maxWave, requirementLabel(player));
+    }
+
+    /** The entry requirement label for the lobby screen (empty for none). */
+    private Component requirementLabel(ServerPlayer player) {
+        Component label = net.ledok.arenas_ld.activity.EntryGates.requirement(player, this, null);
+        return label == null ? Component.empty() : label;
     }
 
     @Override
@@ -1235,6 +1241,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
             getMaxPartySize(), maxWave, closeTimerSeconds, cooldownTicks, getRespawnTimeTicks(),
             inviteExpiryTicks, deathTimePenaltyTicks, hpScalePerPlayer, hpScalePerWave,
             rewardCurrencyBase, rewardCurrencyExp, rewardXpBase, rewardXpExp,
-            entries, pendingInstanceRemovals.stream().map(net.ledok.arenas_ld.activity.InstanceKey::pos).collect(java.util.stream.Collectors.toUnmodifiableSet()), List.copyOf(leaderboard));
+            entries, pendingInstanceRemovals.stream().map(net.ledok.arenas_ld.activity.InstanceKey::pos).collect(java.util.stream.Collectors.toUnmodifiableSet()), List.copyOf(leaderboard),
+            AdminScreens.lastEditor(this));
     }
 }

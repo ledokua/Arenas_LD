@@ -34,9 +34,11 @@ public class DungeonControllerScreenHandler extends net.ledok.arenas_ld.activity
     private int queuePosition;
     private int estimatedWaitSeconds;
     private Map<DifficultyTier, net.minecraft.network.chat.Component> lockedTiers;
+    private Map<DifficultyTier, net.minecraft.network.chat.Component> metRequirements = Map.of();
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerData data) {
         this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.myJoinRequests(), data.maxPartySize(), data.tiers(), data.serverGameTick(), data.busyPlayers(), data.topLeaderboards(), data.queuePosition(), data.estimatedWaitSeconds(), data.lockedTiers());
+        this.metRequirements = Map.copyOf(data.metRequirements());
     }
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerBlockEntity blockEntity) {
@@ -129,6 +131,10 @@ public class DungeonControllerScreenHandler extends net.ledok.arenas_ld.activity
         return lockedTiers;
     }
 
+    public Map<DifficultyTier, net.minecraft.network.chat.Component> getMetRequirements() {
+        return metRequirements;
+    }
+
     public void applyData(DungeonControllerData data) {
         this.visibleLobbies = List.copyOf(data.visibleLobbies());
         this.ownLobby = data.ownLobby();
@@ -142,6 +148,7 @@ public class DungeonControllerScreenHandler extends net.ledok.arenas_ld.activity
         this.queuePosition = data.queuePosition();
         this.estimatedWaitSeconds = data.estimatedWaitSeconds();
         this.lockedTiers = Map.copyOf(data.lockedTiers());
+        this.metRequirements = Map.copyOf(data.metRequirements());
     }
 
     @Override

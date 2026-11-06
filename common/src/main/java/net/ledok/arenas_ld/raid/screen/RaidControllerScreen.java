@@ -1043,14 +1043,18 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
         DifficultyTier[] tiers = DifficultyTier.values();
         Button[] buttons = new Button[tiers.length];
         Component[] notes = new Component[tiers.length];
+        boolean[] locked = new boolean[tiers.length];
         for (int i = 0; i < tiers.length; i++) {
             DifficultyTier tier = tiers[i];
-            notes[i] = isTierEnabled(tier) ? lockReason(tier) : null;
-            buttons[i] = segmentButton(tier.name(), notes[i] != null ? INK_DIM : tierColor(tier),
-                isOwner && isTierEnabled(tier) && notes[i] == null, current == tier,
+            Component lock = isTierEnabled(tier) ? lockReason(tier) : null;
+            locked[i] = lock != null;
+            // Locked: the gate's reason, as before. Open: the requirement it meets, in green.
+            notes[i] = locked[i] ? lock : isTierEnabled(tier) ? menu.getMetRequirements().get(tier) : null;
+            buttons[i] = segmentButton(tier.name(), locked[i] ? INK_DIM : tierColor(tier),
+                isOwner && isTierEnabled(tier) && !locked[i], current == tier,
                 () -> ArenasNetwork.sendToServer(new RaidSetLobbyTierPayload(menu.getBlockPos(), tier)));
         }
-        return segmentedControl(notes, buttons);
+        return segmentedControl(notes, locked, buttons);
     }
 
     private boolean isTierEnabled(DifficultyTier tier) {
@@ -1590,11 +1594,11 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
     }
 
     private Flex segmentedControl(Button... buttons) {
-        return segmentedControl(new Component[buttons.length], buttons);
+        return segmentedControl(new Component[buttons.length], new boolean[buttons.length], buttons);
     }
 
-    /** As {@link #segmentedControl(Button...)}, with an optional note (a lock reason) under each segment. */
-    private Flex segmentedControl(Component[] notes, Button... buttons) {
+    /** As {@link #segmentedControl(Button...)}, with an optional note under each segment: a lock reason (red), else a met requirement (green). */
+    private Flex segmentedControl(Component[] notes, boolean[] locked, Button... buttons) {
         Flex row = Flex.row().alignItems(Align.START);
         row.sizing(Sizing.fill(), Sizing.content());
         int n = buttons.length;
@@ -1605,7 +1609,7 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
             cell.sizing(Sizing.fill(pct / 100f), Sizing.content());
             cell.item(buttons[i]);
             if (notes[i] != null) {
-                Label note = ArenasParchment.label(100, notes[i], DANGER).tooltipWhenCut(true);
+                Label note = ArenasParchment.label(100, notes[i], locked[i] ? DANGER : GOOD).tooltipWhenCut(true);
                 note.align(TextNode.Align.CENTER);
                 note.sizing(Sizing.fill(), Sizing.content());
                 cell.item(note);
@@ -1723,6 +1727,7 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
         Optional<Lobby> previousOwnLobby = this.ownLobby;
         int previousQueuePosition = this.lastQueuePosition;
         java.util.Map<DifficultyTier, Component> previousLocks = menu.getLockedTiers();
+        Map<DifficultyTier, Component> previousMet = menu.getMetRequirements();
         menu.applyData(data);
         syncFromMenu(true);
         this.lastQueuePosition = menu.getQueuePosition();
@@ -1730,7 +1735,8 @@ public class RaidControllerScreen extends FitCanvasHandledScreen<RaidControllerS
         // Queue position changed → the banner appears/disappears, so do a full rebuild rather than
         // the in-place member refresh (which wouldn't add/remove the banner). Same for the entry
         // gate's locks: the tier picker and lobby rows show them.
-        if (this.lastQueuePosition != previousQueuePosition || !previousLocks.equals(menu.getLockedTiers())) {
+        if (this.lastQueuePosition != previousQueuePosition || !previousLocks.equals(menu.getLockedTiers())
+            || !previousMet.equals(menu.getMetRequirements())) {
             rebuildUi();
             return;
         }

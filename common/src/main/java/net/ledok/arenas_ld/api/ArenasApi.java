@@ -75,6 +75,22 @@ public final class ArenasApi {
     }
 
     /**
+     * Says what entering needs, so the lobby screens can show it whether or not the player meets it.
+     * Registered next to the {@link EntryGate} that enforces it ({@link #registerEntryRequirement}).
+     */
+    @FunctionalInterface
+    public interface EntryRequirement {
+        /**
+         * @param player     the player looking at the lobby screen
+         * @param activity   the activity id
+         * @param difficulty the difficulty id, or null for the activity itself (arenas)
+         * @return the requirement as players see it once they meet it (green, e.g. "Lv 25+"), or null
+         *         for none. Where the gate refuses, the screen shows the refusal instead, as before.
+         */
+        @Nullable Component describe(ServerPlayer player, ResourceLocation activity, @Nullable String difficulty);
+    }
+
+    /**
      * How a run ended. Arenas: WIN when the run reached its maximum wave, LOSS otherwise. FORCED
      * when staff ended it ({@link #forceEnd}, {@code /arenasld activity stop}): neither a win nor a
      * loss for the players, so leave it out of their stats.
@@ -213,6 +229,15 @@ public final class ArenasApi {
      */
     public static void registerEntryGate(EntryGate gate) {
         EntryGates.register(gate);
+    }
+
+    /**
+     * Adds an entry requirement label (4.16.0+): shown in green on the lobby screen under each
+     * difficulty the player may enter (in the header for arenas). Several may register; the first
+     * non-null label wins. One that throws is logged and skipped.
+     */
+    public static void registerEntryRequirement(EntryRequirement requirement) {
+        EntryGates.registerRequirement(requirement);
     }
 
     /** Called (on the server thread) once per finished run of any type. */

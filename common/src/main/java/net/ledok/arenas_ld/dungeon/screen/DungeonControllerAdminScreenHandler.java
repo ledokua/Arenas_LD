@@ -38,6 +38,7 @@ public class DungeonControllerAdminScreenHandler extends AdminMenuBase {
     private Map<BlockPos, DungeonControllerAdminData.InstanceRun> runningInstances;
     private List<String> knownLootTableIds;
     private String activityId;
+    private String lastEditor;
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerAdminData data) {
         super(ModScreenHandlers.DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER, syncId);
@@ -59,6 +60,7 @@ public class DungeonControllerAdminScreenHandler extends AdminMenuBase {
         this.runningInstances = Map.copyOf(data.runningInstances());
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
         this.activityId = data.activityId();
+        this.lastEditor = data.lastEditor();
     }
 
     /** Server side: the menu only needs to know which controller it edits. */
@@ -94,6 +96,7 @@ public class DungeonControllerAdminScreenHandler extends AdminMenuBase {
     public Map<BlockPos, DungeonControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
     public List<String> getKnownLootTableIds() { return knownLootTableIds; }
     public String getActivityId() { return activityId == null ? "" : activityId; }
+    public String getLastEditor() { return lastEditor == null ? "" : lastEditor; }
 
     public void applyData(DungeonControllerAdminData data) {
         this.dimension = data.dimension();
@@ -113,6 +116,7 @@ public class DungeonControllerAdminScreenHandler extends AdminMenuBase {
         this.runningInstances = Map.copyOf(data.runningInstances());
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
         this.activityId = data.activityId();
+        this.lastEditor = data.lastEditor();
     }
 
     @Override

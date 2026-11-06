@@ -38,7 +38,9 @@ public record RaidControllerAdminData(
     Map<BlockPos, InstanceRun> runningInstances,
     List<String> knownLootTableIds,
     /** The API id ({@code ActivityHost}); empty only before the first server tick. */
-    String activityId
+    String activityId,
+    /** The op who last saved through an admin screen; empty if none since the restart. */
+    String lastEditor
 ) {
     /** One registered raid instance with its current status. */
     public record InstanceEntry(BlockPos spawnerPos, String dimension, InstanceStatus status, int cooldownTicksRemaining) {}
@@ -97,6 +99,7 @@ public record RaidControllerAdminData(
             buf.writeUtf(id);
         }
         buf.writeUtf(data.activityId());
+        buf.writeUtf(data.lastEditor());
     }
 
     private static RaidControllerAdminData decode(RegistryFriendlyByteBuf buf) {
@@ -154,6 +157,7 @@ public record RaidControllerAdminData(
             knownLootTableIds.add(buf.readUtf());
         }
         String activityId = buf.readUtf();
+        String lastEditor = buf.readUtf();
 
         return new RaidControllerAdminData(
             blockPos,
@@ -170,7 +174,8 @@ public record RaidControllerAdminData(
             tierConfigs,
             runningInstances,
             knownLootTableIds,
-            activityId
+            activityId,
+            lastEditor
         );
     }
 }

@@ -34,6 +34,7 @@ public class RaidControllerAdminScreenHandler extends AdminMenuBase {
     private Map<BlockPos, RaidControllerAdminData.InstanceRun> runningInstances = Map.of();
     private List<String> knownLootTableIds = List.of();
     private String activityId = "";
+    private String lastEditor = "";
 
     /** Client side, from the opening data; snapshots refresh it through {@link #applyData}. */
     public RaidControllerAdminScreenHandler(int syncId, Inventory inventory, RaidControllerAdminData data) {
@@ -69,6 +70,7 @@ public class RaidControllerAdminScreenHandler extends AdminMenuBase {
     public Map<BlockPos, RaidControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
     public List<String> getKnownLootTableIds() { return knownLootTableIds != null ? knownLootTableIds : List.of(); }
     public String getActivityId() { return activityId == null ? "" : activityId; }
+    public String getLastEditor() { return lastEditor; }
 
     public void applyData(RaidControllerAdminData data) {
         this.instances = List.copyOf(data.instances());
@@ -84,6 +86,7 @@ public class RaidControllerAdminScreenHandler extends AdminMenuBase {
         this.runningInstances = Map.copyOf(data.runningInstances());
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
         this.activityId = data.activityId();
+        this.lastEditor = data.lastEditor() == null ? "" : data.lastEditor();
     }
 
     @Override

@@ -1890,6 +1890,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             }
         }
 
+        java.util.Map<DifficultyTier, Component> locks = lockWatch.locksFor(player, this);
         return new RaidControllerData(
             worldPosition,
             visible,
@@ -1905,7 +1906,8 @@ public class RaidControllerBlockEntity extends BlockEntity
             busyPlayers,
             topLeaderboards,
             enabledTiers,
-            lockWatch.locksFor(player, this)
+            locks,
+            net.ledok.arenas_ld.activity.EntryGates.metRequirements(player, this, locks)
         );
     }
 
@@ -1962,7 +1964,8 @@ public class RaidControllerBlockEntity extends BlockEntity
             new EnumMap<>(tierConfigs),
             running,
             knownLootTableIds,
-            activityId == null ? "" : activityId.toString()
+            activityId == null ? "" : activityId.toString(),
+            net.ledok.arenas_ld.activity.AdminScreens.lastEditor(this)
         );
     }
 

@@ -5,6 +5,8 @@ import net.ledok.arenas_ld.arena.packet.ArenaMoveInstancePayload;
 import net.ledok.arenas_ld.arena.packet.ArenaRemoveInstancePayload;
 import net.ledok.arenas_ld.arena.packet.ArenaSetRewardCurvePayload;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
+import net.ledok.arenas_ld.screen.AdminDrafts;
+import net.ledok.arenas_ld.screen.AdminEditState;
 import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.vectorlib.client.canvas.VectorCanvas;
 import net.ledok.vectorlib.client.canvas.layout.Align;
@@ -13,6 +15,7 @@ import net.ledok.vectorlib.client.canvas.layout.Insets;
 import net.ledok.vectorlib.client.canvas.layout.Justify;
 import net.ledok.vectorlib.client.canvas.layout.Sizing;
 import net.ledok.vectorlib.client.canvas.widget.Button;
+import net.ledok.vectorlib.client.canvas.widget.Label;
 import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
 import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.arenas_ld.screen.FitCanvasHandledScreen;
@@ -55,8 +58,15 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
     private final Map<String, TextField> intFields = new LinkedHashMap<>();
     /** Every settings box by key (the int keys are also the payload keys). */
     private final Map<String, TextField> fields = new LinkedHashMap<>();
-    /** What each box last showed from the server: a box whose text differs is being edited. */
-    private final Map<String, String> shown = new HashMap<>();
+    /**
+     * Every box with the server value it came from: a snapshot (another admin's save) only
+     * refreshes the boxes nobody is editing here, and warns about the ones both changed.
+     */
+    private final AdminDrafts drafts = new AdminDrafts();
+    private Label editNotice;
+    /** Who last saved what (another admin), shown while there's no conflict. */
+    private String savedNotice;
+    private Button takeTheirs;
     private TextField currencyBase, currencyExp, xpBase, xpExp;
     private TextField nameField, idField;
     private Object lastDynamicSig;
@@ -85,21 +95,76 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
     }
 
     /**
-     * Takes a fresh snapshot: a settings box follows the server unless the admin has typed into
-     * it; the instance and leaderboard rows rebuild on the next frame when they changed.
+     * Takes a fresh snapshot: settings merge box by box (see {@link AdminDrafts}); the instance and
+     * leaderboard rows rebuild on the next frame when they changed.
      */
     public void applyData(ArenaControllerAdminData data) {
         menu.applyData(data);
-        Map<String, String> fresh = fieldValues(data);
-        fields.forEach((key, box) -> {
-            String value = fresh.get(key);
-            if (value == null) return;
-            String text = box.text();
-            if (text.equals(shown.get(key)) || text.equals(value)) {
-                if (!text.equals(value)) box.text(value);
-                shown.put(key, value);
-            }
+        if (fields.isEmpty()) {
+            return; // buildAll takes everything at once
+        }
+        drafts.setAll(boxTexts());
+        List<String> changed = drafts.merge(fieldValues(data));
+        for (String key : changed) {
+            TextField box = fields.get(key);
+            if (box != null && !box.text().equals(drafts.get(key))) box.text(drafts.get(key));
+        }
+        String notice = AdminEditState.notice(data.lastEditor(), changed,
+            Map.of("", Component.translatable("gui.arenas_ld.arena.settings")));
+        refreshEditNotice(notice);
+    }
+
+    private Map<String, String> boxTexts() {
+        Map<String, String> texts = new HashMap<>();
+        fields.forEach((key, box) -> texts.put(key, box.text()));
+        return texts;
+    }
+
+    /** The conflict warning (with "use theirs"), else who just saved, else nothing. */
+    private void refreshEditNotice(String saved) {
+        if (editNotice == null) return;
+        Map<String, String> conflicts = drafts.conflicts("");
+        takeTheirs.enabled(!conflicts.isEmpty());
+        if (!conflicts.isEmpty()) {
+            editNotice.text(AdminEditState.conflictText(data().lastEditor(), conflicts, ArenaControllerAdminScreen::caption))
+                .color(ArenasUi.WARN);
+        } else {
+            if (saved != null) savedNotice = saved;
+            editNotice.text(savedNotice == null ? "" : savedNotice).color(ArenasUi.INFO);
+        }
+    }
+
+    private void takeTheirs() {
+        Map<String, String> conflicts = drafts.conflicts("");
+        drafts.setAll(boxTexts());
+        drafts.takeServer(conflicts.keySet());
+        conflicts.keySet().forEach(key -> {
+            TextField box = fields.get(key);
+            if (box != null) box.text(drafts.get(key));
         });
+        refreshEditNotice(null);
+    }
+
+    /** A box's caption, for the conflict warning. */
+    private static Component caption(String key) {
+        return switch (key) {
+            case NAME -> Component.translatable("gui.arenas_ld.arena.name");
+            case ID -> Component.translatable("gui.arenas_ld.arena.activity_id");
+            case "maxPartySize" -> Component.translatable("gui.arenas_ld.arena.max_party");
+            case "maxWave" -> Component.translatable("gui.arenas_ld.arena.max_wave");
+            case "closeTimer" -> Component.translatable("gui.arenas_ld.arena.close_timer_seconds");
+            case "cooldown" -> Component.translatable("gui.arenas_ld.arena.cooldown_ticks");
+            case "respawnTime" -> Component.translatable("gui.arenas_ld.arena.respawn_ticks");
+            case "inviteExpiry" -> Component.translatable("gui.arenas_ld.arena.invite_expiry_ticks");
+            case "deathPenalty" -> Component.translatable("gui.arenas_ld.arena.death_penalty_ticks");
+            case "hpScalePct" -> Component.translatable("gui.arenas_ld.arena.hp_scale_pct");
+            case "hpWavePct" -> Component.translatable("gui.arenas_ld.arena.hp_wave_pct");
+            case CURRENCY_BASE -> Component.literal("$ base");
+            case CURRENCY_EXP -> Component.literal("$ exp");
+            case XP_BASE -> Component.literal("xp base");
+            case XP_EXP -> Component.literal("xp exp");
+            default -> Component.literal(key);
+        };
     }
 
     @Override
@@ -109,10 +174,11 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
 
     private void buildAll() {
         // A rebuild (resize) keeps what the admin typed but hasn't saved.
-        Map<String, String> typed = new HashMap<>();
-        fields.forEach((key, box) -> {
-            if (!box.text().equals(shown.get(key))) typed.put(key, box.text());
-        });
+        if (fields.isEmpty()) {
+            drafts.merge(fieldValues(data()));
+        } else {
+            drafts.setAll(boxTexts());
+        }
         canvas.clear();
         intFields.clear();
         fields.clear();
@@ -130,10 +196,10 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
         Flex content = Flex.column().gap(6).padding(Insets.of(10));
         content.sizing(Sizing.fill(), Sizing.content());
         content.item(buildSettings(data()));
-        typed.forEach((key, text) -> {
-            TextField box = fields.get(key);
-            if (box != null) box.text(text);
+        fields.forEach((key, box) -> {
+            if (!box.text().equals(drafts.get(key))) box.text(drafts.get(key));
         });
+        refreshEditNotice(null);
         dynamicArea = content.item(Flex.column().gap(4));
         dynamicArea.sizing(Sizing.fill(), Sizing.content());
         ScrollPanel scroll = new ScrollPanel(100, 100, content);
@@ -181,8 +247,6 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
 
     private Flex buildSettings(ArenaControllerAdminData d) {
         Map<String, String> v = fieldValues(d);
-        shown.clear();
-        shown.putAll(v);
         Flex box = Flex.column().gap(4);
         box.sizing(Sizing.fill(), Sizing.content());
         box.item(ArenasUi.sectionHeader(Component.translatable("gui.arenas_ld.arena.identity")));
@@ -215,7 +279,13 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
         Flex buttons = Flex.row().gap(6);
         buttons.sizing(Sizing.fill(), Sizing.content());
         buttons.item(ArenasUi.button(Component.translatable("gui.arenas_ld.save"), this::saveSettings));
+        takeTheirs = ArenasUi.button(Component.translatable("gui.arenas_ld.admin.take_theirs"), this::takeTheirs);
+        takeTheirs.enabled(false);
+        buttons.item(takeTheirs);
         box.item(buttons);
+        editNotice = ArenasUi.label(100, Component.empty(), ArenasUi.WARN).tooltipWhenCut(true);
+        editNotice.sizing(Sizing.fill(), Sizing.content());
+        box.item(editNotice);
         return box;
     }
 
@@ -269,22 +339,41 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
     }
 
     private void saveSettings() {
-        // Saved: the boxes now follow the server again, which shows what it accepted.
-        fields.forEach((key, box) -> shown.put(key, box.text()));
-        ArenasNetwork.sendToServer(new net.ledok.arenas_ld.packet.SetActivityInfoPayload(pos,
-            idField.text().trim(), nameField.text().trim()));
-        intFields.forEach((key, field) -> {
+        // Only what this admin changed, so a box another admin saved meanwhile is left alone.
+        // Saved boxes then follow the server again, which shows what it accepted.
+        drafts.setAll(boxTexts());
+        List<String> sent = new java.util.ArrayList<>();
+        int packets = 0;
+        if (drafts.dirty(NAME) || drafts.dirty(ID)) {
+            ArenasNetwork.sendToServer(new net.ledok.arenas_ld.packet.SetActivityInfoPayload(pos,
+                idField.text().trim(), nameField.text().trim()));
+            sent.add(NAME);
+            sent.add(ID);
+            packets++;
+        }
+        for (Map.Entry<String, TextField> entry : intFields.entrySet()) {
+            if (!drafts.dirty(entry.getKey())) continue;
             try {
-                ArenasNetwork.sendToServer(new ArenaAdminSetIntPayload(pos, key, Integer.parseInt(field.text().trim())));
+                ArenasNetwork.sendToServer(new ArenaAdminSetIntPayload(pos, entry.getKey(),
+                    Integer.parseInt(entry.getValue().text().trim())));
+                sent.add(entry.getKey());
+                packets++;
             } catch (NumberFormatException ignored) {}
-        });
-        try {
-            ArenasNetwork.sendToServer(new ArenaSetRewardCurvePayload(pos,
-                Double.parseDouble(currencyBase.text().trim()),
-                Double.parseDouble(currencyExp.text().trim()),
-                Double.parseDouble(xpBase.text().trim()),
-                Double.parseDouble(xpExp.text().trim())));
-        } catch (NumberFormatException ignored) {}
+        }
+        List<String> curve = List.of(CURRENCY_BASE, CURRENCY_EXP, XP_BASE, XP_EXP);
+        if (curve.stream().anyMatch(drafts::dirty)) {
+            try {
+                ArenasNetwork.sendToServer(new ArenaSetRewardCurvePayload(pos,
+                    Double.parseDouble(currencyBase.text().trim()),
+                    Double.parseDouble(currencyExp.text().trim()),
+                    Double.parseDouble(xpBase.text().trim()),
+                    Double.parseDouble(xpExp.text().trim())));
+                sent.addAll(curve);
+                packets++;
+            } catch (NumberFormatException ignored) {}
+        }
+        drafts.saved(sent, packets);
+        refreshEditNotice(null);
     }
 
     // ── UI helpers ────────────────────────────────────────────────────────────

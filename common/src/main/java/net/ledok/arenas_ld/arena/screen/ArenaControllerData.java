@@ -10,6 +10,8 @@ import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
 
 import java.util.HashSet;
 import java.util.List;
@@ -26,6 +28,8 @@ import java.util.UUID;
  * @param myJoinRequests requests to the viewer's lobby, when they own it
  * @param inLobby       everyone in a forming lobby (for the invite picker)
  * @param inRun         everyone in a running lobby
+ * @param requirement   what entering needs, as the entry requirement labels it (shown green, since
+ *                      the screen only opens for players who may enter); empty for none
  */
 public record ArenaControllerData(
     BlockPos blockPos,
@@ -38,7 +42,8 @@ public record ArenaControllerData(
     Set<UUID> inLobby,
     Set<UUID> inRun,
     int maxPartySize,
-    int maxWave
+    int maxWave,
+    Component requirement
 ) {
     /** One arena instance as the lobby strip shows it. */
     public record InstanceView(InstanceStatus status, int cooldownTicksRemaining) {
@@ -81,6 +86,7 @@ public record ArenaControllerData(
         writeUuids(buf, data.inRun());
         buf.writeVarInt(data.maxPartySize());
         buf.writeVarInt(data.maxWave());
+        ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, data.requirement());
     }
 
     private static ArenaControllerData decode(RegistryFriendlyByteBuf buf) {
@@ -95,7 +101,8 @@ public record ArenaControllerData(
             readUuids(buf),
             readUuids(buf),
             buf.readVarInt(),
-            buf.readVarInt());
+            buf.readVarInt(),
+            ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf));
     }
 
     private static void writeUuids(RegistryFriendlyByteBuf buf, Set<UUID> uuids) {

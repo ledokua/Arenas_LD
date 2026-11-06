@@ -44,6 +44,17 @@ public class ArenasLdConfig {
     // living teammate to watch; farther away, or in another dimension, they are put back on the spot.
     // 0 or less pins them to it.
     public int downed_spectator_radius = 16;
+    // Respawn delays (ticks; 20 = 1 s). A dungeon respawns after its controller's respawn time, but at
+    // least this long (live controllers keep their own, often 40 = 2 s); a protect room adds 50% on top.
+    public int dungeon_respawn_min_ticks = 200;
+    // Each earlier death of the same player in the same dungeon or raid run adds this much, up to the cap.
+    public int respawn_per_death_ticks = 100;
+    public int respawn_per_death_max_ticks = 1200;
+    // Raids: downed players come back together, every raid_respawn_wave_ticks counted from the raid's start,
+    // once their own wait (the per-death extra) is over. 0 or less = the controller's respawn time.
+    // false = each player on their own timer (the controller's respawn time plus the per-death extra).
+    public boolean raid_respawn_together = true;
+    public int raid_respawn_wave_ticks = 600;
 
     public static ArenasLdConfig getInstance() {
         ArenasLdConfig current = instance;

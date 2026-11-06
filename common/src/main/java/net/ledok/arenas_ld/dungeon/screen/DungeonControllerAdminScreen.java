@@ -11,6 +11,8 @@ import net.ledok.arenas_ld.dungeon.packet.SetMaxPartySizePayload;
 import net.ledok.arenas_ld.dungeon.packet.SetTierConfigPayload;
 import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.TierConfig;
+import net.ledok.arenas_ld.screen.AdminDrafts;
+import net.ledok.arenas_ld.screen.AdminEditState;
 import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.vectorlib.client.canvas.Shapes;
@@ -118,8 +120,16 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
 
     private Tab currentTab = Tab.INSTANCES;
     private String footerError;
-    /** Snapshots still due in answer to a save: each one re-reads the inputs, so refused values snap back. */
-    private int pendingSaveEchoes;
+    /** Which other tabs another admin's save just changed; cleared on a tab switch. */
+    private String footerNotice;
+    /**
+     * Every settings field with the server value it came from: a snapshot (another admin's save,
+     * or a save in another tab) only refreshes the fields nobody is editing here.
+     */
+    private final AdminDrafts drafts = new AdminDrafts();
+    /** What the tab labels show (see {@link AdminEditState#markers}), so they're only relabeled on a change. */
+    private String tabMarkers;
+    private boolean synced;
     private long lastCooldownSecond = -1L;
     private long cooldownSnapshotEpochMs = System.currentTimeMillis();
 
@@ -203,13 +213,21 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
 
         root.layoutIn(canvas.width(), canvas.height());
 
-        syncFromMenu();
+        syncStateFromMenu();
+        if (!synced) {
+            drafts.merge(serverTexts());
+            loadInputs();
+            synced = true;
+        }
         rebuildUi();
     }
 
     @Override
     protected void containerTick() {
         super.containerTick();
+        if (synced && minecraft != null && minecraft.player != null && minecraft.player.tickCount % 10 == 0) {
+            updateTabLabels(); // the unsaved-edit markers follow typing
+        }
         if (currentTab == Tab.INSTANCES) {
             long second = System.currentTimeMillis() / 1000L;
             if (second != lastCooldownSecond) {
@@ -278,6 +296,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         tabs.sizing(Sizing.fill(), Sizing.fixed(30));
         tabs.backgroundFill(PANEL_2);
 
+        tabMarkers = null; // new buttons: label them all
         instancesTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.instances", Tab.INSTANCES, 76);
         generalTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.general", Tab.GENERAL, 72);
         easyTabButton = tabButton("gui.arenas_ld.dungeon_controller_admin.tab.easy", Tab.EASY, 56);
@@ -300,7 +319,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         footer.backgroundFill(PANEL_2);
 
         footerLabel = Label.of(100, Component.empty());
-        footerLabel.color(DANGER);
+        footerLabel.color(DANGER).tooltipWhenCut(true);
         footerLabel.sizing(Sizing.expand(), Sizing.content());
         footer.item(footerLabel);
 
@@ -314,6 +333,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         Button button = new Button(width, 18, Component.translatable(key), () -> {
             currentTab = tab;
             footerError = null;
+            footerNotice = null;
             rebuildUi();
         });
         button.style(TAB_STYLE);
@@ -330,7 +350,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         normalTabButton.enabled(currentTab != Tab.NORMAL);
         hardTabButton.enabled(currentTab != Tab.HARD);
         nightmareTabButton.enabled(currentTab != Tab.NIGHTMARE);
-        updateInstancesTabLabel();
+        updateTabLabels();
 
         switch (currentTab) {
             case INSTANCES -> buildInstancesTab();
@@ -341,11 +361,71 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
             case NIGHTMARE -> buildTierTab(DifficultyTier.NIGHTMARE);
         }
 
-        footerLabel.text(footerError == null ? Component.empty() : Component.literal(footerError));
+        refreshFooter();
     }
 
-    private void updateInstancesTabLabel() {
+    private void updateTabLabels() {
+        drafts.setAll(inputTexts());
+        String markers = AdminEditState.markers(drafts, "general.", "EASY.", "NORMAL.", "HARD.", "NIGHTMARE.") + instances.size();
+        if (markers.equals(tabMarkers)) {
+            return;
+        }
+        tabMarkers = markers;
         instancesTabButton.label(Component.translatable("gui.arenas_ld.dungeon_controller_admin.tab.instances").append(" [" + instances.size() + "]"));
+        generalTabButton.label(AdminEditState.tabLabel("gui.arenas_ld.dungeon_controller_admin.tab.general", drafts, prefix(Tab.GENERAL)));
+        easyTabButton.label(AdminEditState.tabLabel("gui.arenas_ld.dungeon_controller_admin.tab.easy", drafts, prefix(Tab.EASY)));
+        normalTabButton.label(AdminEditState.tabLabel("gui.arenas_ld.dungeon_controller_admin.tab.normal", drafts, prefix(Tab.NORMAL)));
+        hardTabButton.label(AdminEditState.tabLabel("gui.arenas_ld.dungeon_controller_admin.tab.hard", drafts, prefix(Tab.HARD)));
+        nightmareTabButton.label(AdminEditState.tabLabel("gui.arenas_ld.dungeon_controller_admin.tab.nightmare", drafts, prefix(Tab.NIGHTMARE)));
+    }
+
+    /** The draft key prefix of a settings tab; null for the instances tab. */
+    private static String prefix(Tab tab) {
+        return switch (tab) {
+            case INSTANCES -> null;
+            case GENERAL -> "general.";
+            case EASY -> "EASY.";
+            case NORMAL -> "NORMAL.";
+            case HARD -> "HARD.";
+            case NIGHTMARE -> "NIGHTMARE.";
+        };
+    }
+
+    /**
+     * The footer: an input error first, then this tab's conflicts (with a button that takes the
+     * other admin's values), then which other tabs another admin just saved.
+     */
+    private void refreshFooter() {
+        footerActions.clear();
+        String tabPrefix = prefix(currentTab);
+        Map<String, String> conflicts = tabPrefix == null ? Map.of() : drafts.conflicts(tabPrefix);
+        if (footerError != null) {
+            footerLabel.text(Component.literal(footerError)).color(DANGER);
+        } else if (!conflicts.isEmpty()) {
+            footerLabel.text(AdminEditState.conflictText(menu.getLastEditor(), conflicts, DungeonControllerAdminScreen::caption)).color(WARN);
+            footerActions.item(ArenasUi.button(Component.translatable("gui.arenas_ld.admin.take_theirs"), 96, 18, () -> {
+                drafts.takeServer(conflicts.keySet());
+                loadInputs();
+                rebuildUi();
+            }));
+        } else if (footerNotice != null) {
+            footerLabel.text(Component.literal(footerNotice)).color(INFO);
+        } else {
+            footerLabel.text(Component.empty());
+        }
+    }
+
+    /** A field's caption, for the conflict warning. */
+    private static Component caption(String key) {
+        String field = key.substring(key.indexOf('.') + 1);
+        String section = key.startsWith("general.") ? "general" : "tier";
+        return switch (field) {
+            case "id" -> Component.translatable("gui.arenas_ld.admin.activity_id");
+            case "commands" -> Component.translatable("gui.arenas_ld.admin.reward_commands");
+            case "enabled" -> Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.availability");
+            case "loot" -> Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.loot");
+            default -> Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui." + section + "." + field);
+        };
     }
 
     private void buildInstancesTab() {
@@ -1029,16 +1109,36 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         }
 
         footerError = null;
-        ArenasNetwork.sendToServer(new net.ledok.arenas_ld.packet.SetActivityInfoPayload(menu.getBlockPos(),
-            activityIdInput == null ? "" : activityIdInput, nameInput == null ? "" : nameInput));
-        ArenasNetwork.sendToServer(new SetCooldownTicksPayload(menu.getBlockPos(), cooldown * 20));
-        ArenasNetwork.sendToServer(new SetCloseTimerSecondsPayload(menu.getBlockPos(), close));
-        ArenasNetwork.sendToServer(new SetMaxPartySizePayload(menu.getBlockPos(), maxParty));
-        ArenasNetwork.sendToServer(new SetInviteExpiryTicksPayload(menu.getBlockPos(), invite * 20));
-        ArenasNetwork.sendToServer(new SetRespawnTimeTicksPayload(menu.getBlockPos(), respawn));
-        ArenasNetwork.sendToServer(new SetDeathTimePenaltyPayload(menu.getBlockPos(), death * 20));
-        ArenasNetwork.sendToServer(new net.ledok.arenas_ld.dungeon.packet.SetHpScalePerPlayerPayload(menu.getBlockPos(), hpScalePct / 100.0));
-        pendingSaveEchoes += 8; // one snapshot per packet above
+        // Only what this admin changed: a field another admin saved meanwhile is left alone.
+        drafts.setAll(inputTexts());
+        BlockPos pos = menu.getBlockPos();
+        List<String> sent = new ArrayList<>();
+        if (drafts.dirty("general.name") || drafts.dirty("general.id")) {
+            ArenasNetwork.sendToServer(new net.ledok.arenas_ld.packet.SetActivityInfoPayload(pos,
+                activityIdInput == null ? "" : activityIdInput, nameInput == null ? "" : nameInput));
+            sent.add("general.name");
+            sent.add("general.id");
+        }
+        sendIfDirty(sent, "general.cooldown", () -> new SetCooldownTicksPayload(pos, cooldown * 20));
+        sendIfDirty(sent, "general.close_timer", () -> new SetCloseTimerSecondsPayload(pos, close));
+        sendIfDirty(sent, "general.max_party", () -> new SetMaxPartySizePayload(pos, maxParty));
+        sendIfDirty(sent, "general.invite_expiry", () -> new SetInviteExpiryTicksPayload(pos, invite * 20));
+        sendIfDirty(sent, "general.respawn_time", () -> new SetRespawnTimeTicksPayload(pos, respawn));
+        sendIfDirty(sent, "general.death_penalty", () -> new SetDeathTimePenaltyPayload(pos, death * 20));
+        sendIfDirty(sent, "general.hp_scale",
+            () -> new net.ledok.arenas_ld.dungeon.packet.SetHpScalePerPlayerPayload(pos, hpScalePct / 100.0));
+        // One snapshot per packet (the activity info packet covers two fields).
+        int packets = sent.size() - (sent.contains("general.id") ? 1 : 0);
+        drafts.saved(sent, packets);
+        rebuildUi();
+    }
+
+    private void sendIfDirty(List<String> sent, String key,
+                             java.util.function.Supplier<net.minecraft.network.protocol.common.custom.CustomPacketPayload> payload) {
+        if (drafts.dirty(key)) {
+            ArenasNetwork.sendToServer(payload.get());
+            sent.add(key);
+        }
     }
 
     private void applyTier(DifficultyTier tier) {
@@ -1059,10 +1159,11 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         boolean enabled = enabledInputs.getOrDefault(tier, current.enabled());
         TierConfig updated = new TierConfig(health, damage, loot, time, enabled, Math.max(0L, reward), Math.max(0, xp),
             commandInputs.getOrDefault(tier, current.rewardCommands()));
-        tierConfigs.put(tier, updated);
         footerError = null;
         ArenasNetwork.sendToServer(new SetTierConfigPayload(menu.getBlockPos(), tier, updated));
-        pendingSaveEchoes++;
+        drafts.setAll(inputTexts());
+        drafts.saved(drafts.values().keySet().stream().filter(k -> k.startsWith(tier.name() + ".")).toList(), 1);
+        rebuildUi();
     }
 
     private Long parseLong(String value) {
@@ -1096,14 +1197,11 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         return String.format("%d:%02d", minutes, rem);
     }
 
-    private void syncFromMenu() {
-        syncStateFromMenu();
-        syncSettingsFromMenu();
-    }
-
     /** Instances and their runs and cooldowns: what changes while nobody edits. */
     private void syncStateFromMenu() {
         knownLootTableIds = new ArrayList<>(menu.getKnownLootTableIds());
+        tierConfigs.clear();
+        tierConfigs.putAll(menu.getTierConfigs());
 
         instances.clear();
         instances.addAll(menu.getInstances());
@@ -1118,35 +1216,84 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         runningInstances.putAll(menu.getRunningInstances());
     }
 
-    /** The settings and every input field. */
-    private void syncSettingsFromMenu() {
-        tierConfigs.clear();
-        tierConfigs.putAll(menu.getTierConfigs());
-
-        nameInput = menu.getDungeonName();
-        activityIdInput = menu.getActivityId();
-        cooldownInput = Integer.toString(menu.getCooldownTicks() / 20);
-        closeTimerInput = Integer.toString(menu.getCloseTimerSeconds());
-        maxPartyInput = Integer.toString(menu.getMaxPartySize());
-        inviteExpiryInput = Integer.toString(menu.getInviteExpiryTicks() / 20);
-        respawnTimeInput = Integer.toString(menu.getRespawnTimeTicks());
-        deathPenaltyInput = Integer.toString(menu.getDeathTimePenaltyTicks() / 20);
-        hpScaleInput = Integer.toString((int) Math.round(menu.getHpScalePerPlayer() * 100.0));
-
-        for (Map.Entry<DifficultyTier, TierConfig> entry : tierConfigs.entrySet()) {
-            syncTierInputs(entry.getKey(), entry.getValue());
+    /** Every settings field as the server has it, in the text the inputs show. */
+    private Map<String, String> serverTexts() {
+        Map<String, String> texts = new HashMap<>();
+        texts.put("general.name", menu.getDungeonName());
+        texts.put("general.id", menu.getActivityId());
+        texts.put("general.cooldown", Integer.toString(menu.getCooldownTicks() / 20));
+        texts.put("general.close_timer", Integer.toString(menu.getCloseTimerSeconds()));
+        texts.put("general.max_party", Integer.toString(menu.getMaxPartySize()));
+        texts.put("general.invite_expiry", Integer.toString(menu.getInviteExpiryTicks() / 20));
+        texts.put("general.respawn_time", Integer.toString(menu.getRespawnTimeTicks()));
+        texts.put("general.death_penalty", Integer.toString(menu.getDeathTimePenaltyTicks() / 20));
+        texts.put("general.hp_scale", Integer.toString((int) Math.round(menu.getHpScalePerPlayer() * 100.0)));
+        for (DifficultyTier tier : DifficultyTier.values()) {
+            TierConfig config = menu.getTierConfigs().getOrDefault(tier, TierConfig.defaultFor(tier));
+            String p = tier.name() + ".";
+            texts.put(p + "health", trimDouble(config.healthMultiplier()));
+            texts.put(p + "damage", trimDouble(config.damageMultiplier()));
+            texts.put(p + "loot", config.perPlayerLootTable());
+            texts.put(p + "time", Integer.toString(config.dungeonTimeSeconds()));
+            texts.put(p + "reward", Long.toString(config.rewardCurrency()));
+            texts.put(p + "xp", Integer.toString(config.skillExperiencePerWin()));
+            texts.put(p + "enabled", Boolean.toString(config.enabled()));
+            texts.put(p + "commands", AdminDrafts.joinLines(config.rewardCommands()));
         }
+        return texts;
     }
 
-    private void syncTierInputs(DifficultyTier tier, TierConfig config) {
-        healthInputs.put(tier, trimDouble(config.healthMultiplier()));
-        damageInputs.put(tier, trimDouble(config.damageMultiplier()));
-        lootInputs.put(tier, config.perPlayerLootTable());
-        timeInputs.put(tier, Integer.toString(config.dungeonTimeSeconds()));
-        rewardInputs.put(tier, Long.toString(config.rewardCurrency()));
-        xpInputs.put(tier, Integer.toString(config.skillExperiencePerWin()));
-        enabledInputs.put(tier, config.enabled());
-        commandInputs.put(tier, new ArrayList<>(config.rewardCommands()));
+    /** What the inputs hold now, keyed like {@link #serverTexts}. */
+    private Map<String, String> inputTexts() {
+        Map<String, String> texts = new HashMap<>();
+        texts.put("general.name", nameInput == null ? "" : nameInput);
+        texts.put("general.id", activityIdInput == null ? "" : activityIdInput);
+        texts.put("general.cooldown", cooldownInput);
+        texts.put("general.close_timer", closeTimerInput);
+        texts.put("general.max_party", maxPartyInput);
+        texts.put("general.invite_expiry", inviteExpiryInput);
+        texts.put("general.respawn_time", respawnTimeInput);
+        texts.put("general.death_penalty", deathPenaltyInput);
+        texts.put("general.hp_scale", hpScaleInput);
+        for (DifficultyTier tier : DifficultyTier.values()) {
+            String p = tier.name() + ".";
+            texts.put(p + "health", healthInputs.get(tier));
+            texts.put(p + "damage", damageInputs.get(tier));
+            texts.put(p + "loot", lootInputs.get(tier));
+            texts.put(p + "time", timeInputs.get(tier));
+            texts.put(p + "reward", rewardInputs.get(tier));
+            texts.put(p + "xp", xpInputs.get(tier));
+            texts.put(p + "enabled", String.valueOf(enabledInputs.get(tier)));
+            texts.put(p + "commands", AdminDrafts.joinLines(commandInputs.getOrDefault(tier, List.of())));
+        }
+        texts.values().removeIf(java.util.Objects::isNull);
+        return texts;
+    }
+
+    /** Puts the drafts back into the inputs (the commands lists in place: an open editor holds them). */
+    private void loadInputs() {
+        nameInput = drafts.get("general.name");
+        activityIdInput = drafts.get("general.id");
+        cooldownInput = drafts.get("general.cooldown");
+        closeTimerInput = drafts.get("general.close_timer");
+        maxPartyInput = drafts.get("general.max_party");
+        inviteExpiryInput = drafts.get("general.invite_expiry");
+        respawnTimeInput = drafts.get("general.respawn_time");
+        deathPenaltyInput = drafts.get("general.death_penalty");
+        hpScaleInput = drafts.get("general.hp_scale");
+        for (DifficultyTier tier : DifficultyTier.values()) {
+            String p = tier.name() + ".";
+            healthInputs.put(tier, drafts.get(p + "health"));
+            damageInputs.put(tier, drafts.get(p + "damage"));
+            lootInputs.put(tier, drafts.get(p + "loot"));
+            timeInputs.put(tier, drafts.get(p + "time"));
+            rewardInputs.put(tier, drafts.get(p + "reward"));
+            xpInputs.put(tier, drafts.get(p + "xp"));
+            enabledInputs.put(tier, Boolean.parseBoolean(drafts.get(p + "enabled")));
+            List<String> commands = commandInputs.computeIfAbsent(tier, t -> new ArrayList<>());
+            commands.clear();
+            commands.addAll(AdminDrafts.splitLines(drafts.get(p + "commands")));
+        }
     }
 
     /** Whether a snapshot is for this screen's controller: same position and dimension. */
@@ -1155,37 +1302,38 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
     }
 
     public void applyData(DungeonControllerAdminData data) {
-        // Run starts, run ends and cooldowns send snapshots too: keep what the admin is typing
-        // unless the settings changed, or the snapshot answers a save.
-        boolean resyncSettings = pendingSaveEchoes > 0 || !sameSettings(data);
-        if (pendingSaveEchoes > 0) {
-            pendingSaveEchoes--;
-        }
+        // Run starts, run ends and cooldowns send snapshots too. Settings merge field by field:
+        // what nobody edits here follows the server, unsaved edits stay (see AdminDrafts).
         menu.applyData(data);
-        if (resyncSettings) {
-            syncFromMenu();
-            rebuildUi();
-            return;
-        }
         syncStateFromMenu();
-        if (currentTab == Tab.INSTANCES) {
+        if (!synced) {
+            return; // buildAll takes everything at once
+        }
+        drafts.setAll(inputTexts());
+        List<String> changed = drafts.merge(serverTexts());
+        loadInputs();
+        String notice = AdminEditState.notice(menu.getLastEditor(), changed, tabNames());
+        if (notice != null) {
+            footerNotice = notice;
+        }
+        String tabPrefix = prefix(currentTab);
+        if (currentTab == Tab.INSTANCES || (tabPrefix != null && AdminDrafts.any(changed, tabPrefix))) {
             rebuildUi();
         } else {
-            updateInstancesTabLabel(); // leaves the open tab's fields (and their focus) alone
+            updateTabLabels(); // leaves the open tab's fields (and their focus) alone
+            refreshFooter();
         }
     }
 
-    /** Whether the snapshot carries the settings this screen already has. */
-    private boolean sameSettings(DungeonControllerAdminData data) {
-        return menu.getDungeonName().equals(data.dungeonName())
-            && menu.getActivityId().equals(data.activityId())
-            && menu.getCooldownTicks() == data.cooldownTicks()
-            && menu.getCloseTimerSeconds() == data.closeTimerSeconds()
-            && menu.getMaxPartySize() == data.maxPartySize()
-            && menu.getInviteExpiryTicks() == data.inviteExpiryTicks()
-            && menu.getRespawnTimeTicks() == data.respawnTimeTicks()
-            && menu.getDeathTimePenaltyTicks() == data.deathTimePenaltyTicks()
-            && Double.compare(menu.getHpScalePerPlayer(), data.hpScalePerPlayer()) == 0
-            && menu.getTierConfigs().equals(data.tierConfigs());
+    /** Draft key prefix → tab name, for the "saved by" notice. */
+    private static Map<String, Component> tabNames() {
+        Map<String, Component> names = new java.util.LinkedHashMap<>();
+        for (Tab tab : Tab.values()) {
+            String p = prefix(tab);
+            if (p != null) {
+                names.put(p, Component.translatable("gui.arenas_ld.dungeon_controller_admin.tab." + tab.name().toLowerCase(java.util.Locale.ROOT)));
+            }
+        }
+        return names;
     }
 }

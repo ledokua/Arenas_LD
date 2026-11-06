@@ -18,13 +18,19 @@ import java.util.UUID;
  * @param status       current participation status (see {@link ParticipantStatus})
  * @param lastSeenTick server tick when this participant was last confirmed present. Used by
  *                     the controller to expire DISCONNECTED participants past the grace period.
+ * @param deaths       how often they went down in this run so far (the respawn delay grows with it)
  */
 public record RunParticipant(
     UUID playerUuid,
     String playerName,
     ParticipantStatus status,
-    long lastSeenTick
+    long lastSeenTick,
+    int deaths
 ) {
+    public RunParticipant(UUID playerUuid, String playerName, ParticipantStatus status, long lastSeenTick) {
+        this(playerUuid, playerName, status, lastSeenTick, 0);
+    }
+
     public enum ParticipantStatus {
         ACTIVE,
         DOWNED,
@@ -50,13 +56,19 @@ public record RunParticipant(
             UUIDUtil.CODEC.fieldOf("uuid").forGetter(RunParticipant::playerUuid),
             Codec.STRING.fieldOf("name").forGetter(RunParticipant::playerName),
             ParticipantStatus.CODEC.fieldOf("status").forGetter(RunParticipant::status),
-            Codec.LONG.fieldOf("lastSeenTick").forGetter(RunParticipant::lastSeenTick)
+            Codec.LONG.fieldOf("lastSeenTick").forGetter(RunParticipant::lastSeenTick),
+            Codec.INT.optionalFieldOf("deaths", 0).forGetter(RunParticipant::deaths)
         ).apply(instance, RunParticipant::new)
     );
 
     /** Returns a copy with a new status and updated lastSeenTick. */
     public RunParticipant withStatus(ParticipantStatus newStatus, long tick) {
-        return new RunParticipant(playerUuid, playerName, newStatus, tick);
+        return new RunParticipant(playerUuid, playerName, newStatus, tick, deaths);
+    }
+
+    /** Returns a copy that went down once more: DOWNED, with one more death. */
+    public RunParticipant downed(long tick) {
+        return new RunParticipant(playerUuid, playerName, ParticipantStatus.DOWNED, tick, deaths + 1);
     }
 
     /** True for any status other than REMOVED. */

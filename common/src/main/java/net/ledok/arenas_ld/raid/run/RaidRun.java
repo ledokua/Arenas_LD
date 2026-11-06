@@ -45,6 +45,8 @@ public final class RaidRun {
     private int initialCloseTimerTicks;
     private int regenerationTickTimer;
     private final long startTick;
+    /** The shared respawn interval in effect (from the controller and config); in memory only, set each tick. */
+    private int respawnWaveTicks = 600;
     @Nullable private BossRef bossRef;
     /** Where the boss last stood while loaded (saved; null = unknown, as in saves before 4.12.0). */
     @Nullable private BlockPos bossLastPos;
@@ -146,6 +148,8 @@ public final class RaidRun {
     public int initialCloseTimerTicks() { return initialCloseTimerTicks; }
     public int regenerationTickTimer() { return regenerationTickTimer; }
     public long startTick() { return startTick; }
+    public int respawnWaveTicks() { return respawnWaveTicks; }
+    public void setRespawnWaveTicks(int ticks) { this.respawnWaveTicks = Math.max(1, ticks); }
     @Nullable public UUID bossUuid() { return bossRef == null ? null : bossRef.bossUuid(); }
     @Nullable public ResourceKey<Level> bossDimension() { return bossRef == null ? null : bossRef.bossDimension(); }
     @Nullable public BlockPos bossLastPos() { return bossLastPos; }

@@ -1334,12 +1334,14 @@ public final class DungeonRunLifecycle {
             return;
         }
 
-        run.updateParticipant(participant.withStatus(ParticipantStatus.DOWNED, world.getGameTime()));
-        // Defending a target makes downed teammates costlier: the revive takes 50% longer.
-        int respawnTicks = controller.getRespawnTimeTicks();
+        run.updateParticipant(participant.downed(world.getGameTime()));
+        // At least dungeon_respawn_min_ticks. Defending a target makes downed teammates costlier: the
+        // revive takes 50% longer. Every earlier death in this run adds respawn_per_death_ticks.
+        int respawnTicks = net.ledok.arenas_ld.util.RespawnDelays.dungeonBase(controller.getRespawnTimeTicks());
         if (activeProtectTargetPercent(world, run) >= 0) {
             respawnTicks = respawnTicks * 3 / 2;
         }
+        respawnTicks += net.ledok.arenas_ld.util.RespawnDelays.perDeathExtra(participant.deaths());
         run.setDowned(new DownedPlayer(player.getUUID(), respawnTicks));
         int penalty = controller.getDeathTimePenaltyTicks();
         if (penalty > 0) {

@@ -41,6 +41,11 @@ public final class RewardDelivery {
      * Rolls {@code lootTableId} once with GIFT parameters and, for an online player, their luck
      * attribute (so luck-scaled entries and quality work as they do for fishing or chests). An
      * unparseable or unknown id yields an empty list (unknown tables resolve to {@code LootTable.EMPTY}).
+     *
+     * <p>An offline player ({@code player} null, rewarded through the inbox) is rolled with CHEST
+     * parameters: GIFT requires {@code this_entity}, and building it without one threw out of the
+     * controller tick and crashed the server (4.16.0). A roll that fails anyway (a broken loot
+     * table, a mod's condition) is logged and yields nothing, never an exception.
      */
     public static List<ItemStack> rollLoot(ServerLevel world, String lootTableId,
                                            @Nullable ServerPlayer player, Vec3 origin) {
@@ -52,21 +57,31 @@ public final class RewardDelivery {
             ArenasLdMod.LOGGER.warn("Invalid reward loot table id: {}", lootTableId);
             return List.of();
         }
-        LootTable table = world.getServer().reloadableRegistries()
-            .getLootTable(ResourceKey.create(Registries.LOOT_TABLE, id));
-        LootParams.Builder builder = new LootParams.Builder(world)
-            .withParameter(LootContextParams.ORIGIN, origin);
-        if (player != null) {
-            builder.withParameter(LootContextParams.THIS_ENTITY, player);
-            builder.withLuck(player.getLuck());
-        }
-        List<ItemStack> rolled = new ArrayList<>();
-        for (ItemStack stack : table.getRandomItems(builder.create(LootContextParamSets.GIFT))) {
-            if (!stack.isEmpty()) {
-                rolled.add(stack);
+        try {
+            LootTable table = world.getServer().reloadableRegistries()
+                .getLootTable(ResourceKey.create(Registries.LOOT_TABLE, id));
+            LootParams.Builder builder = new LootParams.Builder(world)
+                .withParameter(LootContextParams.ORIGIN, origin);
+            LootParams params;
+            if (player != null) {
+                builder.withParameter(LootContextParams.THIS_ENTITY, player);
+                builder.withLuck(player.getLuck());
+                params = builder.create(LootContextParamSets.GIFT);
+            } else {
+                params = builder.create(LootContextParamSets.CHEST);
             }
+            List<ItemStack> rolled = new ArrayList<>();
+            for (ItemStack stack : table.getRandomItems(params)) {
+                if (!stack.isEmpty()) {
+                    rolled.add(stack);
+                }
+            }
+            return rolled;
+        } catch (RuntimeException e) {
+            ArenasLdMod.LOGGER.error("Rolling reward loot table {} for {} failed; they get nothing from it",
+                lootTableId, player != null ? player.getGameProfile().getName() : "an offline player", e);
+            return List.of();
         }
-        return rolled;
     }
 
     /** Rolls {@code lootTableId} {@code rolls} times (at least once) and returns all the results together. */

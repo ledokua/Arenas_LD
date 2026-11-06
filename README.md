@@ -460,6 +460,12 @@ controller's block entity, so breaking the block destroys them.
 
 Disconnect grace and the lobby offline timeout both default to 5 minutes and have no field.
 
+**Several admins at once.** This applies to every controller admin screen (dungeon, raid, arena). A save sends
+only the fields you changed. Every open admin screen then takes the new values into the fields nobody there is
+editing; unsaved edits stay, in every tab. A tab with unsaved edits shows "•". If someone else saved a field you
+are editing, your value stays and the tab shows ⚠. The footer then names who saved and shows their value. Saving
+overwrites theirs; **Use theirs** drops yours.
+
 ## Arenas
 
 Endless waves. Two blocks: an **Arena Controller** (lobby, queue, instance pool, leaderboard, and the
@@ -863,7 +869,8 @@ requirements — the hub keeps itself, keyed by the id.
 
 **The entry gate.** A hub registers a gate (see [API.md](API.md)) that may refuse a player with a
 reason, which is shown as is (Eden_LD sends text like "🔒 Lv 25+"). With no gate registered nothing
-changes. It is asked:
+changes. A hub can also label the requirement (`registerEntryRequirement`, 4.16.0): players who meet it
+then see it in green under each difficulty they may pick, and in the arena lobby header. It is asked:
 
 | When | Who must pass | For which difficulty |
 |---|---|---|
@@ -1016,6 +1023,7 @@ before it. Without LuckPerms every player simply gets the defaults.
 /arenasld activity stop <id> <pos> [dim]   end only the run at that instance (its boss / arena spawner)
 /arenasld activity forget <id>     drop an activity whose controller block is gone (and let go of its chunk);
                                    refused while the controller is still there
+/arenasld team release <player>    take a player off a stale run team (ald_*), giving back their previous team
 /arenasld instance add <activity> <pos> [dim]   link a pasted instance to the activity's controller, then check it
 /arenasld instance check <activity>             check every instance of the activity
 /arenasld instance check at <pos> [dim]         check one Dungeon Boss / Raid Boss / Arena Spawner
@@ -1050,6 +1058,14 @@ One pretty-printed JSON file at `config/arenas_ld.json`, created with defaults o
 | `run_effect_blacklist` | `[]` | Mob effects stripped from run participants every tick. **Plain ids only** — the `#` tag syntax is not supported here. |
 | `debug_logging` | `false` | Verbose `[debug]` INFO logging of teleports, reconnect decisions and the chunks a run keeps loaded. |
 | `downed_spectator_radius` | `16` | How far (blocks) a downed run player with no standing teammate to watch may fly from where they went down before being put back. `0` or less pins them to the spot (1 block of slack). See [Downed players watch their party](#lobbies-parties-and-instances). |
+| `dungeon_respawn_min_ticks` | `200` | A downed **dungeon** player waits the controller's respawn time, but at least this (ticks; 20 = 1 s). A protect room adds 50% on top. |
+| `respawn_per_death_ticks` | `100` | Each earlier death of the same player in the same **dungeon or raid** run adds this to their wait (counted per run, kept across restarts). |
+| `respawn_per_death_max_ticks` | `1200` | Cap on that extra. |
+| `raid_respawn_together` | `true` | Downed **raid** players come back together on a shared clock, once their own wait (the per-death extra) is over. `false` = each on their own timer: the controller's respawn time plus the extra. |
+| `raid_respawn_wave_ticks` | `600` | The shared clock's interval, counted from the raid's start. `0` or less = the controller's respawn time. |
+
+Downed players see their countdown on the action bar ("Respawn in 12 s · Watching Bob", arenas: "Respawn with the
+next wave"), and their party sees a red boss bar naming everyone downed and their time left while anyone is.
 
 ## File locations
 

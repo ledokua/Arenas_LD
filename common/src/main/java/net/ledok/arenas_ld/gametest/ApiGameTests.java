@@ -80,6 +80,9 @@ public final class ApiGameTests {
             }
             return BLOCKED.contains(player.getUUID()) ? Component.literal("blocked") : null;
         });
+        // Every tier of a gate test activity "needs" Lv 5+, met by everyone.
+        ArenasApi.registerEntryRequirement((player, activity, difficulty) ->
+            activity.getPath().startsWith("gt_gate_") && difficulty != null ? Component.literal("Lv 5+") : null);
     }
 
     /** Runs {@code then} on the first tick {@code ready} holds, failing after {@code ticks} ticks. */
@@ -580,6 +583,40 @@ public final class ApiGameTests {
             net.ledok.arenas_ld.util.RunPartyTeams.teardown(level, secondRun, List.of(name));
             helper.assertTrue(scoreboard.getPlayersTeam(name) == null, "the mob team is never given back");
 
+            // Pass 3: a player left on another run's team (a missed exit) never gets it back.
+            var store = net.ledok.arenas_ld.util.PartyTeamStore.get(level.getServer());
+            String stale = "ald_r_gt" + suffix();
+            scoreboard.addPlayerToTeam(name, priorTeam);
+            net.ledok.arenas_ld.util.RunPartyTeams.add(level, stale, player); // stores priorTeam, never removed
+            String thirdRun = "ald_r_gt" + suffix();
+            net.ledok.arenas_ld.util.RunPartyTeams.add(level, thirdRun, player);
+            net.ledok.arenas_ld.util.RunPartyTeams.teardown(level, thirdRun, List.of(name));
+            helper.assertTrue(scoreboard.getPlayersTeam(name) == priorTeam,
+                "the stale run team is skipped: the real prior team comes back");
+            // Same, with the real prior team already lost (what live had): no team at all.
+            store.take(name);
+            scoreboard.addPlayerToTeam(name, scoreboard.getPlayerTeam(stale));
+            String fourthRun = "ald_r_gt" + suffix();
+            net.ledok.arenas_ld.util.RunPartyTeams.add(level, fourthRun, player);
+            net.ledok.arenas_ld.util.RunPartyTeams.teardown(level, fourthRun, List.of(name));
+            helper.assertTrue(scoreboard.getPlayersTeam(name) == null, "a stale run team is never given back");
+            // An old run ending late doesn't take a player off the run they're in now.
+            String current = "ald_r_gt" + suffix();
+            net.ledok.arenas_ld.util.RunPartyTeams.add(level, current, player);
+            net.ledok.arenas_ld.util.RunPartyTeams.teardown(level, stale, List.of(name));
+            helper.assertTrue(scoreboard.getPlayersTeam(name) == scoreboard.getPlayerTeam(current),
+                "a late teardown of another run leaves the current run team alone");
+            net.ledok.arenas_ld.util.RunPartyTeams.teardown(level, current, List.of(name));
+            helper.assertTrue(scoreboard.getPlayersTeam(name) == null, "the current run still gives back no team");
+            scoreboard.addPlayerTeam(stale);
+
+            // release: off a stale run team, which goes once empty.
+            scoreboard.addPlayerToTeam(name, scoreboard.getPlayerTeam(stale));
+            helper.assertTrue(stale.equals(net.ledok.arenas_ld.util.RunPartyTeams.release(level, name)), "release names the team");
+            helper.assertTrue(scoreboard.getPlayersTeam(name) == null && scoreboard.getPlayerTeam(stale) == null,
+                "released, and the empty stale team is deleted");
+            helper.assertTrue(net.ledok.arenas_ld.util.RunPartyTeams.release(level, name) == null, "nothing to release");
+
             // Login takes a player off the mob team.
             scoreboard.addPlayerToTeam(name, mobTeam);
             net.ledok.arenas_ld.util.RunPartyTeams.leaveMobTeamOnLogin(player);
@@ -612,6 +649,10 @@ public final class ApiGameTests {
                 helper.assertTrue(controller.setLobbyTier(owner, DifficultyTier.EASY), "open tier accepted");
                 helper.assertTrue(controller.getScreenOpeningData(owner).lockedTiers().keySet().equals(Set.of(DifficultyTier.HARD)),
                     "lobby data locks hard for the viewer");
+                var met = controller.getScreenOpeningData(owner).metRequirements();
+                helper.assertFalse(met.containsKey(DifficultyTier.HARD), "a locked tier shows its refusal, not the met label");
+                helper.assertTrue(met.containsKey(DifficultyTier.EASY) && met.get(DifficultyTier.EASY).getString().equals("Lv 5+"),
+                    "an open tier carries its met requirement label");
 
                 BLOCKED.add(member.getUUID());
                 helper.assertFalse(controller.joinLobby(member, lobbyId.get()), "gated player can't join");

@@ -55,27 +55,39 @@ import java.util.function.Supplier;
 public final class DownedSpectators {
     /** How often (ticks) the tether is checked and a self-camera player looks for a teammate again. */
     public static final int TETHER_INTERVAL = 5;
-    /** How often (ticks) the "Watching ..." action-bar hint is sent again (it fades after ~3 s). */
-    private static final int HINT_INTERVAL = 50;
+    /** How often (ticks) the action-bar line (respawn countdown, "Watching ...") is sent again. */
+    private static final int HINT_INTERVAL = 20;
+    /** {@link RunView#respawnLeft}: the player comes back with the next wave (arenas). */
+    public static final long NEXT_WAVE = -2;
     /** "Pinned" (radius 0 or less): how far they may drift from the spot before being put back. */
     static final double PIN_SLACK = 1.0;
 
-    /** A downed player's run, read live by the checks. */
+    /**
+     * A downed player's run, read live by the checks.
+     *
+     * @param respawnLeft ticks until a downed player is back, given the game time: -1 unknown,
+     *                    {@link #NEXT_WAVE} with the next wave
+     */
     public record RunView(Object run, Supplier<Map<UUID, RunParticipant>> participants, BooleanSupplier over,
-                          Predicate<UUID> downed) {
+                          Predicate<UUID> downed, java.util.function.BiFunction<Long, UUID, Long> respawnLeft) {
 
         public static RunView of(DungeonRun run) {
-            return new RunView(run, run::participants, () -> run.phase() == DungeonPhase.DONE, run::isDowned);
+            return new RunView(run, run::participants, () -> run.phase() == DungeonPhase.DONE, run::isDowned,
+                (time, uuid) -> {
+                    var downed = run.downedPlayers().get(uuid);
+                    return downed == null ? -1L : (long) downed.ticksRemaining();
+                });
         }
 
         public static RunView of(RaidRun run) {
             return new RunView(run, run::participants, () -> run.phase() == RaidPhase.DONE,
-                uuid -> run.downedPlayers().containsKey(uuid));
+                uuid -> run.downedPlayers().containsKey(uuid),
+                (time, uuid) -> net.ledok.arenas_ld.raid.run.RaidRunLifecycle.respawnTicksLeft(time, run, uuid));
         }
 
         public static RunView of(ArenaRun run) {
             return new RunView(run, run::participants, () -> run.phase() == ArenaPhase.DONE,
-                uuid -> run.downedPlayers().containsKey(uuid));
+                uuid -> run.downedPlayers().containsKey(uuid), (time, uuid) -> NEXT_WAVE);
         }
 
         /** Whether {@code uuid} is still a downed participant of a run that isn't over. */
@@ -113,13 +125,19 @@ public final class DownedSpectators {
 
     /** Downed player UUID → their run, where they went down and whom they watch. */
     private static final Map<UUID, Entry> DOWNED = new HashMap<>();
+    /** Run → the boss bar its party sees while anyone in it is downed ("Downed: Bob 12 s · …"). */
+    private static final Map<Object, net.minecraft.server.level.ServerBossEvent> PARTY_BARS = new HashMap<>();
 
     private DownedSpectators() {
     }
 
     public static void register() {
         ArenasEvents.SERVER_TICK_END.add(DownedSpectators::tick);
-        ArenasEvents.SERVER_STOPPED.add(server -> DOWNED.clear());
+        ArenasEvents.SERVER_STOPPED.add(server -> {
+            DOWNED.clear();
+            PARTY_BARS.values().forEach(net.minecraft.server.level.ServerBossEvent::removeAllPlayers);
+            PARTY_BARS.clear();
+        });
         // Offline: the entry (and its spot) stays until the run is done with them; others watching
         // them pick someone else on the next tick.
         ArenasEvents.PLAYER_DISCONNECT.add((player, server) -> {
@@ -283,6 +301,9 @@ public final class DownedSpectators {
     }
 
     private static void tick(MinecraftServer server) {
+        if (server.getTickCount() % HINT_INTERVAL == 0) {
+            updatePartyBars(server);
+        }
         if (DOWNED.isEmpty()) {
             return;
         }
@@ -309,7 +330,12 @@ public final class DownedSpectators {
                 } else if (--entry.hintTicks <= 0) {
                     hint(player, entry, watched);
                 }
-            } else if (camera != player) {
+                continue;
+            }
+            if (--entry.hintTicks <= 0) {
+                hint(player, entry, null); // the countdown alone
+            }
+            if (camera != player) {
                 player.setCamera(player); // nothing else may be spectated
             } else if (tetherTick) {
                 ServerPlayer mate = nearestMate(player, entry);
@@ -340,10 +366,101 @@ public final class DownedSpectators {
         hint(player, entry, target);
     }
 
-    private static void hint(ServerPlayer player, Entry entry, ServerPlayer target) {
+    /** The action-bar line: the respawn countdown, then whom they watch (when they watch someone). */
+    private static void hint(ServerPlayer player, Entry entry, @Nullable ServerPlayer target) {
         entry.hintTicks = HINT_INTERVAL;
-        player.displayClientMessage(Component.translatableWithFallback("message.arenas_ld.run.downed_watching",
-            "Watching %s — sneak to switch", target.getDisplayName()).withStyle(ChatFormatting.GRAY), true);
+        net.minecraft.network.chat.MutableComponent line = Component.empty();
+        Component status = respawnStatus(entry.run.respawnLeft().apply(player.serverLevel().getGameTime(), player.getUUID()));
+        if (status != null) {
+            line.append(status);
+        }
+        if (target != null) {
+            if (status != null) {
+                line.append(" · ");
+            }
+            line.append(Component.translatableWithFallback("message.arenas_ld.run.downed_watching",
+                "Watching %s — sneak to switch", target.getDisplayName()));
+        }
+        if (status != null || target != null) {
+            player.displayClientMessage(line.withStyle(ChatFormatting.GRAY), true);
+        }
+    }
+
+    /** "Respawn in 12 s" / "Respawn with the next wave"; null when unknown. */
+    private static @Nullable Component respawnStatus(long ticksLeft) {
+        if (ticksLeft == NEXT_WAVE) {
+            return Component.translatableWithFallback("message.arenas_ld.run.respawn_next_wave", "Respawn with the next wave");
+        }
+        if (ticksLeft < 0) {
+            return null;
+        }
+        return Component.translatableWithFallback("message.arenas_ld.run.respawn_in", "Respawn in %s s",
+            secondsLeft(ticksLeft));
+    }
+
+    /** Whole seconds shown for {@code ticks} left, rounded up (1 tick left still shows 1 s). */
+    public static long secondsLeft(long ticks) {
+        return (Math.max(0, ticks) + 19) / 20;
+    }
+
+    /**
+     * Every second: each run with someone downed shows its party a boss bar naming them and their time
+     * left; a run with nobody downed any more loses its bar. Plain vanilla boss bars: no client change.
+     */
+    private static void updatePartyBars(MinecraftServer server) {
+        Map<Object, List<UUID>> downedByRun = new HashMap<>();
+        Map<Object, RunView> views = new HashMap<>();
+        for (Map.Entry<UUID, Entry> pair : DOWNED.entrySet()) {
+            RunView view = pair.getValue().run;
+            if (view.stillDowned(pair.getKey())) {
+                downedByRun.computeIfAbsent(view.run(), k -> new ArrayList<>()).add(pair.getKey());
+                views.put(view.run(), view);
+            }
+        }
+        for (Object run : new ArrayList<>(PARTY_BARS.keySet())) {
+            if (!downedByRun.containsKey(run)) {
+                PARTY_BARS.remove(run).removeAllPlayers();
+            }
+        }
+        long time = server.overworld().getGameTime();
+        for (Map.Entry<Object, List<UUID>> group : downedByRun.entrySet()) {
+            RunView view = views.get(group.getKey());
+            Map<UUID, RunParticipant> participants = view.participants().get();
+            net.minecraft.network.chat.MutableComponent title = Component.translatableWithFallback(
+                "message.arenas_ld.run.party_downed", "Downed:").copy();
+            for (UUID uuid : group.getValue()) {
+                RunParticipant participant = participants.get(uuid);
+                title.append(" ").append(participant != null ? participant.playerName() : "?").append(" ");
+                long left = view.respawnLeft().apply(time, uuid);
+                if (left == NEXT_WAVE) {
+                    title.append(Component.translatableWithFallback("message.arenas_ld.run.party_downed_next_wave", "next wave"));
+                } else if (left >= 0) {
+                    title.append(Component.translatableWithFallback("message.arenas_ld.run.party_downed_seconds", "%s s",
+                        secondsLeft(left)));
+                }
+            }
+            net.minecraft.server.level.ServerBossEvent bar = PARTY_BARS.computeIfAbsent(group.getKey(),
+                k -> new net.minecraft.server.level.ServerBossEvent(Component.empty(),
+                    net.minecraft.world.BossEvent.BossBarColor.RED, net.minecraft.world.BossEvent.BossBarOverlay.PROGRESS));
+            bar.setName(title);
+            bar.setProgress(1.0F);
+            java.util.Set<ServerPlayer> shown = new java.util.HashSet<>();
+            for (RunParticipant participant : participants.values()) {
+                if (participant.status() == ParticipantStatus.REMOVED) {
+                    continue;
+                }
+                ServerPlayer member = server.getPlayerList().getPlayer(participant.playerUuid());
+                if (member != null) {
+                    shown.add(member);
+                }
+            }
+            for (ServerPlayer viewer : new ArrayList<>(bar.getPlayers())) {
+                if (!shown.contains(viewer)) {
+                    bar.removePlayer(viewer);
+                }
+            }
+            shown.forEach(bar::addPlayer);
+        }
     }
 
     /** Puts a self-camera player back on their spot when they strayed too far. */

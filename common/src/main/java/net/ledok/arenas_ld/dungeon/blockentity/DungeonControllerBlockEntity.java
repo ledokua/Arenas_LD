@@ -1287,8 +1287,9 @@ public class DungeonControllerBlockEntity extends BlockEntity
                 .toList();
             topLeaderboards.put(tier, top);
         }
+        Map<DifficultyTier, Component> locks = lockWatch.locksFor(player, this);
         return new DungeonControllerData(worldPosition, visible, own, myInvites, myJoinRequests, maxPartySize, tierConfigs, player.serverLevel().getGameTime(), busyPlayers, topLeaderboards, getQueuePosition(playerUuid), getEstimatedWaitSeconds(),
-            lockWatch.locksFor(player, this));
+            locks, net.ledok.arenas_ld.activity.EntryGates.metRequirements(player, this, locks));
     }
 
     @Override

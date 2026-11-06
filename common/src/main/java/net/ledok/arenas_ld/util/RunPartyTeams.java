@@ -25,6 +25,11 @@ public final class RunPartyTeams {
     private RunPartyTeams() {
     }
 
+    /** Whether {@code teamName} is a run team of any activity ({@code ald_d_}, {@code ald_r_}, {@code ald_a_}). */
+    public static boolean isRunTeam(String teamName) {
+        return teamName.startsWith("ald_d_") || teamName.startsWith("ald_r_") || teamName.startsWith("ald_a_");
+    }
+
     /**
      * The run team of an instance: {@code prefix} plus the instance's dimension and exact position.
      * It used to be the position's hash code alone, which two instances share when they sit at the
@@ -71,13 +76,30 @@ public final class RunPartyTeams {
                 name, priorName);
             priorName = "";
         }
-        PartyTeamStore.get(world.getServer()).put(name, priorName);
+        PartyTeamStore store = PartyTeamStore.get(world.getServer());
+        if (isRunTeam(priorName)) {
+            // Still on another run's team (left there by a missed exit): never hand that back. The
+            // prior team stored when they joined it is the real one, so keep it.
+            ArenasLdMod.LOGGER.warn("{} was still on the run team {}; they won't be put back on it after this run",
+                name, priorName);
+            if (!store.has(name)) {
+                store.put(name, "");
+            }
+        } else {
+            store.put(name, priorName);
+        }
         scoreboard.addPlayerToTeam(name, team);
     }
 
     /** Takes one member off the run team and gives back their prior team (works offline). */
     public static void remove(ServerLevel world, String teamName, String playerName) {
         Scoreboard scoreboard = world.getScoreboard();
+        PlayerTeam onNow = scoreboard.getPlayersTeam(playerName);
+        if (onNow != null && isRunTeam(onNow.getName()) && !onNow.getName().equals(teamName)) {
+            // On another run's team now (an old run ending late, e.g. one restored after a
+            // restart): the stored prior team is that run's to give back, so leave it all alone.
+            return;
+        }
         String priorName = PartyTeamStore.get(world.getServer()).take(playerName);
         if (priorName == null) {
             return; // not on a run team
@@ -103,6 +125,33 @@ public final class RunPartyTeams {
         if (team != null) {
             world.getScoreboard().removePlayerTeam(team);
         }
+    }
+
+    /**
+     * Takes a player off a stale run team: the one they are on when no run has them (as the
+     * leftover index has it, {@code RunLeftovers.isInRun}). They get their stored prior team back,
+     * and the run team is deleted once nobody is left on it.
+     *
+     * @return the team they were taken off, or null when they weren't on a run team
+     */
+    public static @org.jetbrains.annotations.Nullable String release(ServerLevel world, String playerName) {
+        Scoreboard scoreboard = world.getScoreboard();
+        PlayerTeam team = scoreboard.getPlayersTeam(playerName);
+        if (team == null || !isRunTeam(team.getName())) {
+            return null;
+        }
+        String teamName = team.getName();
+        remove(world, teamName, playerName);
+        PlayerTeam still = scoreboard.getPlayersTeam(playerName);
+        if (still != null && still.getName().equals(teamName)) {
+            scoreboard.removePlayerFromTeam(playerName, still); // no prior team was stored
+        }
+        PlayerTeam left = scoreboard.getPlayerTeam(teamName);
+        if (left != null && left.getPlayers().isEmpty()) {
+            scoreboard.removePlayerTeam(left);
+        }
+        ArenasLdMod.LOGGER.info("[Arenas] Took {} off the stale run team {}", playerName, teamName);
+        return teamName;
     }
 
     /**

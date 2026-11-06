@@ -37,7 +37,9 @@ public record DungeonControllerData(
     int queuePosition,
     int estimatedWaitSeconds,
     /** Enabled tiers the entry gate refuses this viewer, with the reason to show. */
-    Map<DifficultyTier, Component> lockedTiers
+    Map<DifficultyTier, Component> lockedTiers,
+    /** Enabled tiers this viewer may enter that have a requirement label (shown green). */
+    Map<DifficultyTier, Component> metRequirements
 ) {
     public static final StreamCodec<RegistryFriendlyByteBuf, DungeonControllerData> STREAM_CODEC = StreamCodec.of(
         DungeonControllerData::encode,
@@ -93,6 +95,11 @@ public record DungeonControllerData(
 
         buf.writeVarInt(data.lockedTiers().size());
         for (Map.Entry<DifficultyTier, Component> entry : data.lockedTiers().entrySet()) {
+            DifficultyTier.STREAM_CODEC.encode(buf, entry.getKey());
+            ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, entry.getValue());
+        }
+        buf.writeVarInt(data.metRequirements().size());
+        for (Map.Entry<DifficultyTier, Component> entry : data.metRequirements().entrySet()) {
             DifficultyTier.STREAM_CODEC.encode(buf, entry.getKey());
             ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, entry.getValue());
         }
@@ -160,8 +167,14 @@ public record DungeonControllerData(
             DifficultyTier tier = DifficultyTier.STREAM_CODEC.decode(buf);
             lockedTiers.put(tier, ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf));
         }
+        int metCount = buf.readVarInt();
+        Map<DifficultyTier, Component> metRequirements = new EnumMap<>(DifficultyTier.class);
+        for (int i = 0; i < metCount; i++) {
+            DifficultyTier tier = DifficultyTier.STREAM_CODEC.decode(buf);
+            metRequirements.put(tier, ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf));
+        }
 
-        return new DungeonControllerData(blockPos, visible, own, invites, joinReqs, maxPartySize, tiers, serverGameTick, busyPlayers, topLeaderboards, queuePosition, estimatedWaitSeconds, lockedTiers);
+        return new DungeonControllerData(blockPos, visible, own, invites, joinReqs, maxPartySize, tiers, serverGameTick, busyPlayers, topLeaderboards, queuePosition, estimatedWaitSeconds, lockedTiers, metRequirements);
     }
 
     private static void writeTag(RegistryFriendlyByteBuf buf, CompoundTag tag) {

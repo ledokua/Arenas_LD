@@ -1,5 +1,68 @@
 # Changelog
 
+## 4.17.0
+
+**Respawn timer** (dungeons, raids, arenas):
+- Downed players see a countdown on the action bar: "Respawn in 12 s · Watching Bob — sneak to switch"
+  (arenas: "Respawn with the next wave"). Their party sees a red boss bar, "Downed: Bob 12 s · Alice 30 s",
+  while anyone is downed. These are plain vanilla action-bar and boss-bar messages; older clients show the English fallback.
+- Dungeons: a downed player waits at least `dungeon_respawn_min_ticks` (default 10 s), whatever the controller
+  stores (live controllers often keep 2 s). The protect-room +50% stays on top.
+- Dungeons and raids: every earlier death of the same player in the same run adds `respawn_per_death_ticks`
+  (default +5 s), up to `respawn_per_death_max_ticks` (+60 s). The count is saved with the run.
+- Raids: with `raid_respawn_together` (default on), downed players come back together every
+  `raid_respawn_wave_ticks` (default 30 s, counted from the raid's start), once their own per-death wait is over.
+  Off: each player on their own timer (controller respawn time + the per-death extra), as before.
+
+## 4.16.2
+
+**Fixes:**
+- Crash: a room cleared while a party member was offline (inside the disconnect grace) crashed the server.
+  The offline member's loot was rolled with GIFT parameters, which need a player. Offline rolls now use
+  CHEST parameters, and a loot roll that fails for any reason is logged and gives nothing instead of
+  throwing out of the controller tick. Arena floor loot goes through the same guarded roll.
+
+## 4.16.1
+
+**Fixes:**
+- A player could keep a run's no-friendly-fire team after the run. If a run's end never ran for them (for
+  example, the server stopped while a won raid was closing), the next run they started stored that team
+  as their "previous team" and gave it back at its end, run after run. A run start now never stores
+  another run's team (`ald_d_`/`ald_r_`/`ald_a_`). It keeps the real previous team if one is still
+  stored, and otherwise none, and logs a warning.
+- An old run ending late (for example one restored after a restart) no longer takes a player off the team
+  of the run they are in now, or takes the previous team saved for it.
+
+**New:**
+- `/arenasld team release <player>` (ops): takes a player off a run team no run has them on, gives back
+  their saved previous team, and deletes the team once it's empty. Refused while the player is in a run.
+
+## 4.16.0
+
+**Admin screens: several admins can edit at once** (issue #17):
+- Saving one tab no longer resets everyone's open admin screens. A snapshot now merges field by
+  field: a field nobody is editing takes the new value, and unsaved edits stay, in every tab and
+  for every admin. Before, another admin saving "Easy" threw away unsaved edits on "General", and
+  so did the same admin saving another tab.
+- If another admin saved a field you are editing, your value stays and the footer warns about it.
+  The warning names who saved and shows their value. The tab gets a yellow ⚠. Saving overwrites
+  their value on purpose; **Use theirs** drops your edit instead.
+- Tabs with unsaved edits show a "•". When another admin's save changes other tabs, the footer
+  says who saved which tabs.
+- Saving sends only the fields you changed. So a save can't revert a field another admin saved
+  while you were editing a different one.
+- Admin snapshots name the op who last saved through an admin screen (kept in memory only). The
+  snapshot format changed, so clients and server need the same version.
+- A resized dungeon admin screen kept its tab but lost unsaved edits; they now stay.
+
+**Lobbies show the entry requirement when it is met** (issue #8):
+- New API `ArenasApi.registerEntryRequirement`: a hub labels what entering needs ("Lv 25+"). Players who
+  meet it see the label in green under each difficulty they may pick (dungeons, raids), and in the arena
+  lobby header. A difficulty they don't meet still shows the gate's refusal, lock and all.
+- Nothing shows until the hub (Eden_LD) registers the label.
+- An invite to a player who doesn't meet the requirement was already refused with "<name> can't enter:
+  <reason>"; that's unchanged.
+
 ## 4.15.0
 
 **Security** (a modified client could do all of these):

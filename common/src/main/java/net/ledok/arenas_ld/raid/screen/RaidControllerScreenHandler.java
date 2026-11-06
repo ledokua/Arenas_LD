@@ -35,6 +35,7 @@ public class RaidControllerScreenHandler extends net.ledok.arenas_ld.activity.Lo
     private Map<DifficultyTier, List<LeaderboardEntry>> topLeaderboards;
     private Set<DifficultyTier> enabledTiers;
     private Map<DifficultyTier, net.minecraft.network.chat.Component> lockedTiers;
+    private Map<DifficultyTier, net.minecraft.network.chat.Component> metRequirements = Map.of();
 
     /** Client-side constructor — called when opening screen from packet data. */
     public RaidControllerScreenHandler(int syncId, Inventory playerInventory, RaidControllerData data) {
@@ -130,6 +131,10 @@ public class RaidControllerScreenHandler extends net.ledok.arenas_ld.activity.Lo
         return lockedTiers;
     }
 
+    public Map<DifficultyTier, net.minecraft.network.chat.Component> getMetRequirements() {
+        return metRequirements;
+    }
+
     public void applyData(RaidControllerData data) {
         this.visibleLobbies = List.copyOf(data.visibleLobbies());
         this.ownLobby = data.ownLobby();
@@ -145,6 +150,7 @@ public class RaidControllerScreenHandler extends net.ledok.arenas_ld.activity.Lo
         this.topLeaderboards = Map.copyOf(data.topLeaderboards());
         this.enabledTiers = Set.copyOf(data.enabledTiers());
         this.lockedTiers = Map.copyOf(data.lockedTiers());
+        this.metRequirements = Map.copyOf(data.metRequirements());
     }
 
     @Override

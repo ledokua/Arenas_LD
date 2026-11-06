@@ -1,7 +1,7 @@
 # Arenas_LD API
 
 Other mods can list the server's dungeons, raids and mob arenas, open an activity's lobby screen for a
-player, veto entry with an **entry gate**, hear about every finished run, and give staff the
+player, veto entry with an **entry gate** (and label what it needs), hear about every finished run, and give staff the
 [admin side](#admin): live status, teleporting to a controller, its admin screen from anywhere,
 renaming, ending runs. It is what a hub mod builds on — Eden_LD's Activities tab uses it — and
 Arenas_LD never depends on who calls it: with no gate registered and nobody listening, it behaves
@@ -123,6 +123,23 @@ raids and arenas only take the online members in.
 Arenas_LD can't know when your verdict changes (a player levels up with the screen open), so open
 dungeon and raid lobby screens are re-checked every 2 seconds and re-sent to the viewers whose locks
 changed. Ask `ArenasApi` from `SERVER_STARTED` on; before the worlds exist the activity list is empty.
+
+### Showing the requirement when it is met (4.16.0+)
+
+A gate only speaks when it refuses, so players who pass it never see what the activity needs. They then
+can't tell why a friend can't be invited. Register a requirement label next to the gate:
+
+```java
+ArenasApi.registerEntryRequirement((player, activity, difficulty) -> {
+    int needed = mySettings.requiredLevel(activity, difficulty);
+    return needed <= 0 ? null : Component.literal("Lv " + needed + "+");
+});
+```
+
+The lobby screens show it in green: under each difficulty the player may pick (dungeons, raids), and in the
+header of an arena lobby (asked with `difficulty` null). A difficulty the gate refuses still shows the
+gate's refusal, as before. Return `null` for nothing to show. Several may register; the first non-null
+label wins, and one that throws is logged and skipped. It is asked as often as the gate, so keep it cheap.
 
 ## Run events
 
