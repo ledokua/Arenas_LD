@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 4.15.0
 
 **Security** (a modified client could do all of these):
 - The boss mob id, attribute and equipment editors of spawners had no permission check on save, so
