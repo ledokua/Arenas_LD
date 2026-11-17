@@ -106,6 +106,11 @@ public final class DungeonManager {
         runByPlayer.remove(uuid);
     }
 
+    /** The dungeon runs going on now (each once). */
+    public java.util.Collection<DungeonRun> activeRuns() {
+        return new java.util.LinkedHashSet<>(runByPlayer.values());
+    }
+
     public DungeonRun getRunForPlayer(UUID uuid) {
         return runByPlayer.get(uuid);
     }

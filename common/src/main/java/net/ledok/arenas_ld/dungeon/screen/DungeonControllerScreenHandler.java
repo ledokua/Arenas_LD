@@ -35,10 +35,16 @@ public class DungeonControllerScreenHandler extends net.ledok.arenas_ld.activity
     private int estimatedWaitSeconds;
     private Map<DifficultyTier, net.minecraft.network.chat.Component> lockedTiers;
     private Map<DifficultyTier, net.minecraft.network.chat.Component> metRequirements = Map.of();
+    private net.minecraft.network.chat.Component runModifiers = net.minecraft.network.chat.Component.empty();
+    private net.ledok.arenas_ld.util.RunSettings runSettings = net.ledok.arenas_ld.util.RunSettings.DEFAULT;
+    private java.util.List<net.ledok.arenas_ld.rewards.RunModifierOption> modifierOptions = java.util.List.of();
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerData data) {
         this(syncId, inventory, data.blockPos(), data.visibleLobbies(), data.ownLobby(), data.myInvites(), data.myJoinRequests(), data.maxPartySize(), data.tiers(), data.serverGameTick(), data.busyPlayers(), data.topLeaderboards(), data.queuePosition(), data.estimatedWaitSeconds(), data.lockedTiers());
         this.metRequirements = Map.copyOf(data.metRequirements());
+        this.runModifiers = data.runModifiers();
+        this.runSettings = data.runSettings();
+        this.modifierOptions = java.util.List.copyOf(data.modifierOptions());
     }
 
     public DungeonControllerScreenHandler(int syncId, Inventory inventory, DungeonControllerBlockEntity blockEntity) {
@@ -135,6 +141,19 @@ public class DungeonControllerScreenHandler extends net.ledok.arenas_ld.activity
         return metRequirements;
     }
 
+    /** The controller's rental mode and base loot rolls. */
+    public net.ledok.arenas_ld.util.RunSettings getRunSettings() {
+        return runSettings;
+    }
+
+    public net.minecraft.network.chat.Component getRunModifiers() {
+        return runModifiers;
+    }
+
+    public java.util.List<net.ledok.arenas_ld.rewards.RunModifierOption> getModifierOptions() {
+        return modifierOptions;
+    }
+
     public void applyData(DungeonControllerData data) {
         this.visibleLobbies = List.copyOf(data.visibleLobbies());
         this.ownLobby = data.ownLobby();
@@ -149,6 +168,9 @@ public class DungeonControllerScreenHandler extends net.ledok.arenas_ld.activity
         this.estimatedWaitSeconds = data.estimatedWaitSeconds();
         this.lockedTiers = Map.copyOf(data.lockedTiers());
         this.metRequirements = Map.copyOf(data.metRequirements());
+        this.runModifiers = data.runModifiers();
+        this.runSettings = data.runSettings();
+        this.modifierOptions = java.util.List.copyOf(data.modifierOptions());
     }
 
     @Override

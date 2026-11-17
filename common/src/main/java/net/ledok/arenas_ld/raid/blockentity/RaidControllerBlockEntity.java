@@ -57,7 +57,10 @@ import java.util.UUID;
 import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
 
 public class RaidControllerBlockEntity extends BlockEntity
-    implements ExtendedMenuProvider<RaidControllerData>, net.ledok.arenas_ld.activity.ActivityHost {
+    implements ExtendedMenuProvider<RaidControllerData>, net.ledok.arenas_ld.activity.ActivityHost,
+    net.ledok.arenas_ld.util.BreakableBlocks.Holder, net.ledok.arenas_ld.util.RunSettings.Holder {
+    private net.ledok.arenas_ld.util.BreakableBlocks breakableBlocks = net.ledok.arenas_ld.util.BreakableBlocks.DEFAULT;
+    private net.ledok.arenas_ld.util.RunSettings runSettings = net.ledok.arenas_ld.util.RunSettings.DEFAULT;
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Inner types
@@ -83,7 +86,8 @@ public class RaidControllerBlockEntity extends BlockEntity
     // ─────────────────────────────────────────────────────────────────────────
 
     private static final String BUSY_REASON = "arenas_ld:raid";
-    private static final int DEFAULT_RESPAWN_TIME_TICKS = 6000;
+    /** The respawn interval (downed players come back together every this often): 60 s. */
+    private static final int DEFAULT_RESPAWN_TIME_TICKS = 1200;
     private static final int DEFAULT_MAX_PARTY_SIZE = 10;
     private static final int DEFAULT_INVITE_EXPIRY_TICKS = 30 * 20;
     private static final int DEFAULT_COOLDOWN_TICKS = 5 * 60 * 20;
@@ -180,7 +184,9 @@ public class RaidControllerBlockEntity extends BlockEntity
         static final Codec<LifecycleTimings> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.optionalFieldOf("disconnectGraceTicks", DEFAULT_DISCONNECT_GRACE_TICKS).forGetter(LifecycleTimings::disconnectGraceTicks),
             Codec.INT.optionalFieldOf("lobbyOfflineTimeoutTicks", DEFAULT_LOBBY_OFFLINE_TIMEOUT_TICKS).forGetter(LifecycleTimings::lobbyOfflineTimeoutTicks),
-            Codec.INT.optionalFieldOf("respawnTimeTicks", DEFAULT_RESPAWN_TIME_TICKS).forGetter(LifecycleTimings::respawnTimeTicks),
+            // The respawn interval, under a new key since 4.22.3: the old "respawnTimeTicks" (a per-player wait,
+            // often the old 5 min default) isn't read, so every raid starts on the 60 s interval.
+            Codec.INT.optionalFieldOf("respawnWaveTicks", DEFAULT_RESPAWN_TIME_TICKS).forGetter(LifecycleTimings::respawnTimeTicks),
             Codec.INT.optionalFieldOf("deathTimePenaltyTicks", DEFAULT_DEATH_TIME_PENALTY_TICKS).forGetter(LifecycleTimings::deathTimePenaltyTicks)
         ).apply(i, LifecycleTimings::new));
 
@@ -346,7 +352,13 @@ public class RaidControllerBlockEntity extends BlockEntity
         for (RaidRun run : new ArrayList<>(activeRuns.values())) {
             ServerLevel spawnerLevel = server.getLevel(run.spawnerDimension());
             if (spawnerLevel == null) continue;
-            RaidRunLifecycle.tick(spawnerLevel, this, run);
+            // The run's picked modifiers: mobs spawned this tick get them, its players keep them.
+            net.ledok.arenas_ld.util.RunEffects.refresh(server, run.runModifiers(), run.participants());
+            // Its live stats: its players carry them, mobs spawned this tick count for it.
+            net.ledok.arenas_ld.stats.RunStats stats = runStats(run);
+            stats.tick(server);
+            net.ledok.arenas_ld.util.RunEffects.during(run.runModifiers(),
+                () -> net.ledok.arenas_ld.stats.RunStats.during(stats, () -> RaidRunLifecycle.tick(spawnerLevel, this, run)));
         }
         // Run state (timers, phases, participants, return points) changes every tick, yet nothing
         // else marks this chunk unsaved; without this, a restart can bring back stale run state
@@ -596,6 +608,41 @@ public class RaidControllerBlockEntity extends BlockEntity
         return Integer.MAX_VALUE;
     }
 
+    /** The run's live stats, with what the details screen shows about it. */
+    public net.ledok.arenas_ld.stats.RunStats runStats(RaidRun run) {
+        return run.runStats(() -> new net.ledok.arenas_ld.stats.RunDetailsSource(activityId(),
+            net.ledok.arenas_ld.activity.ActivityRegistry.displayName(activityType(), activityName()), "raid", run.tier(),
+            new ArenasApi.InstanceRef(run.spawnerDimension(), run.spawnerPos()), run.hardcoreEnabled(), run.runModifiers(),
+            run.startTick(), run.resolvedTierConfig().rewardCurrency(), run.resolvedTierConfig().skillExperiencePerWin(),
+            switch (run.outcome()) {
+                case IN_PROGRESS -> "";
+                case WIN -> "win";
+                case LOSS_ABANDONED -> "abandoned";
+                case LOSS_FORCED, LOSS_STAFF -> "forced";
+                default -> "fail";
+            },
+            net.ledok.arenas_ld.stats.RunGear.levelOf(run.resolvedTierConfig().perPlayerLootTable()),
+            Math.max(0, run.resolvedTierConfig().raidTimeSeconds()),
+            runSettings.baseLootRolls()));
+    }
+
+    @Override
+    public int resetCooldowns(@Nullable ArenasApi.InstanceRef instance) {
+        int reset = 0;
+        for (int i = 0; i < instances.size(); i++) {
+            RaidInstanceState inst = instances.get(i);
+            if (inst.status() == InstanceStatus.COOLDOWN && inst.cooldownTicksRemaining() > 1
+                && (instance == null || (inst.spawnerPos().equals(instance.pos()) && inst.dimension().equals(instance.dimension())))) {
+                instances.set(i, inst.withStatus(InstanceStatus.COOLDOWN, 1));
+                reset++;
+            }
+        }
+        if (reset > 0) {
+            setChanged();
+        }
+        return reset;
+    }
+
     @Override
     public int forceEnd(@Nullable ArenasApi.InstanceRef instance) {
         if (!(level instanceof ServerLevel serverLevel)) {
@@ -743,10 +790,30 @@ public class RaidControllerBlockEntity extends BlockEntity
         return false;
     }
 
+    /** Instances held by a lobby's start countdown (lobby id → instance), not saved: free but not offered. */
+    private final java.util.Map<UUID, net.ledok.arenas_ld.activity.InstanceKey> preparing = new java.util.HashMap<>();
+
+    private boolean isPreparingInstance(RaidInstanceState inst) {
+        return preparing.containsValue(inst.key());
+    }
+
+    /** Reserves this instance (RUNNING) if it is still free; null if not. */
+    private @Nullable RaidInstanceState reserveInstance(net.ledok.arenas_ld.activity.InstanceKey key) {
+        for (int i = 0; i < instances.size(); i++) {
+            RaidInstanceState inst = instances.get(i);
+            if (inst.key().equals(key) && inst.status() == InstanceStatus.FREE) {
+                RaidInstanceState running = inst.withStatus(InstanceStatus.RUNNING, 0);
+                instances.set(i, running);
+                return running;
+            }
+        }
+        return null;
+    }
+
     private @Nullable RaidInstanceState reserveFreeInstance() {
         for (int i = 0; i < instances.size(); i++) {
             RaidInstanceState inst = instances.get(i);
-            if (inst.status() == InstanceStatus.FREE) {
+            if (inst.status() == InstanceStatus.FREE && !isPreparingInstance(inst)) {
                 RaidInstanceState running = inst.withStatus(InstanceStatus.RUNNING, 0);
                 instances.set(i, running);
                 return running;
@@ -756,7 +823,7 @@ public class RaidControllerBlockEntity extends BlockEntity
     }
 
     private boolean hasAnyFreeInstance() {
-        return instances.stream().anyMatch(i -> i.status() == InstanceStatus.FREE);
+        return instances.stream().anyMatch(i -> i.status() == InstanceStatus.FREE && !isPreparingInstance(i));
     }
 
     private void releaseInstance(net.ledok.arenas_ld.activity.InstanceKey key) {
@@ -825,7 +892,6 @@ public class RaidControllerBlockEntity extends BlockEntity
     public boolean createLobby(ServerPlayer player) {
         UUID uuid = player.getUUID();
         String name = player.getGameProfile().getName();
-        if (getLobbyByMember(uuid) != null) return false;
         DifficultyTier defaultTier = defaultEnabledTier();
         if (defaultTier == null) {
             player.sendSystemMessage(Component.translatable("message.arenas_ld.lobby.no_tiers_enabled"));
@@ -835,6 +901,8 @@ public class RaidControllerBlockEntity extends BlockEntity
         if (defaultTier == null) {
             return false;
         }
+        // Another lobby (here or elsewhere) is left now that this one can be made.
+        if (!net.ledok.arenas_ld.activity.LobbyMembership.leaveOthers(player.server, uuid, null)) return false;
         Set<UUID> members = new HashSet<>();
         members.add(uuid);
         Map<UUID, String> memberNames = new HashMap<>();
@@ -898,6 +966,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         ServerPlayer target = sl.getServer().getPlayerList().getPlayer(inviteeUuid);
         if (target == null || target.getUUID().equals(inviter.getUUID())) return false;
         if (getLobbyByMember(target.getUUID()) != null) return false;
+        if (!net.ledok.arenas_ld.activity.EntryGates.inviteAllowed(inviter, inviteeUuid, this)) return false;
         if (!net.ledok.arenas_ld.activity.EntryGates.allowOther(sl.getServer(), inviter, inviteeUuid, this, lobby.selectedTier(), false)) return false;
         // Check if already has pending invite
         for (PendingInvite invite : pendingInvites) {
@@ -929,14 +998,16 @@ public class RaidControllerBlockEntity extends BlockEntity
             markDirtyAndSync();
             return false;
         }
-        if (getLobbyByMember(uuid) != null) return false;
-        if (lobby.isFull(getMaxPartySize())) return false;
+        if (lobby.isMember(uuid) || lobby.isFull(getMaxPartySize())) return false;
         if ((level != null ? level.getGameTime() : Long.MAX_VALUE) > invite.expiresAtTick()) {
             pendingInvites.remove(invite);
             markDirtyAndSync();
             return false;
         }
         if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, lobby.selectedTier())) return false;
+        if (!net.ledok.arenas_ld.activity.LobbyMembership.leaveOthers(player.server, uuid, lobbyId)) return false;
+        lobby = getLobbyById(lobbyId);
+        if (lobby == null) return false;
 
         pendingInvites.remove(invite);
         // Also remove other invites for this player
@@ -989,7 +1060,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
         if (!isTierEnabled(tier)) return false;
         if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, tier)) return false;
-        replaceLobby(lobby.withTier(tier));
+        replaceLobby(net.ledok.arenas_ld.activity.LobbySettingsChange.apply(player.server, lobby, lobby.withTier(tier)));
         markDirtyAndSync();
         return true;
     }
@@ -1035,7 +1106,19 @@ public class RaidControllerBlockEntity extends BlockEntity
         Lobby lobby = getLobbyByMember(player.getUUID());
         if (lobby == null || !lobby.isOwner(player.getUUID())) return false;
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
-        replaceLobby(lobby.withHardcore(hardcore));
+        replaceLobby(net.ledok.arenas_ld.activity.LobbySettingsChange.apply(player.server, lobby, lobby.withHardcore(hardcore)));
+        markDirtyAndSync();
+        return true;
+    }
+
+    /** The owner switches run modifier {@code id} on or off (one of its exclusive group goes off). */
+    public boolean setLobbyModifier(ServerPlayer player, String id, boolean on) {
+        Lobby lobby = getLobbyByMember(player.getUUID());
+        if (lobby == null || !lobby.isOwner(player.getUUID())) return false;
+        if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
+        if (on && !net.ledok.arenas_ld.rewards.RunModifierCatalog.selectable("raid").containsKey(id)) return false;
+        if (on && net.ledok.arenas_ld.rewards.RunModifierCatalog.refusePick(player, id, lobby.modifiers())) return false;
+        replaceLobby(net.ledok.arenas_ld.activity.LobbySettingsChange.apply(player.server, lobby, lobby.withModifier(id, on, net.ledok.arenas_ld.rewards.RunModifierCatalog.sameGroup(id))));
         markDirtyAndSync();
         return true;
     }
@@ -1044,7 +1127,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         Lobby lobby = getLobbyByMember(player.getUUID());
         if (lobby == null || !lobby.isOwner(player.getUUID())) return false;
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
-        replaceLobby(lobby.withVisibility(visibility));
+        replaceLobby(net.ledok.arenas_ld.activity.LobbySettingsChange.apply(player.server, lobby, lobby.withVisibility(visibility)));
         markDirtyAndSync();
         return true;
     }
@@ -1058,6 +1141,13 @@ public class RaidControllerBlockEntity extends BlockEntity
         Lobby lobby = getLobbyByMember(uuid);
         if (lobby == null) return false;
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
+        // "Rental kits only": a member can't get ready before picking a rental build (told why).
+        if (!lobby.readyMembers().contains(uuid) && net.ledok.arenas_ld.util.RunRentals.required(this)
+            && !net.ledok.arenas_ld.util.RunRentals.hasPick(uuid, lobby)) {
+            player.displayClientMessage(Component.translatable("message.arenas_ld.rental.pick_first")
+                .withStyle(net.minecraft.ChatFormatting.RED), false);
+            return false;
+        }
 
         Lobby updated;
         if (lobby.readyMembers().contains(uuid)) {
@@ -1081,13 +1171,16 @@ public class RaidControllerBlockEntity extends BlockEntity
      */
     public boolean joinLobby(ServerPlayer player, UUID lobbyId) {
         UUID uuid = player.getUUID();
-        if (getLobbyByMember(uuid) != null) return false;
         Lobby lobby = getLobbyById(lobbyId);
-        if (lobby == null) return false;
+        if (lobby == null || lobby.isMember(uuid)) return false;
         if (lobby.visibility() != net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility.PUBLIC) return false;
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN || lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.DISBANDED) return false;
         if (lobby.isFull(getMaxPartySize())) return false;
         if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, lobby.selectedTier())) return false;
+        if (!net.ledok.arenas_ld.activity.LobbyLevels.allow(player, lobby)) return false;
+        if (!net.ledok.arenas_ld.activity.LobbyMembership.leaveOthers(player.server, uuid, lobbyId)) return false;
+        lobby = getLobbyById(lobbyId);
+        if (lobby == null) return false;
 
         Lobby updated = lobby.withMemberAdded(uuid, player.getGameProfile().getName());
         replaceLobby(updated);
@@ -1100,13 +1193,13 @@ public class RaidControllerBlockEntity extends BlockEntity
      */
     public boolean requestJoin(ServerPlayer player, UUID lobbyId) {
         UUID uuid = player.getUUID();
-        if (getLobbyByMember(uuid) != null) return false;
         Lobby lobby = getLobbyById(lobbyId);
-        if (lobby == null) return false;
+        if (lobby == null || lobby.isMember(uuid)) return false;
         if (lobby.visibility() != net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility.FRIENDS) return false;
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN || lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.DISBANDED) return false;
         if (lobby.isFull(getMaxPartySize())) return false;
         if (!net.ledok.arenas_ld.activity.EntryGates.allow(player, this, lobby.selectedTier())) return false;
+        if (!net.ledok.arenas_ld.activity.LobbyLevels.allow(player, lobby)) return false;
         // No duplicate requests
         for (PendingJoinRequest req : pendingJoinRequests) {
             if (req.lobbyId().equals(lobbyId) && req.requesterUuid().equals(uuid)) return false;
@@ -1131,8 +1224,7 @@ public class RaidControllerBlockEntity extends BlockEntity
         if (req == null) return false;
         pendingJoinRequests.remove(req);
 
-        if (getLobbyByMember(requesterUuid) != null) return false;
-        if (lobby.isFull(getMaxPartySize())) return false;
+        if (lobby.isMember(requesterUuid) || lobby.isFull(getMaxPartySize())) return false;
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
         if (!net.ledok.arenas_ld.activity.EntryGates.allowOther(owner.server, owner, requesterUuid, this, lobby.selectedTier(), true)) {
             markDirtyAndSync();
@@ -1144,6 +1236,12 @@ public class RaidControllerBlockEntity extends BlockEntity
             ServerPlayer requester = sl.getServer().getPlayerList().getPlayer(requesterUuid);
             if (requester != null) requesterName = requester.getGameProfile().getName();
         }
+        if (!net.ledok.arenas_ld.activity.LobbyMembership.leaveOthers(owner.server, requesterUuid, lobby.lobbyId())) {
+            markDirtyAndSync();
+            return false;
+        }
+        lobby = getLobbyById(lobby.lobbyId());
+        if (lobby == null) return false;
         Lobby updated = lobby.withMemberAdded(requesterUuid, requesterName);
         replaceLobby(updated);
         markDirtyAndSync();
@@ -1175,6 +1273,7 @@ public class RaidControllerBlockEntity extends BlockEntity
             return false;
         }
         if (lobby.status() == net.ledok.arenas_ld.dungeon.lobby.LobbyStatus.IN_RUN) return false;
+        if (net.ledok.arenas_ld.util.RunPreparation.isPreparing(lobby.lobbyId())) return false;
         if (!(level instanceof ServerLevel serverLevel)) return false;
         // The builder may have disabled the tier while the lobby was forming.
         if (!isTierEnabled(lobby.selectedTier())) {
@@ -1212,7 +1311,97 @@ public class RaidControllerBlockEntity extends BlockEntity
             return false;
         }
         queuedLobbyIds.remove(lobby.lobbyId());
+        if (net.ledok.arenas_ld.util.RunPreparation.enabled()) {
+            return prepareRaid(serverLevel, lobby, freeInst);
+        }
         return launchRaidOnInstance(serverLevel, lobby, freeInst);
+    }
+
+    /**
+     * The start countdown ({@link net.ledok.arenas_ld.util.RunPreparation}): the reserved instance goes back to free
+     * but is held for this lobby, its chunks load, and the raid launches when the countdown ends. A party change, an
+     * offline member or a gone lobby cancels it.
+     */
+    private boolean prepareRaid(ServerLevel serverLevel, Lobby lobby, RaidInstanceState reserved) {
+        net.ledok.arenas_ld.activity.InstanceKey key = reserved.key();
+        for (int i = 0; i < instances.size(); i++) {
+            if (instances.get(i).key().equals(key)) {
+                instances.set(i, instances.get(i).withStatus(InstanceStatus.FREE, 0));
+            }
+        }
+        ServerLevel spawnerLevel = serverLevel.getServer().getLevel(reserved.dimension());
+        if (spawnerLevel == null) {
+            markDirtyAndSync();
+            return false;
+        }
+        UUID lobbyId = lobby.lobbyId();
+        java.util.Set<UUID> party = new java.util.HashSet<>(lobby.members());
+        preparing.put(lobbyId, key);
+        boolean began = net.ledok.arenas_ld.util.RunPreparation.begin(serverLevel.getServer(), lobbyId,
+            RaidRunLifecycle.preloadChunks(spawnerLevel, reserved.spawnerPos(), net.ledok.arenas_ld.util.RunPreparation.radius()),
+            new net.ledok.arenas_ld.util.RunPreparation.Hooks() {
+                @Override
+                public java.util.Collection<UUID> members() {
+                    return party;
+                }
+
+                @Override
+                public @Nullable Component problem(net.minecraft.server.MinecraftServer server) {
+                    if (isRemoved()) {
+                        return Component.translatableWithFallback("message.arenas_ld.run.prepare.gone", "the lobby is gone");
+                    }
+                    return net.ledok.arenas_ld.util.RunPreparation.partyProblem(server, getLobbyById(lobbyId), party, false);
+                }
+
+                @Override
+                public void launch(net.minecraft.server.MinecraftServer server) {
+                    preparing.remove(lobbyId);
+                    Lobby current = getLobbyById(lobbyId);
+                    Component refusal = current == null ? null
+                        : net.ledok.arenas_ld.activity.EntryGates.partyRefusal(server, current, RaidControllerBlockEntity.this, current.selectedTier());
+                    if (current == null || refusal != null) {
+                        if (current != null) notifyLobbyMembers(current, refusal);
+                        markDirtyAndSync();
+                        return;
+                    }
+                    RaidInstanceState inst = reserveInstance(key);
+                    if (inst == null) {
+                        inst = reserveFreeInstance();
+                    }
+                    if (inst == null) {
+                        notifyLobbyMembers(current, Component.translatableWithFallback("message.arenas_ld.run.prepare.no_instance",
+                            "No free instance any more; press start again."));
+                        markDirtyAndSync();
+                        return;
+                    }
+                    launchRaidOnInstance(serverLevel, current, inst);
+                    markDirtyAndSync();
+                }
+
+                @Override
+                public void cancelled(net.minecraft.server.MinecraftServer server, Component reason) {
+                    preparing.remove(lobbyId);
+                    markDirtyAndSync();
+                }
+
+                @Override
+                public void closeScreens(net.minecraft.server.MinecraftServer server) {
+                    var close = new net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload(worldPosition);
+                    for (UUID member : party) {
+                        ServerPlayer player = server.getPlayerList().getPlayer(member);
+                        if (player != null) {
+                            net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(player, close);
+                        }
+                    }
+                }
+            });
+        if (!began) {
+            preparing.remove(lobbyId);
+            RaidInstanceState inst = reserveInstance(key);
+            return inst != null && launchRaidOnInstance(serverLevel, lobby, inst);
+        }
+        markDirtyAndSync();
+        return true;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1554,15 +1743,18 @@ public class RaidControllerBlockEntity extends BlockEntity
             spawnerLevel.dimension(),
             serverLevel.getGameTime()
         );
+        run.setRunModifiers(lobby.modifiers());
         activeRuns.put(run.instanceKey(), run);
 
-        RaidRunLifecycle.startBattle(
+        net.ledok.arenas_ld.stats.RunStats startStats = runStats(run);
+        startStats.tick(spawnerLevel.getServer());
+        net.ledok.arenas_ld.util.RunEffects.during(run.runModifiers(), () -> net.ledok.arenas_ld.stats.RunStats.during(startStats, () -> RaidRunLifecycle.startBattle(
             spawnerLevel,
             run,
             players,
             difficulty,
             lobby.hardcoreEnabled()
-        );
+        )));
 
         for (ServerPlayer p : players) {
             BusyStateCompat.setBusy(p.getUUID(), BUSY_REASON);
@@ -1649,9 +1841,35 @@ public class RaidControllerBlockEntity extends BlockEntity
     //  NBT persistence
     // ─────────────────────────────────────────────────────────────────────────
 
+    /** This controller's own breakable blocks list (see {@link net.ledok.arenas_ld.util.RunBlockBreaking}). */
+    @Override
+    public net.ledok.arenas_ld.util.BreakableBlocks getBreakableBlocks() {
+        return breakableBlocks;
+    }
+
+    @Override
+    public void setBreakableBlocks(net.ledok.arenas_ld.util.BreakableBlocks blocks) {
+        breakableBlocks = blocks == null ? net.ledok.arenas_ld.util.BreakableBlocks.DEFAULT : blocks;
+        setChanged();
+    }
+
+    /** Rental mode and base loot rolls (see {@link net.ledok.arenas_ld.util.RunSettings}). */
+    @Override
+    public net.ledok.arenas_ld.util.RunSettings getRunSettings() {
+        return runSettings;
+    }
+
+    @Override
+    public void setRunSettings(net.ledok.arenas_ld.util.RunSettings settings) {
+        runSettings = settings == null ? net.ledok.arenas_ld.util.RunSettings.DEFAULT : settings;
+        setChanged();
+    }
+
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.saveAdditional(nbt, registryLookup);
+        breakableBlocks.save(nbt);
+        runSettings.save(nbt);
 
         List<InstanceEntry> instanceEntries = new ArrayList<>();
         for (RaidInstanceState inst : instances) {
@@ -1698,6 +1916,8 @@ public class RaidControllerBlockEntity extends BlockEntity
     @Override
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.loadAdditional(nbt, registryLookup);
+        breakableBlocks = net.ledok.arenas_ld.util.BreakableBlocks.load(nbt);
+        runSettings = net.ledok.arenas_ld.util.RunSettings.load(nbt);
 
         if (nbt.contains("State", Tag.TAG_COMPOUND)) {
             State.CODEC.parse(NbtOps.INSTANCE, nbt.get("State"))
@@ -1907,7 +2127,10 @@ public class RaidControllerBlockEntity extends BlockEntity
             topLeaderboards,
             enabledTiers,
             locks,
-            net.ledok.arenas_ld.activity.EntryGates.metRequirements(player, this, locks)
+            net.ledok.arenas_ld.activity.EntryGates.metRequirements(player, this, locks),
+            net.ledok.arenas_ld.rewards.RewardModifiers.lobbyLine(activityId, ownLobby.map(Lobby::modifiers).orElse(java.util.Set.of())),
+            net.ledok.arenas_ld.rewards.RunModifierOption.forType("raid"),
+            runSettings
         );
     }
 
@@ -1965,7 +2188,9 @@ public class RaidControllerBlockEntity extends BlockEntity
             running,
             knownLootTableIds,
             activityId == null ? "" : activityId.toString(),
-            net.ledok.arenas_ld.activity.AdminScreens.lastEditor(this)
+            net.ledok.arenas_ld.activity.AdminScreens.lastEditor(this),
+            breakableBlocks,
+            runSettings
         );
     }
 
@@ -1980,5 +2205,49 @@ public class RaidControllerBlockEntity extends BlockEntity
         } catch (Exception e) {
             return Level.OVERWORLD;
         }
+    }
+    @Override
+    public boolean createLobbyFor(ServerPlayer player) {
+        return createLobby(player);
+    }
+
+    @Override
+    public @org.jetbrains.annotations.Nullable Component applyLobbySettings(ServerPlayer owner,
+            @org.jetbrains.annotations.Nullable DifficultyTier tier, java.util.Set<String> modifiers,
+            net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility visibility, int minLevel) {
+        Lobby lobby = getLobbyByMember(owner.getUUID());
+        if (lobby == null) {
+            return Component.translatable("message.arenas_ld.lobby.settings.no_lobby");
+        }
+        Component problem = net.ledok.arenas_ld.activity.LobbySettingsApply.problem(owner, this, lobby, tier, modifiers);
+        if (problem != null) {
+            return problem;
+        }
+        replaceLobby(net.ledok.arenas_ld.activity.LobbySettingsChange.apply(owner.server, lobby,
+            net.ledok.arenas_ld.activity.LobbySettingsApply.build(lobby, tier, modifiers, visibility, minLevel)));
+        markDirtyAndSync();
+        return null;
+    }
+
+    @Override
+    public int runLevel(@org.jetbrains.annotations.Nullable DifficultyTier tier) {
+        var config = tier == null ? null : tierConfigs.get(tier);
+        return config == null ? -1 : net.ledok.arenas_ld.stats.RunGear.levelOf(config.perPlayerLootTable());
+    }
+
+    @Override
+    public List<String> rewardLootTables(@org.jetbrains.annotations.Nullable DifficultyTier tier) {
+        List<String> out = new ArrayList<>();
+        for (var entry : tierConfigs.entrySet()) {
+            if (tier != null && entry.getKey() != tier) {
+                continue;
+            }
+            if (!entry.getValue().perPlayerLootTable().isBlank()) {
+                out.add(entry.getValue().perPlayerLootTable());
+            }
+            // Loot handed out by the tier's reward commands ("loot give @p loot <table>") counts too.
+            out.addAll(net.ledok.arenas_ld.activity.LootPreview.tablesInCommands(entry.getValue().rewardCommands()));
+        }
+        return out;
     }
 }

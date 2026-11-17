@@ -66,6 +66,17 @@ public class CommandRegistry {
             .then(literal("exit").executes(CommandRegistry::exitDungeon))
             .then(literal("stats").executes(CommandRegistry::showStats))
             .then(buildLobbyNode())
+            .then(literal("run")
+                .then(literal("details").executes(CommandRegistry::openRunDetails))
+                .then(literal("last").executes(CommandRegistry::openLastRun))
+                .then(literal("history").requires(source -> source.hasPermission(2))
+                    .executes(ctx -> runHistory(ctx, null))
+                    .then(argument("player", net.minecraft.commands.arguments.GameProfileArgument.gameProfile())
+                        .executes(ctx -> runHistory(ctx, net.minecraft.commands.arguments.GameProfileArgument
+                            .getGameProfiles(ctx, "player").iterator().next().getId()))))
+                .then(literal("open").requires(source -> source.hasPermission(2))
+                    .then(argument("runId", com.mojang.brigadier.arguments.StringArgumentType.word())
+                        .executes(CommandRegistry::openRun))))
             .then(buildActivityNode())
             .then(literal("team")
                 .requires(source -> source.hasPermission(2))
@@ -121,6 +132,7 @@ public class CommandRegistry {
                     .then(argument("pos", BlockPosArgument.blockPos())
                         .executes(ctx -> lobbyAction(ctx, "start", false)))))
             .then(literal("open")
+                .executes(CommandRegistry::openOwnLobby)
                 .then(argument("dim", DimensionArgument.dimension())
                     .then(argument("pos", BlockPosArgument.blockPos())
                         .executes(ctx -> lobbyAction(ctx, "open", false)))))
@@ -162,10 +174,129 @@ public class CommandRegistry {
                             .executes(ctx -> stopActivity(ctx, new ArenasApi.InstanceRef(
                                 DimensionArgument.getDimension(ctx, "dimension").dimension(),
                                 BlockPosArgument.getBlockPos(ctx, "pos"))))))))
+            .then(literal("resetcooldown")
+                .then(argument("id", ResourceLocationArgument.id())
+                    .suggests(ACTIVITY_IDS)
+                    .executes(ctx -> resetCooldowns(ctx, null))
+                    .then(argument("pos", BlockPosArgument.blockPos())
+                        .executes(ctx -> resetCooldowns(ctx, new ArenasApi.InstanceRef(
+                            ctx.getSource().getLevel().dimension(), BlockPosArgument.getBlockPos(ctx, "pos"))))
+                        .then(argument("dimension", DimensionArgument.dimension())
+                            .executes(ctx -> resetCooldowns(ctx, new ArenasApi.InstanceRef(
+                                DimensionArgument.getDimension(ctx, "dimension").dimension(),
+                                BlockPosArgument.getBlockPos(ctx, "pos"))))))))
             .then(literal("forget")
                 .then(argument("id", ResourceLocationArgument.id())
                     .suggests(ACTIVITY_IDS)
-                    .executes(CommandRegistry::forgetActivity)));
+                    .executes(CommandRegistry::forgetActivity)))
+            .then(literal("breakable")
+                .then(argument("id", ResourceLocationArgument.id())
+                    .suggests(ACTIVITY_IDS)
+                    .executes(CommandRegistry::showBreakable)
+                    .then(literal("mode")
+                        .then(literal(net.ledok.arenas_ld.util.BreakableBlocks.ADD)
+                            .executes(ctx -> editBreakable(ctx, b -> new net.ledok.arenas_ld.util.BreakableBlocks(
+                                net.ledok.arenas_ld.util.BreakableBlocks.ADD, b.blocks()))))
+                        .then(literal(net.ledok.arenas_ld.util.BreakableBlocks.REPLACE)
+                            .executes(ctx -> editBreakable(ctx, b -> new net.ledok.arenas_ld.util.BreakableBlocks(
+                                net.ledok.arenas_ld.util.BreakableBlocks.REPLACE, b.blocks())))))
+                    .then(literal("add")
+                        .then(argument("entry", com.mojang.brigadier.arguments.StringArgumentType.greedyString())
+                            .executes(ctx -> editBreakable(ctx, b -> {
+                                java.util.List<String> list = new java.util.ArrayList<>(b.blocks());
+                                list.add(com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "entry"));
+                                return new net.ledok.arenas_ld.util.BreakableBlocks(b.mode(), list);
+                            }))))
+                    .then(literal("remove")
+                        .then(argument("entry", com.mojang.brigadier.arguments.StringArgumentType.greedyString())
+                            .executes(ctx -> editBreakable(ctx, b -> {
+                                java.util.List<String> list = new java.util.ArrayList<>(b.blocks());
+                                list.remove(com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "entry").trim());
+                                return new net.ledok.arenas_ld.util.BreakableBlocks(b.mode(), list);
+                            }))))
+                    .then(literal("clear")
+                        .executes(ctx -> editBreakable(ctx, b -> net.ledok.arenas_ld.util.BreakableBlocks.DEFAULT)))))
+            .then(literal("settings")
+                .then(argument("id", ResourceLocationArgument.id())
+                    .suggests(ACTIVITY_IDS)
+                    .executes(CommandRegistry::showRunSettings)
+                    .then(literal("rental")
+                        .then(literal(net.ledok.arenas_ld.util.RunSettings.OPTIONAL)
+                            .executes(ctx -> editRunSettings(ctx, s -> s.withRentalMode(net.ledok.arenas_ld.util.RunSettings.OPTIONAL))))
+                        .then(literal(net.ledok.arenas_ld.util.RunSettings.REQUIRED)
+                            .executes(ctx -> editRunSettings(ctx, s -> s.withRentalMode(net.ledok.arenas_ld.util.RunSettings.REQUIRED)))))
+                    .then(literal("loot_rolls")
+                        .then(literal("default")
+                            .executes(ctx -> editRunSettings(ctx, s -> s.withBaseLootRolls(-1))))
+                        .then(argument("rolls", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg(0,
+                                net.ledok.arenas_ld.util.RunSettings.MAX_ROLLS))
+                            .executes(ctx -> editRunSettings(ctx, s -> s.withBaseLootRolls(
+                                com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(ctx, "rolls"))))))));
+    }
+
+    /** {@code /arenasld activity breakable <id>}: the controller's list and what its runs allow with it. */
+    private static int showBreakable(CommandContext<CommandSourceStack> ctx) {
+        net.minecraft.resources.ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
+        var blocks = ArenasApi.breakableBlocks(ctx.getSource().getServer(), id).orElse(null);
+        if (blocks == null) {
+            ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.admin.breakable_not_supported", id.toString()));
+            return 0;
+        }
+        var effective = blocks.effective(net.ledok.arenas_ld.config.ArenasLdConfig.getInstance().run_breakable_blocks);
+        ctx.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.admin.breakable_show", id.toString(),
+            blocks.mode(), blocks.blocks().isEmpty() ? "-" : String.join(", ", blocks.blocks()),
+            effective.isEmpty() ? "-" : String.join(", ", effective)), false);
+        return 1;
+    }
+
+    private static int editBreakable(CommandContext<CommandSourceStack> ctx,
+                                     java.util.function.UnaryOperator<net.ledok.arenas_ld.util.BreakableBlocks> change) {
+        net.minecraft.resources.ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
+        var server = ctx.getSource().getServer();
+        var blocks = ArenasApi.breakableBlocks(server, id).orElse(null);
+        if (blocks == null) {
+            ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.admin.breakable_not_supported", id.toString()));
+            return 0;
+        }
+        Component refusal = ArenasApi.setBreakableBlocks(server, id, change.apply(blocks), ctx.getSource().getTextName());
+        if (refusal != null) {
+            ctx.getSource().sendFailure(refusal);
+            return 0;
+        }
+        return showBreakable(ctx);
+    }
+
+    /** {@code /arenasld activity settings <id>}: the controller's rental mode and base loot rolls. */
+    private static int showRunSettings(CommandContext<CommandSourceStack> ctx) {
+        net.minecraft.resources.ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
+        var settings = net.ledok.arenas_ld.activity.ActivityAdmin.runSettings(ctx.getSource().getServer(), id).orElse(null);
+        if (settings == null) {
+            ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.admin.run_settings_not_supported", id.toString()));
+            return 0;
+        }
+        String rolls = net.ledok.arenas_ld.rewards.RewardMath.number(settings.lootRolls());
+        ctx.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.admin.run_settings_show", id.toString(),
+            settings.rentalMode(), settings.hasOwnLootRolls() ? Component.literal(rolls)
+                : Component.translatable("message.arenas_ld.admin.run_settings_global_rolls", rolls)), false);
+        return 1;
+    }
+
+    private static int editRunSettings(CommandContext<CommandSourceStack> ctx,
+                                       java.util.function.UnaryOperator<net.ledok.arenas_ld.util.RunSettings> change) {
+        net.minecraft.resources.ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
+        var server = ctx.getSource().getServer();
+        var settings = net.ledok.arenas_ld.activity.ActivityAdmin.runSettings(server, id).orElse(null);
+        if (settings == null) {
+            ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.admin.run_settings_not_supported", id.toString()));
+            return 0;
+        }
+        Component refusal = net.ledok.arenas_ld.activity.ActivityAdmin.setRunSettings(server, id, change.apply(settings),
+            ctx.getSource().getTextName());
+        if (refusal != null) {
+            ctx.getSource().sendFailure(refusal);
+            return 0;
+        }
+        return showRunSettings(ctx);
     }
 
     /**
@@ -236,6 +367,22 @@ public class CommandRegistry {
     }
 
     /** Ends the activity's runs as staff, or only the run at one instance. */
+    /** {@code /arenasld activity resetcooldown <id> [pos [dimension]]}: {@code ArenasApi.resetCooldowns}. */
+    private static int resetCooldowns(CommandContext<CommandSourceStack> ctx, @Nullable ArenasApi.InstanceRef instance) {
+        net.minecraft.resources.ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
+        Component refusal = ArenasApi.resetCooldowns(ctx.getSource().getServer(), id, instance, ctx.getSource().getTextName());
+        if (refusal != null) {
+            ctx.getSource().sendFailure(refusal);
+            return 0;
+        }
+        Component done = instance == null
+            ? Component.translatable("message.arenas_ld.activity.cooldowns_reset", id.toString())
+            : Component.translatable("message.arenas_ld.activity.cooldown_reset_at", id.toString(),
+                instance.pos().toShortString() + " (" + instance.dimension().location() + ")");
+        ctx.getSource().sendSuccess(() -> done, true);
+        return 1;
+    }
+
     private static int stopActivity(CommandContext<CommandSourceStack> ctx, @Nullable ArenasApi.InstanceRef instance) {
         net.minecraft.resources.ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
         Component refusal = ArenasApi.forceEnd(ctx.getSource().getServer(), id, instance);
@@ -260,6 +407,68 @@ public class CommandRegistry {
             return 0;
         }
         ctx.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.activity.forgotten", id.toString()), true);
+        return 1;
+    }
+
+    /** {@code /arenasld lobby open}: the lobby screen of the player's own lobby, from anywhere (the HUD badge, the hub). */
+    /** {@code /arenasld run details}: the live details screen of the player's dungeon or raid run. */
+    private static int openRunDetails(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        if (!ArenasApi.openRunDetails(ctx.getSource().getPlayerOrException())) {
+            ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.run_details.no_run"));
+            return 0;
+        }
+        return 1;
+    }
+
+    /** {@code /arenasld run last}: the player's last finished run (the chat summary's [Details]). */
+    private static int openLastRun(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        if (!ArenasApi.openLastRunDetails(ctx.getSource().getPlayerOrException())) {
+            ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.run_stats.no_last"));
+            return 0;
+        }
+        return 1;
+    }
+
+    /** {@code /arenasld run history [player]}: the last 10 finished runs, each with an [Open] button. */
+    private static int runHistory(CommandContext<CommandSourceStack> ctx, @Nullable UUID player) {
+        var runs = ArenasApi.runHistory(ctx.getSource().getServer(), null, player, 10);
+        if (runs.isEmpty()) {
+            ctx.getSource().sendSuccess(() -> Component.translatable("message.arenas_ld.run_stats.history_empty"), false);
+            return 0;
+        }
+        var format = java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(java.time.ZoneId.systemDefault());
+        for (var run : runs) {
+            Component line = Component.literal(format.format(run.start()) + " ")
+                .append(Component.literal(run.name()).withStyle(net.minecraft.ChatFormatting.GOLD))
+                .append(" " + run.difficulty() + " · ")
+                .append(Component.translatable("gui.arenas_ld.run_details.result." + run.result().name().toLowerCase(java.util.Locale.ROOT)))
+                .append(String.format(java.util.Locale.ROOT, " · %d:%02d · ", run.durationSeconds() / 60, run.durationSeconds() % 60))
+                .append(String.join(", ", run.party()) + " ")
+                .append(Component.translatable("message.arenas_ld.run_stats.open").withStyle(style -> style
+                    .withColor(net.minecraft.ChatFormatting.AQUA).withUnderlined(true)
+                    .withClickEvent(new net.minecraft.network.chat.ClickEvent(
+                        net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND, "/arenasld run open " + run.runId()))));
+            ctx.getSource().sendSuccess(() -> line, false);
+        }
+        return runs.size();
+    }
+
+    /** {@code /arenasld run open <runId>}: a finished run's details, staff view. */
+    private static int openRun(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        String runId = com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "runId");
+        if (!ArenasApi.openRunDetails(ctx.getSource().getPlayerOrException(), runId)) {
+            ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.run_stats.unknown_run", runId));
+            return 0;
+        }
+        return 1;
+    }
+
+    private static int openOwnLobby(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        if (!net.ledok.arenas_ld.api.ArenasApi.openOwnLobby(player)) {
+            ctx.getSource().sendFailure(Component.translatable("message.arenas_ld.lobby.none"));
+            return 0;
+        }
         return 1;
     }
 

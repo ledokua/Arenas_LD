@@ -59,6 +59,7 @@ public class ArenasLdMod {
         // handling needs the manager to record them (their grace then carries over the restart).
         ArenasEvents.SERVER_STOPPED.add(server -> DUNGEON_MANAGER.clearForServerStop());
         ArenasEvents.PLAYER_JOIN.add((player, server) -> net.ledok.arenas_ld.util.RunPartyTeams.leaveMobTeamOnLogin(player));
+        ArenasEvents.PLAYER_JOIN.add((player, server) -> net.ledok.arenas_ld.util.RunEffects.onJoin(player));
         DungeonConnectionListener.register();
         net.ledok.arenas_ld.arena.run.ArenaConnectionListener.register();
         // After the connection listeners: queued reward commands run once their restore teleports have.
@@ -69,8 +70,24 @@ public class ArenasLdMod {
         ArenasEvents.SERVER_STARTED.add(net.ledok.arenas_ld.util.ControllerChunks::holdKnown);
         ArenasEvents.SERVER_STOPPED.add(server -> net.ledok.arenas_ld.util.RunChunkTickets.clear());
         ArenasEvents.SERVER_TICK_END.add(net.ledok.arenas_ld.util.RunMinions::endTick);
+        ArenasEvents.SERVER_TICK_END.add(net.ledok.arenas_ld.util.RunPreparation::tick);
+        ArenasEvents.SERVER_TICK_END.add(net.ledok.arenas_ld.activity.OpenLobbies::tick);
+        ArenasEvents.SERVER_TICK_END.add(net.ledok.arenas_ld.util.AllyHealthSync::tick);
+        ArenasEvents.SERVER_STOPPED.add(server -> net.ledok.arenas_ld.util.AllyHealthSync.clear());
+        ArenasEvents.SERVER_STOPPED.add(server -> net.ledok.arenas_ld.activity.OpenLobbies.clear());
+        net.ledok.arenas_ld.util.RunSplits.LISTENERS.add(net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle::onSplitPart);
+        net.ledok.arenas_ld.util.RunSplits.LISTENERS.add(net.ledok.arenas_ld.arena.run.ArenaRunLifecycle::onSplitPart);
+        net.ledok.arenas_ld.util.RunSplits.LISTENERS.add(net.ledok.arenas_ld.raid.run.RaidRunLifecycle::onSplitPart);
+        ArenasEvents.SERVER_STOPPED.add(server -> net.ledok.arenas_ld.util.RunSplits.clear());
+        ArenasEvents.SERVER_STOPPED.add(server -> net.ledok.arenas_ld.util.RunPreparation.clear());
         ArenasEvents.SERVER_STOPPED.add(server -> net.ledok.arenas_ld.util.RunMinions.clear());
         net.ledok.arenas_ld.util.RunLeftovers.register();
         net.ledok.arenas_ld.util.DownedSpectators.register();
+        net.ledok.arenas_ld.util.RunEffects.register();
+        net.ledok.arenas_ld.util.RunBlockBreaking.register();
+        net.ledok.arenas_ld.util.RespawnShield.register();
+        net.ledok.arenas_ld.util.RunRentals.register();
+        net.ledok.arenas_ld.activity.LobbyBadges.register();
+        net.ledok.arenas_ld.stats.RunDetails.register();
     }
 }

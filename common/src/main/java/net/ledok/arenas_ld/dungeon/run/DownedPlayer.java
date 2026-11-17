@@ -27,13 +27,25 @@ public record DownedPlayer(UUID playerUuid, int ticksRemaining) {
         ).apply(instance, DownedPlayer::new)
     );
 
-    /** Returns a new DownedPlayer with ticksRemaining decremented by 1, clamped at 0. */
+    /** {@link #ticksRemaining} of a hardcore death: out until the run ends, revived (and rewarded) on a win. */
+    public static final int OUT = -1;
+
+    /** A hardcore death: spectates the party until the run ends, never respawns. */
+    public static DownedPlayer out(UUID playerUuid) {
+        return new DownedPlayer(playerUuid, OUT);
+    }
+
+    public boolean isOut() {
+        return ticksRemaining == OUT;
+    }
+
+    /** Returns a new DownedPlayer with ticksRemaining decremented by 1, clamped at 0 (an {@link #isOut} one stays). */
     public DownedPlayer tick() {
-        return new DownedPlayer(playerUuid, Math.max(0, ticksRemaining - 1));
+        return isOut() ? this : new DownedPlayer(playerUuid, Math.max(0, ticksRemaining - 1));
     }
 
     /** True when the countdown has finished and the player should be respawned. */
     public boolean isReadyToRespawn() {
-        return ticksRemaining <= 0;
+        return !isOut() && ticksRemaining <= 0;
     }
 }

@@ -37,6 +37,7 @@ public abstract class EntityMixin {
     private void arenas_ld$minionLoaded(net.minecraft.nbt.CompoundTag tag, CallbackInfo ci) {
         net.ledok.arenas_ld.util.RunMinions.onLoaded((Entity) (Object) this);
         net.ledok.arenas_ld.util.RunLeftovers.onLoaded((Entity) (Object) this);
+        net.ledok.arenas_ld.stats.RunStats.onLoaded((Entity) (Object) this);
     }
 
     /** A run mob killed or discarded takes its minions with it (see RunMinions); a dead leftover is forgotten. */

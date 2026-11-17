@@ -22,34 +22,36 @@ public final class ReturnPoints {
 
     /**
      * Puts an online player back where they entered the run: out of the downed camera, teleported
-     * to the spot, in their old game mode, at full health. Effects are wiped when the return point
-     * says so (dungeons and arenas capture it that way, raids don't) or {@code alwaysClearEffects}.
+     * to the spot, in their old game mode, at full health, with every status effect gone (buffs and
+     * debuffs alike, in every mode), so nothing from the run follows them home.
      */
-    public static void apply(MinecraftServer server, ServerPlayer player, PlayerReturnPoint rp, boolean alwaysClearEffects) {
+    public static void apply(MinecraftServer server, ServerPlayer player, PlayerReturnPoint rp) {
+        RunPlayerSafety.secure(player); // screens closed, held items back in the inventory (4.36.1)
         DownedSpectators.release(player);
+        // Game mode first: a downed spectator crosses dimensions as a normal player, so the destination's chunk
+        // map registers them as one from the start (no spectator-to-player switch there afterwards).
+        player.setGameMode(rp.previousGameMode());
         ServerLevel target = server.getLevel(rp.dimension());
         DebugLog.log("teleport to return point {} in {}: {}", rp.pos(), rp.dimension().location(), DebugLog.describe(player));
         if (target != null) {
-            player.teleportTo(target, rp.pos().x(), rp.pos().y(), rp.pos().z(), rp.yaw(), rp.pitch());
+            // The 8-argument teleport also holds the destination chunk loaded for the arrival (POST_TELEPORT ticket).
+            player.teleportTo(target, rp.pos().x(), rp.pos().y(), rp.pos().z(), java.util.Set.of(), rp.yaw(), rp.pitch());
         }
-        player.setGameMode(rp.previousGameMode());
         player.setHealth(player.getMaxHealth());
-        if (alwaysClearEffects || rp.clearEffects()) {
-            player.removeAllEffects();
-        }
+        player.removeAllEffects();
     }
 
     /**
      * {@link #apply} if the player is online; otherwise the eject is persisted
      * ({@link PendingRestoreStore}) and carried out when they next log in.
      */
-    public static void sendHome(MinecraftServer server, UUID uuid, PlayerReturnPoint rp, boolean alwaysClearEffects) {
+    public static void sendHome(MinecraftServer server, UUID uuid, PlayerReturnPoint rp) {
         ServerPlayer player = server.getPlayerList().getPlayer(uuid);
         if (player == null) {
             PendingRestoreStore.get(server).put(uuid, rp);
             return;
         }
-        apply(server, player, rp, alwaysClearEffects);
+        apply(server, player, rp);
     }
 
     /** Sends a message to every online participant still in the run, except {@code except} (nullable). */

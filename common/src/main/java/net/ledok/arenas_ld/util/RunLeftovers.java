@@ -313,6 +313,8 @@ public final class RunLeftovers {
         }
         Membership membership = MEMBERS.get(owner);
         tagFor(entity, membership.runId(), owner);
+        // A pet or summon of a run player: its hits count for them.
+        net.ledok.arenas_ld.stats.RunStats.onOwnedEntity(entity, level.getServer().getPlayerList().getPlayer(owner));
     }
 
     private static void tagFor(Entity entity, String runId, UUID owner) {

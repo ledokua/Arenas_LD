@@ -52,6 +52,8 @@ public final class DungeonRun {
     private int closeTimerTicks;
     private int initialCloseTimerTicks;
     private final long startTick;
+    /** The run modifiers the lobby picked (config run_modifiers ids), fixed at run start. */
+    private final java.util.List<String> runModifiers = new java.util.ArrayList<>();
     /** LuckPerms reward perks captured while each player was online in this run (see EndRewardPerks). */
     private final Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots = new HashMap<>();
     private final Map<UUID, RunParticipant> participants;
@@ -232,6 +234,31 @@ public final class DungeonRun {
 
     /** Mutable on purpose: the lifecycle snapshots at run start and refreshes at payout. */
     public Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots() { return perkSnapshots; }
+    /** The run's live combat stats; its totals go into the run's save. */
+    private net.ledok.arenas_ld.stats.RunStats runStats;
+
+    /** Its totals from the save, until the stats exist (after a restart). */
+    private String savedRunStats = "";
+
+    public net.ledok.arenas_ld.stats.RunStats runStats(java.util.function.Supplier<net.ledok.arenas_ld.stats.RunDetailsSource> source) {
+        if (runStats == null) {
+            runStats = new net.ledok.arenas_ld.stats.RunStats(net.ledok.arenas_ld.util.DownedSpectators.RunView.of(this), source);
+            runStats.load(savedRunStats);
+            savedRunStats = "";
+        }
+        return runStats;
+    }
+
+    private String runStatsForSave() {
+        return runStats != null ? runStats.saveTotals() : savedRunStats;
+    }
+
+    public @org.jetbrains.annotations.Nullable net.ledok.arenas_ld.stats.RunStats runStatsOrNull() {
+        return runStats;
+    }
+
+    public java.util.List<String> runModifiers() { return java.util.Collections.unmodifiableList(runModifiers); }
+    public void setRunModifiers(java.util.Collection<String> ids) { runModifiers.clear(); runModifiers.addAll(ids); }
     void addParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void updateParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void removeParticipant(UUID uuid) { participants.remove(uuid); }
@@ -330,8 +357,13 @@ public final class DungeonRun {
             RoomProgress.CODEC.optionalFieldOf("roomProgress", RoomProgress.EMPTY).forGetter(DungeonRun::snapshotRoomProgress),
             net.ledok.arenas_ld.util.EndRewardPerks.SNAPSHOT_CODEC.optionalFieldOf("perkSnapshots", Map.of()).forGetter(DungeonRun::perkSnapshots),
             // Absent in saves from before 4.7.0: those runs force-loaded their chunks.
-            Codec.BOOL.optionalFieldOf("chunkTickets", false).forGetter(run -> !run.legacyForcedChunks)
-        ).apply(instance, (run, partyHealthMultiplier, roomProgress, perkSnapshots, chunkTickets) -> {
+            Codec.BOOL.optionalFieldOf("chunkTickets", false).forGetter(run -> !run.legacyForcedChunks),
+            Codec.STRING.listOf().optionalFieldOf("runModifiers", java.util.List.of()).forGetter(r -> r.runModifiers),
+            net.ledok.arenas_ld.stats.RunStatsSave.CODEC.optionalFieldOf("runStats", "").forGetter(DungeonRun::runStatsForSave)
+        ).apply(instance, (run, partyHealthMultiplier, roomProgress, perkSnapshots, chunkTickets, runModifiers, runStats) -> {
+            run.savedRunStats = runStats;
+            // Saved before hardcore became the hardcore_run modifier: the flag alone means it.
+            run.runModifiers.addAll(net.ledok.arenas_ld.rewards.RunModifierCatalog.withLegacyHardcore(runModifiers, run.hardcoreEnabled()));
             run.setPartyHealthMultiplier(partyHealthMultiplier);
             run.applyRoomProgress(roomProgress);
             run.perkSnapshots.putAll(perkSnapshots);

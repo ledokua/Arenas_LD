@@ -60,7 +60,7 @@ final class NeoForgeArenasWiring {
             }
         });
         NeoForge.EVENT_BUS.addListener((PlayerInteractEvent.RightClickBlock event) -> {
-            if (ArenasEvents.isUseBlocked(event.getEntity(), event.getHand())) {
+            if (ArenasEvents.isBlockUseBlocked(event.getEntity(), event.getHand(), event.getPos())) {
                 event.setCanceled(true);
                 event.setCancellationResult(InteractionResult.FAIL);
             }

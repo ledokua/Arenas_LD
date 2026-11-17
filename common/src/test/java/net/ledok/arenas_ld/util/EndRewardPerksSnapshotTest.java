@@ -27,7 +27,22 @@ class EndRewardPerksSnapshotTest {
 
     private static final UUID PRIME = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
     private static final UUID PLAIN = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
-    private static final EndRewardPerks PRIME_PERKS = new EndRewardPerks(2, 1.1, 1.25);
+    private static final EndRewardPerks PRIME_PERKS = new EndRewardPerks(java.util.List.of(
+        net.ledok.arenas_ld.rewards.RewardModifier.increased(net.ledok.arenas_ld.rewards.RewardModifier.Stat.LOOT, 0.5, "luckperms", "Prime"),
+        net.ledok.arenas_ld.rewards.RewardModifier.increased(net.ledok.arenas_ld.rewards.RewardModifier.Stat.XP, 0.25, "luckperms", "Prime")));
+
+    @Test
+    void preModifierSnapshotsLoadAsBonuses() {
+        CompoundTag legacy = new CompoundTag();
+        legacy.putInt("lootRolls", 5);
+        legacy.putDouble("currencyMultiplier", 1.5);
+        legacy.putDouble("xpMultiplier", 1.0);
+        EndRewardPerks loaded = EndRewardPerks.CODEC.parse(NbtOps.INSTANCE, legacy).getOrThrow();
+        var mods = loaded.modifiers();
+        assertEquals(5.0 / 3, net.ledok.arenas_ld.rewards.RewardMath.multiplier(mods, net.ledok.arenas_ld.rewards.RewardModifier.Stat.LOOT), 1e-9);
+        assertEquals(1.5, net.ledok.arenas_ld.rewards.RewardMath.multiplier(mods, net.ledok.arenas_ld.rewards.RewardModifier.Stat.CURRENCY), 1e-9);
+        assertEquals(1.0, net.ledok.arenas_ld.rewards.RewardMath.multiplier(mods, net.ledok.arenas_ld.rewards.RewardModifier.Stat.XP), 1e-9);
+    }
 
     @Test
     void offlinePlayerGetsTheirSnapshot() {

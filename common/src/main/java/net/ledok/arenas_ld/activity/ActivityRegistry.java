@@ -274,7 +274,8 @@ public final class ActivityRegistry {
     }
 
     /** The entry's controller when its chunk is loaded and the controller still has that id. */
-    private static @Nullable ActivityHost liveHost(MinecraftServer server, ActivityIndex.Entry entry) {
+    /** The entry's controller when its chunk is loaded (never loads one), else null. */
+    public static @Nullable ActivityHost liveHost(MinecraftServer server, ActivityIndex.Entry entry) {
         ServerLevel level = server.getLevel(entry.dimension());
         if (level == null || !level.isLoaded(entry.pos())) {
             return null;

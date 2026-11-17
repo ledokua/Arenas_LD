@@ -44,6 +44,10 @@ public final class EntityEquipmentHelper {
         if (entity instanceof Mob mob) {
             mob.setPersistenceRequired();
         }
+        // Run modifiers of the run spawning it (health, speed).
+        RunEffects.onRunMob(entity);
+        // Counted in the live stats of the run spawning it.
+        net.ledok.arenas_ld.stats.RunStats.onRunMob(entity);
         // The one piece of finalizeSpawn the spawners need: /summon runs finalizeSpawn, which
         // for a warden sets this dig cooldown — without it a fresh warden burrows away the
         // moment it spawns. Full finalizeSpawn is deliberately not called (it rolls random

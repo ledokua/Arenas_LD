@@ -57,6 +57,23 @@ public class ArenasLdClient {
         sink.accept(BlockRegistry.PHASE_BLOCK, RenderType.translucent());
     }
 
+    /** Opens the live details screen of the player's dungeon or raid run ({@code /arenasld run details}). */
+    public static final net.minecraft.client.KeyMapping RUN_DETAILS_KEY = new net.minecraft.client.KeyMapping(
+        "key.arenas_ld.run_details", org.lwjgl.glfw.GLFW.GLFW_KEY_SEMICOLON, "key.categories.arenas_ld");
+
+    /** Every client tick (the loader glue calls it). */
+    public static void clientTick() {
+        Minecraft mc = Minecraft.getInstance();
+        net.ledok.arenas_ld.screen.RunDetailsScreen.clientTick();
+        DevRunDetails.tick();
+        net.ledok.arenas_ld.screen.lobby.LobbyScreen.hostedTick();
+        while (RUN_DETAILS_KEY.consumeClick()) {
+            if (mc.player != null && mc.screen == null) {
+                mc.player.connection.sendCommand("arenasld run details");
+            }
+        }
+    }
+
     public static void init() {
         SelectionOverlayRenderer.register();
         SpawnTelegraphRenderer.register();
@@ -75,10 +92,41 @@ public class ArenasLdClient {
             net.ledok.vectorlib.client.render.HudRenderStage.OVERLAY, ctx -> {
                 net.ledok.arenas_ld.client.hud.RunTimerHud.tick(ctx.partialTick());
                 net.ledok.arenas_ld.client.hud.LootRevealHud.tick();
+                net.ledok.arenas_ld.client.hud.AllyHealthHud.tick();
             });
+        net.ledok.vectorlib.client.render.RenderEvents.onHudRender(
+            net.ledok.vectorlib.client.render.HudRenderStage.OVERLAY,
+            ctx -> net.ledok.arenas_ld.client.hud.LobbyBadgeHud.render(ctx.graphics(), ctx.width()));
+        ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.client.hud.LobbyBadgeHud::clear);
+        ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.screen.RunDetailsScreen::clear);
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RunTimelinePayload.TYPE, (payload, context) ->
+            context.client().execute(() -> net.ledok.arenas_ld.screen.run.TimelineView.onPayload(payload)));
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RunDetailsPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> net.ledok.arenas_ld.screen.RunDetailsScreen.onPayload(payload)));
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.LobbyBadgePayload.TYPE, (payload, context) ->
+            context.client().execute(() -> net.ledok.arenas_ld.client.hud.LobbyBadgeHud.onPayload(payload)));
         ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.client.hud.RunTimerHud::clear);
         ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.client.hud.LootRevealHud::clear);
+        ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.client.hud.AllyHealthHud::clear);
+        ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.screen.lobby.LobbyScreen::clearHosted);
+        DevLobbyHost.registerIfEnabled();
+        // Set at once (no execute): the menu's open-screen packet right behind it must find it.
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.LobbyOpeningPayload.TYPE, (payload, context) ->
+            net.ledok.arenas_ld.screen.lobby.LobbyScreen.nextActivity(payload.activity()));
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.AllyHealthPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> net.ledok.arenas_ld.client.hud.AllyHealthHud.onPayload(payload)));
+        ClientEvents.DISCONNECTED.add(() -> net.ledok.arenas_ld.util.RunEffectsClientState.frozenGround = false);
+        ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.util.RunBlockBreaking::clearClient);
+        ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.screen.RentalPick::clear);
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RentalLobbyPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> net.ledok.arenas_ld.screen.RentalPick.onPayload(payload)));
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RentalPreviewPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> net.ledok.arenas_ld.screen.RentalPick.onPreview(payload)));
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RunBreakableBlocksPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> net.ledok.arenas_ld.util.RunBlockBreaking.onClientPayload(payload)));
 
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RunFrozenGroundPayload.TYPE, (payload, context) ->
+            net.ledok.arenas_ld.util.RunEffectsClientState.frozenGround = payload.frozen());
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RunHudPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> net.ledok.arenas_ld.client.hud.RunTimerHud.onPayload(payload)));
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.LootRewardPayload.TYPE, (payload, context) ->
@@ -88,21 +136,21 @@ public class ArenasLdClient {
 
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> {
-                    if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen screen
+                    if (net.ledok.arenas_ld.screen.lobby.LobbyScreen.current() instanceof net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen screen
                             && screen.matchesController(payload.controllerPos())) {
                         screen.onClose();
                     }
                 }));
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.raid.packet.RaidCloseScreenPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> {
-                    if (Minecraft.getInstance().screen instanceof RaidControllerScreen screen
+                    if (net.ledok.arenas_ld.screen.lobby.LobbyScreen.current() instanceof RaidControllerScreen screen
                             && screen.matchesController(payload.controllerPos())) {
                         screen.onClose();
                     }
                 }));
         ArenasClientNetwork.registerReceiver(DungeonControllerSnapshotPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> {
-                    if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen screen
+                    if (net.ledok.arenas_ld.screen.lobby.LobbyScreen.current() instanceof net.ledok.arenas_ld.dungeon.screen.DungeonControllerScreen screen
                             && screen.matchesController(payload.data().blockPos())) {
                         screen.applyData(payload.data());
                     }
@@ -146,7 +194,7 @@ public class ArenasLdClient {
             }));
         ArenasClientNetwork.registerReceiver(ModPackets.RaidControllerInfoPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
-                if (Minecraft.getInstance().screen instanceof RaidControllerScreen screen
+                if (net.ledok.arenas_ld.screen.lobby.LobbyScreen.current() instanceof RaidControllerScreen screen
                         && payload.pos().equals(screen.getMenu().getPos())) {
                     screen.applyServerInfo(payload);
                 }
@@ -167,14 +215,14 @@ public class ArenasLdClient {
             }));
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.arena.packet.ArenaControllerSnapshotPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
-                if (Minecraft.getInstance().screen instanceof net.ledok.arenas_ld.arena.screen.ArenaControllerScreen screen
+                if (net.ledok.arenas_ld.screen.lobby.LobbyScreen.current() instanceof net.ledok.arenas_ld.arena.screen.ArenaControllerScreen screen
                         && screen.matchesController(payload.data().blockPos())) {
                     screen.applyData(payload.data());
                 }
             }));
         ArenasClientNetwork.registerReceiver(RaidControllerSnapshotPayload.TYPE, (payload, context) ->
             context.client().execute(() -> {
-                if (Minecraft.getInstance().screen instanceof RaidControllerScreen screen
+                if (net.ledok.arenas_ld.screen.lobby.LobbyScreen.current() instanceof RaidControllerScreen screen
                         && payload.data().blockPos().equals(screen.getMenu().getPos())) {
                     screen.applyData(payload.data());
                 }

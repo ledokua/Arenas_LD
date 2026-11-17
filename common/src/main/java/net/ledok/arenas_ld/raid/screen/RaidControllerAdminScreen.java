@@ -152,6 +152,11 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
     private final Map<DifficultyTier, String> regenInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> hpScaleInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, Boolean> enabledInputs = new EnumMap<>(DifficultyTier.class);
+    private final Map<DifficultyTier, Boolean> breakingInputs = new EnumMap<>(DifficultyTier.class);
+    /** What the breakable blocks add field holds. */
+    private String breakableDraft = "";
+    /** The base loot rolls field while typed in; null shows the saved value. */
+    private String runSettingsDraft = null;
     private final Map<DifficultyTier, List<String>> commandInputs = new EnumMap<>(DifficultyTier.class);
     /** The "Commands on win" add field per tier, kept across rebuilds. */
     private final Map<DifficultyTier, String> commandDrafts = new EnumMap<>(DifficultyTier.class);
@@ -607,7 +612,7 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         ));
         contentArea.item(ArenasUi.spacer(8));
         contentArea.item(twoColumnRow(
-            stepperField(tr("gui.arenas_ld.raid_controller_admin.ui.general.respawn_time"), tr("gui.arenas_ld.raid_controller_admin.ui.general.respawn_time_hint"), "T", 20, 0, 1_200_000, respawnTimeInput, v -> respawnTimeInput = v),
+            stepperField(tr("gui.arenas_ld.raid_controller_admin.ui.general.respawn_time"), tr("gui.arenas_ld.raid_controller_admin.ui.general.respawn_time_hint"), "s", 5, 0, 60_000, respawnTimeInput, v -> respawnTimeInput = v),
             stepperField(tr("gui.arenas_ld.dungeon_controller_admin.ui.general.death_penalty"), tr("gui.arenas_ld.dungeon_controller_admin.ui.general.death_penalty_hint"), "S", 1, 0, 600, deathPenaltyInput, v -> deathPenaltyInput = v)
         ));
         contentArea.item(ArenasUi.spacer(10));
@@ -616,6 +621,12 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         applyRow.sizing(Sizing.fill(), Sizing.content());
         applyRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.general.apply"), 120, 18, this::applyGeneral));
         contentArea.item(applyRow);
+        contentArea.item(ArenasUi.spacer(10));
+        contentArea.item(net.ledok.arenas_ld.screen.BreakableBlocksEditor.build(menu.getBlockPos(), menu.getBreakableBlocks(),
+            breakableDraft, v -> breakableDraft = v));
+        contentArea.item(ArenasUi.spacer(10));
+        contentArea.item(net.ledok.arenas_ld.screen.RunSettingsEditor.build(menu.getBlockPos(), menu.getRunSettings(),
+            runSettingsDraft, v -> runSettingsDraft = v));
     }
 
     private Flex twoColumnRow(Flex left, Flex right) {
@@ -762,6 +773,21 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
             }
         ));
 
+        boolean breaking = breakingInputs.getOrDefault(tier, config.allowBlockBreaking());
+        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(togglePanel(
+            tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.breaking"),
+            Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.breaking_desc", tierName).getString(),
+            breaking ? tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.enabled") : tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.disabled"),
+            breaking ? GOOD : INK_DIM,
+            GOOD,
+            () -> breakingInputs.getOrDefault(tier, config.allowBlockBreaking()),
+            () -> {
+                breakingInputs.put(tier, !breakingInputs.getOrDefault(tier, config.allowBlockBreaking()));
+                rebuildUi();
+            }
+        ));
+
         contentArea.item(ArenasUi.spacer(6));
         contentArea.item(labelLiteral(tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.parameters"), INK_DIM));
         contentArea.item(ArenasUi.spacer(2));
@@ -784,8 +810,8 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         contentArea.item(twoColumnRow(
             stepperField(tr("gui.arenas_ld.raid_controller_admin.ui.tier.xp"), tr("gui.arenas_ld.raid_controller_admin.ui.tier.xp_hint"), "XP", 10, 0, 1_000_000,
                 xpInputs.getOrDefault(tier, Integer.toString(config.skillExperiencePerWin())), v -> xpInputs.put(tier, v)),
-            stepperField(tr("gui.arenas_ld.raid_controller_admin.ui.tier.regen"), tr("gui.arenas_ld.raid_controller_admin.ui.tier.regen_hint"), "HP", 1, 0, 1_000_000,
-                regenInputs.getOrDefault(tier, Integer.toString(config.regeneration())), v -> regenInputs.put(tier, v))
+            stepperFieldDouble(tr("gui.arenas_ld.raid_controller_admin.ui.tier.regen"), tr("gui.arenas_ld.raid_controller_admin.ui.tier.regen_hint"), "HP/s", 0.5, 0, 1_000_000,
+                regenInputs.getOrDefault(tier, trimDouble(config.regenerationPerPlayer())), v -> regenInputs.put(tier, v))
         ));
 
         contentArea.item(ArenasUi.spacer(6));
@@ -1115,7 +1141,8 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         sendIfDirty(sent, "general.close_timer", () -> new RaidSetCloseTimerSecondsPayload(pos, close));
         sendIfDirty(sent, "general.max_party", () -> new RaidSetMaxPartySizePayload(pos, maxParty));
         sendIfDirty(sent, "general.invite_expiry", () -> new RaidSetInviteExpiryTicksPayload(pos, invite * 20));
-        sendIfDirty(sent, "general.respawn_time", () -> new RaidSetRespawnTimeTicksPayload(pos, respawn));
+        // The field is in seconds (the respawn interval); the controller keeps ticks.
+        sendIfDirty(sent, "general.respawn_time", () -> new RaidSetRespawnTimeTicksPayload(pos, respawn * 20));
         sendIfDirty(sent, "general.death_penalty", () -> new RaidSetDeathTimePenaltyPayload(pos, death * 20));
         // A raid merges the edits of a tick into one snapshot.
         drafts.saved(sent, sent.isEmpty() ? 0 : 1);
@@ -1138,7 +1165,7 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         String loot = lootInputs.getOrDefault(tier, current.perPlayerLootTable());
         Long reward = parseLong(rewardInputs.getOrDefault(tier, Long.toString(current.rewardCurrency())));
         Integer xp = parseInt(xpInputs.getOrDefault(tier, Integer.toString(current.skillExperiencePerWin())));
-        Integer regen = parseInt(regenInputs.getOrDefault(tier, Integer.toString(current.regeneration())));
+        Double regen = parseDouble(regenInputs.getOrDefault(tier, trimDouble(current.regenerationPerPlayer())));
         Double hpScale = parseDouble(hpScaleInputs.getOrDefault(tier, Double.toString(current.hpScalePerPlayer())));
 
         if (health == null || damage == null || time == null || reward == null
@@ -1151,8 +1178,9 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         boolean enabled = enabledInputs.getOrDefault(tier, current.enabled());
         RaidTierConfig updated = new RaidTierConfig(
             health, damage, loot, time, enabled, Math.max(0L, reward),
-            Math.max(0, xp), Math.max(0, regen), hpScale,
+            Math.max(0, xp), Math.max(0.0, regen), hpScale,
             commandInputs.getOrDefault(tier, current.rewardCommands()));
+        updated = updated.withAllowBlockBreaking(breakingInputs.getOrDefault(tier, current.allowBlockBreaking()));
         footerError = null;
         ArenasNetwork.sendToServer(new RaidSetTierConfigPayload(menu.getBlockPos(), tier, updated));
         drafts.setAll(inputTexts());
@@ -1215,7 +1243,7 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
         texts.put("general.close_timer", Integer.toString(menu.getCloseTimerSeconds()));
         texts.put("general.max_party", Integer.toString(menu.getMaxPartySize()));
         texts.put("general.invite_expiry", Integer.toString(menu.getInviteExpiryTicks() / 20));
-        texts.put("general.respawn_time", Integer.toString(menu.getRespawnTimeTicks()));
+        texts.put("general.respawn_time", Integer.toString(menu.getRespawnTimeTicks() / 20));
         texts.put("general.death_penalty", Integer.toString(menu.getDeathTimePenaltyTicks() / 20));
         for (DifficultyTier tier : DifficultyTier.values()) {
             RaidTierConfig config = menu.getTierConfigs().getOrDefault(tier, RaidTierConfig.defaultFor(tier));
@@ -1226,9 +1254,10 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
             texts.put(p + "time", Integer.toString(config.raidTimeSeconds()));
             texts.put(p + "reward", Long.toString(config.rewardCurrency()));
             texts.put(p + "xp", Integer.toString(config.skillExperiencePerWin()));
-            texts.put(p + "regen", Integer.toString(config.regeneration()));
+            texts.put(p + "regen", trimDouble(config.regenerationPerPlayer()));
             texts.put(p + "hp_scale", trimDouble(config.hpScalePerPlayer()));
             texts.put(p + "enabled", Boolean.toString(config.enabled()));
+            texts.put(p + "breaking", Boolean.toString(config.allowBlockBreaking()));
             texts.put(p + "commands", AdminDrafts.joinLines(config.rewardCommands()));
         }
         return texts;
@@ -1256,6 +1285,7 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
             texts.put(p + "regen", regenInputs.get(tier));
             texts.put(p + "hp_scale", hpScaleInputs.get(tier));
             texts.put(p + "enabled", String.valueOf(enabledInputs.get(tier)));
+            texts.put(p + "breaking", String.valueOf(breakingInputs.get(tier)));
             texts.put(p + "commands", AdminDrafts.joinLines(commandInputs.getOrDefault(tier, List.of())));
         }
         texts.values().removeIf(java.util.Objects::isNull);
@@ -1283,6 +1313,7 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
             regenInputs.put(tier, drafts.get(p + "regen"));
             hpScaleInputs.put(tier, drafts.get(p + "hp_scale"));
             enabledInputs.put(tier, Boolean.parseBoolean(drafts.get(p + "enabled")));
+            breakingInputs.put(tier, Boolean.parseBoolean(drafts.get(p + "breaking")));
             List<String> commands = commandInputs.computeIfAbsent(tier, t -> new ArrayList<>());
             commands.clear();
             commands.addAll(AdminDrafts.splitLines(drafts.get(p + "commands")));
@@ -1297,6 +1328,8 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
     public void applyData(RaidControllerAdminData data) {
         // Run starts, run ends and cooldowns send snapshots too. Settings merge field by field:
         // what nobody edits here follows the server, unsaved edits stay (see AdminDrafts).
+        var breakableBefore = menu.getBreakableBlocks();
+        var runSettingsBefore = menu.getRunSettings();
         menu.applyData(data);
         if (!synced || contentArea == null) {
             return; // buildAll takes everything at once
@@ -1310,7 +1343,10 @@ public class RaidControllerAdminScreen extends FitCanvasHandledScreen<RaidContro
             footerNotice = notice;
         }
         String tabPrefix = prefix(currentTab);
-        if (currentTab == Tab.INSTANCES || (tabPrefix != null && AdminDrafts.any(changed, tabPrefix))) {
+        // The breakable blocks list saves at once (no draft): redraw the General tab when it changed.
+        boolean breakableChanged = currentTab == Tab.GENERAL && (!breakableBefore.equals(menu.getBreakableBlocks())
+            || !runSettingsBefore.equals(menu.getRunSettings()));
+        if (currentTab == Tab.INSTANCES || breakableChanged || (tabPrefix != null && AdminDrafts.any(changed, tabPrefix))) {
             rebuildUi();
         } else {
             updateTabLabels(); // leaves the open tab's fields (and their focus) alone

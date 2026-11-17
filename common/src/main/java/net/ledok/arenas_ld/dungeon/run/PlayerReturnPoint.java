@@ -40,7 +40,7 @@ public record PlayerReturnPoint(
         ).apply(instance, PlayerReturnPoint::new)
     );
 
-    /** The player's spot and game mode now; {@code clearEffects}: whether leaving the run wipes effects. */
+    /** The player's spot and game mode now; {@code clearEffects} is saved but no longer read (4.19.2: every return wipes effects). */
     public static PlayerReturnPoint capture(ServerPlayer player, boolean clearEffects) {
         return new PlayerReturnPoint(
             player.level().dimension(),

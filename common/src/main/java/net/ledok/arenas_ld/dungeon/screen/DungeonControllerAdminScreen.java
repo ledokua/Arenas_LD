@@ -164,6 +164,11 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
     private final Map<DifficultyTier, String> timeInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, String> rewardInputs = new EnumMap<>(DifficultyTier.class);
     private final Map<DifficultyTier, Boolean> enabledInputs = new EnumMap<>(DifficultyTier.class);
+    private final Map<DifficultyTier, Boolean> breakingInputs = new EnumMap<>(DifficultyTier.class);
+    /** What the breakable blocks add field holds. */
+    private String breakableDraft = "";
+    /** The base loot rolls field while typed in; null shows the saved value. */
+    private String runSettingsDraft = null;
     private final Map<DifficultyTier, List<String>> commandInputs = new EnumMap<>(DifficultyTier.class);
     /** The "Commands on win" add field per tier, kept across rebuilds. */
     private final Map<DifficultyTier, String> commandDrafts = new EnumMap<>(DifficultyTier.class);
@@ -623,6 +628,12 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         applyRow.sizing(Sizing.fill(), Sizing.content());
         applyRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.general.apply"), 120, 18, this::applyGeneral));
         contentArea.item(applyRow);
+        contentArea.item(ArenasUi.spacer(10));
+        contentArea.item(net.ledok.arenas_ld.screen.BreakableBlocksEditor.build(menu.getBlockPos(), menu.getBreakableBlocks(),
+            breakableDraft, v -> breakableDraft = v));
+        contentArea.item(ArenasUi.spacer(10));
+        contentArea.item(net.ledok.arenas_ld.screen.RunSettingsEditor.build(menu.getBlockPos(), menu.getRunSettings(),
+            runSettingsDraft, v -> runSettingsDraft = v));
     }
 
     private Flex twoColumnRow(Flex left, Flex right) {
@@ -766,6 +777,21 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
             () -> enabledInputs.getOrDefault(tier, config.enabled()),
             () -> {
                 enabledInputs.put(tier, !enabledInputs.getOrDefault(tier, config.enabled()));
+                rebuildUi();
+            }
+        ));
+
+        boolean breaking = breakingInputs.getOrDefault(tier, config.allowBlockBreaking());
+        contentArea.item(ArenasUi.spacer(4));
+        contentArea.item(togglePanel(
+            tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.breaking"),
+            Component.translatable("gui.arenas_ld.dungeon_controller_admin.ui.tier.breaking_desc", tierName).getString(),
+            breaking ? tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.enabled") : tr("gui.arenas_ld.dungeon_controller_admin.ui.tier.disabled"),
+            breaking ? GOOD : INK_DIM,
+            GOOD,
+            () -> breakingInputs.getOrDefault(tier, config.allowBlockBreaking()),
+            () -> {
+                breakingInputs.put(tier, !breakingInputs.getOrDefault(tier, config.allowBlockBreaking()));
                 rebuildUi();
             }
         ));
@@ -1159,6 +1185,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         boolean enabled = enabledInputs.getOrDefault(tier, current.enabled());
         TierConfig updated = new TierConfig(health, damage, loot, time, enabled, Math.max(0L, reward), Math.max(0, xp),
             commandInputs.getOrDefault(tier, current.rewardCommands()));
+        updated = updated.withAllowBlockBreaking(breakingInputs.getOrDefault(tier, current.allowBlockBreaking()));
         footerError = null;
         ArenasNetwork.sendToServer(new SetTierConfigPayload(menu.getBlockPos(), tier, updated));
         drafts.setAll(inputTexts());
@@ -1238,6 +1265,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
             texts.put(p + "reward", Long.toString(config.rewardCurrency()));
             texts.put(p + "xp", Integer.toString(config.skillExperiencePerWin()));
             texts.put(p + "enabled", Boolean.toString(config.enabled()));
+            texts.put(p + "breaking", Boolean.toString(config.allowBlockBreaking()));
             texts.put(p + "commands", AdminDrafts.joinLines(config.rewardCommands()));
         }
         return texts;
@@ -1264,6 +1292,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
             texts.put(p + "reward", rewardInputs.get(tier));
             texts.put(p + "xp", xpInputs.get(tier));
             texts.put(p + "enabled", String.valueOf(enabledInputs.get(tier)));
+            texts.put(p + "breaking", String.valueOf(breakingInputs.get(tier)));
             texts.put(p + "commands", AdminDrafts.joinLines(commandInputs.getOrDefault(tier, List.of())));
         }
         texts.values().removeIf(java.util.Objects::isNull);
@@ -1290,6 +1319,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
             rewardInputs.put(tier, drafts.get(p + "reward"));
             xpInputs.put(tier, drafts.get(p + "xp"));
             enabledInputs.put(tier, Boolean.parseBoolean(drafts.get(p + "enabled")));
+            breakingInputs.put(tier, Boolean.parseBoolean(drafts.get(p + "breaking")));
             List<String> commands = commandInputs.computeIfAbsent(tier, t -> new ArrayList<>());
             commands.clear();
             commands.addAll(AdminDrafts.splitLines(drafts.get(p + "commands")));
@@ -1304,6 +1334,8 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
     public void applyData(DungeonControllerAdminData data) {
         // Run starts, run ends and cooldowns send snapshots too. Settings merge field by field:
         // what nobody edits here follows the server, unsaved edits stay (see AdminDrafts).
+        var breakableBefore = menu.getBreakableBlocks();
+        var runSettingsBefore = menu.getRunSettings();
         menu.applyData(data);
         syncStateFromMenu();
         if (!synced) {
@@ -1317,7 +1349,10 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
             footerNotice = notice;
         }
         String tabPrefix = prefix(currentTab);
-        if (currentTab == Tab.INSTANCES || (tabPrefix != null && AdminDrafts.any(changed, tabPrefix))) {
+        // The breakable blocks list saves at once (no draft): redraw the General tab when it changed.
+        boolean breakableChanged = currentTab == Tab.GENERAL && (!breakableBefore.equals(menu.getBreakableBlocks())
+            || !runSettingsBefore.equals(menu.getRunSettings()));
+        if (currentTab == Tab.INSTANCES || breakableChanged || (tabPrefix != null && AdminDrafts.any(changed, tabPrefix))) {
             rebuildUi();
         } else {
             updateTabLabels(); // leaves the open tab's fields (and their focus) alone

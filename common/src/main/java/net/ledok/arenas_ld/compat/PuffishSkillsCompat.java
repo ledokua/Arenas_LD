@@ -26,6 +26,41 @@ public class PuffishSkillsCompat {
     }
 
     /**
+     * The branch of a skill tree with the most unlocked nodes: node ids start with it ("rogue.t3.s2.b" → "rogue").
+     * Empty when the tree is unknown or nothing is unlocked.
+     */
+    public static String topBranch(ServerPlayer player, ResourceLocation categoryId) {
+        Optional<Category> tree = SkillsAPI.getCategory(categoryId);
+        if (tree.isEmpty()) {
+            return "";
+        }
+        java.util.Map<String, Integer> counts = new java.util.TreeMap<>();
+        tree.get().streamUnlockedSkills(player).forEach(skill -> {
+            String id = skill.getId();
+            int dot = id.indexOf('.');
+            counts.merge(dot > 0 ? id.substring(0, dot) : id, 1, Integer::sum);
+        });
+        String best = "";
+        int most = 0;
+        for (java.util.Map.Entry<String, Integer> entry : counts.entrySet()) {
+            if (entry.getValue() > most) {
+                best = entry.getKey();
+                most = entry.getValue();
+            }
+        }
+        return best;
+    }
+
+    /** Every unlocked node of every skill tree, "<category>/<node>", sorted. */
+    public static java.util.List<String> unlockedSkills(ServerPlayer player) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        SkillsAPI.streamCategories().forEach(category ->
+            category.streamUnlockedSkills(player).forEach(skill -> out.add(category.getId() + "/" + skill.getId())));
+        out.sort(null);
+        return out;
+    }
+
+    /**
      * Adds experience to the configured skill tree for a specific player.
      * @param player The player to grant experience to.
      * @param amount The amount of experience to add.

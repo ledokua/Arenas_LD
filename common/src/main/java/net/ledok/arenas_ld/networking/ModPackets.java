@@ -785,6 +785,7 @@ public class ModPackets {
         ModPacketTypeRegistry.registerC2STypes();
         net.ledok.arenas_ld.raid.RaidPacketHandlers.register();
         SpawnerPacketHandlers.register();
+        SummonDataHandlers.register();
         net.ledok.arenas_ld.arena.ArenaPacketHandlers.register();
 
     }
@@ -813,23 +814,6 @@ public class ModPackets {
         return new ArrayList<>(controller.getLeaderboardForDifficulty(difficulty));
     }
 
-    static void removePlayerFromOtherLobbies(ServerPlayer player, BlockPos currentControllerPos, ResourceKey<Level> currentControllerDim) {
-        var server = player.server;
-        if (server == null) return;
-        for (RaidControllerBlockEntity.ControllerKey key : RaidControllerBlockEntity.getControllers()) {
-            ServerLevel level = server.getLevel(key.dimension());
-            if (level == null) continue;
-            BlockEntity be = level.getBlockEntity(key.pos());
-            if (be instanceof RaidControllerBlockEntity controller) {
-                if (level.dimension().equals(currentControllerDim) && controller.getBlockPos().equals(currentControllerPos)) {
-                    continue;
-                }
-                if (controller.getLobbyByMember(player.getUUID()) != null) {
-                    controller.leaveLobby(player.getUUID());
-                }
-            }
-        }
-    }
 
     public static RaidControllerBlockEntity findRaidControllerByLobbyId(net.minecraft.server.MinecraftServer server, UUID lobbyId) {
         for (RaidControllerBlockEntity.ControllerKey key : RaidControllerBlockEntity.getControllers()) {

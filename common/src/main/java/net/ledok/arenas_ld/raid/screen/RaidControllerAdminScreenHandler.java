@@ -35,6 +35,8 @@ public class RaidControllerAdminScreenHandler extends AdminMenuBase {
     private List<String> knownLootTableIds = List.of();
     private String activityId = "";
     private String lastEditor = "";
+    private net.ledok.arenas_ld.util.BreakableBlocks breakableBlocks = net.ledok.arenas_ld.util.BreakableBlocks.DEFAULT;
+    private net.ledok.arenas_ld.util.RunSettings runSettings = net.ledok.arenas_ld.util.RunSettings.DEFAULT;
 
     /** Client side, from the opening data; snapshots refresh it through {@link #applyData}. */
     public RaidControllerAdminScreenHandler(int syncId, Inventory inventory, RaidControllerAdminData data) {
@@ -70,6 +72,8 @@ public class RaidControllerAdminScreenHandler extends AdminMenuBase {
     public Map<BlockPos, RaidControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
     public List<String> getKnownLootTableIds() { return knownLootTableIds != null ? knownLootTableIds : List.of(); }
     public String getActivityId() { return activityId == null ? "" : activityId; }
+    public net.ledok.arenas_ld.util.BreakableBlocks getBreakableBlocks() { return breakableBlocks; }
+    public net.ledok.arenas_ld.util.RunSettings getRunSettings() { return runSettings; }
     public String getLastEditor() { return lastEditor; }
 
     public void applyData(RaidControllerAdminData data) {
@@ -87,6 +91,8 @@ public class RaidControllerAdminScreenHandler extends AdminMenuBase {
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
         this.activityId = data.activityId();
         this.lastEditor = data.lastEditor() == null ? "" : data.lastEditor();
+        this.breakableBlocks = data.breakableBlocks();
+        this.runSettings = data.runSettings();
     }
 
     @Override

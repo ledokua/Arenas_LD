@@ -11,7 +11,8 @@ import java.util.List;
  * Per-tier raid configuration. Owned by {@link net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity}.
  *
  * <p>All raid-time mechanics that used to live on RaidBossSpawnerBlockEntity are configured
- * here: HP/damage scaling, time limit, per-player loot table, skill XP reward, regeneration,
+ * here: HP/damage scaling, time limit, per-player loot table, skill XP reward, boss regeneration (HP per second for
+ * each player in the run, 4.37.0; the old flat {@code regeneration} is no longer read),
  * and per-player HP scale. The spawner is a passive arena. {@code rewardCommands} run as the
  * server on a win (see {@link net.ledok.arenas_ld.util.RewardCommands}).
  */
@@ -23,20 +24,29 @@ public record RaidTierConfig(
     boolean enabled,
     long rewardCurrency,
     int skillExperiencePerWin,
-    int regeneration,
+    double regenerationPerPlayer,
     double hpScalePerPlayer,
-    List<String> rewardCommands
+    List<String> rewardCommands,
+    boolean allowBlockBreaking
 ) {
     public RaidTierConfig {
         rewardCommands = rewardCommands == null ? List.of() : List.copyOf(rewardCommands);
     }
 
+    /** A tier without block breaking (the shape before 4.23.0). */
+    public RaidTierConfig(double healthMultiplier, double damageMultiplier, String perPlayerLootTable,
+                          int raidTimeSeconds, boolean enabled, long rewardCurrency, int skillExperiencePerWin,
+                          double regenerationPerPlayer, double hpScalePerPlayer, List<String> rewardCommands) {
+        this(healthMultiplier, damageMultiplier, perPlayerLootTable, raidTimeSeconds, enabled, rewardCurrency,
+            skillExperiencePerWin, regenerationPerPlayer, hpScalePerPlayer, rewardCommands, false);
+    }
+
     /** A tier with no reward commands (the shape before 4.11.0). */
     public RaidTierConfig(double healthMultiplier, double damageMultiplier, String perPlayerLootTable,
                           int raidTimeSeconds, boolean enabled, long rewardCurrency, int skillExperiencePerWin,
-                          int regeneration, double hpScalePerPlayer) {
+                          double regenerationPerPlayer, double hpScalePerPlayer) {
         this(healthMultiplier, damageMultiplier, perPlayerLootTable, raidTimeSeconds, enabled, rewardCurrency,
-            skillExperiencePerWin, regeneration, hpScalePerPlayer, List.of());
+            skillExperiencePerWin, regenerationPerPlayer, hpScalePerPlayer, List.of());
     }
 
     public static final RaidTierConfig EASY_DEFAULT =
@@ -57,16 +67,25 @@ public record RaidTierConfig(
             Codec.BOOL.optionalFieldOf("enabled", true).forGetter(RaidTierConfig::enabled),
             Codec.LONG.optionalFieldOf("rewardCurrency", 0L).forGetter(RaidTierConfig::rewardCurrency),
             Codec.INT.optionalFieldOf("skillExperiencePerWin", 100).forGetter(RaidTierConfig::skillExperiencePerWin),
-            Codec.INT.optionalFieldOf("regeneration", 0).forGetter(RaidTierConfig::regeneration),
+            // 4.37.0: per player (HP/s × the run's players). The old flat "regeneration" (HP per 5 s) is dropped, not
+            // converted: a controller that had it heals nothing until this is set (LeDok: regen per player instead).
+            Codec.DOUBLE.optionalFieldOf("regenerationPerPlayer", 0.0).forGetter(RaidTierConfig::regenerationPerPlayer),
             Codec.DOUBLE.optionalFieldOf("hpScalePerPlayer", 0.10).forGetter(RaidTierConfig::hpScalePerPlayer),
-            Codec.STRING.listOf().optionalFieldOf("rewardCommands", List.of()).forGetter(RaidTierConfig::rewardCommands)
+            Codec.STRING.listOf().optionalFieldOf("rewardCommands", List.of()).forGetter(RaidTierConfig::rewardCommands),
+            Codec.BOOL.optionalFieldOf("allowBlockBreaking", false).forGetter(RaidTierConfig::allowBlockBreaking)
         ).apply(instance, RaidTierConfig::new)
     );
 
     /** This tier with other reward commands. */
     public RaidTierConfig withRewardCommands(List<String> commands) {
         return new RaidTierConfig(healthMultiplier, damageMultiplier, perPlayerLootTable, raidTimeSeconds, enabled,
-            rewardCurrency, skillExperiencePerWin, regeneration, hpScalePerPlayer, commands);
+            rewardCurrency, skillExperiencePerWin, regenerationPerPlayer, hpScalePerPlayer, commands, allowBlockBreaking);
+    }
+
+    /** This tier with block breaking on or off. */
+    public RaidTierConfig withAllowBlockBreaking(boolean allow) {
+        return new RaidTierConfig(healthMultiplier, damageMultiplier, perPlayerLootTable, raidTimeSeconds, enabled,
+            rewardCurrency, skillExperiencePerWin, regenerationPerPlayer, hpScalePerPlayer, rewardCommands, allow);
     }
 
     public static RaidTierConfig defaultFor(RaidDifficulty tier) {

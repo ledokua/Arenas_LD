@@ -16,6 +16,8 @@ final class ArenasLdClientNeoForge {
     @SuppressWarnings("deprecation") // setRenderLayer: the code path matching Fabric's BlockRenderLayerMap
     static void register(IEventBus modBus) {
         modBus.addListener((RegisterMenuScreensEvent event) -> ArenasLdClient.registerScreens(event::register));
+        modBus.addListener((net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent event) -> event.register(ArenasLdClient.RUN_DETAILS_KEY));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.ClientTickEvent.Post event) -> ArenasLdClient.clientTick());
         modBus.addListener((FMLClientSetupEvent event) -> event.enqueueWork(() -> {
             ArenasLdClient.registerRenderLayers(ItemBlockRenderTypes::setRenderLayer);
             ArenasLdClient.init();

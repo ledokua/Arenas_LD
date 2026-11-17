@@ -67,7 +67,6 @@ public final class RaidPacketHandlers {
                 }
                 RaidControllerBlockEntity controller = findController(player, payload.blockPos());
                 if (controller == null) return;
-                if (controller.getLobbyByMember(player.getUUID()) != null) return;
                 controller.createLobby(player);
                 broadcastRaidControllerSnapshot(player, controller);
             })

@@ -43,7 +43,11 @@ public record ArenaControllerData(
     Set<UUID> inRun,
     int maxPartySize,
     int maxWave,
-    Component requirement
+    Component requirement,
+    /** The run modifiers every run here gets now (activity modifiers, reward events); empty for none. */
+    Component runModifiers,
+    /** The run modifiers a lobby owner here can switch on. */
+    java.util.List<net.ledok.arenas_ld.rewards.RunModifierOption> modifierOptions
 ) {
     /** One arena instance as the lobby strip shows it. */
     public record InstanceView(InstanceStatus status, int cooldownTicksRemaining) {
@@ -87,6 +91,8 @@ public record ArenaControllerData(
         buf.writeVarInt(data.maxPartySize());
         buf.writeVarInt(data.maxWave());
         ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, data.requirement());
+        ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, data.runModifiers());
+        net.ledok.arenas_ld.rewards.RunModifierOption.LIST_CODEC.encode(buf, data.modifierOptions());
     }
 
     private static ArenaControllerData decode(RegistryFriendlyByteBuf buf) {
@@ -102,7 +108,9 @@ public record ArenaControllerData(
             readUuids(buf),
             buf.readVarInt(),
             buf.readVarInt(),
-            ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf));
+            ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf),
+            ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf),
+            net.ledok.arenas_ld.rewards.RunModifierOption.LIST_CODEC.decode(buf));
     }
 
     private static void writeUuids(RegistryFriendlyByteBuf buf, Set<UUID> uuids) {

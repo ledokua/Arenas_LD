@@ -24,6 +24,15 @@ import java.util.Set;
 @GameTestHolder("arenas_ld")
 @PrefixGameTestTemplate(false)
 public final class NeoForgeGametests {
+    static {
+        // Runs start at once in tests; apiRunPreparation turns the countdown on for itself (own batch).
+        // Only in a game test run: this class is loaded on normal servers too (the loader reads test entrypoints),
+        // and there it must not switch the start countdown off (4.29.x–4.33.x shipped that bug).
+        if (System.getProperty("neoforge.enabledGameTestNamespaces") != null) {
+            net.ledok.arenas_ld.util.RunPreparation.secondsOverride = 0;
+        }
+    }
+
     private NeoForgeGametests() {}
 
     @GameTest(template = "empty")
@@ -41,6 +50,21 @@ public final class NeoForgeGametests {
     }
 
     @GameTest(template = "empty")
+    public static void runEventLog(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runEventLog(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void runDetailsClassBook(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runDetailsClassBook(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void runPlayerSafety(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runPlayerSafety(helper);
+    }
+
+    @GameTest(template = "empty")
     public static void rewardCommands(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.rewardCommands(helper);
     }
@@ -53,6 +77,119 @@ public final class NeoForgeGametests {
     @GameTest(template = "empty")
     public static void apiEntryGate(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.entryGate(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiRunModifiers(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runModifiers(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiHardcoreRun(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.hardcoreRun(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiRunModifierConflicts(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runModifierConflicts(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiUnregisteredPlayerRemoval(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.unregisteredPlayerRemoval(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiLobbyAutoLeave(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.lobbyAutoLeave(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiRunStatsCounting(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runStatsCounting(helper);
+    }
+
+    // Own batch: the rental tests swap the one global rental provider.
+    @GameTest(template = "empty", batch = "rental_dungeon")
+    public static void apiRentalDungeonPick(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.rentalDungeonPick(helper);
+    }
+
+    // Own batch: the rental tests swap the one global rental provider.
+    @GameTest(template = "empty", batch = "rental_required")
+    public static void apiRunSettings(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runSettings(helper);
+    }
+
+    // Own batch: the rental tests swap the one global rental provider.
+    @GameTest(template = "empty", batch = "rental_builds")
+    public static void apiRentalBuilds(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.rentalBuilds(helper);
+    }
+
+    @GameTest(template = "empty", batch = "run_preparation", timeoutTicks = 500)
+    public static void apiDungeonPreparation(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.dungeonPreparation(helper);
+    }
+
+    @GameTest(template = "empty", batch = "run_preparation", timeoutTicks = 500)
+    public static void apiRunPreparation(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runPreparation(helper, NeoForgeGametests::acceptModPayloads);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiSummonSplits(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.summonSplits(helper);
+    }
+
+    @GameTest(template = "empty", batch = "open_lobbies")
+    public static void apiOpenLobbies(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.openLobbiesList(helper, NeoForgeGametests::acceptModPayloads);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiLobbySettingsChange(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.lobbySettingsChange(helper);
+    }
+
+    @GameTest(template = "empty", batch = "open_lobbies")
+    public static void apiHubLobbyApi(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.hubLobbyApi(helper, NeoForgeGametests::acceptModPayloads);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiRunStatsSave(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runStatsSave(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiRunStates(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runStates(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiRespawnShield(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.respawnShield(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiHardcoreOut(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.hardcoreOut(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiRunBlockBreaking(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runBlockBreaking(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiRunDetailsNewestRun(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.runDetailsNewestRun(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiResetCooldowns(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.resetCooldowns(helper);
     }
 
     @GameTest(template = "empty")
@@ -80,7 +217,8 @@ public final class NeoForgeGametests {
         net.ledok.arenas_ld.gametest.ApiGameTests.controllerChunks(helper);
     }
 
-    @GameTest(template = "empty", timeoutTicks = 400)
+    // Own batch: it waits up to 200 ticks, and a neighbor test starting meanwhile clears its space (discarding these mobs).
+    @GameTest(template = "empty", timeoutTicks = 400, batch = "run_minions")
     public static void runMinions(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.runMinions(helper);
     }
@@ -160,7 +298,8 @@ public final class NeoForgeGametests {
         net.ledok.arenas_ld.gametest.ApiGameTests.runLeftoversOnLoad(helper);
     }
 
-    @GameTest(template = "empty")
+    // Own batch: it waits up to 260 ticks for a fresh chunk to generate, which other tests running beside it slow down.
+    @GameTest(template = "empty", timeoutTicks = 400, batch = "raid_boss_chunks")
     public static void raidBossChunks(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.raidBossChunks(helper, NeoForgeGametests::acceptModPayloads);
     }

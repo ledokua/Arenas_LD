@@ -924,8 +924,82 @@ public final class SpawnerPacketHandlers {
                 }
             });
         });
+        // A lobby member's rental build pick.
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.SetRentalChoicePayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                Component refusal = net.ledok.arenas_ld.util.RunRentals.choose(context.player(), payload.controller(),
+                    payload.kitId(), payload.spells());
+                if (refusal != null) {
+                    context.player().displayClientMessage(refusal.copy().withStyle(net.minecraft.ChatFormatting.RED), false);
+                }
+            }));
+        // A lobby member opens the rental kit preview.
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.RequestRentalPreviewPayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                var preview = net.ledok.arenas_ld.util.RunRentals.preview(context.player(), payload.controller());
+                if (preview != null) {
+                    ArenasNetwork.sendToPlayer(context.player(), preview);
+                }
+            }));
+        // A dungeon or raid admin screen's breakable blocks list.
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.SetBreakableBlocksPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    return;
+                }
+                BlockEntity be = AdminScreens.controller(player, payload.controllerPos(), BlockEntity.class);
+                if (be instanceof net.ledok.arenas_ld.activity.ActivityHost host) {
+                    Component refusal = net.ledok.arenas_ld.activity.ActivityAdmin.applyBreakableBlocks(host,
+                        new net.ledok.arenas_ld.util.BreakableBlocks(payload.mode(), payload.blocks()), player.getGameProfile().getName());
+                    if (refusal != null) {
+                        player.displayClientMessage(refusal.copy().withStyle(net.minecraft.ChatFormatting.RED), false);
+                    }
+                }
+            });
+        });
+        // A dungeon or raid admin screen's run settings (rental mode, base loot rolls).
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.SetRunSettingsPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    return;
+                }
+                BlockEntity be = AdminScreens.controller(player, payload.controllerPos(), BlockEntity.class);
+                if (be instanceof net.ledok.arenas_ld.activity.ActivityHost host) {
+                    Component refusal = net.ledok.arenas_ld.activity.ActivityAdmin.applyRunSettings(host, payload.settings(),
+                        player.getGameProfile().getName());
+                    if (refusal != null) {
+                        player.displayClientMessage(refusal.copy().withStyle(net.minecraft.ChatFormatting.RED), false);
+                    }
+                }
+            });
+        });
         ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.SetActivityInfoPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> applyActivityInfo(context.player(), payload));
+        });
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.RunDetailsClosedPayload.TYPE, (payload, context) ->
+            context.server().execute(() -> net.ledok.arenas_ld.stats.RunDetails.closed(context.player())));
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.RunTimelinePayload.Request.TYPE, (payload, context) ->
+            context.server().execute(() -> net.ledok.arenas_ld.stats.RunDetails.timeline(context.player(), payload.player(), payload.from())));
+        // A lobby owner's run modifier toggle, for any controller type (the lobby screen it came from).
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.SetLobbyModifierPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                BlockEntity be = net.ledok.arenas_ld.activity.LobbyScreens.controller(player, payload.controllerPos(), BlockEntity.class);
+                boolean changed = switch (be) {
+                    case net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity dungeon ->
+                        dungeon.setLobbyModifier(player, payload.modifier(), payload.on());
+                    case net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity raid ->
+                        raid.setLobbyModifier(player, payload.modifier(), payload.on());
+                    case net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity arena ->
+                        arena.setLobbyModifier(player, payload.modifier(), payload.on());
+                    case null, default -> false;
+                };
+                if (changed && be instanceof net.ledok.arenas_ld.activity.ActivityHost host) {
+                    host.syncViewers();
+                }
+            });
         });
         // Any spawner's "Scale minions" switch (op only, like every spawner edit).
         ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.SetMinionScalingPayload.TYPE, (payload, context) -> {
@@ -1026,7 +1100,11 @@ public final class SpawnerPacketHandlers {
         controller.notifyLobbyMembers(lobby, msg);
     }
 
-    /** Owner starts the run (or queues); on launch, closes the controller screen for all members. */
+    /**
+     * Owner starts the run (or queues). With a start countdown ({@code run_prepare_seconds}) the instance is held and
+     * its chunks load first ({@link net.ledok.arenas_ld.util.RunPreparation}); on launch the controller screen closes
+     * for all members.
+     */
     public static void performStartRun(ServerPlayer player, net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller) {
         if (!(controller.getLevel() instanceof ServerLevel serverLevel)) {
             return;
@@ -1036,31 +1114,103 @@ public final class SpawnerPacketHandlers {
         if (lobby == null) {
             return;
         }
-        controller.startRun(player).ifPresent(instancePos -> {
-            List<UUID> party = new ArrayList<>(lobby.members());
-            // The DBS may live in a different dimension than the controller.
-            ServerLevel dbsLevel = serverLevel.getServer().getLevel(controller.getInstanceDimension(instancePos));
-            if (dbsLevel == null) {
-                dbsLevel = serverLevel;
-            }
-            DungeonRun run = DungeonRunLifecycle.startRun(
-                dbsLevel, controller, instancePos, party,
-                lobby.selectedTier(), lobby.hardcoreEnabled(), lobby.ownerName());
-            if (run == null) {
-                ArenasLdMod.LOGGER.warn("startRun failed for lobby {}", lobby.lobbyId());
-                return;
-            }
-            net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload closePayload =
-                new net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload(controller.getBlockPos());
-            for (UUID memberUuid : party) {
-                ServerPlayer member = serverLevel.getServer().getPlayerList().getPlayer(memberUuid);
-                if (member != null) {
-                    ArenasNetwork.sendToPlayer(member, closePayload);
-                }
-            }
-        });
+        if (net.ledok.arenas_ld.util.RunPreparation.enabled()) {
+            controller.startRun(player, null, true).ifPresent(instancePos -> prepareDungeon(serverLevel, controller, lobby, instancePos));
+        } else {
+            controller.startRun(player).ifPresent(instancePos -> launchDungeon(serverLevel, controller, lobby, instancePos));
+        }
         markDirtyAndSync(controller.getLevel(), controller);
         broadcastDungeonControllerSnapshot(player, controller);
+    }
+
+    private static void prepareDungeon(ServerLevel serverLevel, net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller,
+                                       Lobby lobby, net.minecraft.core.BlockPos instancePos) {
+        ServerLevel dbsLevel = serverLevel.getServer().getLevel(controller.getInstanceDimension(instancePos));
+        if (dbsLevel == null) {
+            dbsLevel = serverLevel;
+        }
+        UUID lobbyId = lobby.lobbyId();
+        java.util.Set<UUID> party = new java.util.HashSet<>(lobby.members());
+        controller.holdForPreparation(lobbyId, instancePos);
+        boolean began = net.ledok.arenas_ld.util.RunPreparation.begin(serverLevel.getServer(), lobbyId,
+            DungeonRunLifecycle.preloadChunks(dbsLevel, instancePos, net.ledok.arenas_ld.util.RunPreparation.radius()),
+            new net.ledok.arenas_ld.util.RunPreparation.Hooks() {
+                @Override
+                public java.util.Collection<UUID> members() {
+                    return party;
+                }
+
+                @Override
+                public @org.jetbrains.annotations.Nullable Component problem(net.minecraft.server.MinecraftServer server) {
+                    if (controller.isRemoved()) {
+                        return Component.translatableWithFallback("message.arenas_ld.run.prepare.gone", "the lobby is gone");
+                    }
+                    Lobby current = controller.getLobbies().stream().filter(l -> l.lobbyId().equals(lobbyId)).findFirst().orElse(null);
+                    return net.ledok.arenas_ld.util.RunPreparation.partyProblem(server, current, party, true);
+                }
+
+                @Override
+                public void launch(net.minecraft.server.MinecraftServer server) {
+                    controller.holdForPreparation(lobbyId, null);
+                    Lobby current = controller.getLobbies().stream().filter(l -> l.lobbyId().equals(lobbyId)).findFirst().orElse(null);
+                    ServerPlayer owner = current != null ? server.getPlayerList().getPlayer(current.ownerUuid()) : null;
+                    if (owner != null) {
+                        // Every check again (tier, gates, readiness); the loaded instance when it's still free.
+                        Lobby launching = current;
+                        controller.startRun(owner, instancePos, false)
+                            .ifPresent(pos -> launchDungeon(serverLevel, controller, launching, pos));
+                        broadcastDungeonControllerSnapshot(owner, controller);
+                    }
+                    markDirtyAndSync(controller.getLevel(), controller);
+                }
+
+                @Override
+                public void cancelled(net.minecraft.server.MinecraftServer server, Component reason) {
+                    controller.holdForPreparation(lobbyId, null);
+                    markDirtyAndSync(controller.getLevel(), controller);
+                }
+
+                @Override
+                public void closeScreens(net.minecraft.server.MinecraftServer server) {
+                    var close = new net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload(controller.getBlockPos());
+                    for (UUID member : party) {
+                        ServerPlayer player = server.getPlayerList().getPlayer(member);
+                        if (player != null) {
+                            ArenasNetwork.sendToPlayer(player, close);
+                        }
+                    }
+                }
+            });
+        if (!began) {
+            controller.holdForPreparation(lobbyId, null);
+        }
+    }
+
+    /** Starts the dungeon run on {@code instancePos} (the lobby is already taken off) and closes the members' screens. */
+    private static void launchDungeon(ServerLevel serverLevel, net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller,
+                                      Lobby lobby, net.minecraft.core.BlockPos instancePos) {
+        List<UUID> party = new ArrayList<>(lobby.members());
+        // The DBS may live in a different dimension than the controller.
+        ServerLevel dbsLevel = serverLevel.getServer().getLevel(controller.getInstanceDimension(instancePos));
+        if (dbsLevel == null) {
+            dbsLevel = serverLevel;
+        }
+        ServerLevel startLevel = dbsLevel;
+        DungeonRun run = net.ledok.arenas_ld.util.RunEffects.during(lobby.modifiers(), () -> DungeonRunLifecycle.startRun(
+            startLevel, controller, instancePos, party,
+            lobby.selectedTier(), lobby.hardcoreEnabled(), lobby.ownerName(), lobby.modifiers()));
+        if (run == null) {
+            ArenasLdMod.LOGGER.warn("startRun failed for lobby {}", lobby.lobbyId());
+            return;
+        }
+        net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload closePayload =
+            new net.ledok.arenas_ld.dungeon.packet.DungeonCloseScreenPayload(controller.getBlockPos());
+        for (UUID memberUuid : party) {
+            ServerPlayer member = serverLevel.getServer().getPlayerList().getPlayer(memberUuid);
+            if (member != null) {
+                ArenasNetwork.sendToPlayer(member, closePayload);
+            }
+        }
     }
 
     /** Chats a clickable invite to the invitee so they see it even without the controller screen open. */

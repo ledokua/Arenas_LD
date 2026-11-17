@@ -78,7 +78,9 @@ public class DungeonControllerAdminMenuProvider implements ExtendedMenuProvider<
             runningInstances,
             knownLootTableIds,
             controller.activityId() == null ? "" : controller.activityId().toString(),
-            net.ledok.arenas_ld.activity.AdminScreens.lastEditor(controller)
+            net.ledok.arenas_ld.activity.AdminScreens.lastEditor(controller),
+            controller.getBreakableBlocks(),
+            controller.getRunSettings()
         );
     }
 

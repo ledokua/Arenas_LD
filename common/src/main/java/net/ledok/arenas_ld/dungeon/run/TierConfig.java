@@ -16,6 +16,7 @@ import java.util.List;
  * @param enabled whether this tier appears in the lobby tier picker and can be selected.
  * @param rewardCurrency Economy_LD currency delivered to each loot-eligible player's inbox on win. 0 = none.
  * @param skillExperiencePerWin Puffish skills XP granted to each loot-eligible player on win. 0 = none.
+ * @param allowBlockBreaking run players may break the run's breakable blocks ({@code run_breakable_blocks}).
  * @param rewardCommands commands run as the server on win (see {@link net.ledok.arenas_ld.util.RewardCommands}).
  */
 public record TierConfig(
@@ -26,10 +27,19 @@ public record TierConfig(
     boolean enabled,
     long rewardCurrency,
     int skillExperiencePerWin,
-    List<String> rewardCommands
+    List<String> rewardCommands,
+    boolean allowBlockBreaking
 ) {
     public TierConfig {
         rewardCommands = rewardCommands == null ? List.of() : List.copyOf(rewardCommands);
+    }
+
+    /** A tier without block breaking (the shape before 4.23.0). */
+    public TierConfig(double healthMultiplier, double damageMultiplier, String perPlayerLootTable,
+                      int dungeonTimeSeconds, boolean enabled, long rewardCurrency, int skillExperiencePerWin,
+                      List<String> rewardCommands) {
+        this(healthMultiplier, damageMultiplier, perPlayerLootTable, dungeonTimeSeconds, enabled, rewardCurrency,
+            skillExperiencePerWin, rewardCommands, false);
     }
 
     /** A tier with no reward commands (the shape before 4.11.0). */
@@ -57,14 +67,21 @@ public record TierConfig(
             Codec.BOOL.optionalFieldOf("enabled", true).forGetter(TierConfig::enabled),
             Codec.LONG.optionalFieldOf("rewardCurrency", 0L).forGetter(TierConfig::rewardCurrency),
             Codec.INT.optionalFieldOf("skillExperiencePerWin", 100).forGetter(TierConfig::skillExperiencePerWin),
-            Codec.STRING.listOf().optionalFieldOf("rewardCommands", List.of()).forGetter(TierConfig::rewardCommands)
+            Codec.STRING.listOf().optionalFieldOf("rewardCommands", List.of()).forGetter(TierConfig::rewardCommands),
+            Codec.BOOL.optionalFieldOf("allowBlockBreaking", false).forGetter(TierConfig::allowBlockBreaking)
         ).apply(instance, TierConfig::new)
     );
 
     /** This tier with other reward commands. */
     public TierConfig withRewardCommands(List<String> commands) {
         return new TierConfig(healthMultiplier, damageMultiplier, perPlayerLootTable, dungeonTimeSeconds, enabled,
-            rewardCurrency, skillExperiencePerWin, commands);
+            rewardCurrency, skillExperiencePerWin, commands, allowBlockBreaking);
+    }
+
+    /** This tier with block breaking on or off. */
+    public TierConfig withAllowBlockBreaking(boolean allow) {
+        return new TierConfig(healthMultiplier, damageMultiplier, perPlayerLootTable, dungeonTimeSeconds, enabled,
+            rewardCurrency, skillExperiencePerWin, rewardCommands, allow);
     }
 
     /**

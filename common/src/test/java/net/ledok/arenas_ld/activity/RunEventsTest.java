@@ -25,6 +25,10 @@ class RunEventsTest {
         @Override public LiveStatus liveStatus() { return new LiveStatus(List.of(), List.of(), 0, 0, 0); }
         @Override public int forceEnd(ArenasApi.InstanceRef instance) { return 0; }
         @Override public void syncViewers() { }
+        @Override public java.util.List<net.ledok.arenas_ld.dungeon.lobby.Lobby> getLobbies() { return java.util.List.of(); }
+        @Override public int getMaxPartySize() { return 1; }
+        @Override public boolean leaveLobby(java.util.UUID player) { return false; }
+        @Override public int resetCooldowns(ArenasApi.InstanceRef instance) { return 0; }
     }
 
     @Test

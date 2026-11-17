@@ -76,6 +76,18 @@ public final class ArenasParchment {
             HAIRLINE_HI, 0xFF000000, 0xFF7A7060, INK_DIM, ACCENT, 0x557A4A1E,
             18, 16, 4, false);
 
+    /** A dark red button (a run modifier switch that conflicts with a picked one); same sizes as {@link #WIDGETS}. */
+    public static final WidgetStyle CONFLICT_WIDGETS = new WidgetStyle(
+            new WidgetStyle.Skin.Flat(0xFF6E1410, 0xFF3A0806, 1, 2),
+            new WidgetStyle.Skin.Flat(0xFF821A14, 0xFF3A0806, 1, 2),
+            new WidgetStyle.Skin.Flat(0xFF5A100C, 0xFF3A0806, 1, 2),
+            new WidgetStyle.Skin.Flat(0xFF5A100C, 0xFF3A0806, 1, 2),
+            new WidgetStyle.Skin.Flat(0x2E2B1B0E, HAIRLINE, 1, 2),
+            new WidgetStyle.Skin.Flat(0x2E2B1B0E, ACCENT, 1, 2),
+            new WidgetStyle.Skin.NineSlice(tex("panel"), 48, 48, 8),
+            0xFFF3E3C3, 0xFFFFFFFF, 0xFFD9B8A8, INK_DIM, ACCENT, 0x557A4A1E,
+            18, 16, 4, false);
+
     public static final Theme THEME = new Theme(
             PANEL, PANEL_2, HAIRLINE,
             INK, INK_MID, INK_DIM,

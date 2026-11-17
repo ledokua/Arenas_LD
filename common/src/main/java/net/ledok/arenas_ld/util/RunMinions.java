@@ -215,6 +215,7 @@ public final class RunMinions {
      * @return false to cancel the spawn (a dying run mob's death spawn)
      */
     public static boolean onAdd(ServerLevel level, Entity entity) {
+        RunSplits.onAdd(entity); // a split run slime's part becomes a run mob itself, not a minion
         if (!(entity instanceof Mob mob) || isRunMob(mob)) {
             return true; // not a mob, or one of the run's own (spawners mark them before adding)
         }
@@ -281,6 +282,8 @@ public final class RunMinions {
         double[] scale = scaleOf(root);
         multiplyBase(mob, Attributes.MAX_HEALTH, scale[0]);
         multiplyBase(mob, Attributes.ATTACK_DAMAGE, scale[1]);
+        RunEffects.copyMob(root, mob);
+        net.ledok.arenas_ld.stats.RunStats.copyMob(root, mob);
         mob.setHealth(mob.getMaxHealth());
         DebugLog.log("minion: {} adopted by {} ({}), scale {}x health {}x damage", mob.getType(), root.getUUID(),
             root.getType(), scale[0], scale[1]);
@@ -291,6 +294,7 @@ public final class RunMinions {
      * summoner's team and is remembered with it.
      */
     public static void afterAdd(ServerLevel level, Entity entity, boolean added) {
+        RunSplits.afterAdd(level, entity, added);
         if (!added || !isMinion(entity)) {
             return;
         }

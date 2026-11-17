@@ -26,6 +26,10 @@ dependencies {
             exclude: ["*sources.jar"]
     )
 
+    // Run event log (4.37.0): Trinkets' equip callbacks, used only when it is loaded. (Spell Engine Expansion's events
+    // are read by reflection: its jar is built with a newer Loom than this one can remap.)
+    modCompileOnly files("${rootProject.projectDir}/libs/trinkets-3.10.0.jar")
+
     implementation project(path: ':common', configuration: 'namedElements')
 }
 

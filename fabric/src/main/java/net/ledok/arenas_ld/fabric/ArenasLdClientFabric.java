@@ -16,6 +16,8 @@ public final class ArenasLdClientFabric implements ClientModInitializer {
         ArenasLdClient.registerScreens(MenuScreens::register);
         ArenasLdClient.registerRenderLayers(BlockRenderLayerMap.INSTANCE::putBlock);
         ArenasLdClient.init();
+        net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(ArenasLdClient.RUN_DETAILS_KEY);
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(client -> ArenasLdClient.clientTick());
 
         // Every client-bound type gets a receiver that dispatches to whatever the common client
         // code registered for it (types were declared during the main initializer).

@@ -220,6 +220,7 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
             return null;
         }
 
+        net.ledok.arenas_ld.util.RunSplits.applyNbt(living, entityDefinition.nbt());
         EntityEquipmentHelper.applyScaledAttributes(
             living, entityDefinition.attributes(), world.registryAccess(), healthMultiplier, 1.0, 1.0);
         EntityEquipmentHelper.applyAllEquipment(living, entityDefinition.equipment());
@@ -227,6 +228,8 @@ public class DungeonBossSpawnerBlockEntity extends BlockEntity implements Attrib
         living.heal(living.getMaxHealth());
         // Owned by the run: never let vanilla despawn or convert the boss.
         EntityEquipmentHelper.markRunMob(living);
+        net.ledok.arenas_ld.stats.RunStats.markBoss(living);
+        net.ledok.arenas_ld.util.RunSplits.markRoot(living, entityDefinition.splitStrength());
         // For its minions: what reached its own health (damage to players is scaled per run).
         net.ledok.arenas_ld.util.RunMinions.recordScale(living, this,
             EntityEquipmentHelper.setsMaxHealth(entityDefinition.attributes()) ? healthMultiplier : 1.0, 1.0);

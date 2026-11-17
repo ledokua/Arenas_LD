@@ -185,6 +185,27 @@ public final class ActivityAdmin {
         return null;
     }
 
+    /** {@code ArenasApi.resetCooldowns}: null when done, else why not; logged with who did it. */
+    public static @Nullable Component resetCooldowns(MinecraftServer server, ResourceLocation id,
+                                                     @Nullable ArenasApi.InstanceRef instance, String actor) {
+        ActivityHost host = ActivityRegistry.resolve(server, id);
+        if (host == null) {
+            ArenasLdMod.LOGGER.info("{} tried to reset cooldowns of {}: no such activity", actor, id);
+            return unknown(id);
+        }
+        int reset = host.resetCooldowns(instance);
+        if (reset == 0) {
+            ArenasLdMod.LOGGER.info("{} tried to reset cooldowns of {}{}: none on cooldown", actor, id,
+                instance == null ? "" : " at " + describe(instance));
+            return instance != null
+                ? Component.translatable("message.arenas_ld.admin.no_cooldown_at", id.toString(), describe(instance))
+                : Component.translatable("message.arenas_ld.admin.no_cooldowns", id.toString());
+        }
+        ArenasLdMod.LOGGER.info("{} reset the cooldown of {} instance(s) of {}{}", actor, reset, id,
+            instance == null ? "" : " at " + describe(instance));
+        return null;
+    }
+
     public static @Nullable Component forget(MinecraftServer server, ResourceLocation id) {
         ActivityIndex.Entry entry = entry(server, id);
         if (entry == null) {
@@ -201,6 +222,72 @@ public final class ActivityAdmin {
 
     private static @Nullable ActivityIndex.Entry entry(MinecraftServer server, ResourceLocation id) {
         return server.overworld() == null ? null : ActivityIndex.get(server).get(id); // no worlds yet: nothing known
+    }
+
+    /** The dungeon or raid controller's own breakable blocks list; empty for an unknown id or another type. */
+    public static java.util.Optional<net.ledok.arenas_ld.util.BreakableBlocks> breakableBlocks(MinecraftServer server,
+                                                                                             ResourceLocation id) {
+        return ActivityRegistry.resolve(server, id) instanceof net.ledok.arenas_ld.util.BreakableBlocks.Holder holder
+            ? java.util.Optional.of(holder.getBreakableBlocks()) : java.util.Optional.empty();
+    }
+
+    /**
+     * Replaces the dungeon or raid controller's breakable blocks list. Refused for an unknown id, an arena, or an
+     * entry that is neither a known block id nor a {@code #tag}.
+     */
+    public static @Nullable Component setBreakableBlocks(MinecraftServer server, ResourceLocation id,
+                                                         net.ledok.arenas_ld.util.BreakableBlocks blocks, String actor) {
+        ActivityHost host = ActivityRegistry.resolve(server, id);
+        if (host == null) {
+            return unknown(id);
+        }
+        return applyBreakableBlocks(host, blocks, actor);
+    }
+
+    /** {@link #setBreakableBlocks} on a controller in hand (the admin screen's edit); open screens are updated. */
+    public static @Nullable Component applyBreakableBlocks(ActivityHost host, net.ledok.arenas_ld.util.BreakableBlocks blocks,
+                                                           String actor) {
+        if (!(host instanceof net.ledok.arenas_ld.util.BreakableBlocks.Holder holder)) {
+            return Component.translatable("message.arenas_ld.admin.breakable_not_supported", String.valueOf(host.activityId()));
+        }
+        for (String entry : blocks.blocks()) {
+            if (!net.ledok.arenas_ld.util.RunBlockBreaking.isValidEntry(entry)) {
+                return Component.translatable("message.arenas_ld.admin.breakable_bad_entry", entry);
+            }
+        }
+        holder.setBreakableBlocks(blocks);
+        host.syncViewers();
+        ArenasLdMod.LOGGER.info("{} set the breakable blocks of {}: {} {}", actor, host.activityId(), blocks.mode(), blocks.blocks());
+        return null;
+    }
+
+    /** The dungeon or raid controller's run settings (rental mode, base loot rolls); empty for an unknown id or an arena. */
+    public static java.util.Optional<net.ledok.arenas_ld.util.RunSettings> runSettings(MinecraftServer server, ResourceLocation id) {
+        return ActivityRegistry.resolve(server, id) instanceof net.ledok.arenas_ld.util.RunSettings.Holder holder
+            ? java.util.Optional.of(holder.getRunSettings()) : java.util.Optional.empty();
+    }
+
+    /** Replaces the dungeon or raid controller's run settings; refused for an unknown id or an arena. */
+    public static @Nullable Component setRunSettings(MinecraftServer server, ResourceLocation id,
+                                                     net.ledok.arenas_ld.util.RunSettings settings, String actor) {
+        ActivityHost host = ActivityRegistry.resolve(server, id);
+        if (host == null) {
+            return unknown(id);
+        }
+        return applyRunSettings(host, settings, actor);
+    }
+
+    /** {@link #setRunSettings} on a controller in hand (the admin screen's edit); open screens are updated. */
+    public static @Nullable Component applyRunSettings(ActivityHost host, net.ledok.arenas_ld.util.RunSettings settings,
+                                                       String actor) {
+        if (!(host instanceof net.ledok.arenas_ld.util.RunSettings.Holder holder)) {
+            return Component.translatable("message.arenas_ld.admin.run_settings_not_supported", String.valueOf(host.activityId()));
+        }
+        holder.setRunSettings(settings);
+        host.syncViewers();
+        ArenasLdMod.LOGGER.info("{} set the run settings of {}: rental {}, base loot rolls {}", actor, host.activityId(),
+            settings.rentalMode(), settings.hasOwnLootRolls() ? settings.baseLootRolls() : "global");
+        return null;
     }
 
     private static Component unknown(ResourceLocation id) {

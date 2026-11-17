@@ -56,6 +56,17 @@ public final class LivingEntityHooks {
         return (float) (amount * raidDamageMultiplier);
     }
 
+    /**
+     * Damage any living entity takes: a player's run scaling ({@link #modifyPlayerHurtAmount}), then the run
+     * modifiers' damage taken (run players) and dealt (by run players to anything but players).
+     */
+    public static float modifyHurtAmount(LivingEntity target, DamageSource source, float amount) {
+        if (target instanceof ServerPlayer player) {
+            amount = modifyPlayerHurtAmount(player, source, amount);
+        }
+        return net.ledok.arenas_ld.util.RunEffects.modifyDamage(target, source, amount);
+    }
+
     private static boolean matchesDungeonDamageFilter(DamageSource source) {
         if (source == null) {
             return true;

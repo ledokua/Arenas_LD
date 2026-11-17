@@ -46,7 +46,7 @@ public final class RaidRun {
     private int regenerationTickTimer;
     private final long startTick;
     /** The shared respawn interval in effect (from the controller and config); in memory only, set each tick. */
-    private int respawnWaveTicks = 600;
+    private int respawnWaveTicks = 1200;
     @Nullable private BossRef bossRef;
     /** Where the boss last stood while loaded (saved; null = unknown, as in saves before 4.12.0). */
     @Nullable private BlockPos bossLastPos;
@@ -56,6 +56,8 @@ public final class RaidRun {
     private long bossMissingLoadedSince = -1L;
     /** Not saved: the boss chunk this run's tickets cover now (null = none taken yet). */
     @Nullable private net.ledok.arenas_ld.util.RunChunkTickets.HeldChunk heldBossChunk;
+    /** The run modifiers the lobby picked (config run_modifiers ids), fixed at run start. */
+    private final java.util.List<String> runModifiers = new java.util.ArrayList<>();
     /** LuckPerms reward perks captured while each player was online in this run (see EndRewardPerks). */
     private final Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots = new HashMap<>();
     private final Map<UUID, RunParticipant> participants;
@@ -185,8 +187,43 @@ public final class RaidRun {
     void setBossMissingLoadedSince(long tick) { this.bossMissingLoadedSince = tick; }
     void setHeldBossChunk(@Nullable net.ledok.arenas_ld.util.RunChunkTickets.HeldChunk chunk) { this.heldBossChunk = chunk; }
 
+    /**
+     * A split boss's other parts (a slime raid boss, {@link net.ledok.arenas_ld.util.RunSplits}): the boss reference is
+     * one part, these are the rest. The raid is won when the boss is dead and none of these is left.
+     */
+    private final java.util.LinkedHashSet<UUID> bossParts = new java.util.LinkedHashSet<>();
+
+    public java.util.Set<UUID> bossParts() { return java.util.Collections.unmodifiableSet(bossParts); }
+    void addBossPart(UUID uuid) { bossParts.add(uuid); }
+    void removeBossPart(UUID uuid) { bossParts.remove(uuid); }
+
     /** Mutable on purpose: the lifecycle snapshots at run start and refreshes at payout. */
     public Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots() { return perkSnapshots; }
+    /** The run's live combat stats; its totals go into the run's save. */
+    private net.ledok.arenas_ld.stats.RunStats runStats;
+
+    /** Its totals from the save, until the stats exist (after a restart). */
+    private String savedRunStats = "";
+
+    public net.ledok.arenas_ld.stats.RunStats runStats(java.util.function.Supplier<net.ledok.arenas_ld.stats.RunDetailsSource> source) {
+        if (runStats == null) {
+            runStats = new net.ledok.arenas_ld.stats.RunStats(net.ledok.arenas_ld.util.DownedSpectators.RunView.of(this), source);
+            runStats.load(savedRunStats);
+            savedRunStats = "";
+        }
+        return runStats;
+    }
+
+    private String runStatsForSave() {
+        return runStats != null ? runStats.saveTotals() : savedRunStats;
+    }
+
+    public @org.jetbrains.annotations.Nullable net.ledok.arenas_ld.stats.RunStats runStatsOrNull() {
+        return runStats;
+    }
+
+    public java.util.List<String> runModifiers() { return java.util.Collections.unmodifiableList(runModifiers); }
+    public void setRunModifiers(java.util.Collection<String> ids) { runModifiers.clear(); runModifiers.addAll(ids); }
     void addParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void updateParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void removeParticipant(UUID uuid) { participants.remove(uuid); }
@@ -278,8 +315,16 @@ public final class RaidRun {
         instance.group(
             BASE_CODEC.forGetter(run -> run),
             net.ledok.arenas_ld.util.EndRewardPerks.SNAPSHOT_CODEC.optionalFieldOf("perkSnapshots", Map.of()).forGetter(RaidRun::perkSnapshots),
-            BlockPos.CODEC.optionalFieldOf("bossLastPos").forGetter(run -> Optional.ofNullable(run.bossLastPos))
-        ).apply(instance, (run, perkSnapshots, bossLastPos) -> {
+            BlockPos.CODEC.optionalFieldOf("bossLastPos").forGetter(run -> Optional.ofNullable(run.bossLastPos)),
+            Codec.STRING.listOf().optionalFieldOf("runModifiers", java.util.List.of()).forGetter(r -> r.runModifiers),
+            net.ledok.arenas_ld.stats.RunStatsSave.CODEC.optionalFieldOf("runStats", "").forGetter(RaidRun::runStatsForSave),
+            UUIDUtil.STRING_CODEC.listOf().optionalFieldOf("bossParts", java.util.List.of())
+                .forGetter(run -> java.util.List.copyOf(run.bossParts))
+        ).apply(instance, (run, perkSnapshots, bossLastPos, runModifiers, runStats, bossParts) -> {
+            run.savedRunStats = runStats;
+            run.bossParts.addAll(bossParts);
+            // Saved before hardcore became the hardcore_run modifier: the flag alone means it.
+            run.runModifiers.addAll(net.ledok.arenas_ld.rewards.RunModifierCatalog.withLegacyHardcore(runModifiers, run.hardcoreEnabled()));
             run.perkSnapshots.putAll(perkSnapshots);
             run.bossLastPos = bossLastPos.orElse(null);
             return run;

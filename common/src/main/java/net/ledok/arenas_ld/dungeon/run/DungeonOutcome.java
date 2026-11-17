@@ -18,6 +18,8 @@ public enum DungeonOutcome {
     LOSS_TIMEOUT,
     /** All players left the run (disconnected past grace period, or hardcore-removed). */
     LOSS_ABANDONED,
+    /** Hardcore: every player still in the run died (they spectate until it ends). */
+    LOSS_WIPED,
     /** The run's Dungeon Boss Spawner went missing mid-run, so the run could not go on. */
     LOSS_FORCED,
     /** A room objective failed hard — e.g. the PROTECT target died. */
@@ -46,6 +48,7 @@ public enum DungeonOutcome {
     public boolean isLoss() {
         return this == LOSS_TIMEOUT
             || this == LOSS_ABANDONED
+            || this == LOSS_WIPED
             || this == LOSS_FORCED
             || this == LOSS_OBJECTIVE;
     }

@@ -139,6 +139,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
                 continue;
             }
 
+            net.ledok.arenas_ld.util.RunSplits.applyNbt(living, this.entityDefinition.nbt());
             EntityEquipmentHelper.applyScaledAttributes(
                 living, this.entityDefinition.attributes(), world.registryAccess(), healthMultiplier, 1.0, 1.0);
 
@@ -149,6 +150,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
             // SPECTATOR on down, mobs would otherwise hard-despawn and the room would falsely
             // clear) nor convert them (zombie → drowned would swap the tracked UUID).
             EntityEquipmentHelper.markRunMob(living);
+            net.ledok.arenas_ld.util.RunSplits.markRoot(living, this.entityDefinition.splitStrength());
             // For its minions: what reached its own health (damage to players is scaled per run).
             net.ledok.arenas_ld.util.RunMinions.recordScale(living, this,
                 EntityEquipmentHelper.setsMaxHealth(this.entityDefinition.attributes()) ? healthMultiplier : 1.0, 1.0);

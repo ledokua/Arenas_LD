@@ -27,6 +27,15 @@ public final class LuckPermsCompat {
         return LOADED ? Hook.metaDouble(player, key) : OptionalDouble.empty();
     }
 
+    /** A text meta value (group inheritance resolved), e.g. {@code /lp group prime meta set <key> Prime}. */
+    public static java.util.Optional<String> metaString(UUID player, String key) {
+        if (!LOADED) {
+            return java.util.Optional.empty();
+        }
+        String value = Hook.metaValue(player, key);
+        return value == null || value.isBlank() ? java.util.Optional.empty() : java.util.Optional.of(value.trim());
+    }
+
     /** The only class touching LuckPerms types, so the mod loads without LuckPerms. */
     private static final class Hook {
         static OptionalInt metaInt(UUID player, String key) {
@@ -54,7 +63,7 @@ public final class LuckPermsCompat {
             }
         }
 
-        private static String metaValue(UUID player, String key) {
+        static String metaValue(UUID player, String key) {
             try {
                 net.luckperms.api.model.user.User user = net.luckperms.api.LuckPermsProvider.get()
                         .getUserManager().getUser(player);

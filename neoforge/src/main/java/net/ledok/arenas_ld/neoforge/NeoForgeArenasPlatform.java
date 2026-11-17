@@ -29,7 +29,10 @@ public final class NeoForgeArenasPlatform implements ArenasPlatform {
 
     @Override
     public void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
-        PacketDistributor.sendToPlayer(player, payload);
+        // Skips a player whose client can't take it (no Arenas, or a game test mock player).
+        if (player.connection.hasChannel(payload)) {
+            PacketDistributor.sendToPlayer(player, payload);
+        }
     }
 
     @Override

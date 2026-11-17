@@ -40,7 +40,11 @@ public record RaidControllerAdminData(
     /** The API id ({@code ActivityHost}); empty only before the first server tick. */
     String activityId,
     /** The op who last saved through an admin screen; empty if none since the restart. */
-    String lastEditor
+    String lastEditor,
+    /** The controller's own breakable blocks list. */
+    net.ledok.arenas_ld.util.BreakableBlocks breakableBlocks,
+    /** The controller's rental mode and base loot rolls (4.39.0). */
+    net.ledok.arenas_ld.util.RunSettings runSettings
 ) {
     /** One registered raid instance with its current status. */
     public record InstanceEntry(BlockPos spawnerPos, String dimension, InstanceStatus status, int cooldownTicksRemaining) {}
@@ -100,6 +104,9 @@ public record RaidControllerAdminData(
         }
         buf.writeUtf(data.activityId());
         buf.writeUtf(data.lastEditor());
+        buf.writeUtf(data.breakableBlocks().mode());
+        buf.writeCollection(data.breakableBlocks().blocks(), (b, s) -> b.writeUtf(s));
+        net.ledok.arenas_ld.util.RunSettings.STREAM_CODEC.encode(buf, data.runSettings());
     }
 
     private static RaidControllerAdminData decode(RegistryFriendlyByteBuf buf) {
@@ -158,6 +165,8 @@ public record RaidControllerAdminData(
         }
         String activityId = buf.readUtf();
         String lastEditor = buf.readUtf();
+        net.ledok.arenas_ld.util.BreakableBlocks breakableBlocks = new net.ledok.arenas_ld.util.BreakableBlocks(buf.readUtf(), buf.readList(b -> b.readUtf()));
+        net.ledok.arenas_ld.util.RunSettings runSettings = net.ledok.arenas_ld.util.RunSettings.STREAM_CODEC.decode(buf);
 
         return new RaidControllerAdminData(
             blockPos,
@@ -175,7 +184,9 @@ public record RaidControllerAdminData(
             runningInstances,
             knownLootTableIds,
             activityId,
-            lastEditor
+            lastEditor,
+            breakableBlocks,
+            runSettings
         );
     }
 }

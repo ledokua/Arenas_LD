@@ -185,6 +185,7 @@ public final class DownedSpectators {
     public static void down(ServerPlayer player, RunView run) {
         Entry entry = new Entry(run, player.level().dimension(), player.position());
         DOWNED.put(player.getUUID(), entry);
+        net.ledok.arenas_ld.stats.RunEvents.downed(player);
         attach(player, entry, nearestMate(player, entry));
     }
 
@@ -210,7 +211,9 @@ public final class DownedSpectators {
      * is their own again. Call before their game mode is switched back.
      */
     public static void release(ServerPlayer player) {
-        DOWNED.remove(player.getUUID());
+        if (DOWNED.remove(player.getUUID()) != null) {
+            net.ledok.arenas_ld.stats.RunEvents.revived(player);
+        }
         if (player.getCamera() != player) {
             player.setCamera(player);
         }

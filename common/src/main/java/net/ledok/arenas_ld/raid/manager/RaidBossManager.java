@@ -101,8 +101,8 @@ public class RaidBossManager {
         if (rp == null) {
             return;
         }
-        // A pending restore from a dungeon or arena run (the store is shared) wipes effects as those exits do.
-        net.ledok.arenas_ld.util.ReturnPoints.apply(player.server, player, rp, false);
+        // A pending restore from any run (the store is shared): sent home with every effect wiped.
+        net.ledok.arenas_ld.util.ReturnPoints.apply(player.server, player, rp);
         player.sendSystemMessage(Component.translatable("message.arenas_ld.raid.run_ended_while_away")
             .withStyle(ChatFormatting.YELLOW));
     }

@@ -42,7 +42,13 @@ public record RaidControllerData(
     /** Enabled tiers the entry gate refuses this viewer, with the reason to show. */
     Map<DifficultyTier, Component> lockedTiers,
     /** Enabled tiers this viewer may enter that have a requirement label (shown green). */
-    Map<DifficultyTier, Component> metRequirements
+    Map<DifficultyTier, Component> metRequirements,
+    /** The run modifiers every run here gets now (activity modifiers, reward events); empty for none. */
+    Component runModifiers,
+    /** The run modifiers a lobby owner here can switch on. */
+    java.util.List<net.ledok.arenas_ld.rewards.RunModifierOption> modifierOptions,
+    /** The controller's rental mode and base loot rolls (4.39.0). */
+    net.ledok.arenas_ld.util.RunSettings runSettings
 ) {
     /**
      * Flat data representation of a single raid instance, suitable for sending to the client.
@@ -122,6 +128,9 @@ public record RaidControllerData(
             DifficultyTier.STREAM_CODEC.encode(buf, entry.getKey());
             ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, entry.getValue());
         }
+        ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, data.runModifiers());
+        net.ledok.arenas_ld.rewards.RunModifierOption.LIST_CODEC.encode(buf, data.modifierOptions());
+        net.ledok.arenas_ld.util.RunSettings.STREAM_CODEC.encode(buf, data.runSettings());
     }
 
     private static RaidControllerData decode(RegistryFriendlyByteBuf buf) {
@@ -206,11 +215,15 @@ public record RaidControllerData(
             DifficultyTier tier = DifficultyTier.STREAM_CODEC.decode(buf);
             metRequirements.put(tier, ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf));
         }
+        Component runModifiers = ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf);
+        java.util.List<net.ledok.arenas_ld.rewards.RunModifierOption> modifierOptions =
+            net.ledok.arenas_ld.rewards.RunModifierOption.LIST_CODEC.decode(buf);
+        net.ledok.arenas_ld.util.RunSettings runSettings = net.ledok.arenas_ld.util.RunSettings.STREAM_CODEC.decode(buf);
 
         return new RaidControllerData(
             blockPos, visible, own, invites, joinReqs, instances,
             queuePosition, estimatedWaitSeconds, maxPartySize, respawnTimeTicks, serverGameTick, busyPlayers,
-            topLeaderboards, enabledTiers, lockedTiers, metRequirements
+            topLeaderboards, enabledTiers, lockedTiers, metRequirements, runModifiers, modifierOptions, runSettings
         );
     }
 

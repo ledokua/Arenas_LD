@@ -83,6 +83,7 @@ public final class ArenaRunLifecycle {
             net.ledok.arenas_ld.util.EndRewardPerks.snapshot(run.perkSnapshots(), player.getUUID(), net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA);
             net.ledok.arenas_ld.util.PlayerStatsStore.get(world.getServer())
                 .recordRunStart(player.getUUID(), net.ledok.arenas_ld.util.PlayerStatsStore.Mode.ARENA);
+            net.ledok.arenas_ld.util.RunPlayerSafety.secure(player);
             player.setGameMode(GameType.SURVIVAL);
             player.setHealth(player.getMaxHealth());
             // Run mates share a no-friendly-fire team, so AOE and sweeps never hit each other (the
@@ -137,6 +138,28 @@ public final class ArenaRunLifecycle {
                 new net.minecraft.world.level.ChunkPos(spawner.getAbsoluteEntrancePos())));
         }
         net.ledok.arenas_ld.util.RunChunkTickets.hold(world.getServer(), chunkOwner(run), chunks);
+    }
+
+    /**
+     * What a run on this instance loads while its party waits to start ({@link net.ledok.arenas_ld.util.RunPreparation}):
+     * the battle area and a square of {@code radius} chunks around the entrance.
+     */
+    public static java.util.Set<net.ledok.arenas_ld.util.RunPreparation.HeldChunk> preloadChunks(ServerLevel spawnerLevel, BlockPos spawnerPos, int radius) {
+        java.util.Set<net.ledok.arenas_ld.util.RunPreparation.HeldChunk> chunks = new java.util.HashSet<>();
+        if (!(spawnerLevel.getBlockEntity(spawnerPos) instanceof ArenaSpawnerBlockEntity spawner)) {
+            net.ledok.arenas_ld.util.RunPreparation.square(chunks, spawnerLevel.dimension(), spawnerPos, radius);
+            return chunks;
+        }
+        int battle = Math.max(0, Math.min(spawner.getBattleRadius(), MAX_HELD_BATTLE_RADIUS));
+        for (int cx = (spawnerPos.getX() - battle) >> 4; cx <= (spawnerPos.getX() + battle) >> 4; cx++) {
+            for (int cz = (spawnerPos.getZ() - battle) >> 4; cz <= (spawnerPos.getZ() + battle) >> 4; cz++) {
+                chunks.add(new net.ledok.arenas_ld.util.RunPreparation.HeldChunk(
+                    spawnerLevel.dimension(), new net.minecraft.world.level.ChunkPos(cx, cz)));
+            }
+        }
+        ResourceKey<Level> entranceDim = spawner.getEntranceDimension() != null ? spawner.getEntranceDimension() : spawnerLevel.dimension();
+        net.ledok.arenas_ld.util.RunPreparation.square(chunks, entranceDim, spawner.getAbsoluteEntrancePos(), radius);
+        return chunks;
     }
 
     public static void tick(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
@@ -260,7 +283,27 @@ public final class ArenaRunLifecycle {
         boolean settled = net.ledok.arenas_ld.util.RunChunkTickets.entitiesLoaded(world, chunkOwner(run));
         for (UUID uuid : new ArrayList<>(run.aliveMobs())) {
             Entity entity = world.getEntity(uuid);
-            if (entity == null ? settled : !entity.isAlive()) run.removeAliveMob(uuid);
+            // A run slime that died but hasn't split yet still holds the wave: its parts come when it's removed.
+            if (entity == null ? settled : !entity.isAlive() && !net.ledok.arenas_ld.util.RunSplits.pendingSplit(entity)) {
+                run.removeAliveMob(uuid);
+            }
+        }
+    }
+
+    /** A run slime split ({@link net.ledok.arenas_ld.util.RunSplits}): its part joins the parent's wave. */
+    public static void onSplitPart(ServerLevel level, UUID parent, LivingEntity part) {
+        for (ArenaControllerBlockEntity.ControllerKey key : ArenaControllerBlockEntity.getControllers()) {
+            ServerLevel controllerLevel = level.getServer().getLevel(key.dimension());
+            if (controllerLevel == null || !(controllerLevel.getBlockEntity(key.pos()) instanceof ArenaControllerBlockEntity controller)) {
+                continue;
+            }
+            for (ArenaRun run : controller.getActiveRuns().values()) {
+                if (run.aliveMobs().contains(parent)) {
+                    run.addAliveMob(part.getUUID());
+                    controller.setChanged();
+                    return;
+                }
+            }
         }
     }
 
@@ -418,11 +461,13 @@ public final class ArenaRunLifecycle {
         Entity entity = typeOpt.get().create(world);
         if (!(entity instanceof LivingEntity living)) return null;
 
+        net.ledok.arenas_ld.util.RunSplits.applyNbt(living, mobData.nbt);
         applyScaledAttributes(world, living, mobData, scaleFactor);
         EntityEquipmentHelper.applyAllEquipment(living, mobData.equipment);
         living.heal(living.getMaxHealth());
         // Owned by the run: never let vanilla despawn or convert arena mobs.
         EntityEquipmentHelper.markRunMob(living);
+        net.ledok.arenas_ld.util.RunSplits.markRoot(living, mobData.splitStrength);
         // For its minions: the wave scaling that reached its own health and attack damage (arenas
         // don't scale damage to players separately).
         net.ledok.arenas_ld.util.RunMinions.recordScale(living, spawner,
@@ -539,22 +584,33 @@ public final class ArenaRunLifecycle {
 
         List<ServerPlayer> players = onlineParticipants(world, run);
         if (players.isEmpty()) return;
-        int multiplier = run.hardcoreEnabled() ? 2 : 1;
+        // One formula for every reward: a row's rolls × the loot modifiers (hardcore ×2, run modifiers,
+        // events, and on per-player rows each player's LuckPerms bonus); the fraction is the chance of
+        // one more roll.
+        List<net.ledok.arenas_ld.rewards.RewardModifier> runModifiers = net.ledok.arenas_ld.rewards.RewardModifiers.forRun(
+            controller.activityId(), null, run.hardcoreEnabled(), net.ledok.arenas_ld.rewards.RewardModifiers.Mode.ARENA, run.runModifiers());
 
+        // Per-player rows roll arena_player_row_rolls times their rolls (live: 3, what the old LuckPerms
+        // arena_loot_rolls 3 gave everyone).
+        double rowRolls = Math.max(0, net.ledok.arenas_ld.config.ArenasLdConfig.getInstance().arena_player_row_rolls);
         Map<UUID, List<ItemStack>> perPlayerLoot = new HashMap<>();
         for (MobArenaRewardData reward : valid) {
             if (reward.perPlayer) {
-                // LuckPerms arena_loot_rolls multiplies each player's own rolls on per-player rows.
                 for (ServerPlayer player : players) {
-                    int rolls = reward.rolls * multiplier * net.ledok.arenas_ld.util.EndRewardPerks.resolve(
-                        run.perkSnapshots(), player.getUUID(), true, net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA).lootRolls();
-                    perPlayerLoot.computeIfAbsent(player.getUUID(), k -> new ArrayList<>())
-                        .addAll(RewardDelivery.rollLoot(world, reward.lootTableId, player, player.position(), rolls));
+                    var perks = net.ledok.arenas_ld.util.EndRewardPerks.resolve(
+                        run.perkSnapshots(), player.getUUID(), true, net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA);
+                    int rolls = net.ledok.arenas_ld.rewards.RewardPayout.compute(reward.rolls * rowRolls, 0, 0,
+                        rowModifiers(net.ledok.arenas_ld.rewards.RewardPayout.join(perks.modifiers(), runModifiers)), false, world.random).rolls();
+                    if (rolls > 0) {
+                        perPlayerLoot.computeIfAbsent(player.getUUID(), k -> new ArrayList<>())
+                            .addAll(RewardDelivery.rollLoot(world, reward.lootTableId, player, player.position(), rolls));
+                    }
                 }
             } else {
-                // Communal rolls keep the old behavior: scattered on the arena floor for anyone.
-                // Rolled once for the whole party, so per-player perks don't apply here.
-                for (int i = 0; i < reward.rolls * multiplier; i++) {
+                // Communal rolls: scattered on the arena floor for anyone. Rolled once for the whole
+                // party, so only the run's modifiers apply, not anyone's LuckPerms bonus.
+                int communal = net.ledok.arenas_ld.rewards.RewardPayout.compute(reward.rolls, 0, 0, rowModifiers(runModifiers), false, world.random).rolls();
+                for (int i = 0; i < communal; i++) {
                     ServerPlayer player = players.get(world.random.nextInt(players.size()));
                     rollLootTableToWorld(world, run, reward.lootTableId, player);
                 }
@@ -569,6 +625,13 @@ public final class ArenaRunLifecycle {
             RewardDelivery.notify(player, net.ledok.arenas_ld.packet.LootRewardPayload.Source.ARENA_WAVE,
                 delivered, 0L, 0);
         }
+    }
+
+    /** Wave rows have no XP to convert into: items-to-XP leaves them alone. */
+    private static List<net.ledok.arenas_ld.rewards.RewardModifier> rowModifiers(List<net.ledok.arenas_ld.rewards.RewardModifier> modifiers) {
+        List<net.ledok.arenas_ld.rewards.RewardModifier> out = new ArrayList<>(modifiers);
+        out.removeIf(m -> m.kind() == net.ledok.arenas_ld.rewards.RewardModifier.Kind.CONVERT);
+        return out;
     }
 
     private static void rollLootTableToWorld(ServerLevel world, ArenaRun run, String lootTableId, ServerPlayer player) {
@@ -860,19 +923,22 @@ public final class ArenaRunLifecycle {
     private static void payoutSummary(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
         int waves = run.currentWave();
         if (waves <= 0) return;
-        int multiplier = run.hardcoreEnabled() ? 2 : 1;
-        long currency = controller.computeCurrencyReward(waves) * multiplier;
-        int xp = controller.computeXpReward(waves) * multiplier;
+        long currency = controller.computeCurrencyReward(waves);
+        int xp = controller.computeXpReward(waves);
+        List<net.ledok.arenas_ld.rewards.RewardModifier> runModifiers = net.ledok.arenas_ld.rewards.RewardModifiers.forRun(
+            controller.activityId(), null, run.hardcoreEnabled(), net.ledok.arenas_ld.rewards.RewardModifiers.Mode.ARENA, run.runModifiers());
         boolean skillsLoaded = ArenasPlatform.INSTANCE.isModLoaded("puffish_skills");
 
         for (UUID uuid : run.lootEligibleUuids()) {
             ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
-            // LuckPerms currency/XP multipliers, after the hardcore ×2: live when online, else the
+            // The run's modifiers plus the player's LuckPerms bonuses: live when online, else the
             // run-start snapshot.
             net.ledok.arenas_ld.util.EndRewardPerks perks = net.ledok.arenas_ld.util.EndRewardPerks.resolve(
                 run.perkSnapshots(), uuid, player != null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA);
-            long playerCurrency = perks.scaleCurrency(currency);
-            int playerXp = perks.scaleXp(xp);
+            net.ledok.arenas_ld.rewards.RewardPayout payout = net.ledok.arenas_ld.rewards.RewardPayout.compute(0, currency, xp,
+                net.ledok.arenas_ld.rewards.RewardPayout.join(perks.modifiers(), runModifiers), true, world.random);
+            long playerCurrency = payout.currency();
+            int playerXp = payout.xp();
             RewardDelivery.giveCurrency(world.getServer(), uuid, playerCurrency, "ARENA_REWARD");
             if (player == null) {
                 continue;
@@ -883,6 +949,7 @@ public final class ArenaRunLifecycle {
                 grantedXp = playerXp;
             }
             player.sendSystemMessage(Component.translatable("message.arenas_ld.arena.summary", waves, playerCurrency, playerXp));
+            payout.tell(player, false);
             RewardDelivery.notify(player, net.ledok.arenas_ld.packet.LootRewardPayload.Source.ARENA_SUMMARY,
                 java.util.List.of(), RewardDelivery.displayableCurrency(playerCurrency), grantedXp);
         }
@@ -1079,7 +1146,7 @@ public final class ArenaRunLifecycle {
         // Offline at run end / forfeit: persisted, and they're sent home on next login. Leaving an
         // arena wipes status effects (skill buffs, potions), as leaving a dungeon does — also for
         // return points saved before they carried that flag.
-        net.ledok.arenas_ld.util.ReturnPoints.sendHome(world.getServer(), uuid, rp, true);
+        net.ledok.arenas_ld.util.ReturnPoints.sendHome(world.getServer(), uuid, rp);
     }
 
     // ── Boss bars ──────────────────────────────────────────────────────────────

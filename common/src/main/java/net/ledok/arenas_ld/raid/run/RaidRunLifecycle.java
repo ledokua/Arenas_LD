@@ -219,6 +219,7 @@ public final class RaidRunLifecycle {
             ArenasLdMod.LOGGER.error("Failed to create entity from ID: {}", entityDefinition.mobId());
             return;
         }
+        net.ledok.arenas_ld.util.RunSplits.applyNbt(boss, entityDefinition.nbt());
 
         RaidDifficulty diff = difficulty != null ? difficulty : RaidDifficulty.NORMAL;
         long now = world.getGameTime();
@@ -242,17 +243,20 @@ public final class RaidRunLifecycle {
 
         if (boss instanceof LivingEntity livingBoss) {
             double healthMult = runTier.healthMultiplier();
-            double damageMult = runTier.damageMultiplier();
             // Linear per-player HP scaling: each player beyond the first adds hpScalePerPlayer of base HP.
             double perPlayerMult = 1.0 + Math.max(0, players.size() - 1) * runTier.hpScalePerPlayer();
 
+            // Attack damage stays as configured: every hit on a raid player is already × the tier's damageMultiplier
+            // (LivingEntityHooks.modifyPlayerHurtAmount). Scaling it here too made raids hit × tier² (4.36.3 fix).
             EntityEquipmentHelper.applyScaledAttributes(
-                livingBoss, entityDefinition.attributes(), world.registryAccess(), healthMult, damageMult, perPlayerMult);
+                livingBoss, entityDefinition.attributes(), world.registryAccess(), healthMult, 1.0, perPlayerMult);
             EntityEquipmentHelper.applyAllEquipment(livingBoss, entityDefinition.equipment());
 
             livingBoss.heal(livingBoss.getMaxHealth());
             // Owned by the run: never let vanilla despawn or convert the boss.
             EntityEquipmentHelper.markRunMob(livingBoss);
+            net.ledok.arenas_ld.stats.RunStats.markBoss(livingBoss);
+            net.ledok.arenas_ld.util.RunSplits.markRoot(livingBoss, entityDefinition.splitStrength());
             // For its minions: what reached its own health. Damage to raid players is already
             // multiplied by the tier for every source, so minions get no attack-damage factor.
             net.ledok.arenas_ld.util.RunMinions.recordScale(livingBoss, spawner,
@@ -279,6 +283,7 @@ public final class RaidRunLifecycle {
         ServerLevel entranceWorld = world.getServer().getLevel(spawner.getEntranceDimension());
         BlockPos absoluteEntrance = spawner.getAbsoluteEntrancePos();
         for (ServerPlayer player : players) {
+            net.ledok.arenas_ld.util.RunPlayerSafety.secure(player);
             player.setGameMode(GameType.ADVENTURE);
             player.setHealth(player.getMaxHealth());
             if (entranceWorld != null) {
@@ -336,6 +341,13 @@ public final class RaidRunLifecycle {
         if (bossEntity != null && bossEntity.isRemoved() && !bossEntity.getRemovalReason().shouldDestroy()) {
             bossEntity = null; // unloaded to its chunk (or moved away), not dead
         }
+        if (bossEntity == null && !run.bossParts().isEmpty()) {
+            // A split boss: this part is gone (it split, or died), another one takes over.
+            if (!promotePart(bossWorld, run)) {
+                handleWin(world, controller, run);
+            }
+            return;
+        }
         if (bossEntity == null) {
             if (waitForMissingBoss(world, bossWorld, controller, run)) {
                 // The fight is paused (no timer, no regeneration) until the boss is back.
@@ -353,7 +365,12 @@ public final class RaidRunLifecycle {
         trackBoss(world, controller, run, bossEntity);
 
         if (!bossEntity.isAlive()) {
-            handleWin(world, controller, run);
+            if (net.ledok.arenas_ld.util.RunSplits.pendingSplit(bossEntity)) {
+                return; // a dying split boss: its parts come when its death ends
+            }
+            if (run.bossParts().isEmpty() || !promotePart(bossWorld, run)) {
+                handleWin(world, controller, run);
+            }
             return;
         }
 
@@ -397,18 +414,22 @@ public final class RaidRunLifecycle {
                 ServerPlayer player = world.getServer().getPlayerList().getPlayer(id);
                 return player != null && player.isAlive() && !player.isSpectator();
             });
-            if (!anyFighting && downed.isEmpty()) {
+            // Downed players who will respawn keep it going; hardcore deaths are out for good.
+            if (!anyFighting && downed.values().stream().allMatch(DownedPlayer::isOut)) {
                 bossEntity.discard();
                 handleLoss(world, controller, run, "All players eliminated.");
                 return;
             }
         }
 
-        int regenRate = runTier.regeneration();
-        if (regenRate > 0 && bossEntity instanceof LivingEntity livingBoss) {
+        double regenPerPlayer = runTier.regenerationPerPlayer();
+        if (regenPerPlayer > 0 && bossEntity instanceof LivingEntity livingBoss) {
             int nextRegen = run.regenerationTickTimer() + 1;
             if (nextRegen >= REGEN_INTERVAL_TICKS) {
-                livingBoss.heal((float) regenRate);
+                // HP per second for each player still in the run (downed ones too), healed every 5 s in one go.
+                long players = run.participants().values().stream()
+                    .filter(p -> p.status() != net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus.REMOVED).count();
+                livingBoss.heal((float) (regenPerPlayer * Math.max(1, players) * REGEN_INTERVAL_TICKS / 20.0));
                 run.setRegenerationTickTimer(0);
             } else {
                 run.setRegenerationTickTimer(nextRegen);
@@ -442,9 +463,13 @@ public final class RaidRunLifecycle {
 
         int xpReward = tierCfg.skillExperiencePerWin();
         long rewardPerPlayer = tierCfg.rewardCurrency();
-        if (run.hardcoreEnabled()) {
-            rewardPerPlayer *= 2;
-        }
+        // Every modifier (hardcore ×2, run modifiers, events) stacks through one formula, with each
+        // player's LuckPerms bonuses added in below.
+        List<net.ledok.arenas_ld.rewards.RewardModifier> runModifiers = net.ledok.arenas_ld.rewards.RewardModifiers.forRun(
+            controller.activityId(), net.ledok.arenas_ld.activity.ActivityHost.difficultyId(run.tier()),
+            run.hardcoreEnabled(), net.ledok.arenas_ld.rewards.RewardModifiers.Mode.RAID, run.runModifiers());
+        // The controller's own base rolls when it has them, else the global completion_loot_rolls.
+        double baseRolls = net.ledok.arenas_ld.util.RunSettings.of(controller).lootRolls();
         String perPlayerLoot = tierCfg.perPlayerLootTable();
         boolean puffishLoaded = ArenasPlatform.INSTANCE.isModLoaded("puffish_skills");
 
@@ -454,9 +479,12 @@ public final class RaidRunLifecycle {
             // run-start snapshot.
             net.ledok.arenas_ld.util.EndRewardPerks perks = net.ledok.arenas_ld.util.EndRewardPerks.resolve(
                 run.perkSnapshots(), uuid, player != null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.RAID);
-            List<ItemStack> loot = net.ledok.arenas_ld.util.RewardDelivery.rollLoot(world, perPlayerLoot, player,
-                player != null ? player.position() : Vec3.atCenterOf(run.spawnerPos()), perks.lootRolls());
-            long currency = perks.scaleCurrency(rewardPerPlayer);
+            net.ledok.arenas_ld.rewards.RewardPayout payout = net.ledok.arenas_ld.rewards.RewardPayout.compute(baseRolls,
+                rewardPerPlayer, xpReward, net.ledok.arenas_ld.rewards.RewardPayout.join(net.ledok.arenas_ld.rewards.RewardPayout.join(
+                    perks.modifiers(), net.ledok.arenas_ld.util.RunRentals.rewardModifiers(uuid)), runModifiers), true, world.random);
+            List<ItemStack> loot = payout.rolls() <= 0 ? List.of() : net.ledok.arenas_ld.util.RewardDelivery.rollLoot(world,
+                perPlayerLoot, player, player != null ? player.position() : Vec3.atCenterOf(run.spawnerPos()), payout.rolls());
+            long currency = payout.currency();
 
             if (player == null) {
                 // Offline but loot-eligible: the reward still lands via the economy inbox.
@@ -470,7 +498,7 @@ public final class RaidRunLifecycle {
             net.ledok.arenas_ld.util.RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "RAID_REWARD");
 
             int grantedXp = 0;
-            int scaledXp = perks.scaleXp(xpReward);
+            int scaledXp = payout.xp();
             if (scaledXp > 0 && puffishLoaded) {
                 PuffishSkillsCompat.addExperience(player, scaledXp);
                 grantedXp = scaledXp;
@@ -479,6 +507,12 @@ public final class RaidRunLifecycle {
             net.ledok.arenas_ld.util.RewardDelivery.notify(player,
                 net.ledok.arenas_ld.packet.LootRewardPayload.Source.RAID_WIN, delivered,
                 net.ledok.arenas_ld.util.RewardDelivery.displayableCurrency(currency), grantedXp);
+            // The breakdown goes to the run details' Rewards tab (D5); chat only when the run keeps no stats.
+            if (!net.ledok.arenas_ld.stats.RunStats.recordRewards(uuid,
+                    payout.summary(perPlayerLoot != null && !perPlayerLoot.isEmpty()),
+                    payout.lines(perPlayerLoot != null && !perPlayerLoot.isEmpty()))) {
+                payout.tell(player, perPlayerLoot != null && !perPlayerLoot.isEmpty());
+            }
         }
 
         // Offline winners get their per-player commands on their next join.
@@ -574,6 +608,59 @@ public final class RaidRunLifecycle {
             bossEntity.discard();
             ArenasLdMod.LOGGER.info("Despawned boss of the ended raid at {}.", run.spawnerPos());
         }
+        ServerLevel bossWorld = run.bossDimension() != null ? world.getServer().getLevel(run.bossDimension()) : null;
+        for (UUID part : List.copyOf(run.bossParts())) {
+            Entity entity = bossWorld != null ? bossWorld.getEntity(part) : null;
+            if (entity != null && entity.isAlive()) {
+                entity.discard();
+            }
+            run.removeBossPart(part);
+        }
+    }
+
+    /**
+     * A split boss's current part is gone: the next part (a loaded one first) becomes the boss. Dead parts are
+     * dropped. False when no part is left, i.e. the whole boss is dead.
+     */
+    private static boolean promotePart(ServerLevel bossWorld, RaidRun run) {
+        UUID next = null;
+        boolean nextLoaded = false;
+        for (UUID uuid : List.copyOf(run.bossParts())) {
+            Entity entity = bossWorld.getEntity(uuid);
+            if (entity != null && !entity.isAlive() && !net.ledok.arenas_ld.util.RunSplits.pendingSplit(entity)) {
+                run.removeBossPart(uuid);
+                continue;
+            }
+            if (next == null || (!nextLoaded && entity != null)) {
+                next = uuid;
+                nextLoaded = entity != null;
+            }
+        }
+        if (next == null) {
+            return false;
+        }
+        run.removeBossPart(next);
+        run.setBossRef(next, bossWorld.dimension());
+        net.ledok.arenas_ld.util.DebugLog.log("raid at {}: split boss part {} takes over ({} more)", run.spawnerPos(), next, run.bossParts().size());
+        return true;
+    }
+
+    /** A run slime split ({@link net.ledok.arenas_ld.util.RunSplits}): a part of a raid's boss joins its parts. */
+    public static void onSplitPart(ServerLevel level, UUID parent, LivingEntity part) {
+        for (ControllerKey key : RaidControllerBlockEntity.getControllers()) {
+            ServerLevel controllerLevel = level.getServer().getLevel(key.dimension());
+            if (controllerLevel == null || !(controllerLevel.getBlockEntity(key.pos()) instanceof RaidControllerBlockEntity controller)) {
+                continue;
+            }
+            for (RaidRun run : controller.getActiveRuns().values()) {
+                if (parent.equals(run.bossUuid()) || run.bossParts().contains(parent)) {
+                    run.removeBossPart(parent);
+                    run.addBossPart(part.getUUID());
+                    controller.setChanged();
+                    return;
+                }
+            }
+        }
     }
 
     /** The run's boss when it is loaded; an in-memory lookup that never loads a chunk. */
@@ -652,6 +739,9 @@ public final class RaidRunLifecycle {
                 RunParticipant participant = run.participants().get(uuid);
                 if (participant == null || participant.status() == ParticipantStatus.REMOVED) continue;
                 boolean midRun = run.phase() != RaidPhase.CLOSING;
+                if (midRun) {
+                    net.ledok.arenas_ld.stats.RunStats.markForfeit(uuid); // before they're out of the run
+                }
                 // The run lives in its spawner's dimension, which needn't be the controller's: using
                 // the controller's level here looked the spawner up (loading a chunk) at the right
                 // coordinates in the wrong dimension, and finalize then missed it.
@@ -748,7 +838,7 @@ public final class RaidRunLifecycle {
         PlayerReturnPoint rp = run.returnPoints().get(uuid);
         if (rp == null) return;
         // Offline at run end / forfeit: persisted, and they're sent home on next login.
-        net.ledok.arenas_ld.util.ReturnPoints.sendHome(world.getServer(), uuid, rp, false);
+        net.ledok.arenas_ld.util.ReturnPoints.sendHome(world.getServer(), uuid, rp);
     }
 
     /** Tell the controller the run ended so it records the leaderboard and releases the instance. */
@@ -788,10 +878,10 @@ public final class RaidRunLifecycle {
         // Every player is disconnected when the server stops: that is no rage-quit, so it neither
         // counts as a hardcore death (wiping every hardcore raid on restart) nor costs time.
         boolean serverStopping = !world.getServer().isRunning();
-        if (run.hardcoreEnabled() && !serverStopping) {
-            run.clearDisconnected(player.getUUID());
-            handlePlayerHardcoreDeath(world, run, player);
-            return;
+        if (run.hardcoreEnabled() && !serverStopping && !run.downedPlayers().containsKey(player.getUUID())) {
+            // Hardcore: leaving mid-fight counts as dying (out, no respawn); then the usual disconnect grace.
+            run.updateParticipant(participant.downed(world.getGameTime()));
+            run.setDowned(DownedPlayer.out(player.getUUID()));
         }
 
         run.markDisconnected(player.getUUID(), world.getGameTime());
@@ -849,17 +939,18 @@ public final class RaidRunLifecycle {
         RunParticipant participant = run.participants().get(player.getUUID());
         if (participant == null || participant.status() == ParticipantStatus.REMOVED) return;
 
-        // Hardcore: the player is out of the run for good. Mark them removed and send them back
-        // to their entry point (restoring their previous game mode) rather than leaving them
-        // stranded as a spectator inside the arena. Mirrors the dungeon's hardcore handling.
-        run.updateParticipant(participant.withStatus(ParticipantStatus.REMOVED, world.getGameTime()));
-        run.clearDowned(player.getUUID());
-        run.clearDisconnected(player.getUUID());
-        removeFromPartyTeam(world, run, player.getScoreboardName());
-        restoreToReturnPoint(world, run, player.getUUID());
-        run.removeReturnPoint(player.getUUID());
-        BusyStateCompat.clearBusy(player.getUUID(), BUSY_REASON);
-        player.sendSystemMessage(Component.translatable("message.arenas_ld.raid.hardcore_death").withStyle(ChatFormatting.RED));
+        if (run.downedPlayers().get(player.getUUID()) instanceof DownedPlayer downed && downed.isOut()) return;
+
+        // Hardcore: out of the fight for good, but still in the raid. They watch the party and, if it wins,
+        // are revived at the end (return point: game mode, full health) and get the rewards like everyone.
+        run.updateParticipant(participant.downed(world.getGameTime()));
+        run.setDowned(DownedPlayer.out(player.getUUID()));
+        player.setHealth(1.0F);
+        player.setGameMode(GameType.SPECTATOR);
+        net.ledok.arenas_ld.util.DownedSpectators.down(player, net.ledok.arenas_ld.util.DownedSpectators.RunView.of(run));
+        player.sendSystemMessage(Component.translatable("message.arenas_ld.run.hardcore_out").withStyle(ChatFormatting.RED));
+        broadcastToParty(world, run, Component.translatable("message.arenas_ld.run.hardcore_out_party",
+            participant.playerName()).withStyle(ChatFormatting.RED), player.getUUID());
     }
 
     private static void tickDownedPlayers(ServerLevel world, @Nullable RaidControllerBlockEntity controller, RaidRun run) {
@@ -942,12 +1033,19 @@ public final class RaidRunLifecycle {
         ServerLevel entranceWorld = world.getServer().getLevel(spawner.getEntranceDimension());
         net.ledok.arenas_ld.util.DownedSpectators.release(player);
         player.setGameMode(GameType.ADVENTURE);
+        // Back from downed with a clean slate: every status effect goes, buffs too, as on leaving the run. The
+        // run modifiers' own effects aren't status effects (an attribute, the client's ice, damage hooks) and stay.
+        player.removeAllEffects();
         player.setHealth(player.getMaxHealth());
+        // Full hunger bar on the way back in; saturation stays as it is (LeDok 2026-11-09).
+        player.getFoodData().setFoodLevel(20);
         if (entranceWorld != null) {
             player.teleportTo(entranceWorld,
                 target.getX() + 0.5, target.getY(), target.getZ() + 0.5,
                 player.getYRot(), player.getXRot());
         }
+        net.ledok.arenas_ld.util.RespawnShield.grant(player);
+        net.ledok.arenas_ld.util.RunRentals.reequip(player);
 
         RunParticipant participant = run.participants().get(player.getUUID());
         if (participant != null) {
@@ -984,10 +1082,14 @@ public final class RaidRunLifecycle {
 
     private static void updateRaidTimerBossBar(ServerLevel world, RaidRun run, @Nullable Entity boss) {
         int raidTimeTicks = Math.max(0, run.resolvedTierConfig().raidTimeSeconds() * 20);
+        var payload = raidHudPayload(run, bossHealthPercent(world.getServer(), run, boss));
+        if (run.runStatsOrNull() != null) {
+            run.runStatsOrNull().lastHud = payload; // the run details screen (boss HP even when untimed)
+        }
         if (raidTimeTicks <= 0) {
             return; // untimed raid: no clock to show (matches the old hidden bar)
         }
-        RunHudSync.tickSend(world, hudTargets(run), raidHudPayload(run, bossHealthPercent(boss)));
+        RunHudSync.tickSend(world, hudTargets(run), payload);
     }
 
     /** Death-time penalty from the controller, falling back to the legacy constant. */
@@ -1001,12 +1103,16 @@ public final class RaidRunLifecycle {
 
     /**
      * A downed player's own wait, before {@link #respawnClockFires} lets them back: with the shared
-     * clock ({@code raid_respawn_together}) only the per-death extra, else the controller's respawn
-     * time plus it.
+     * clock ({@code raid_respawn_together}) none, so everyone downed comes back together at the next
+     * mark (the per-death extra only with {@code raid_per_death_extra}); else the controller's respawn
+     * time plus the per-death extra.
      */
     private static int ownRespawnWait(@Nullable RaidControllerBlockEntity controller, int priorDeaths) {
         int extra = net.ledok.arenas_ld.util.RespawnDelays.perDeathExtra(priorDeaths);
-        return net.ledok.arenas_ld.util.RespawnDelays.raidTogether() ? extra : resolveRespawnTimeTicks(controller) + extra;
+        if (net.ledok.arenas_ld.util.RespawnDelays.raidTogether()) {
+            return net.ledok.arenas_ld.util.RespawnDelays.raidPerDeathExtra() ? extra : 0;
+        }
+        return resolveRespawnTimeTicks(controller) + extra;
     }
 
     /** Whether downed players whose own wait is over may come back now: always, or on a shared clock tick. */
@@ -1021,7 +1127,7 @@ public final class RaidRunLifecycle {
     /** Ticks until a downed player is back (for the countdown); -1 when not downed. */
     public static long respawnTicksLeft(long gameTime, RaidRun run, UUID uuid) {
         DownedPlayer downed = run.downedPlayers().get(uuid);
-        if (downed == null) {
+        if (downed == null || downed.isOut()) {
             return -1;
         }
         if (!net.ledok.arenas_ld.util.RespawnDelays.raidTogether()) {
@@ -1065,6 +1171,21 @@ public final class RaidRunLifecycle {
         chunks.add(bossChunk);
         run.setHeldBossChunk(bossChunk);
         RunChunkTickets.hold(world.getServer(), chunkOwner(run), chunks);
+    }
+
+    /**
+     * What a run on this instance loads while its party waits to start ({@link net.ledok.arenas_ld.util.RunPreparation}):
+     * a square of {@code radius} chunks around the spawner (the boss arena) and around the entrance.
+     */
+    public static Set<net.ledok.arenas_ld.util.RunPreparation.HeldChunk> preloadChunks(ServerLevel spawnerLevel, BlockPos spawnerPos, int radius) {
+        Set<net.ledok.arenas_ld.util.RunPreparation.HeldChunk> chunks = new HashSet<>();
+        net.ledok.arenas_ld.util.RunPreparation.square(chunks, spawnerLevel.dimension(), spawnerPos, radius);
+        if (spawnerLevel.getBlockEntity(spawnerPos) instanceof RaidBossSpawnerBlockEntity spawner) {
+            ResourceKey<Level> entranceDim = spawner.getEntranceDimension() != null
+                ? spawner.getEntranceDimension() : spawnerLevel.dimension();
+            net.ledok.arenas_ld.util.RunPreparation.square(chunks, entranceDim, spawner.getAbsoluteEntrancePos(), radius);
+        }
+        return chunks;
     }
 
     /** The chunk the boss was last seen in, in its dimension (the spawner's when not known yet). */
@@ -1151,6 +1272,7 @@ public final class RaidRunLifecycle {
                     if (run.bossUuid() != null) {
                         bosses.add(run.bossUuid());
                     }
+                    bosses.addAll(run.bossParts());
                 }
             }
         }
@@ -1217,7 +1339,7 @@ public final class RaidRunLifecycle {
             } else {
                 Entity boss = loadedBoss(server, run);
                 phase = boss instanceof LivingEntity && boss.isAlive()
-                    ? Component.translatable("status.arenas_ld.raid.boss_health", bossHealthPercent(boss))
+                    ? Component.translatable("status.arenas_ld.raid.boss_health", bossHealthPercent(server, run, boss))
                     : Component.translatable("status.arenas_ld.raid.boss");
             }
             // Untimed raids have no clock (see updateRaidTimerBossBar).
@@ -1229,9 +1351,24 @@ public final class RaidRunLifecycle {
     }
 
     /** Whole-percent remaining boss health, ceil'd so the bar never reads 0% while the boss lives. */
-    private static int bossHealthPercent(@Nullable Entity boss) {
-        if (boss instanceof LivingEntity living && living.getMaxHealth() > 0.0f) {
-            return Mth.ceil(living.getHealth() * 100.0f / living.getMaxHealth());
+    /** The boss's health in percent; a split boss (slime) counts all its parts over its whole tree. */
+    private static int bossHealthPercent(MinecraftServer server, RaidRun run, @Nullable Entity boss) {
+        List<Entity> group = new ArrayList<>();
+        if (boss != null) {
+            group.add(boss);
+        }
+        ServerLevel bossWorld = run.bossDimension() != null ? server.getLevel(run.bossDimension()) : null;
+        if (bossWorld != null) {
+            for (UUID part : run.bossParts()) {
+                Entity entity = bossWorld.getEntity(part);
+                if (entity != null) {
+                    group.add(entity);
+                }
+            }
+        }
+        double[] health = net.ledok.arenas_ld.util.RunSplits.health(group);
+        if (health[1] > 0) {
+            return Mth.ceil(health[0] * 100.0 / health[1]);
         }
         return 100;
     }

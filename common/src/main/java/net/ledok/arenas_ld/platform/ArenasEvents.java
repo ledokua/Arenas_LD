@@ -39,6 +39,27 @@ public final class ArenasEvents {
      */
     public static final List<BiPredicate<Player, InteractionHand>> USE_BLOCKED = new CopyOnWriteArrayList<>();
 
+    /** A right-click on the block at a position; true cancels it. Fired on both sides; check for a server player yourself. */
+    @FunctionalInterface
+    public interface BlockUseCheck {
+        boolean blocked(Player player, InteractionHand hand, net.minecraft.core.BlockPos pos);
+    }
+
+    public static final List<BlockUseCheck> BLOCK_USE_BLOCKED = new CopyOnWriteArrayList<>();
+
+    /** The item checks ({@link #USE_BLOCKED}) and then the block ones ({@link #BLOCK_USE_BLOCKED}). */
+    public static boolean isBlockUseBlocked(Player player, InteractionHand hand, net.minecraft.core.BlockPos pos) {
+        if (isUseBlocked(player, hand)) {
+            return true;
+        }
+        for (BlockUseCheck check : BLOCK_USE_BLOCKED) {
+            if (check.blocked(player, hand, pos)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean isUseBlocked(Player player, InteractionHand hand) {
         for (BiPredicate<Player, InteractionHand> check : USE_BLOCKED) {
             if (check.test(player, hand)) {

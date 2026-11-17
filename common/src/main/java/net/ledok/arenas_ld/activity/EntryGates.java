@@ -130,6 +130,33 @@ public final class EntryGates {
         return true;
     }
 
+    /** {@link net.ledok.arenas_ld.api.ArenasApi#setInviteFilter}; null: everyone may invite. */
+    public static volatile net.ledok.arenas_ld.api.ArenasApi.@Nullable InviteFilter inviteFilter;
+
+    /**
+     * The invite filter's say on {@code inviter} inviting {@code invitee} to {@code host}: false (the inviter told why,
+     * the invitee nothing) when it refuses. A filter that throws is logged and lets the invite through.
+     */
+    public static boolean inviteAllowed(ServerPlayer inviter, UUID invitee, ActivityHost host) {
+        net.ledok.arenas_ld.api.ArenasApi.InviteFilter filter = inviteFilter;
+        if (filter == null) {
+            return true;
+        }
+        Component refusal;
+        try {
+            net.minecraft.resources.ResourceLocation id = host.activityId();
+            refusal = filter.refuse(inviter, invitee, id == null ? "" : id.toString());
+        } catch (RuntimeException e) {
+            net.ledok.arenas_ld.ArenasLdMod.LOGGER.warn("[Arenas] The invite filter failed; letting the invite through", e);
+            return true;
+        }
+        if (refusal == null) {
+            return true;
+        }
+        inviter.sendSystemMessage(refusal);
+        return false;
+    }
+
     /**
      * Checks another player on behalf of {@code actor} (an owner accepting a request, an inviter):
      * on refusal the actor hears "name can't enter: reason", and the target hears the reason when
@@ -156,11 +183,23 @@ public final class EntryGates {
     }
 
     /**
-     * Every online member must pass for the lobby's run to start. Returns the message listing who
-     * can't and why, or null when everyone may enter.
+     * Every online member must pass for the lobby's run to start, its run modifiers must not conflict, and on a
+     * "rental kits only" controller every member must have picked a rental build.
+     * Returns the message listing who can't and why (or the conflict), or null when everyone may enter.
      */
     public static @Nullable Component partyRefusal(MinecraftServer server, Lobby lobby, ActivityHost host,
                                                    @Nullable DifficultyTier tier) {
+        // Two conflicting run modifiers never start together (the config may have changed since they were picked).
+        Component conflict = net.ledok.arenas_ld.rewards.RunModifierCatalog.conflictRefusal(lobby.modifiers());
+        if (conflict != null) {
+            return conflict;
+        }
+        // "Rental kits only": everyone picks a rental build first (LeDok 2026-11-17).
+        List<String> missing = net.ledok.arenas_ld.util.RunRentals.missingPicks(host, lobby);
+        if (!missing.isEmpty()) {
+            return Component.translatable("message.arenas_ld.rental.start_needs_picks", String.join(", ", missing))
+                .withStyle(ChatFormatting.RED);
+        }
         if (GATES.isEmpty()) {
             return null;
         }

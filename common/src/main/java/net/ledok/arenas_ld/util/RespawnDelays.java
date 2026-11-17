@@ -32,10 +32,15 @@ public final class RespawnDelays {
         return ArenasLdConfig.getInstance().raid_respawn_together;
     }
 
-    /** The raid's shared respawn interval: the configured one, else the controller's respawn time. */
+    /** Whether earlier deaths delay a downed raid player past the shared mark ({@code raid_per_death_extra}). */
+    public static boolean raidPerDeathExtra() {
+        return ArenasLdConfig.getInstance().raid_per_death_extra;
+    }
+
+    /** The raid's shared respawn interval: the controller's (its admin screen), else the configured default. */
     public static int raidWave(int controllerTicks) {
         int configured = ArenasLdConfig.getInstance().raid_respawn_wave_ticks;
-        return Math.max(1, configured > 0 ? configured : controllerTicks);
+        return Math.max(1, controllerTicks > 0 ? controllerTicks : configured > 0 ? configured : 1200);
     }
 
     /**

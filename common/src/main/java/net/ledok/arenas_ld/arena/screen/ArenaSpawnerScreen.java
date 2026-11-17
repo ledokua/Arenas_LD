@@ -82,7 +82,7 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
         objectives.addAll(s.getEnabledObjectives());
         mobs.clear();
         for (MobArenaMobData m : s.getMobs()) {
-            mobs.add(new MobArenaMobData(m.mobId, new ArrayList<>(m.attributes), m.equipment, m.weight, m.minWave, m.maxWave, m.isBoss));
+            mobs.add(m.copy());
         }
         rewards.clear();
         for (MobArenaRewardData r : s.getRewards()) {
@@ -208,6 +208,10 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
             row.item(box(Sizing.fixed(30), String.valueOf(mob.maxWave), v -> mob.maxWave = parseInt(v, mob.maxWave)));
             row.item(button(Component.literal(mob.isBoss ? "BOSS" : "reg"), 40, 16,
                 () -> { mob.isBoss = !mob.isBoss; rebuildMobs(); }));
+            // Extra mob data (SNBT) and, for slimes, the split strength; saved with the list (Save).
+            row.item(button(Component.literal(mob.nbt.isBlank() && mob.splitStrength == 100 ? "{}" : "{…}"), 22, 16,
+                () -> net.ledok.arenas_ld.screen.SummonDataEditor.open(canvas, mob.mobId, mob.nbt, mob.splitStrength,
+                    (nbt, strength) -> { mob.nbt = nbt; mob.splitStrength = strength; rebuildMobs(); })));
             row.item(button(Component.literal("✕"), 16, 16,
                 () -> { mobs.remove(idx); rebuildMobs(); }));
             mobsArea.item(row);

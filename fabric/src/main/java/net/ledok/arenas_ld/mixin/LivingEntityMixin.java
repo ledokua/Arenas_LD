@@ -38,10 +38,10 @@ public abstract class LivingEntityMixin {
             index = 1
     )
     private float arenasLd$applyDungeonTierDamageMultiplier(float amount) {
-        if (!((Object) this instanceof ServerPlayer player)) {
+        if (((LivingEntity) (Object) this).level().isClientSide()) {
             return amount;
         }
-        return LivingEntityHooks.modifyPlayerHurtAmount(player, this.arenasLd$currentDamageSource, amount);
+        return LivingEntityHooks.modifyHurtAmount((LivingEntity) (Object) this, this.arenasLd$currentDamageSource, amount);
     }
 
     @Inject(method = "setHealth", at = @At("HEAD"), cancellable = true)

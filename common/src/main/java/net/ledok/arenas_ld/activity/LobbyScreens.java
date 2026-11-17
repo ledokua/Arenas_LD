@@ -46,6 +46,11 @@ public final class LobbyScreens {
             player.sendSystemMessage(refusal);
             return false;
         }
+        if (host.activityId() != null) {
+            // For a hub hosting the view (Eden): which activity this menu is. Sent first, so it arrives before the menu.
+            net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(player,
+                new net.ledok.arenas_ld.packet.LobbyOpeningPayload(host.activityId()));
+        }
         ArenasMenus.open(player, bound(provider, level.dimension(), remote));
         return true;
     }

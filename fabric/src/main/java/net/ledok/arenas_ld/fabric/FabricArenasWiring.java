@@ -65,7 +65,7 @@ final class FabricArenasWiring {
             ? InteractionResultHolder.fail(player.getItemInHand(hand))
             : InteractionResultHolder.pass(player.getItemInHand(hand)));
         UseBlockCallback.EVENT.register((player, world, hand, hitResult) ->
-            ArenasEvents.isUseBlocked(player, hand) ? InteractionResult.FAIL : InteractionResult.PASS);
+            ArenasEvents.isBlockUseBlocked(player, hand, hitResult.getBlockPos()) ? InteractionResult.FAIL : InteractionResult.PASS);
         UseEntityCallback.EVENT.register((player, world, hand, entity, hitResult) ->
             ArenasEvents.isUseBlocked(player, hand) ? InteractionResult.FAIL : InteractionResult.PASS);
     }

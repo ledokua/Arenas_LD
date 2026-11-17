@@ -34,7 +34,10 @@ public final class FabricArenasPlatform implements ArenasPlatform {
 
     @Override
     public void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
-        ServerPlayNetworking.send(player, payload);
+        // Skips a player whose client can't take it (no Arenas, or a game test mock player).
+        if (ServerPlayNetworking.canSend(player, payload.type())) {
+            ServerPlayNetworking.send(player, payload);
+        }
     }
 
     @Override

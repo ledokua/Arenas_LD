@@ -87,6 +87,267 @@ any distance and any dimension; it stays open until the player closes it, and lo
 reach the right controller. It returns false when the id is unknown or the entry gate refused the
 player (they are told why in chat).
 
+### The player's own lobby
+
+```java
+Optional<ArenasApi.OwnLobby> mine = ArenasApi.ownLobby(player);
+mine.ifPresent(l -> {
+    l.activity();    // its activity id
+    l.type();        // DUNGEON, RAID or ARENA
+    l.name();        // the activity's display name
+    l.members();     // of l.maxMembers()
+    l.ready();       // members marked ready
+    l.owner();       // the player owns it
+    l.inRun();       // its run has started
+});
+boolean opened = ArenasApi.openOwnLobby(player); // that lobby's screen, from anywhere
+```
+
+For a "My lobby" button: `ownLobby` is a cheap in-memory read; `openOwnLobby` opens the same remote screen as
+`openLobbies` (ready, leave, invite, run modifiers all work from it) and is what `/arenasld lobby open` (no
+arguments) does. A player is in one lobby at a time: creating or joining one takes them out of the old one
+(since 4.21.0).
+
+## Run details
+
+```java
+boolean opened = ArenasApi.openRunDetails(player);                    // the player's own dungeon/raid run
+boolean shown  = ArenasApi.openRunDetails(staff, activityId, instance); // staff: that run (instance null: any of it)
+```
+
+Opens the live run details screen (players' state, deaths, respawn timer, HP, damage dealt/taken, healing; the run's
+modifiers, phase, time, boss HP, rewards). False when there is no such dungeon or raid run (or `run_stats.enabled` is
+off). The staff overload also shows the HP nobody was credited for; check staff permission before calling it.
+
+### Finished runs (4.23.0+)
+
+```java
+List<ArenasApi.RunHistoryEntry> runs = ArenasApi.runHistory(server, activityId /* or null */, playerUuid /* or null */, 50);
+boolean shown = ArenasApi.openRunDetails(staff, runs.get(0).runId()); // final numbers with the staff details
+boolean last  = ArenasApi.openLastRunDetails(player);                 // the player's last finished run
+```
+
+`RunHistoryEntry(runId, activity, type, name, difficulty, hardcore, modifiers, start, durationSeconds, result,
+party, partyUuids, runLevel, playerLevels, gearPower)`, newest first (4.24.0: `runLevel` is the difficulty's loot
+table `level_N`, `playerLevels` the `loot_stage` level and `gearPower` the average gear power level of each player at
+run start, in party order; -1 when unknown; 4.24.1: `classes` the equipped spell book's item id, or
+`skills:<branch>`, or ""); `result` is `HistoryResult.WIN`, `FAIL`, `ABANDONED` or `FORCED`. The history
+covers the last 30 days (files under `<world>/arenas_ld/runs/`). `runHistory` reads the in-memory index, cheap to
+call; `openRunDetails(staff, runId)` reads the run's file off the server thread and opens the screen when it is in
+(false for an unknown id). Check staff permission yourself.
+
+## Client: hosting the lobby view in another screen (4.35.0+)
+
+Client only: `net.ledok.arenas_ld.api.client.ArenasClientApi`. A hub (Eden_LD) can show Arenas' lobby view inside its own
+screen instead of Arenas' lobby screen (LeDok: "only the hub's screens when Eden is there").
+
+```java
+ArenasClientApi.setLobbyHost(@Nullable LobbyHost host)
+interface LobbyHost { boolean open(ResourceLocation activity, Component name, HostedLobby view); }
+interface HostedLobby { CanvasNode node(); void resize(float w, float h); boolean keyPressed(int key, int scan, int mods);
+                        boolean charTyped(char c, int mods); void mouseClicked(float canvasX, float canvasY);
+                        void close(); boolean closed(); }
+```
+
+- **When the host is asked:** the server opens the lobby menu as always (controller block, `/arenasld lobby open`,
+  invites, the badge, `ArenasApi.openLobbies` / `joinOpenLobby` / `createLobby`). On the client, Arenas builds the view
+  from that menu and calls `open` on the next render-thread task, so the host may switch screens right away.
+- **`true`:** the host shows it, and Arenas' own screen never appears. Lobby actions and updates keep going through
+  the open menu.
+- **`false`, or no host:** Arenas' own screen, as before.
+- **The view:** it has no title bar; the host shows `name` and its own back button. It has tabs at the top and Leave
+  / Ready / Start at the bottom, and it is one column below 560 wide.
+- **Popups** (the rental preset list, the invite suggestions) open on `node().canvas()`.
+- **`close()`** closes that view's menu only (idempotent). Call it on back, on a tab switch, and when your screen closes.
+- **`closed()`** is true once the menu is gone: the server closed it (run start, kick), a newer lobby opened, or it was
+  closed.
+- **Dev check without Eden:** `-Darenas_ld.devLobbyHost=true` registers a bare test host.
+- **Run start (4.36.1):** on Start the server closes every party member's screen, the hub too (vanilla container close),
+  so the countdown title shows.
+
+### Client settings for a hub's settings page (4.36.1+)
+
+```java
+List<ArenasClientApi.Setting> ArenasClientApi.settings()
+record Setting(String id, Component name, Component description, List<Choice> choices,
+               Supplier<String> value, Consumer<String> set)
+record Choice(String value, Component label)
+```
+
+- **What's there:** Arenas' player-facing client settings, in display order:
+  - `run_hud_style`: `new` / `classic`;
+  - `loot_reveal_style`: `new` / `classic`;
+  - `ally_sidebar`: `left` / `right` / `hidden`;
+  - `lobby_badge`: `top_left` / `top_right` / `hidden`.
+- **How to use it:** show `name` and the choices with `value()` selected. `set` saves `config/arenas_ld-client.json`
+  and the HUDs pick it up right away (the run timer from its next update).
+- **Stability:** ids and values stay stable.
+
+## Ally HP sidebar parties (4.34.0+)
+
+`ArenasApi.setPartyProvider(Function<ServerPlayer, Collection<UUID>>)`: who is in a player's party outside dungeon, raid
+and arena runs, so the ally HP sidebar shows them too (Eden_LD: its parties). It's called a few times a second per online
+player who isn't in a run, so keep it cheap. Return the members (the player may be included); empty when none. Inside a
+run the sidebar always shows the run's members.
+
+## Lobby creation and settings for a hub (4.33.0+)
+
+For a hub's lobby browser and «Створити лобі» panel (Eden_LD):
+
+```java
+enum LobbyVisibility { PUBLIC, FRIENDS, PRIVATE }
+record LobbySettings(String difficulty, boolean hardcore, List<String> modifiers, LobbyVisibility visibility, int minLevel)
+void setLevelProvider(@Nullable ToIntFunction<ServerPlayer> levels)
+@Nullable Component createLobby(ServerPlayer owner, ResourceLocation activity, LobbySettings settings, boolean openScreen)
+@Nullable Component updateLobby(ServerPlayer owner, LobbySettings settings)
+Optional<ActivityInfo> activityInfo(MinecraftServer server, ResourceLocation activity)
+List<ItemStack> possibleDrops(MinecraftServer server, ResourceLocation activity, @Nullable String difficulty)
+```
+
+- **`createLobby`** goes through the controller's usual flow: busy check, entry gate for the tier, one lobby at a time
+  (a forming lobby elsewhere is left). The settings are checked before anything is made. If the owner already has a
+  forming lobby at that activity, it just gets the new settings.
+  - Returns null when done; otherwise the reason. The reason isn't sent to the player, so show it yourself.
+  - `difficulty`: "easy" / "normal" / "hard" / "nightmare", or empty for arenas (keeps the current tier).
+  - `hardcore` switches the `hardcore_run` modifier.
+  - Unknown modifiers, and pairs that conflict or share an exclusive group, are refused.
+- **`updateLobby`** changes the lobby the player owns, anywhere. The owner may change settings even with members in the
+  lobby.
+  - The members get a line naming the change.
+  - A change to the run (difficulty, hardcore, modifiers) un-readies everyone but the owner.
+- **Minimum join level:**
+  - stored on the lobby (`OpenLobby.minLevel()`, 0 = none);
+  - checked on join and on asking to join (including `joinOpenLobby` and the in-world screens), but not on an
+    owner's invite;
+  - checked only while a level provider is set; without one it's ignored.
+- **`lobbySettings(owner)`** (4.33.1+): returns `Optional<LobbySettings>` for the forming lobby the player owns, private
+  ones included, to prefill an edit form. It's empty when they own none or the run has started. `difficulty` is ""
+  for arenas.
+- **`ActivityInfo`:**
+  - activity, type and name;
+  - the enabled tiers' ids (empty for arenas);
+  - `ModifierInfo(id, name, description, rewards, icon, conflicts)`: `rewards` is the reward effect text, e.g.
+    "+2 loot · +25% XP";
+  - `maxMembers`;
+  - `levelsActive`: whether a level provider is set.
+- **`possibleDropsCount(server, activity, difficulty)`** (4.34.4+): how many distinct items `possibleDrops` would list
+  without its 64 cap, for a "+N" counter.
+- **`possibleDrops`:** the items a win can give, from the tier's reward loot tables.
+  - Arenas: every instance spawner's reward tables. A null or empty difficulty means all tiers.
+  - Includes nested tables, item tags and alternatives/groups. No rolls; at most 64 items.
+  - Copies, cached until the next data reload.
+
+## Open lobbies, server-wide (4.31.0+)
+
+For a hub overview of every lobby forming now (dungeons, raids, arenas):
+
+```java
+List<ArenasApi.OpenLobby> ArenasApi.listOpenLobbies(MinecraftServer server);
+long ArenasApi.openLobbiesRevision();
+void ArenasApi.addOpenLobbiesListener(Runnable listener);
+@Nullable Component ArenasApi.joinOpenLobby(ServerPlayer player, ResourceLocation activity, UUID lobbyId);
+```
+
+- **`listOpenLobbies`**: every PUBLIC and FRIENDS lobby that isn't in a run (forming or queued), across every loaded
+  controller, sorted by activity id then age. Private lobbies are never listed. It reads memory only.
+  - `OpenLobby(activity, type, name, lobbyId, owner, ownerName, members, maxMembers, ready, difficulty, hardcore,
+    modifiers, access, createdAtTick, minLevel)` has a `full()` helper. `minLevel` arrived in 4.33.0.
+  - `access` is `JOIN` (public) or `REQUEST` (friends-only: anyone may ask and the owner accepts). Arenas doesn't know
+    friends, so a hub that shows REQUEST lobbies only to the owner's friends filters them itself.
+- **`openLobbiesRevision` / `addOpenLobbiesListener`**: the list is checked once a second while at least one listener
+  is registered. When it changes, the revision goes up and the listeners run on the server thread. The first check
+  only records a baseline.
+- **`joinOpenLobby`**: joins a JOIN lobby, or asks to join a REQUEST one, from anywhere, through the controller's usual
+  flow:
+  - the busy check, the entry gate (the lobby's tier), and one lobby at a time (a forming lobby elsewhere is left);
+  - a full lobby is refused;
+  - then that activity's lobby screen opens. Already a member: it only opens the screen.
+
+  It returns null when the join went through; otherwise the reason, which the player is told as well.
+
+## Invite filter (4.28.0+)
+
+`ArenasApi.setInviteFilter(InviteFilter)` (null removes it; one filter, the last call wins) decides who may invite a
+player to a raid, dungeon or arena lobby, e.g. a privacy setting or an ignore list (Eden_LD).
+
+```java
+@Nullable Component refuse(ServerPlayer inviter, UUID invitee, String activityId);
+```
+
+- Asked at the start of every invite (raid, dungeon, arena), on the server thread, after the lobby checks and before
+  the invite exists or the invitee is notified.
+- Null lets the invite through. A line refuses it: there is no invite, the inviter gets the line as is, and the invitee
+  hears nothing.
+- `activityId` is the activity's id as in `status` (`""` for a controller without one). The invitee may be offline.
+- A filter that throws is logged and the invite goes through.
+
+## Rental builds (4.26.0+)
+
+Arenas lends preset class loadouts in dungeon and raid runs through a provider another mod registers (Eden_LD does,
+with its stash and Kits_LD hidden kits). Without one, the lobby shows no rental option.
+
+```java
+ArenasApi.setRentalProvider(new ArenasApi.RentalProvider() {
+    public List<String> presets(int level) { ... }                 // kit ids the player can rent (see below); empty hides the option
+    public String displayName(String kitId) { ... }                // plain text: the kit's name, else the preset id
+    public boolean begin(ServerPlayer p, String sessionId, String kitId) { ... } // false: nothing changed
+    public void end(MinecraftServer server, UUID player) { ... }   // also for offline players
+    public void reequip(ServerPlayer p) { ... }                    // after a respawn in the run
+    public boolean isRenting(ServerPlayer p) { ... }
+    public List<ItemStack> preview(String kitId) { ... }           // the kit's items (copies) for the lobby preview
+});
+```
+
+Kit ids are `<ns>:rental/<level>/<preset>`. `presets(level)` gives, for each class (the preset name up to the first
+"_"), all its presets in the highest level folder at or below the player's `loot_stage` level that has that class
+(4.26.1). Arenas reads the level (the folder) and the class from the id.
+
+Server thread only. Arenas calls `begin` at the run's first stats tick (session `arenas:<dim>@<x,y,z>@<start tick>`),
+again after a restart when `isRenting` is false (a few ticks after the login), `reequip` after each respawn in the run,
+and `end` within a second once the player is no longer in the run. The renter's rewards are halved
+("Rental ×0.5"). Run records and `RunHistoryEntry.loadouts` name the loadout.
+
+Since 4.40.0 Arenas asks `presets(level)` with the player's level capped at the run level of the lobby's difficulty,
+and after `begin`/`reequip` it may change the `spell_engine:spell_container` `spell_ids` of the lent spell book to the
+player's pick (same pool). A provider needs no change for either.
+
+### Run settings: rental only, base loot rolls (4.39.0+)
+
+```java
+Optional<String> mode = ArenasApi.rentalMode(server, activityId);           // "optional" | "required"; empty: unknown id or an arena
+Component refusal = ArenasApi.setRentalMode(server, activityId, "required", actor); // null = done
+Optional<Double> rolls = ArenasApi.baseLootRolls(server, activityId);       // -1 = the global completion_loot_rolls
+Component refusal2 = ArenasApi.setBaseLootRolls(server, activityId, 9, actor);      // below 0 = back to the global
+```
+
+`required`: every lobby member must pick a rental kit before getting ready or starting, own gear is refused, and the
+run pays renters in full (no "Rental ×0.5"). The run keeps the mode it started with. Run records carry `rentalMode`
+and `baseLootRolls`. A hub's own lobby list can read `rentalMode` to label such runs.
+
+## Breakable blocks (4.23.0+)
+
+```java
+Optional<BreakableBlocks> blocks = ArenasApi.breakableBlocks(server, activityId); // empty: unknown id or an arena
+Component refusal = ArenasApi.setBreakableBlocks(server, activityId,
+    new BreakableBlocks(BreakableBlocks.REPLACE, List.of("bosses_of_mass_destruction:vine_wall", "#minecraft:leaves")),
+    staff.getGameProfile().getName());                                           // null = done
+```
+
+A dungeon or raid controller's own list (`net.ledok.arenas_ld.util.BreakableBlocks`: `mode` `"add"` to the global
+`run_breakable_blocks` or `"replace"` it, and block ids / `#tags`). Refused for an unknown id, an arena, or an
+unknown block id. Runs use the lists only in difficulties whose tier has `allowBlockBreaking` on (off by default);
+players get the change within a second.
+
+## Resetting instance cooldowns
+
+```java
+Component refusal = ArenasApi.resetCooldowns(server, id, instance /* or null: all */, staff.getScoreboardName());
+```
+
+Makes an instance on cooldown free at the next tick (the next queued lobby can start). Null when done; otherwise
+why not (unknown id, nothing on cooldown there). Logged with `actor`. Check staff permission first, as for
+`forceEnd`. `/arenasld activity resetcooldown <id> [pos [dimension]]` does the same.
+
 ## The entry gate
 
 ```java
@@ -140,6 +401,22 @@ The lobby screens show it in green: under each difficulty the player may pick (d
 header of an arena lobby (asked with `difficulty` null). A difficulty the gate refuses still shows the
 gate's refusal, as before. Return `null` for nothing to show. Several may register; the first non-null
 label wins, and one that throws is logged and skipped. It is asked as often as the gate, so keep it cheap.
+
+## Reward modifiers (4.18.0+)
+
+Add run-wide reward modifiers, e.g. a server event:
+
+```java
+ArenasApi.registerRewardModifierSource((activity, difficulty, mode) ->
+    weekendEvent.active()
+        ? List.of(RewardModifier.increased(RewardModifier.Stat.XP, 0.25, "myhub:weekend", "XP Weekend"))
+        : List.of());
+```
+
+It is asked at every payout (dungeon completions and rooms, raid wins, arena waves and summary) and stacks with
+the lobby's run modifiers (hardcore's `hardcore_run`: loot and currency more ×2, XP +25%), the config's run modifiers and each player's LuckPerms bonuses:
+`final = base × (1 + Σ increased) × Π more`. `difficulty` is null for arenas. `name` is literal text or a
+translation key; players see it in their reward breakdown. Keep it cheap; one that throws is logged and skipped.
 
 ## Run events
 

@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arenas UI rework</title>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Eden / Arenas parchment palette (EdenParchment, ArenasParchment) */
+  --paper: #E5D8B9; --paper2: #DACAA5; --row: #D8C69E; --row-alt: #D2BF94;
+  --line: #5A4632; --line-hi: #3B2612; --ink: #2B1B0E; --ink-mid: #4A2E16; --ink-dim: #8A7A60;
+  --accent: #7A4A1E; --good: #3E6B2F; --warn: #9A6A10; --danger: #8B2F23; --track: #BBA47A; --fill: #6E9A4A;
+  /* in-world HUD (dark, translucent) */
+  --hud: rgba(14, 18, 24, .78); --hud-line: #3A4A5C; --hud-ink: #E8EEF5; --hud-dim: #9AA8B8; --hp: #D9473A; --hp-bg: #3a1a17; --absorb: #E8C24A;
+  --u: 1.5px; /* one Minecraft GUI pixel in this page */
+  --page: #f4efe4; --text: #2b2b2b; --muted: #6b6457; --card: #fffaf0; --border: #d8ccb4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #17140f; --text: #ece6da; --muted: #a59c8c; --card: #221e17; --border: #3a3326; }
+}
+:root[data-theme="dark"] { --page: #17140f; --text: #ece6da; --muted: #a59c8c; --card: #221e17; --border: #3a3326; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text); font: 15px/1.55 Inter, system-ui, sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 80px; }
+h1 { font-size: 28px; margin: 0 0 4px; }
+h2 { font-size: 21px; margin: 44px 0 8px; border-top: 1px solid var(--border); padding-top: 24px; }
+h3 { font-size: 16px; margin: 22px 0 6px; }
+p, li { max-width: 78ch; }
+.sub { color: var(--muted); margin: 0 0 18px; }
+.note { color: var(--muted); font-size: 13px; }
+table.data { border-collapse: collapse; margin: 10px 0; font-size: 14px; }
+table.data th, table.data td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
+table.data th { background: var(--card); }
+.bad { color: #b33a2a; font-weight: 600; } .ok { color: #3e7a2f; font-weight: 600; }
+.decision { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin: 12px 0; }
+.decision b.q { display: block; margin-bottom: 4px; }
+.pick { display: inline-block; font-size: 12px; font-weight: 700; background: #3e7a2f; color: #fff; border-radius: 4px; padding: 0 6px; margin-left: 6px; }
+.row-of-frames { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; margin: 14px 0; }
+.cap { font-size: 13px; color: var(--muted); margin-top: 6px; max-width: calc(var(--u) * 640); }
+
+/* ── Minecraft frames: sizes are in GUI pixels × --u ─────────────────── */
+.mc { position: relative; overflow: hidden; border-radius: 4px; box-shadow: 0 2px 10px rgba(0,0,0,.25);
+  background: linear-gradient(160deg, #4d6b3c 0%, #3a5530 40%, #6f7f8f 41%, #59687a 100%);
+  font-family: "Pixelify Sans", monospace; font-size: calc(var(--u) * 8); line-height: calc(var(--u) * 9); color: var(--ink); }
+.mc.w640 { width: calc(var(--u) * 640); height: calc(var(--u) * 360); }
+.mc.w455 { width: calc(var(--u) * 455); height: calc(var(--u) * 256); }
+.dim::before { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+.px { position: absolute; }
+.shell { position: absolute; background: var(--paper); border: calc(var(--u)*2) solid var(--line); border-radius: calc(var(--u)*3);
+  box-shadow: inset 0 0 0 calc(var(--u)*1) var(--paper2); display: flex; flex-direction: column; }
+.bar { display: flex; align-items: center; gap: calc(var(--u)*6); padding: 0 calc(var(--u)*8); background: var(--paper2); border-bottom: calc(var(--u)*1) solid var(--line); flex: none; }
+.title { font-weight: 600; font-size: calc(var(--u)*10); }
+.pill { display: inline-flex; align-items: center; height: calc(var(--u)*14); padding: 0 calc(var(--u)*5); border-radius: calc(var(--u)*7);
+  border: calc(var(--u)*1) solid var(--line); background: var(--row); color: var(--ink-mid); white-space: nowrap; }
+.pill.on { background: var(--accent); color: #f6ead0; border-color: var(--line-hi); }
+.pill.hc { background: var(--danger); color: #f6e0d8; border-color: #5a1a12; }
+.pill.good { background: var(--good); color: #e4f0da; }
+.btn { display: inline-flex; align-items: center; justify-content: center; height: calc(var(--u)*20); padding: 0 calc(var(--u)*10);
+  background: linear-gradient(#d9c79e, #c9b386); border: calc(var(--u)*1) solid var(--line-hi); border-radius: calc(var(--u)*2); color: var(--ink); white-space: nowrap; }
+.btn.primary { background: linear-gradient(#8f5a28, #6c4119); color: #fbefd6; height: calc(var(--u)*24); font-weight: 600; padding: 0 calc(var(--u)*14); }
+.btn.ghost { background: transparent; border-color: var(--ink-dim); color: var(--ink-mid); }
+.btn.sm { height: calc(var(--u)*16); padding: 0 calc(var(--u)*6); }
+.sec { font-size: calc(var(--u)*7); letter-spacing: calc(var(--u)*.6); color: var(--ink-dim); text-transform: uppercase; margin: calc(var(--u)*6) 0 calc(var(--u)*3); }
+.col { display: flex; flex-direction: column; gap: calc(var(--u)*4); min-width: 0; }
+.rowc { display: flex; align-items: center; gap: calc(var(--u)*5); min-width: 0; }
+.grow { flex: 1; min-width: 0; }
+.ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dimtx { color: var(--ink-dim); } .goodtx { color: var(--good); } .dangertx { color: var(--danger); } .warntx { color: var(--warn); }
+.member { display: flex; align-items: center; gap: calc(var(--u)*5); height: calc(var(--u)*26); padding: 0 calc(var(--u)*5);
+  background: var(--row); border: calc(var(--u)*1) solid rgba(90,70,50,.35); border-radius: calc(var(--u)*2); }
+.member.empty { background: transparent; border-style: dashed; color: var(--ink-dim); justify-content: center; }
+.head { width: calc(var(--u)*16); height: calc(var(--u)*16); border-radius: calc(var(--u)*1); flex: none; image-rendering: pixelated;
+  background: conic-gradient(from 45deg, #6b4a2b 0 25%, #c9935f 0 50%, #6b4a2b 0 75%, #c9935f 0); }
+.cls { width: calc(var(--u)*10); height: calc(var(--u)*10); border-radius: 50%; flex: none; border: calc(var(--u)*1) solid var(--line-hi); }
+.ready { width: calc(var(--u)*12); height: calc(var(--u)*12); border-radius: calc(var(--u)*2); display: grid; place-items: center; font-size: calc(var(--u)*8); flex: none; }
+.ready.y { background: var(--good); color: #fff; } .ready.n { background: var(--track); color: var(--ink-mid); }
+.mod { display: flex; align-items: center; gap: calc(var(--u)*5); height: calc(var(--u)*18); padding: 0 calc(var(--u)*5);
+  border-radius: calc(var(--u)*2); background: var(--row-alt); }
+.mod.on { background: #c9b07a; box-shadow: inset calc(var(--u)*2) 0 0 var(--accent); }
+.mod .ic { width: calc(var(--u)*10); height: calc(var(--u)*10); background: var(--accent); border-radius: calc(var(--u)*2); flex: none; }
+.scroll { position: relative; overflow: hidden; }
+.scroll::after { content: ""; position: absolute; right: 0; top: calc(var(--u)*2); width: calc(var(--u)*3); height: 40%; background: var(--ink-dim); border-radius: 2px; opacity: .6; }
+.seg { display: flex; border: calc(var(--u)*1) solid var(--line); border-radius: calc(var(--u)*3); overflow: hidden; }
+.seg span { flex: 1; text-align: center; padding: calc(var(--u)*3) 0; background: var(--row); border-left: calc(var(--u)*1) solid var(--line); }
+.seg span:first-child { border-left: 0; } .seg span.on { background: var(--accent); color: #f6ead0; }
+.tabs { display: flex; gap: calc(var(--u)*2); }
+.tab { padding: calc(var(--u)*3) calc(var(--u)*8); border-radius: calc(var(--u)*3) calc(var(--u)*3) 0 0; color: var(--ink-mid); }
+.tab.on { background: var(--paper); color: var(--ink); font-weight: 600; box-shadow: 0 calc(var(--u)*1) 0 var(--paper); }
+.count { background: var(--accent); color: #f6ead0; border-radius: calc(var(--u)*5); padding: 0 calc(var(--u)*3); font-size: calc(var(--u)*7); }
+/* HUD */
+.hud { position: absolute; background: var(--hud); border: calc(var(--u)*1) solid var(--hud-line); border-radius: calc(var(--u)*3); color: var(--hud-ink); }
+.hpbar { position: relative; height: calc(var(--u)*5); background: var(--hp-bg); border-radius: calc(var(--u)*1); overflow: hidden; }
+.hpbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--hp); }
+.hpbar b { position: absolute; top: 0; bottom: 0; background: var(--absorb); }
+.hotbar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--u)*2); width: calc(var(--u)*182); height: calc(var(--u)*22);
+  background: rgba(0,0,0,.45); border: calc(var(--u)*1) solid #888; }
+.cross { position: absolute; left: 50%; top: 50%; width: calc(var(--u)*9); height: calc(var(--u)*9); transform: translate(-50%,-50%);
+  background: linear-gradient(#fff,#fff) center/100% calc(var(--u)*1) no-repeat, linear-gradient(#fff,#fff) center/calc(var(--u)*1) 100% no-repeat; opacity: .8; }
+.card { width: calc(var(--u)*24); height: calc(var(--u)*24); border-radius: calc(var(--u)*2); background: #2a3442; border: calc(var(--u)*1) solid #57677a; display: grid; place-items: center; color: #fff; font-size: calc(var(--u)*7); }
+.bignum { font-size: calc(var(--u)*16); line-height: calc(var(--u)*16); font-weight: 600; }
+.mid { font-size: calc(var(--u)*10); line-height: calc(var(--u)*11); }
+</style>
+</head>
+<body>
+<main>
+<h1>Arenas UI rework: plan and mockups</h1>
+<p class="sub">For LeDok, to pick a direction before any code (TODO §6 screens, §7 ally HP sidebar, the lobby browser + «Створити лобі»). The
+frames below are drawn to scale in Minecraft GUI pixels: <b>640×360 = GUI scale 3 on 1920×1080</b>, 455×256 = scale 3 on 1366×768.
+The font is a stand-in for the Minecraft font (about the same size). The text is in English here; the game uses the uk/en lang files.</p>
+
+<h2>1. What's wrong today (measured in the code)</h2>
+<table class="data">
+<tr><th>Screen</th><th>Today</th><th>At GUI scale 3 (640×360)</th></tr>
+<tr><td>Lobby screens (dungeon/raid/arena)</td><td>Designed for 560×480; it fills the window and squeezes the height</td><td class="bad">Only 146–226 px for the scroll area, but "My lobby" for an owner is 500–900 px tall. Lists are capped: 5 members, 6 lobbies, no "more". Names, badges and lock reasons overflow their columns.</td></tr>
+<tr><td>Rental preset modal</td><td>440 wide, list 220 tall</td><td>It fits only just; at 455×256 it scales to 80%.</td></tr>
+<tr><td>Run details (<code>;</code>, and the end screen)</td><td>Fixed 580×340, 10 fixed table columns</td><td class="bad">The columns are 12 px wider than the table even at 1:1, so Kills clips. At 455×256 everything scales to 75%.</td></tr>
+<tr><td>Run HUD (timer)</td><td>Fixed 240×50 strip at the top</td><td>Small boss bar (140×4); long objective lines run past the strip.</td></tr>
+<tr><td>Reward reveal</td><td>Overlay cards with no panel, 12 s</td><td>It covers the crosshair in arena waves. The breakdown (base → modifiers → final, e.g. "Rental ×0.5") only goes to chat, in gray.</td></tr>
+<tr><td>Arena waves</td><td>No screen of their own</td><td>Only the HUD line "Wave 3 • Enemies: 12".</td></tr>
+</table>
+
+<h2>2. Principles for every screen</h2>
+<ul>
+<li><b>Text is never scaled below 1:1.</b> Screens reflow instead: two columns at ≥ 560 GUI px, one column with tabs below that. Lists scroll and have no caps.</li>
+<li><b>One fixed frame per screen:</b> a title bar (name, tier, hardcore), the content, and a <b>bottom action bar that never scrolls away</b> with one primary button (Ready / Start).</li>
+<li><b>Fewer, larger elements:</b> member cards 26 px tall with head, class and level; modifiers 18 px rows with the reward effect on the right. The long description goes in a tooltip.</li>
+<li><b>Parchment like the Eden hub</b> (EdenParchment colors) for screens. <b>Dark translucent for the in-world HUD</b>, because it has to read over any terrain.</li>
+<li><b>Numbers are big</b> where they matter: timer, boss HP %, rewards, your damage. Details go in tooltips.</li>
+<li><b>One lobby view shared by the controller screens and the hub,</b> so dungeon, raid and arena stop being three near-copies of 1,600–1,900 lines each.</li>
+</ul>
+
+<h2>3. Lobby screen ("My lobby")</h2>
+<div class="row-of-frames">
+<div>
+<div class="mc w640 dim">
+  <div class="shell" style="left:calc(var(--u)*20);top:calc(var(--u)*10);width:calc(var(--u)*600);height:calc(var(--u)*340)">
+    <div class="bar" style="height:calc(var(--u)*26)">
+      <span class="title">Забуті печери</span><span class="pill">Dungeon</span>
+      <span class="grow"></span>
+      <span class="tabs"><span class="tab">Lobbies <span class="count">3</span></span><span class="tab on">My lobby</span><span class="tab">Leaderboard</span><span class="tab">Invites</span></span>
+      <span class="btn sm ghost">✕</span>
+    </div>
+    <div style="display:flex;gap:calc(var(--u)*10);padding:calc(var(--u)*8);flex:1;min-height:0">
+      <div class="col" style="width:calc(var(--u)*270)">
+        <div class="sec">Party · 3 / 4 · 2 ready</div>
+        <div class="member"><span class="head"></span><span class="col grow" style="gap:0"><span class="ell"><b>LeDok</b> <span class="dimtx">★ owner</span></span><span class="dimtx ell">Paladin · Lv 32 · <span class="warntx">Rental: paladin</span></span></span><span class="cls" style="background:#e8c24a"></span><span class="ready y">✓</span></div>
+        <div class="member"><span class="head"></span><span class="col grow" style="gap:0"><span class="ell"><b>Tend1tnuy</b></span><span class="dimtx ell">Rogue · Lv 28</span></span><span class="cls" style="background:#5c8a3e"></span><span class="ready y">✓</span></div>
+        <div class="member"><span class="head"></span><span class="col grow" style="gap:0"><span class="ell"><b>LunarApostle</b></span><span class="dimtx ell">Priest · Lv 30 · <span class="dangertx">offline</span></span></span><span class="cls" style="background:#d8d8f0"></span><span class="ready n">…</span></div>
+        <div class="member empty">+ Invite a player</div>
+        <div class="sec" style="margin-top:calc(var(--u)*8)">Rental build</div>
+        <div class="rowc"><span class="grow ell">Your build: <b>paladin_holy</b> (Lv 25) <span class="dangertx">−50% rewards</span></span><span class="btn sm">Change</span></div>
+      </div>
+      <div class="col grow">
+        <div class="sec">Difficulty</div>
+        <div class="seg"><span>Easy</span><span class="on">Normal</span><span>Hard</span><span class="dimtx">Nightmare 🔒</span></div>
+        <div class="rowc" style="margin-top:calc(var(--u)*4)"><span class="dimtx">Visibility</span><span class="pill on">Public</span><span class="pill">Friends</span><span class="pill">Private</span></div>
+        <div class="sec">Run modifiers · 2 on</div>
+        <div class="col scroll" style="gap:calc(var(--u)*3);flex:1">
+          <div class="mod on"><span class="ic" style="background:var(--danger)"></span><span class="grow ell">Hardcore</span><span class="goodtx">loot ×2</span></div>
+          <div class="mod on"><span class="ic"></span><span class="grow ell">Glass cannon</span><span class="goodtx">+25% XP</span></div>
+          <div class="mod"><span class="ic"></span><span class="grow ell">No healing potions</span><span class="goodtx">+15% gold</span></div>
+          <div class="mod"><span class="ic"></span><span class="grow ell">Swift mobs</span><span class="goodtx">+1 loot roll</span></div>
+          <div class="mod"><span class="ic"></span><span class="grow ell">Fragile armor</span><span class="goodtx">+20% XP</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bar" style="height:calc(var(--u)*34);border-top:calc(var(--u)*1) solid var(--line);border-bottom:0">
+      <span class="dimtx grow ell">Waiting for LunarApostle to be ready</span>
+      <span class="btn ghost">Leave</span><span class="btn">Ready ✓</span><span class="btn primary">Start run</span>
+    </div>
+  </div>
+</div>
+<div class="cap">A: <b>two columns</b> at 640×360, 1:1 text. Party on the left (head, class, level, rental, ready), settings on the right; only the modifiers list scrolls.
+Non-owners see the settings as read-only summaries instead of disabled controls. The modifier description and conflicts go in tooltips.</div>
+</div>
+
+<div>
+<div class="mc w455 dim">
+  <div class="shell" style="left:calc(var(--u)*6);top:calc(var(--u)*6);width:calc(var(--u)*443);height:calc(var(--u)*244)">
+    <div class="bar" style="height:calc(var(--u)*24)">
+      <span class="title ell">Забуті печери</span><span class="grow"></span>
+      <span class="tabs"><span class="tab">Lobbies</span><span class="tab on">My lobby</span><span class="tab">⋯</span></span><span class="btn sm ghost">✕</span>
+    </div>
+    <div class="rowc" style="padding:calc(var(--u)*4) calc(var(--u)*8) 0"><span class="pill on">Party 3/4</span><span class="pill">Settings</span><span class="grow"></span><span class="pill">Normal</span><span class="pill hc">Hardcore</span></div>
+    <div class="col scroll" style="padding:calc(var(--u)*6) calc(var(--u)*8);flex:1;min-height:0">
+      <div class="member"><span class="head"></span><span class="grow ell"><b>LeDok</b> <span class="dimtx">★ · Paladin 32</span></span><span class="ready y">✓</span></div>
+      <div class="member"><span class="head"></span><span class="grow ell"><b>Tend1tnuy</b> <span class="dimtx">Rogue 28</span></span><span class="ready y">✓</span></div>
+      <div class="member"><span class="head"></span><span class="grow ell"><b>LunarApostle</b> <span class="dangertx">offline</span></span><span class="ready n">…</span></div>
+      <div class="member empty">+ Invite a player</div>
+    </div>
+    <div class="bar" style="height:calc(var(--u)*30);border-top:calc(var(--u)*1) solid var(--line);border-bottom:0">
+      <span class="grow"></span><span class="btn ghost">Leave</span><span class="btn">Ready</span><span class="btn primary">Start</span>
+    </div>
+  </div>
+</div>
+<div class="cap">The same screen at 455×256: <b>one column</b> with Party / Settings sub-tabs. The text stays 1:1, the action bar stays put, and the content scrolls.</div>
+</div>
+</div>
+
+<h2>4. Lobby browser + «Створити лобі» (hub, with Eden_LD)</h2>
+<div class="row-of-frames">
+<div>
+<div class="mc w640 dim">
+  <div class="shell" style="left:calc(var(--u)*20);top:calc(var(--u)*10);width:calc(var(--u)*600);height:calc(var(--u)*340)">
+    <div class="bar" style="height:calc(var(--u)*26)"><span class="title">Activities</span><span class="grow"></span><span class="btn sm">My lobby</span><span class="btn primary" style="height:calc(var(--u)*20)">+ Створити лобі</span></div>
+    <div class="rowc" style="padding:calc(var(--u)*6) calc(var(--u)*8)"><span class="pill on">All</span><span class="pill">Dungeons</span><span class="pill">Raids</span><span class="pill">Arenas</span><span class="grow"></span><span class="pill">Joinable for me ✓</span><span class="pill">Newest ▾</span></div>
+    <div class="col scroll" style="padding:0 calc(var(--u)*8);gap:calc(var(--u)*3);flex:1">
+      <div class="member" style="height:calc(var(--u)*28)"><span class="ic" style="width:calc(var(--u)*18);height:calc(var(--u)*18);background:#6b5a8a;border-radius:3px"></span><span class="col grow" style="gap:0"><span class="ell"><b>Візер</b> <span class="dimtx">· raid · LeDok</span></span><span class="rowc"><span class="pill on">Hard</span><span class="pill hc">Hardcore</span><span class="dimtx">Lv 25+</span></span></span><span class="mid">3/5</span><span class="btn">Join</span></div>
+      <div class="member" style="height:calc(var(--u)*28)"><span class="ic" style="width:calc(var(--u)*18);height:calc(var(--u)*18);background:#5c7a4a;border-radius:3px"></span><span class="col grow" style="gap:0"><span class="ell"><b>Забуті печери</b> <span class="dimtx">· dungeon · Tend1tnuy</span></span><span class="rowc"><span class="pill on">Normal</span><span class="dimtx">friends only</span></span></span><span class="mid">1/4</span><span class="btn">Ask to join</span></div>
+      <div class="member" style="height:calc(var(--u)*28)"><span class="ic" style="width:calc(var(--u)*18);height:calc(var(--u)*18);background:#8a6a3a;border-radius:3px"></span><span class="col grow" style="gap:0"><span class="ell"><b>Квітка порожнечі</b> <span class="dimtx">· dungeon · Mira</span></span><span class="rowc"><span class="pill on">Nightmare</span><span class="dangertx">needs Lv 40</span></span></span><span class="mid">2/4</span><span class="btn" style="opacity:.45">Join</span></div>
+      <div class="member" style="height:calc(var(--u)*28)"><span class="ic" style="width:calc(var(--u)*18);height:calc(var(--u)*18);background:#3a6a8a;border-radius:3px"></span><span class="col grow" style="gap:0"><span class="ell"><b>Арена хвиль</b> <span class="dimtx">· arena · Dex</span></span><span class="rowc"><span class="pill">Endless</span></span></span><span class="mid">4/10</span><span class="btn">Join</span></div>
+    </div>
+  </div>
+</div>
+<div class="cap">Browser: one row per forming lobby with the activity, tier, hardcore, min level, owner, members and the button.
+A disabled button says why ("needs Lv 40"). It refreshes live from Arenas' change signal, and an empty list shows the create button.</div>
+</div>
+<div>
+<div class="mc w640 dim">
+  <div class="shell" style="left:calc(var(--u)*20);top:calc(var(--u)*10);width:calc(var(--u)*600);height:calc(var(--u)*340)">
+    <div class="bar" style="height:calc(var(--u)*26)"><span class="title">Створити лобі</span><span class="grow"></span><span class="btn sm ghost">✕</span></div>
+    <div style="display:flex;gap:calc(var(--u)*8);padding:calc(var(--u)*8);flex:1;min-height:0">
+      <div class="col scroll" style="width:calc(var(--u)*150);gap:calc(var(--u)*3)">
+        <div class="member"><span class="grow ell"><b>Забуті печери</b></span></div>
+        <div class="member" style="background:#c9b07a"><span class="grow ell"><b>Візер</b></span><span class="dimtx">raid</span></div>
+        <div class="member"><span class="grow ell">Полеглий ідол</span></div>
+        <div class="member"><span class="grow ell dimtx">Згнивший король 🔒</span></div>
+        <div class="member"><span class="grow ell">Квітка порожнечі</span></div>
+      </div>
+      <div class="col" style="width:calc(var(--u)*170)">
+        <div style="height:calc(var(--u)*60);border-radius:4px;background:linear-gradient(135deg,#5a4a6a,#2a2232)"></div>
+        <b class="mid">Візер</b><span class="dimtx">Raid · up to 5 · needs Lv 20</span>
+        <div class="sec">Possible drops</div>
+        <div class="rowc" style="flex-wrap:wrap;gap:calc(var(--u)*3)"><span class="card" style="background:#5a4a2a">⚔</span><span class="card">◆</span><span class="card">✦</span><span class="card">☗</span><span class="card">+3</span></div>
+        <div class="sec">Leaderboard</div><span class="dimtx">1. LeDok 4:12 · 2. Mira 4:40</span>
+      </div>
+      <div class="col grow">
+        <div class="sec">Difficulty</div><div class="seg"><span>Easy</span><span>Normal</span><span class="on">Hard</span><span>Nightm.</span></div>
+        <div class="sec">Modifiers</div>
+        <div class="mod on"><span class="ic" style="background:var(--danger)"></span><span class="grow ell">Hardcore</span><span class="goodtx">×2</span></div>
+        <div class="mod"><span class="ic"></span><span class="grow ell">Glass cannon</span><span class="goodtx">+25%</span></div>
+        <div class="sec">Visibility</div><div class="rowc"><span class="pill on">Public</span><span class="pill">Friends</span><span class="pill">Private</span></div>
+        <div class="sec">Min join level</div><div class="rowc"><span class="btn sm">◀</span><span class="mid">25</span><span class="btn sm">▶</span></div>
+        <span class="grow"></span><span class="btn primary">Створити лобі</span>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="cap">Create: activities on the left (locked ones grayed, with the reason in a tooltip), info + possible drops + leaderboard in the middle, settings on the right.
+The settings can be edited until a second player joins.</div>
+</div>
+</div>
+
+<h2>5. In-run HUD + ally HP sidebar (§7)</h2>
+<div class="row-of-frames">
+<div>
+<div class="mc w640">
+  <div class="cross"></div><div class="hotbar"></div>
+  <div class="hud" style="left:50%;transform:translateX(-50%);top:calc(var(--u)*4);width:calc(var(--u)*260);padding:calc(var(--u)*4) calc(var(--u)*8)">
+    <div class="rowc"><span class="bignum">07:42</span><span class="grow ell" style="color:var(--hud-dim)">Defeat the boss</span><span class="pill hc">HC</span></div>
+    <div class="rowc" style="margin-top:calc(var(--u)*3)"><span style="color:var(--hud-dim)">Візер</span><div class="hpbar grow" style="height:calc(var(--u)*7)"><i style="width:63%"></i></div><b class="mid">63%</b></div>
+  </div>
+  <div class="hud" style="left:calc(var(--u)*4);top:calc(var(--u)*90);width:calc(var(--u)*118);padding:calc(var(--u)*4)">
+    <div class="col" style="gap:calc(var(--u)*4)">
+      <div><div class="rowc"><span class="head" style="width:calc(var(--u)*10);height:calc(var(--u)*10)"></span><span class="grow ell">LeDok</span><span style="color:var(--hud-dim)">31/40</span></div><div class="hpbar"><i style="width:77%"></i><b style="left:77%;width:8%"></b></div></div>
+      <div style="outline:calc(var(--u)*1) solid #ff6a5a;outline-offset:calc(var(--u)*1)"><div class="rowc"><span class="head" style="width:calc(var(--u)*10);height:calc(var(--u)*10)"></span><span class="grow ell">Tend1tnuy</span><span style="color:#ff8a7a">6/36</span></div><div class="hpbar"><i style="width:17%"></i></div></div>
+      <div><div class="rowc"><span class="head" style="width:calc(var(--u)*10);height:calc(var(--u)*10)"></span><span class="grow ell">LunarApostle</span><span style="color:var(--hud-dim)">28/28</span></div><div class="hpbar"><i style="width:100%"></i></div></div>
+      <div style="opacity:.55"><div class="rowc"><span class="head" style="width:calc(var(--u)*10);height:calc(var(--u)*10)"></span><span class="grow ell">Mira</span><span>downed 0:08</span></div><div class="hpbar"><i style="width:0"></i></div></div>
+    </div>
+  </div>
+</div>
+<div class="cap">Top: the timer as big digits, the objective, and a long boss bar with name and %. A split slime boss shares this one bar.
+Left: the <b>ally sidebar</b> with head, name, HP numbers, an HP bar with absorption in gold, the lowest HP outlined, and downed/out/offline dimmed with their timers.
+It's shown in runs and in a party, and hidden when you're alone; the position (left/right) and on/off are in settings.</div>
+</div>
+<div>
+<div class="mc w640">
+  <div class="cross"></div><div class="hotbar"></div>
+  <div class="hud" style="left:50%;transform:translateX(-50%);top:calc(var(--u)*4);width:calc(var(--u)*240);padding:calc(var(--u)*4) calc(var(--u)*8)">
+    <div class="rowc"><span class="bignum">Wave 7</span><span class="grow"></span><span class="mid">12 left</span></div>
+    <div class="rowc" style="margin-top:calc(var(--u)*3)"><span style="color:var(--hud-dim)">Protect the target</span><div class="hpbar grow"><i style="width:80%;background:#4aa0d9"></i></div><span>1:12</span></div>
+  </div>
+  <div class="hud" style="right:calc(var(--u)*4);bottom:calc(var(--u)*30);width:calc(var(--u)*150);padding:calc(var(--u)*5)">
+    <b>Wave reward</b>
+    <div class="rowc" style="margin-top:calc(var(--u)*3)"><span class="card">⚔</span><span class="card">◆</span><span class="card">✦</span><span class="grow"></span><span class="mid" style="color:var(--absorb)">+120 ⛀</span></div>
+  </div>
+</div>
+<div class="cap">Arena: "Wave 7" and enemies left as big text; the objective with its own bar. Wave rewards go in a small panel at the bottom right
+(<b>not over the crosshair</b>) for about 6 s; the full list is on the end screen.</div>
+</div>
+</div>
+
+<h2>6. Run details (<code>;</code>) and the end-of-run screen</h2>
+<div class="row-of-frames">
+<div>
+<div class="mc w640 dim">
+  <div class="shell" style="left:calc(var(--u)*20);top:calc(var(--u)*10);width:calc(var(--u)*600);height:calc(var(--u)*340)">
+    <div class="bar" style="height:calc(var(--u)*28)"><span class="title">Візер — Hard</span><span class="pill hc">Hardcore</span><span class="grow"></span><span class="mid">07:42 left</span><span class="dimtx">boss 63%</span><span class="btn sm ghost">✕</span></div>
+    <div class="rowc" style="padding:calc(var(--u)*6) calc(var(--u)*8) 0"><span class="tab on">Party</span><span class="tab">Damage</span><span class="tab">Healing</span><span class="tab">Rewards</span><span class="grow"></span><span class="dimtx">Top damage: LeDok · Top healer: LunarApostle</span></div>
+    <div class="col scroll" style="padding:calc(var(--u)*6) calc(var(--u)*8);gap:calc(var(--u)*3);flex:1">
+      <div class="rowc dimtx" style="font-size:calc(var(--u)*7)"><span style="width:calc(var(--u)*150)">PLAYER</span><span style="width:calc(var(--u)*110)">HP</span><span style="width:calc(var(--u)*70)">DEALT</span><span style="width:calc(var(--u)*70)">TAKEN</span><span style="width:calc(var(--u)*70)">HEALED</span><span>DEATHS</span></div>
+      <div class="member" style="outline:calc(var(--u)*2) solid var(--accent)"><span class="head"></span><span class="cls" style="background:#e8c24a"></span><span class="ell" style="width:calc(var(--u)*118)"><b>LeDok</b> <span class="goodtx">alive</span></span><span style="width:calc(var(--u)*110)"><div class="hpbar" style="width:calc(var(--u)*70);display:inline-block;vertical-align:middle"><i style="width:77%"></i></div> 31</span><b class="mid" style="width:calc(var(--u)*70)">12.4k</b><span style="width:calc(var(--u)*70)">3.1k</span><span style="width:calc(var(--u)*70)">420</span><span>0</span></div>
+      <div class="member"><span class="head"></span><span class="cls" style="background:#5c8a3e"></span><span class="ell" style="width:calc(var(--u)*118)"><b>Tend1tnuy</b> <span class="warntx">low</span></span><span style="width:calc(var(--u)*110)"><div class="hpbar" style="width:calc(var(--u)*70);display:inline-block;vertical-align:middle"><i style="width:17%"></i></div> 6</span><b class="mid" style="width:calc(var(--u)*70)">9.8k</b><span style="width:calc(var(--u)*70)">5.6k</span><span style="width:calc(var(--u)*70)">0</span><span>1</span></div>
+      <div class="member"><span class="head"></span><span class="cls" style="background:#d8d8f0"></span><span class="ell" style="width:calc(var(--u)*118)"><b>LunarApostle</b> <span class="dimtx">forfeited</span></span><span style="width:calc(var(--u)*110)" class="dimtx">—</span><b class="mid" style="width:calc(var(--u)*70)">1.2k</b><span style="width:calc(var(--u)*70)">900</span><span style="width:calc(var(--u)*70)">6.3k</span><span>2</span></div>
+    </div>
+  </div>
+</div>
+<div class="cap">Run details: the head and class icon per player (the Top item in TODO), and the state as colored words (alive / downed / forfeited / won / lost).
+Five big columns fit at 640; blocked, kills and respawn go in a row tooltip and on the Damage tab. Tabs replace the one long screen.</div>
+</div>
+<div>
+<div class="mc w640 dim">
+  <div class="shell" style="left:calc(var(--u)*70);top:calc(var(--u)*20);width:calc(var(--u)*500);height:calc(var(--u)*320)">
+    <div class="bar" style="height:calc(var(--u)*40);justify-content:center;background:linear-gradient(#cdb889,var(--paper2))"><span class="bignum goodtx">Victory</span><span class="dimtx">Візер — Hard · 6:18</span></div>
+    <div class="col" style="padding:calc(var(--u)*8) calc(var(--u)*14);flex:1">
+      <div class="sec">Your rewards</div>
+      <div class="rowc" style="flex-wrap:wrap;gap:calc(var(--u)*4)"><span class="card" style="background:#5a4a2a">⚔</span><span class="card">◆</span><span class="card">✦</span><span class="card">☗</span><span class="card">◆</span><span class="card">✦</span></div>
+      <div class="rowc" style="gap:calc(var(--u)*16);margin-top:calc(var(--u)*6)"><span><span class="bignum">+840</span> <span class="dimtx">gold</span></span><span><span class="bignum">+1,200</span> <span class="dimtx">XP</span></span></div>
+      <div class="sec">How it was counted</div>
+      <div class="rowc"><span class="grow">Loot rolls</span><span class="dimtx">base 3</span><span class="goodtx">Hardcore ×2</span><span class="dangertx">Rental ×0.5</span><b>→ 3</b></div>
+      <div class="rowc"><span class="grow">Gold</span><span class="dimtx">base 400</span><span class="goodtx">Hard ×1.5 · Hardcore ×2</span><span class="dangertx">Rental ×0.5</span><b>→ 600</b></div>
+      <span class="grow"></span>
+      <div class="rowc"><span class="dimtx grow">Inventory full: 2 items sent to your mail</span><span class="btn">Run details</span><span class="btn primary">Close</span></div>
+    </div>
+  </div>
+</div>
+<div class="cap">A new <b>end-of-run screen</b>: Victory / Defeat, your items, big gold/XP numbers, and the reward breakdown that today is a gray chat line.
+It opens after the reveal; "Run details" opens the stats.</div>
+</div>
+</div>
+
+<h2>7. Decisions for LeDok</h2>
+<div class="decision"><b class="q">D1. Small windows: reflow or scale?</b>A: the layout reflows to one column below 560 GUI px and text stays 1:1 <span class="pick">recommended</span>. B: keep one layout and scale it down (today's behavior, so small text).</div>
+<div class="decision"><b class="q">D2. Lobby screen layout</b>A: two columns, party | settings (section 3) <span class="pick">recommended</span>. B: keep the tabs and only enlarge/clean them.</div>
+<div class="decision"><b class="q">D3. HUD look</b>A: dark translucent HUD, parchment screens <span class="pick">recommended</span>. B: parchment HUD too (matches the hub, but is harder to read over bright terrain).</div>
+<div class="decision"><b class="q">D4. Ally sidebar</b>A: left middle, compact (head, name, numbers, bar) <span class="pick">recommended</span>. B: right side. C: under the run timer. Shown in runs and in parties (parties through Eden_LD).</div>
+<div class="decision"><b class="q">D5. End-of-run screen</b>A: a new screen with rewards and the breakdown, and no gray chat line <span class="pick">recommended</span>. B: keep the reveal + chat, only restyle them.</div>
+<div class="decision"><b class="q">D6. Controller screens vs hub</b>A: the world controllers open the same lobby view as the hub (one code base; the in-world block shows that activity's lobbies + create) <span class="pick">recommended</span>. B: keep separate controller screens.</div>
+
+<h2>8. Order of work (each step goes to TEST + Client TEST, with before/after screenshots at scale 2/3/4)</h2>
+<ol>
+<li><b>Foundation:</b> a responsive canvas (size = GUI area up to a max, reflow under 560), shared parts (title bar, action bar, member card, modifier row, pills, tier picker), 1:1 text.</li>
+<li><b>Lobby view</b> (dungeon/raid/arena in one): My lobby, Lobbies, Leaderboard, Invites; rental row + preset modal; no row caps.</li>
+<li><b>Lobby browser + create API</b> (createLobby/updateLobby, min level, activityInfo, possibleDrops) → Eden_LD builds the hub screens on it.</li>
+<li><b>HUD + ally sidebar:</b> new timer/boss bar, arena wave panel, sidebar (server sends teammates' HP a few times a second, only on change).</li>
+<li><b>Run details + end-of-run screen</b> with heads, class icons and the reward breakdown.</li>
+</ol>
+<p class="note">Client update: every step changes the client, so the pack and live go together, after TEST. Admin/editor screens are not part of this.</p>
+</main>
+</body>
+</html>

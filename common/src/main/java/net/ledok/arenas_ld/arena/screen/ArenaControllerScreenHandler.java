@@ -34,7 +34,7 @@ public class ArenaControllerScreenHandler extends LobbyMenuBase {
         this.pos = blockEntity.getBlockPos();
         this.data = new ArenaControllerData(pos, List.of(), 0, List.of(), List.of(), List.of(), List.of(),
             Set.of(), Set.of(), blockEntity.getMaxPartySize(), blockEntity.getMaxWave(),
-            net.minecraft.network.chat.Component.empty());
+            net.minecraft.network.chat.Component.empty(), net.minecraft.network.chat.Component.empty(), java.util.List.of());
     }
 
     public BlockPos getBlockPos() {

@@ -7,6 +7,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * A controller block entity that is one activity of the public API: the dungeon, raid and arena
@@ -59,11 +60,59 @@ public interface ActivityHost {
     int forceEnd(@Nullable ArenasApi.InstanceRef instance);
 
     /**
+     * Staff makes instances on cooldown free ({@code ArenasApi.resetCooldowns}). The cooldown is cut to its last
+     * tick, so the controller's own tick frees it as usual (the queue moves on, screens update).
+     *
+     * @param instance the instance, or null for every instance on cooldown
+     * @return how many instances were on cooldown
+     */
+    int resetCooldowns(@Nullable ArenasApi.InstanceRef instance);
+
+    /**
      * Sends fresh data to everyone looking at this controller after a change made from outside its
      * screens (a rename through the API): a block update, the lobby screens' snapshot and the admin
      * screens' snapshot ({@link AdminScreens#viewers}).
      */
     void syncViewers();
+
+    /** The controller's lobbies (forming, ready, queued and in a run). */
+    List<net.ledok.arenas_ld.dungeon.lobby.Lobby> getLobbies();
+
+    int getMaxPartySize();
+
+    /**
+     * Takes the player out of their lobby here (ownership passes to another member, or the lobby closes when they
+     * were alone); false when they aren't in one or it is in a run. The caller syncs viewers.
+     */
+    boolean leaveLobby(UUID player);
+
+    /** Joins a PUBLIC lobby here (the controller's own checks: full, gate, one lobby at a time); false when it can't. */
+    boolean joinLobby(net.minecraft.server.level.ServerPlayer player, UUID lobbyId);
+
+    /** Asks to join a FRIENDS lobby here (its owner accepts or declines); false when it can't. */
+    boolean requestJoin(net.minecraft.server.level.ServerPlayer player, UUID lobbyId);
+
+    /** Makes a lobby here for the player (the controller's usual checks; they are told why not); false when it can't. */
+    boolean createLobbyFor(net.minecraft.server.level.ServerPlayer player);
+
+    /**
+     * The owner's lobby here gets all these settings at once ({@code tier} null keeps it), with one notice to the
+     * members. Null when done; otherwise why not.
+     */
+    @org.jetbrains.annotations.Nullable net.minecraft.network.chat.Component applyLobbySettings(
+        net.minecraft.server.level.ServerPlayer owner, @org.jetbrains.annotations.Nullable DifficultyTier tier,
+        java.util.Set<String> modifiers, net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility visibility, int minLevel);
+
+    /**
+     * The run level of {@code tier} (the level in its reward loot table, "…/level_20" → 20); -1 when it has none.
+     * Rental kits never go above it.
+     */
+    default int runLevel(@org.jetbrains.annotations.Nullable DifficultyTier tier) {
+        return -1;
+    }
+
+    /** The loot tables a win pays out here ({@code tier} null: arenas, or any). For "possible drops". */
+    List<String> rewardLootTables(@org.jetbrains.annotations.Nullable DifficultyTier tier);
 
     /**
      * A controller's in-memory state for {@code ArenasApi.status}; {@link ActivityAdmin} adds the

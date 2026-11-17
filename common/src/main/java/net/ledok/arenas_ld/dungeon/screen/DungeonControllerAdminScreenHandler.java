@@ -39,6 +39,8 @@ public class DungeonControllerAdminScreenHandler extends AdminMenuBase {
     private List<String> knownLootTableIds;
     private String activityId;
     private String lastEditor;
+    private net.ledok.arenas_ld.util.BreakableBlocks breakableBlocks = net.ledok.arenas_ld.util.BreakableBlocks.DEFAULT;
+    private net.ledok.arenas_ld.util.RunSettings runSettings = net.ledok.arenas_ld.util.RunSettings.DEFAULT;
 
     public DungeonControllerAdminScreenHandler(int syncId, Inventory inventory, DungeonControllerAdminData data) {
         super(ModScreenHandlers.DUNGEON_CONTROLLER_ADMIN_SCREEN_HANDLER, syncId);
@@ -61,6 +63,8 @@ public class DungeonControllerAdminScreenHandler extends AdminMenuBase {
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
         this.activityId = data.activityId();
         this.lastEditor = data.lastEditor();
+        this.breakableBlocks = data.breakableBlocks();
+        this.runSettings = data.runSettings();
     }
 
     /** Server side: the menu only needs to know which controller it edits. */
@@ -96,6 +100,8 @@ public class DungeonControllerAdminScreenHandler extends AdminMenuBase {
     public Map<BlockPos, DungeonControllerAdminData.InstanceRun> getRunningInstances() { return runningInstances; }
     public List<String> getKnownLootTableIds() { return knownLootTableIds; }
     public String getActivityId() { return activityId == null ? "" : activityId; }
+    public net.ledok.arenas_ld.util.BreakableBlocks getBreakableBlocks() { return breakableBlocks; }
+    public net.ledok.arenas_ld.util.RunSettings getRunSettings() { return runSettings; }
     public String getLastEditor() { return lastEditor == null ? "" : lastEditor; }
 
     public void applyData(DungeonControllerAdminData data) {
@@ -117,6 +123,8 @@ public class DungeonControllerAdminScreenHandler extends AdminMenuBase {
         this.knownLootTableIds = List.copyOf(data.knownLootTableIds());
         this.activityId = data.activityId();
         this.lastEditor = data.lastEditor();
+        this.breakableBlocks = data.breakableBlocks();
+        this.runSettings = data.runSettings();
     }
 
     @Override

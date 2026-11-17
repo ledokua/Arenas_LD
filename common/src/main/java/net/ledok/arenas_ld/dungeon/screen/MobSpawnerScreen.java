@@ -222,6 +222,9 @@ public class MobSpawnerScreen extends FitCanvasHandledScreen<MobSpawnerScreenHan
         Button scaling = ArenasUi.minionScalingButton(menu.getBlockPos());
         scaling.sizing(Sizing.fill(), Sizing.fixed(20));
         content.item(scaling);
+        Button summonData = net.ledok.arenas_ld.screen.SummonDataEditor.button(() -> canvas, menu.getBlockPos(), 100);
+        summonData.sizing(Sizing.fill(), Sizing.fixed(20));
+        content.item(summonData);
 
         return content;
     }

@@ -19,7 +19,8 @@ from. Built on VectorLib for the UI.
 [Raids](#raids) · [Tier scaling](#tier-scaling) ·
 [Lobbies, parties and instances](#lobbies-parties-and-instances) ·
 [Activity ids and the entry gate](#activity-ids-and-the-entry-gate) · [Rewards and loot](#rewards-and-loot) ·
-[LuckPerms reward perks](#luckperms-reward-perks) ·
+[LuckPerms reward perks](#luckperms-reward-perks) · [Run details](#run-details-run-stats) ·
+[Breakable blocks in runs](#breakable-blocks-in-runs) ·
 [Commands](#commands) · [Config](#config) · [File locations](#file-locations) ·
 [Addon API](#addon-api) · [Compatibility](#compatibility) · [License](#license)
 
@@ -370,8 +371,9 @@ is exactly the pre-objective behavior.
   nearest respawn point. The room is read **at revive time**, so clearing rooms while a teammate is
   down pushes their respawn forward; while exploring it falls back to the most recently cleared room
   with a respawn point, then the dungeon entrance.
-- **Hardcore** removes the player from the run on their first death instead: healed, effects wiped,
-  prior game mode restored, sent home, no further reward eligibility. The party continues.
+- **Hardcore**: the first death puts the player out of the fight for good. They stay in the run as a
+  spectator watching the party and never respawn. If the party wins they are revived at the end (prior game
+  mode, full health) and get the rewards like everyone; when every player is out the run is lost.
 - **Logging out** marks a participant disconnected and starts a grace countdown (default 5 minutes);
   the party is told how long they have, and a downed player's respawn timer pauses while offline.
   Reconnecting inside the window puts them back at the active room's respawn point, still downed if
@@ -380,7 +382,7 @@ is exactly the pre-objective behavior.
   the Dungeon Boss Spawner block being gone. A loss discards the boss room's live mobs, wipes every
   participant's status effects, and plays a red **Defeat** title.
 - **A win** pays each loot-eligible player (anyone not removed, online or not) the tier's per-player
-  loot table, the tier's currency — **doubled in hardcore** — and the tier's skill XP, and writes online
+  loot table, the tier's currency and the tier's skill XP — in hardcore ×2 loot and currency, +25% XP — and writes online
   winners to that tier's leaderboard with their run time. All status effects are then stripped, and
   then the tier's [reward commands](#rewards-and-loot) run (so a command may hand out an effect).
 - Either way a **close timer** runs (default 30 s) with a clickable **[Exit Now]** in chat before
@@ -580,7 +582,7 @@ currency = round(currencyBase × Σ w^currencyExp)   for w = 1..waves completed
 xp       = round(xpBase      × Σ w^xpExp)
 ```
 
-Both default to base 1.0 and exponent 1.5, and both double in hardcore. The Arena Admin screen edits
+Both default to base 1.0 and exponent 1.5, and both double in hardcore (XP gets +25%). The Arena Admin screen edits
 them as four free-text fields under *Reward Curve (base x sum of wave^exp)*.
 
 The leaderboard is a single top-10 list keyed by **deepest wave reached**, each player's best only.
@@ -657,6 +659,36 @@ else: the mob's own natural loot table (bones, rotten flesh…), canceled when i
 On spawn the boss is healed to full, marked persistence-required (and protected from vanilla mob
 conversions), and put on a no-friendly-fire team.
 
+### Extra mob data and splitting mobs (4.30.0)
+
+Every summon (dungeon mob spawner, dungeon boss spawner, raid boss spawner, and each row of an arena
+spawner's mob list) can carry **extra mob data**. In a spawner screen it's the **Extra data…** button; in the
+arena spawner it's the `{}` button on each mob row, saved with the list.
+
+- **The data** is SNBT, merged into the mob before its attributes, equipment and run scaling, which still
+  apply on top. It works as with `/summon`: `{Size:3}` is a size-4 slime or magma cube. `Pos`, `Motion`,
+  `Rotation`, `UUID` and `Passengers` in it are ignored. Invalid SNBT isn't saved.
+- **Splitting mobs:** when a run slime or magma cube (any slime-like mob) dies, its split parts stay in the run.
+  - **Status:** they're run mobs on the same team, with the same run effects and run stats. A part of a boss
+    is a boss too.
+  - **Clearing:** they hold up the room, wave or raid until they die, and the run's cleanup takes them.
+  - **Timing:** a dying slime keeps its room, wave or raid open until its parts appear, at the end of its
+    death animation.
+- **Part strength:** a part's max health is the parent's × (part size ÷ parent size)², and its attack is the
+  parent's × (part size ÷ parent size). Both are then multiplied by the **split part strength** percent, which
+  shows only for slimes and magma cubes. The default is 100.
+  - For example, a size-4 slime with 400 HP and 20 attack splits into size-2 parts of 100 HP and 10 attack at
+    100%, or 50 HP and 5 attack at 50%.
+  - Other attributes are copied from the parent. Speed and armor stay as vanilla sets them for the part's
+    size.
+- **One boss bar:** a splitting boss or room miniboss and all its parts share the HUD's boss HP. The bar counts
+  the whole tree: each part's health plus every part it could still split into (vanilla makes 2–4; 4 are
+  counted). It only goes down, and reaches 0 with the last part. If fewer than 4 parts spawn, the bar drops a
+  step at the split.
+- **A raid boss that splits:** the raid is won only when the last part dies. Arena waves have no boss bar, so
+  there the parts simply count as wave mobs.
+- **Slime minions:** a slime spawned as a minion by another boss splits into minions as before.
+
 ### Tier scaling
 
 | Setting | Easy | Normal | Hard | Nightmare |
@@ -665,36 +697,40 @@ conversions), and put on a no-friendly-fire team.
 | Damage multiplier | 0.75 | 1.0 | 1.5 | 2.5 |
 | Run time limit | 600 s | 600 s | 600 s | 600 s |
 | Skill XP per win | 100 | 100 | 100 | 100 |
-| Boss regeneration | 0 | 0 | 0 | 0 |
+| Boss regeneration per player | 0 | 0 | 0 | 0 |
 | HP scale per player | 0.10 | 0.10 | 0.10 | 0.10 |
 | Loot table / currency | — / 0 | — / 0 | — / 0 | — / 0 |
 | Commands on win | none | none | none | none |
 
-- **Health and damage multipliers scale the boss's configured `max_health` and `attack_damage` base
-  values.** They iterate only the attributes you configured, so deleting those two rows in the
-  Attributes editor silently disables all tier scaling.
-- The **damage multiplier is applied twice**: once to the boss's attack damage, and again as a blanket
-  multiplier on every point of damage a participant takes. Unlike dungeons, the raid path has no
-  damage-source filter, so fall damage, fire and drowning are multiplied too.
+- **The health multiplier scales the boss's configured `max_health`.** It only touches that attribute row,
+  so deleting it in the Attributes editor silently disables HP scaling.
+- **The damage multiplier is applied once** (4.36.3; before that it was applied twice, so a tier hit × its
+  multiplier squared): every point of damage a participant takes is × the tier, and the boss keeps its
+  configured `attack_damage`. Unlike dungeons, the raid path has no damage-source filter, so fall damage,
+  fire and drowning are multiplied too.
 - **HP scale per player**: `1 + (players − 1) × hpScalePerPlayer` — at the 0.10 default a 4-player party
   faces +30 % boss HP. The stepper allows −0.99 to 10.0 in 0.05 steps, so it can shrink the boss too.
-- **Boss regeneration**, above 0, heals the boss exactly that many HP every 100 ticks (5 seconds) for
-  as long as the run is RUNNING.
+- **Boss regeneration per player** (`regenerationPerPlayer`, 4.37.0): HP per second for each player still
+  in the run (downed ones too), healed every 100 ticks (5 seconds) in one go, for as long as the run is
+  RUNNING. A 4-player party at 3 HP/s heals the boss 60 HP every 5 s. The old flat `regeneration` (HP per
+  5 s) is no longer read: a controller that had it regenerates nothing until this is set.
 
 The HUD shows "Defeat the boss", the countdown and the boss's remaining HP as a whole percentage
 (rounded up, so it never reads 0 % while the boss lives). A tier time limit of 0 makes the run untimed
 and hides the bar — though the admin stepper's minimum is 1 second, so that state cannot be configured
 through the screen.
 
-**Winning** is simply the boss no longer being alive; it pays the tier's loot, currency (doubled in
-hardcore — loot and XP are not) and skill XP, runs the tier's [commands on win](#rewards-and-loot)
+**Winning** is simply the boss no longer being alive; it pays the tier's loot, currency and skill XP (×2 loot
+and currency, +25% XP in hardcore), runs the tier's [commands on win](#rewards-and-loot)
 (edited in the tier tab like the dungeon's), and records the run time on that tier's top-10
 leaderboard. **Losing** is the timer expiring, the boss vanishing, or everyone being eliminated; the
 boss is despawned and nothing is paid.
 
 Downed players drop to 1 HP as spectators and return in Adventure at the nearest respawn point
 (or the entrance) after the controller's respawn time. In hardcore, a lethal hit — **or a disconnect** —
-eliminates them immediately, with no grace window.
+puts them out at once: they spectate the party without respawning, are revived and rewarded if it wins, and the
+raid is lost when everyone is out. A disconnected player still has the usual grace window to come back (as a
+spectator); past it they are removed and get nothing.
 
 ### Raid Controller settings
 
@@ -737,11 +773,22 @@ has no instance strip, so its pool is only visible on the admin screen.
 - **Ready** is per member and chats "<name> is ready (2/4)." to the party with a clickable toggle.
 - **Only the owner starts**, and the button is disabled unless everyone is ready and online. Ownership
   transfers automatically if the owner leaves with members remaining; leaving alone disbands.
-- **Hardcore** is an owner toggle described in-screen as "Permadeath. No second attempts. 2× rewards on
-  win." In dungeons and raids it doubles the win currency; in arenas it doubles the per-wave loot rolls
-  and the end-of-run currency and XP.
+- **Hardcore** is the built-in run modifier `hardcore_run` ("Hardcore run"), switched on in the lobby's run
+  modifier list like the others (since 4.20.0; before, a separate switch). One life each, as described above;
+  rewards: loot rolls and currency more ×2, XP increased +25%, on every payout of the run (wins, dungeon rooms,
+  arena waves and summary). The lobby and run stay "hardcore" (`hardcoreEnabled()`, the HUD tag, the invite
+  warning) while a picked modifier has `effects.one_life`. Lobbies and runs saved with the old hardcore flag
+  load with `hardcore_run` picked.
 - **One activity at a time.** A player already in any Arenas_LD run is flagged busy through BusyLib and
   cannot create, join, request or accept. Without BusyLib every busy check silently returns false.
+- **One lobby at a time** (4.21.0). Creating or joining a lobby (also by an accepted invite or join request) takes
+  the player out of the lobby they were in, in any dungeon, raid or arena, once the new lobby has accepted them:
+  ownership passes to another member, or the old lobby closes when they were alone. Chat: "You left the lobby
+  <activity>." A run in progress (or BusyLib busy for another reason) still blocks.
+- **Lobby badge.** While in a lobby (not yet in its run) the HUD shows "Lobby: <activity> (2/4, 1 ready)",
+  top-left by default; `lobby_badge` in `config/arenas_ld-client.json` is `top_left`, `top_right` (under the
+  effect icons) or `hidden`. With the chat open, clicking it opens the lobby's screen; `/arenasld lobby open`
+  (no arguments) does the same from anywhere, and so can the hub through `ArenasApi.openOwnLobby`.
 
 **Instances.** Each linked spawner block is one instance — one physical copy of the content, so several
 parties can play it at once. A run claims the first instance that is idle, off cooldown and not queued
@@ -952,7 +999,7 @@ each trimmed to 256 chars, a leading `/` dropped.
   pending eject has sent them home), with their current name, positioned at the player. Commands
   without a placeholder are never queued; they already ran once.
 - **Room clear**: online players only, nothing is queued (a room clears mid-run).
-- Hardcore and [LuckPerms reward perks](#luckperms-reward-perks) don't change commands.
+- Hardcore, [reward modifiers](#reward-modifiers) and [LuckPerms reward perks](#luckperms-reward-perks) don't change commands.
 - The reward popup shows loot, currency and XP only. Whatever a command gives is delivered by the
   command itself (`give` puts items straight into the inventory) and does not appear in the popup.
 
@@ -972,37 +1019,255 @@ the arena floor). Communal drops are **deleted when the next wave starts**, alon
 dropped item in the battle radius — use per-player rows for loot that must not be missed. Arena mobs
 also default to suppressed natural drops, so all arena loot is expected to come from these rows.
 
+### Reward modifiers
+
+Every payout — a dungeon completion, a dungeon room's reward, a raid win, an arena's per-player wave rows and
+its end-of-run summary — scales its loot rolls, currency and skill XP with one formula:
+
+```
+final = base × (1 + Σ increased) × Π more
+```
+
+**Increased** bonuses of a stat add up (+50% and +15% make +65%); **more** factors multiply on top (hardcore's loot
+and currency are more ×2). Currency and XP round half up. Loot rolls stay fractional: the fraction is the chance of one more roll
+(4.5 = 4 rolls and a 50% chance of a fifth), so the average is exact.
+
+| Base | Value |
+|---|---|
+| Dungeon or raid completion: rolls of the tier's per-player loot table | `completion_loot_rolls` (config, default 3) |
+| Dungeon room reward: rolls of the room's loot table | 1 |
+| Arena per-player wave row | the row's `rolls` |
+| Arena communal row | the row's `rolls`, run modifiers only (no one's LuckPerms bonus) |
+| Currency, skill XP | the tier's, room's or arena summary's values |
+
+Where modifiers come from:
+- **LuckPerms** (each player, see below).
+- **Hardcore** (`hardcore_run`, a lobby run modifier): more ×2 on loot and currency, increased +25% on XP.
+- **Run modifiers** from the config: `run_modifiers` names them, `activity_modifiers` attaches them to every run
+  of an activity (or one difficulty), `reward_events` switches one on server-wide for a time window.
+- **Other mods**: `ArenasApi.registerRewardModifierSource` (see [API.md](API.md)).
+
+After a completion or a raid win, each player's breakdown per stat, e.g. «Здобич: база 3 · Prime +50% · Хардкор ×2 → 9
+(випало 9)», goes to the run details' **Rewards** tab (4.36.0), with what they got. The arena summary (and a run
+without run stats) still says it in chat. Lobby headers list the active run modifiers.
+
+Config example (`config/arenas_ld.json`):
+
+```json
+"run_modifiers": {
+  "treasure_hunter": {
+    "name": "Treasure Hunter",
+    "description": "More loot from every chest of the run",
+    "modifiers": [ { "stat": "loot", "kind": "increased", "value": 0.15 } ]
+  },
+  "xp_weekend": {
+    "name": "XP Weekend",
+    "modifiers": [ { "stat": "xp", "kind": "increased", "value": 0.25 } ]
+  }
+},
+"activity_modifiers": {
+  "arenas_ld:crypt": [ "treasure_hunter" ],
+  "arenas_ld:crypt#nightmare": [ "treasure_hunter" ]
+},
+"reward_events": [
+  { "modifier": "xp_weekend", "start": "2026-11-07T00:00:00+02:00", "end": "2026-11-09T00:00:00+02:00" }
+]
+```
+
+`stat` is `loot`, `xp` or `currency`; `kind` is `increased` (0.15 = +15%, negative values allowed) or `more`
+(2 = ×2). `name` is literal text or a translation key. An event without `start` or `end` has no limit that side; an
+unparseable time switches the event off (logged). Edit the file and `/arenasld reload`.
+
+### Lobby run modifiers
+
+The lobby owner switches run modifiers on in the lobby (everyone in the lobby sees them; the header
+shows the total, e.g. "Picked: +3 loot · +35% XP"). They are fixed when the run starts and saved with it.
+
+Each is a `run_modifiers` entry. The ten built-ins (`hardcore_run`, `frozen_ground`, `glass_cannon`, `tanky_mobs`, `bloody_mobs`,
+`items_to_xp`, `currency_to_xp`, `speed_run`, `xp_to_loot`, `currency_to_loot`) are written into the config with all
+their values on load when missing (since 4.20.0), so editing the numbers there is enough; an entry with the same id replaces one, and
+`"enabled": false` hides it. A replacement whose `name`, `description` or `icon` is empty keeps the built-in's
+(translated) one, and one without `effects` (or `conflicts`) keeps the built-in's (so tuning `hardcore_run`'s rewards
+keeps its one life); everything else comes from the entry as written. Fields on top of the reward-modifier ones:
+
+| Field | Meaning |
+|---|---|
+| `selectable` | shown as a lobby switch |
+| `icon` | item id for the switch |
+| `types` | `dungeon`, `raid`, `arena` it may be picked for; empty = all |
+| `group` | picking one switches the others of the group off |
+| `conflicts` | ids it can't be picked with; either side listing the other is enough. The lobby shows a conflicting row red ("Conflict: …"), the server refuses the pick in chat, and a lobby that holds a conflicting pair anyway (config changed) can't start. Built-in pairs: `items_to_xp`–`xp_to_loot`, `items_to_xp`–`currency_to_loot`, `currency_to_xp`–`currency_to_loot`, `currency_to_xp`–`xp_to_loot` |
+| `effects` | `damage_taken`, `damage_dealt` (run players, ×), `mob_health`, `mob_speed` (run mobs, ×), `player_speed` (×), `frozen_ground`, `one_life` (hardcore: one life each; true/false). Between modifiers the factors add their bonuses, `1 + Σ (value − 1)` (since 4.38.0): Glass cannon `4` + Bloody mobs `2` = ×5 damage taken. The difficulty tier multiplies on top: on a ×1.5 tier that is ×7.5 |
+
+`kind` may also be `flat` (added to the base before percentages; completions only) and `convert` (`loot`: every
+final roll becomes `value` increased XP and no items drop; `currency`: no currency, `value` increased XP), applied
+last, before XP's more factors. Effects reach only the run's players and mobs (minions copy their summoner's) and stop
+when a player leaves or the run ends.
+
 ### LuckPerms reward perks
 
-With [LuckPerms](https://luckperms.net) installed, meta values on a player (usually set on a group)
-boost their rewards from a raid win, a dungeon completion and the mob arena. Per-room dungeon rewards
-are never affected.
+With [LuckPerms](https://luckperms.net) installed, meta values on a player (usually set on a group) add their
+bonuses to every payout above, as **increased** modifiers:
 
-| Meta key | Type | Default | Range | Effect |
-|---|---|---|---|---|
-| `arenas_ld.raid_loot_rolls` | integer | 1 | 1–10 | How many times the raid tier's per-player loot table rolls; all results are delivered together. |
-| `arenas_ld.dungeon_loot_rolls` | integer | 1 | 1–10 | The same for the dungeon tier's completion loot table. |
-| `arenas_ld.arena_loot_rolls` | integer | 1 | 1–10 | Multiplies the player's rolls on every **per-player** (*each*) wave reward row — a row with `rolls 2` rolls 4 times at value 2, on top of the hardcore ×2. Communal (*one*) rows are rolled once for the whole party and stay unchanged. |
-| `arenas_ld.currency_multiplier` | decimal | 1.0 | 0–10 | Currency × this, rounded (`1.1` = +10%). Applied after the hardcore ×2, so both stack. Raid win, dungeon completion and the arena's end-of-run summary. |
-| `arenas_ld.xp_multiplier` | decimal | 1.0 | 0–10 | Skill XP × this, rounded (`1.25` = +25%), at the same three payouts. |
+| Meta key | Type | Effect |
+|---|---|---|
+| `arenas_ld.loot_bonus` | decimal | +loot (`0.5` = +50%: 3 base rolls → 4.5 on average) |
+| `arenas_ld.xp_bonus` | decimal | +skill XP (`0.25` = +25%) |
+| `arenas_ld.currency_bonus` | decimal | +currency (`0.5` = +50%) |
+| `arenas_ld.<mode>.loot_bonus`, `.xp_bonus`, `.currency_bonus` | decimal | the same for one mode only (`dungeon`, `raid`, `arena`), replacing the general key there |
+| `arenas_ld.bonus_name` | text | the name the breakdown shows ("Prime"); default "Rank bonus" |
 
-A missing or unparseable value, or a value outside its range, falls back to (or is clamped into) the
-default range. The popup shows the boosted amounts. Example for a `prime` group:
+Example for a `prime` group:
 
 ```
-lp group prime meta set arenas_ld.raid_loot_rolls 2
-lp group prime meta set arenas_ld.dungeon_loot_rolls 2
-lp group prime meta set arenas_ld.arena_loot_rolls 2
-lp group prime meta set arenas_ld.currency_multiplier 1.1
-lp group prime meta set arenas_ld.xp_multiplier 1.1
+lp group prime meta set arenas_ld.loot_bonus 0.5
+lp group prime meta set arenas_ld.currency_bonus 0.5
+lp group prime meta set arenas_ld.xp_bonus 0.25
+lp group prime meta set arenas_ld.bonus_name Prime
 ```
 
-**Offline winners keep their perks.** LuckPerms only has online players loaded, so each run
-snapshots every player's perks when it starts (everyone is online then) and saves the snapshot with the
-run, so it survives a restart. A loot-eligible player who is offline at payout (their reward goes
-through the Economy_LD inbox) is paid with that snapshot; an online player always uses their current
-values. A rank bought mid-run applies if the player is online at payout, but not if they log off
-before it. Without LuckPerms every player simply gets the defaults.
+**Old keys** (before 4.18.0) are still read when the new one for that stat is missing, converted to the same bonus:
+`arenas_ld.raid_loot_rolls` / `dungeon_loot_rolls` N → +(N / `completion_loot_rolls` − 1), `arenas_ld.arena_loot_rolls`
+N → +(N − 1), `arenas_ld.currency_multiplier` / `xp_multiplier` M → +(M − 1). The log notes once that they are in use.
+
+**Offline winners keep their bonuses.** LuckPerms only has online players loaded, so each run snapshots every
+player's bonuses when it starts and saves the snapshot with the run, so it survives a restart. A loot-eligible
+player who is offline at payout (their reward goes through the Economy_LD inbox) is paid with that snapshot; an
+online player always uses their current values. Without LuckPerms nobody has a rank bonus.
+
+## Run details (run stats)
+
+While a dungeon or raid run goes, every player of it has live combat totals, and the run details screen shows them
+(4.36.0: in the player's Eden hub theme when Eden is there, text 1:1, fewer columns in a small window):
+- the run's line: activity, difficulty, Hardcore, result, room/phase, time left or taken, boss HP; its modifiers; the
+  highlights (top damage, top healer);
+- **Party:** each player's head, class icon (spell book, or a book for a skill-tree class), name, state (alive,
+  downed, out, offline, forfeited, won, lost), level, HP bar, damage dealt and taken, healing, deaths; everything else
+  in the row's tooltip;
+- **Damage:** share of the party's damage, dealt, taken, blocked, kills, deaths, and the boss phase marks;
+- **Healing:** share, total, on others, on self;
+- **Rewards:** the win's base rewards with the reward modifiers while it goes; after a win, what each player got and
+  how it was counted (the end-of-run screen opens on this tab). Players open it with the **Run details** key (default `;`), `/arenasld
+run details` or a hub button (`ArenasApi.openRunDetails`); staff open any run's from their tools
+(`ArenasApi.openRunDetails(staff, activity, instance)`), with the staff details. It updates about once a second while
+open.
+
+**When the run ends** every player of it gets the final numbers on the same screen (after the loot reveal) and a chat
+line with the result, time and highlights (top damage, most blocked, top healer) with a **[Details]** link
+(`/arenasld run last`).
+
+**Run event log (4.37.0).**
+- **What's recorded:** every run player's own events, at the tick they happened.
+  - **Hits taken:** attacker, damage type, raw → after armor → after Resistance/enchantments, absorbed, and HP before →
+    after.
+  - **Procs during a hit:** the passives that fired inside it. A Cheat Death shows on the hit it refused.
+  - **Flags:** "lethal" (it took them down) and "saved" (lethal, but they lived).
+  - **Hits that didn't land:** dodge, shield or cancelled.
+  - **Effects:** effects added (a refresh is only counted) and removed.
+  - **Down and out:** downed, back up, death.
+  - **Swaps:** hand, armor and Trinkets slots (relics); swaps of one slot within half a second merge.
+  - **With Spell Engine Expansion 0.3.7+:** casts (start / end / cancel, with cast time and cooldown), channels (with
+    real duration and pulses), passives (with their trigger and the container they fired from: main hand, off hand,
+    a relic slot, the skill tree) and dodges.
+- **Hit columns** (`hit_taken`):
+  - attacker, damage type, raw, after armor, after Resistance/enchantments, absorbed, HP before, HP after, procs,
+    flag;
+  - then (4.37.1) **applied**, what really came off health, and **other**: what other mods took off between the
+    vanilla steps and health (Eden's damage reduction and the like).
+  - **Flags:** `lethal` = the hit took them down; `saved` = what came off health was at least their HP and yet they
+    lived (a floor, a totem, an on-hit heal: `procs` names the passives that fired in that hit).
+  - **Refused hits:** a hit refused before damage (Cheat Death) is a `hit_cancelled` row with the passive in its procs.
+- **Counted, not stored:** hits ignored during the half-second invulnerability are only counted
+  (`eventCounts.hit_ignored`), and so are effect refreshes at the same strength (`effect_refresh`).
+- **Skill-tree spells:** their container shows as `skill_tree` (Spell Engine names it by a UUID); the spell id is the
+  node.
+- **How:** hooks only, no per-tick scan. Players outside runs cost one null check.
+- **Storage:**
+  - each event is a compact list `[tick, type, fields…]` in the run record (`players[].events`, version 2);
+  - at most 5,000 per player, with every type counted in `eventCounts` (over the cap too) and `eventsDropped`;
+  - the old `timeline` snapshot is now every 30 s only.
+- **In game:** the run details' **Timeline** tab shows it per player, with type filters. A going run adds new events
+  every 2 s.
+
+**History.** Each finished run is saved once as a small gzip JSON file, `<world>/arenas_ld/runs/<runId>.json.gz`, with
+an index (`index.jsonl`) for the history; files older than 30 days go at server start. Staff list runs with
+`/arenasld run history [player]` and open one with `/arenasld run open <runId>` (or the API: `runHistory`,
+`openRunDetails(staff, runId)`).
+
+**What counts.** Only HP really lost (after armor, enchantments, absorption; a killing blow counts the mob's
+remaining HP, not the overkill), only the run's own mobs (and their minions), only the run's players.
+- Damage dealt: the player's hits, projectiles and spells (their owner), pets and summons (their owner), damage over
+  time (poison, wither, bleed: whoever last put a harmful effect on the mob), and anything else with no attacker
+  (fire, falls, lava) the last player who hit the mob. What none of these names is "not credited" (staff see it).
+  Boss damage is counted apart too; boss phases split at 75/50/25% HP.
+- Damage taken: HP the player lost. Blocked: what a shield, armor, Resistance, protection enchantments and
+  absorption hearts stopped.
+- Healing: HP restored; a Spell Engine heal counts for its caster, everything else (potions, regeneration,
+  lifesteal) for the player healed. Regeneration from a full hunger bar doesn't count.
+- Kills (killing blows; boss kills apart), deaths, time alive. Staff also see overkill, overheal and assists.
+- For balance (staff line and run file): each player's level (`loot_stage`), class (equipped spell book, else
+  the class skill-tree branch with the most nodes) and gear when they joined (Dungeon
+  Difficulty power level and Limit Break level per armor slot and hand), the run's level (its loot table's
+  `level_N`), each player's three biggest hits (with the spell or weapon that dealt them) and damage per source;
+  the bosses' max HP and HP left, the time limit, each player's seconds on the boss, their attributes and effects
+  when the fight began and in their best minute, and their unlocked skill-tree nodes.
+
+**Cost.** The run marks its own entities with a field; every hit or heal elsewhere costs one null check. Totals only,
+nothing per hit is stored. Nothing is built or sent unless someone has the screen open; the run file is written once,
+off the server thread. Totals are saved with the run, so a restart keeps them. `run_stats.enabled: false` turns
+counting off (new runs).
+
+## Rental builds in runs
+
+A lobby member of a dungeon or raid can switch on the per-player **Rental build** modifier (its own row under the
+run modifiers; it opens a preview of every kit, and picking a class confirms it): a preset loadout (kits `<ns>:rental/<level>/<preset>`; for each class, its presets from the highest level
+folder at or below the player's `loot_stage` level), lent by a provider mod (Eden_LD, with Kits_LD hidden
+kits) while their own items wait. Everything they earn in the run is halved. The loadout comes back after each
+respawn in the run and goes when they leave or the run ends. Without a provider (or with no loadouts) the lobby shows
+no rental option. See API.md.
+
+**Rental kits only** (4.39.0): a controller can require rentals (admin screen → General → Run settings, or
+`/arenasld activity settings <id> rental required|optional`). Then every member must pick a kit: the rental row has no
+On/Off, the preview opens by itself, own gear is refused, getting ready and the start are refused until everyone has
+picked ("Not picked yet: …"), and the lobby header says «Лише орендовані набори» / "Rental kits only". Such a run pays
+renters in **full** (no ×0.5); the run keeps the mode it started with, and its record has `rentalMode`.
+
+**Rental round 2** (4.40.0):
+- **Kit level cap:** a kit's level folder is never above the run level of the lobby's difficulty (the level in its
+  reward loot table) nor the player's level. When the difficulty changes, a pick that's no longer allowed is dropped,
+  the member is told, and the preview opens again.
+- **Recommended:** presets of the player's skill-tree class (the `falleneden:classes` branch with most unlocked nodes)
+  show first, marked «Рекомендовано». Config `rental_class_presets` maps a skill class to the preset class where the
+  names differ (`"earth": "terra"`).
+- **Spell choice:** a kit whose spell book has a pool shows its spells in the preview. The player picks up to the
+  book's size; the picker starts with their last pick for that preset, else their own book's spells (same pool),
+  else the kit's. At the run start (and after each respawn or rejoin) the lent book holds the pick. Config
+  `rental_spell_max_tier` (`"<kit level>": <max spell tier>`) limits the pool by kit level; empty = the whole pool.
+  Picks are kept per player and preset (`arenas_ld_rental_spells` world data); run records have `rentalSpells` and
+  `rentalPool`.
+
+## Base loot rolls per controller (4.39.0)
+
+A dungeon or raid controller can set its own base loot rolls for a completion (General → Run settings → Base loot
+rolls, or `/arenasld activity settings <id> loot_rolls <n>|default`). Empty / `default` = the global
+`completion_loot_rolls`. Fractions roll as a chance, and every modifier (difficulty, run modifiers, LuckPerms, rental)
+multiplies on top as before. The payout, the lobby header ("Base loot rolls: 9", shown only when set), the run details
+and the run record (`baseLootRolls`) use it. The old LuckPerms `*_loot_rolls` keys still convert against the global
+value. `/arenasld activity settings <id>` shows both settings.
+
+## Breakable blocks in runs
+
+Dungeon and raid players are in Adventure mode and can't break blocks. A run can let them break chosen blocks (a
+boss's vine walls, say):
+- **Global list** `run_breakable_blocks` in the config: block ids or `#tags`.
+- **Controller list**: the dungeon or raid admin screen's General tab (or `/arenasld activity breakable <id>`): its
+  own entries, **added** to the global list or **replacing** it (an empty replacing list allows nothing). Use it to
+  let one raid break a block that another dungeon keeps protected.
+- **Per difficulty**: the **Block breaking** switch in each tier tab, off by default for every tier. Off means
+  nothing is breakable in that difficulty, whatever the lists say.
+
+Only the run's own players in Adventure can break (not spectators or downed players); a broken block drops nothing
+and gives no XP, and nothing is put back after the run. Other blocks show "This block can't be broken here".
 
 ## Commands
 
@@ -1015,6 +1280,13 @@ before it. Without LuckPerms every player simply gets the defaults.
 /arenasld lobby ready   <dim> <pos>
 /arenasld lobby start   <dim> <pos>
 /arenasld lobby open    <dim> <pos>
+/arenasld lobby open               your own lobby's screen, from anywhere
+/arenasld run details              the live details screen of your dungeon or raid run (default key: ;)
+/arenasld run last                 the final details of your last finished run
+/arenasld run history [player]     (op) the last finished runs, all or one player's
+/arenasld run open <runId>         (op) a finished run's details, with the staff numbers
+/arenasld activity resetcooldown <id> [pos [dim]]   free an instance on cooldown now (all of the activity's without pos)
+/arenasld activity breakable <id> [mode add|replace | add <block|#tag> | remove <entry> | clear]   the controller's breakable blocks list
 /arenasld lobby accept  <dim> <pos> <lobbyId>
 /arenasld lobby decline <dim> <pos> <lobbyId>
 /arenasld activity list            every activity: id, type, name, enabled difficulties
@@ -1056,13 +1328,19 @@ One pretty-printed JSON file at `config/arenas_ld.json`, created with defaults o
 | `dungeon_damage_source_filter` | `"ALL"` | Which damage the **dungeon** tier damage multiplier applies to: `LIVING` (only from a living entity), `MOB` (only from a mob), anything else = all. Case-insensitive. Raid multipliers ignore it; arenas do not use this path. |
 | `run_item_blacklist` | `["minecraft:ender_pearl", "minecraft:chorus_fruit"]` | Items unusable during any run. Item ids, or tags with a `#` prefix. |
 | `run_effect_blacklist` | `[]` | Mob effects stripped from run participants every tick. **Plain ids only** — the `#` tag syntax is not supported here. |
+| `run_breakable_blocks` | `["bosses_of_mass_destruction:void_blossom", "bosses_of_mass_destruction:vine_wall"]` | Blocks dungeon/raid players may break, in difficulties with Block breaking on. Block ids or `#tags`. See [Breakable blocks in runs](#breakable-blocks-in-runs). |
+| `run_blocked_use_blocks` | `["minecraft:respawn_anchor"]` | Blocks raid, dungeon and arena players can't right-click during a run. Block ids or `#tags`. |
+| `run_prepare_seconds` | `10` | The start countdown of dungeon, raid and arena runs: the arena's chunks load while the party waits (title "Preparing… N"), and the run always starts when it ends, never earlier, so everyone can finish what they're doing. A party change, an offline member or (dungeon) an un-ready member cancels it. `0`: start at once. |
+| `run_prepare_radius_chunks` | `8` | During the countdown, the square of chunks loaded around the entrance (and the raid spawner), besides the run area. Match it to the run dimension's view distance. Max 16. |
 | `debug_logging` | `false` | Verbose `[debug]` INFO logging of teleports, reconnect decisions and the chunks a run keeps loaded. |
 | `downed_spectator_radius` | `16` | How far (blocks) a downed run player with no standing teammate to watch may fly from where they went down before being put back. `0` or less pins them to the spot (1 block of slack). See [Downed players watch their party](#lobbies-parties-and-instances). |
 | `dungeon_respawn_min_ticks` | `200` | A downed **dungeon** player waits the controller's respawn time, but at least this (ticks; 20 = 1 s). A protect room adds 50% on top. |
 | `respawn_per_death_ticks` | `100` | Each earlier death of the same player in the same **dungeon or raid** run adds this to their wait (counted per run, kept across restarts). |
 | `respawn_per_death_max_ticks` | `1200` | Cap on that extra. |
-| `raid_respawn_together` | `true` | Downed **raid** players come back together on a shared clock, once their own wait (the per-death extra) is over. `false` = each on their own timer: the controller's respawn time plus the extra. |
-| `raid_respawn_wave_ticks` | `600` | The shared clock's interval, counted from the raid's start. `0` or less = the controller's respawn time. |
+| `respawn_invulnerable_ticks` | `20` | After a dungeon or raid respawn the player can't be hurt for this many ticks (0 = off). Ends early on their first swing or the first damage they deal; void and /kill still hurt. |
+| `raid_respawn_together` | `true` | Downed **raid** players come back together at the next mark of a shared clock (all countdowns and the party bar show the same time). The interval is each raid controller's "Respawn interval (s)" (admin screen, default 60 s). `false` = each on their own timer: the controller's interval plus the per-death extra. |
+| `raid_per_death_extra` | `false` | With `raid_respawn_together`: earlier deaths (`respawn_per_death_*`) delay a player past the shared mark. |
+| `raid_respawn_wave_ticks` | `1200` | Fallback interval for a raid controller whose interval is 0. |
 
 Downed players see their countdown on the action bar ("Respawn in 12 s · Watching Bob", arenas: "Respawn with the
 next wave"), and their party sees a red boss bar naming everyone downed and their time left while anyone is.
@@ -1079,6 +1357,7 @@ next wave"), and their party sees a red boss bar naming everyone downed and thei
 | Pending ejects for players offline when a run ended | `<world>/data/arenas_ld_pending_restores.dat` |
 | Reward commands waiting for winners who were offline | `<world>/data/arenas_ld_pending_reward_commands.dat` |
 | Saved pre-run scoreboard teams | `<world>/data/arenas_ld_party_teams.dat` |
+| Finished runs (run stats history, 30 days) | `<world>/arenas_ld/runs/` (`<runId>.json.gz`, `index.jsonl`) |
 
 Because lobbies, instance links, tier settings and leaderboards live in the controller's block entity,
 **breaking or replacing a controller block destroys all of them.** Only the world-level files above

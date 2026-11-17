@@ -387,13 +387,13 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
         setChanged();
     }
 
-    void trackSpawnedMob(UUID uuid) {
+    public void trackSpawnedMob(UUID uuid) {
         aliveMobs.add(uuid);
         setChanged();
     }
 
     /** Like {@link #trackSpawnedMob(UUID)}, but also marks the mob as a boss for {@link #refreshAliveMobs}. */
-    void trackBossMob(UUID uuid) {
+    public void trackBossMob(UUID uuid) {
         aliveMobs.add(uuid);
         bossMobs.add(uuid);
         setChanged();
@@ -530,6 +530,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
                 LivingEntity entity = newBossSpawner.spawnSingleScaled(world, healthMultiplier);
                 if (entity != null) {
                     trackBossMob(entity.getUUID());
+                    net.ledok.arenas_ld.stats.RunStats.markBoss(entity);
                     bossInCurrentWave = true;
                     spawned.add(entity.getUUID());
                 }
@@ -687,6 +688,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
         }
         // Deliberately NOT on the arenas_dungeon mob team (wave mobs must be able to hurt it);
         // the run lifecycle adds it to the party's no-friendly-fire team so players can't.
+        living.addTag(net.ledok.arenas_ld.util.RunEffects.NOT_A_FOE_TAG); // run modifiers leave it alone
         net.ledok.arenas_ld.util.EntityEquipmentHelper.markRunMob(living);
         if (objective.protectStationary() && living instanceof net.minecraft.world.entity.Mob mob) {
             mob.setNoAi(true);
@@ -908,7 +910,9 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
             if (entity == null && !entitiesSettled) {
                 continue; // not loaded yet, see above
             }
-            if (entity == null || !entity.isAlive() || entity.isRemoved() || entity.level() != world) {
+            // A run slime that died but hasn't split yet still holds the room: its parts come when it's removed.
+            if (entity == null || (!entity.isAlive() && !net.ledok.arenas_ld.util.RunSplits.pendingSplit(entity))
+                    || entity.isRemoved() || entity.level() != world) {
                 it.remove();
                 bossMobs.remove(uuid);
                 ArenasLdMod.DUNGEON_MANAGER.unregisterMob(uuid);

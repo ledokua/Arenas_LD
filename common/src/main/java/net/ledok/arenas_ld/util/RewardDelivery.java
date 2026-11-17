@@ -100,6 +100,7 @@ public final class RewardDelivery {
      * its overflow) ended up, for the loot popup.
      */
     public static List<LootRewardPayload.Entry> giveStacks(ServerPlayer player, List<ItemStack> stacks, String reason) {
+        net.ledok.arenas_ld.stats.RunStats.onLoot(player.getUUID(), stacks); // before delivery empties the stacks
         List<LootRewardPayload.Entry> delivered = new ArrayList<>(stacks.size());
         boolean inboxAvailable = EconomyCompat.isAvailable();
         for (ItemStack stack : stacks) {
@@ -128,6 +129,7 @@ public final class RewardDelivery {
      * nowhere durable to put them, so the loss is logged and the stacks are discarded.
      */
     public static void giveStacksOffline(UUID playerUuid, List<ItemStack> stacks, String reason) {
+        net.ledok.arenas_ld.stats.RunStats.onLoot(playerUuid, stacks);
         for (ItemStack stack : stacks) {
             if (stack.isEmpty()) {
                 continue;

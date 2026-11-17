@@ -182,6 +182,7 @@ public class DungeonBossSpawnerScreen extends FitCanvasHandledScreen<DungeonBoss
         contentArea.item(actionRow);
         contentArea.item(ArenasUi.spacer(4));
         contentArea.item(ArenasUi.minionScalingButton(menu.getBlockPos()));
+        contentArea.item(net.ledok.arenas_ld.screen.SummonDataEditor.button(() -> canvas, menu.getBlockPos(), 150));
 
         contentArea.item(ArenasUi.spacer(10));
 

@@ -59,6 +59,8 @@ public final class ArenaRun {
     private int initialCloseTimerTicks;
 
     private final Set<UUID> aliveMobs;
+    /** The run modifiers the lobby picked (config run_modifiers ids), fixed at run start. */
+    private final java.util.List<String> runModifiers = new java.util.ArrayList<>();
     /** LuckPerms reward perks captured while each player was online in this run (see EndRewardPerks). */
     private final Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots = new HashMap<>();
     private final Map<UUID, RunParticipant> participants;
@@ -198,6 +200,8 @@ public final class ArenaRun {
 
     /** Mutable on purpose: the lifecycle snapshots at run start and refreshes at payout. */
     public Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots() { return perkSnapshots; }
+    public java.util.List<String> runModifiers() { return java.util.Collections.unmodifiableList(runModifiers); }
+    public void setRunModifiers(java.util.Collection<String> ids) { runModifiers.clear(); runModifiers.addAll(ids); }
     void addParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void updateParticipant(RunParticipant p) { participants.put(p.playerUuid(), p); }
     void removeParticipant(UUID uuid) { participants.remove(uuid); }
@@ -306,8 +310,11 @@ public final class ArenaRun {
     public static final Codec<ArenaRun> CODEC = RecordCodecBuilder.create(instance ->
         instance.group(
             BASE_CODEC.forGetter(run -> run),
-            net.ledok.arenas_ld.util.EndRewardPerks.SNAPSHOT_CODEC.optionalFieldOf("perkSnapshots", Map.of()).forGetter(ArenaRun::perkSnapshots)
-        ).apply(instance, (run, perkSnapshots) -> {
+            net.ledok.arenas_ld.util.EndRewardPerks.SNAPSHOT_CODEC.optionalFieldOf("perkSnapshots", Map.of()).forGetter(ArenaRun::perkSnapshots),
+            Codec.STRING.listOf().optionalFieldOf("runModifiers", java.util.List.of()).forGetter(r -> r.runModifiers)
+        ).apply(instance, (run, perkSnapshots, runModifiers) -> {
+            // Saved before hardcore became the hardcore_run modifier: the flag alone means it.
+            run.runModifiers.addAll(net.ledok.arenas_ld.rewards.RunModifierCatalog.withLegacyHardcore(runModifiers, run.hardcoreEnabled()));
             run.perkSnapshots.putAll(perkSnapshots);
             return run;
         })

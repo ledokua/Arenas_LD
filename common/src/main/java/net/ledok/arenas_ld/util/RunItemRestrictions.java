@@ -26,6 +26,37 @@ public final class RunItemRestrictions {
         // the loader glue cancels the interaction with FAIL when it returns true.
         ArenasEvents.USE_BLOCKED.add((player, hand) ->
             player instanceof ServerPlayer serverPlayer && blockBlacklisted(serverPlayer, hand));
+        ArenasEvents.BLOCK_USE_BLOCKED.add((player, hand, pos) ->
+            player instanceof ServerPlayer serverPlayer && blockUseBlocked(serverPlayer, pos));
+    }
+
+    /** True (and notifies the player) for a right-click on a {@code run_blocked_use_blocks} block while in a run. */
+    static boolean blockUseBlocked(ServerPlayer player, net.minecraft.core.BlockPos pos) {
+        java.util.List<String> blocked = net.ledok.arenas_ld.config.ArenasLdConfig.getInstance().run_blocked_use_blocks;
+        if (blocked.isEmpty()) {
+            return false;
+        }
+        net.minecraft.world.level.block.state.BlockState state = player.level().getBlockState(pos);
+        if (!matches(state, blocked) || !isPlayerInRun(player)) {
+            return false;
+        }
+        player.displayClientMessage(
+            Component.translatableWithFallback("message.arenas_ld.run.block_use_blocked", "That can't be used during a run.").withStyle(ChatFormatting.RED), true);
+        return true;
+    }
+
+    private static boolean matches(net.minecraft.world.level.block.state.BlockState state, java.util.List<String> entries) {
+        for (String entry : entries) {
+            if (entry.startsWith("#")) {
+                net.minecraft.resources.ResourceLocation tag = net.minecraft.resources.ResourceLocation.tryParse(entry.substring(1));
+                if (tag != null && state.is(net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.BLOCK, tag))) {
+                    return true;
+                }
+            } else if (entry.equals(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** True (and notifies the player) if a blacklisted item is being used while in a run. */

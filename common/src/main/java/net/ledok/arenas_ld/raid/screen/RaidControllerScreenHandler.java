@@ -36,6 +36,9 @@ public class RaidControllerScreenHandler extends net.ledok.arenas_ld.activity.Lo
     private Set<DifficultyTier> enabledTiers;
     private Map<DifficultyTier, net.minecraft.network.chat.Component> lockedTiers;
     private Map<DifficultyTier, net.minecraft.network.chat.Component> metRequirements = Map.of();
+    private net.minecraft.network.chat.Component runModifiers = net.minecraft.network.chat.Component.empty();
+    private net.ledok.arenas_ld.util.RunSettings runSettings = net.ledok.arenas_ld.util.RunSettings.DEFAULT;
+    private java.util.List<net.ledok.arenas_ld.rewards.RunModifierOption> modifierOptions = java.util.List.of();
 
     /** Client-side constructor — called when opening screen from packet data. */
     public RaidControllerScreenHandler(int syncId, Inventory playerInventory, RaidControllerData data) {
@@ -135,6 +138,19 @@ public class RaidControllerScreenHandler extends net.ledok.arenas_ld.activity.Lo
         return metRequirements;
     }
 
+    /** The controller's rental mode and base loot rolls. */
+    public net.ledok.arenas_ld.util.RunSettings getRunSettings() {
+        return runSettings;
+    }
+
+    public net.minecraft.network.chat.Component getRunModifiers() {
+        return runModifiers;
+    }
+
+    public java.util.List<net.ledok.arenas_ld.rewards.RunModifierOption> getModifierOptions() {
+        return modifierOptions;
+    }
+
     public void applyData(RaidControllerData data) {
         this.visibleLobbies = List.copyOf(data.visibleLobbies());
         this.ownLobby = data.ownLobby();
@@ -151,6 +167,9 @@ public class RaidControllerScreenHandler extends net.ledok.arenas_ld.activity.Lo
         this.enabledTiers = Set.copyOf(data.enabledTiers());
         this.lockedTiers = Map.copyOf(data.lockedTiers());
         this.metRequirements = Map.copyOf(data.metRequirements());
+        this.runModifiers = data.runModifiers();
+        this.runSettings = data.runSettings();
+        this.modifierOptions = java.util.List.copyOf(data.modifierOptions());
     }
 
     @Override

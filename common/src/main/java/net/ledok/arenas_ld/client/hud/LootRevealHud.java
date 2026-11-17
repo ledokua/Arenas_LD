@@ -29,8 +29,9 @@ import java.util.List;
 /**
  * The loot-reveal popup: reward item cards that pop in one by one across the top of the
  * screen (below the run-timer bar), with a counting-up gold line and an XP line. Cards are
- * tinted by item rarity and tagged when the item overflowed to the economy inbox or the
- * ground. Multiple rewards queue up and play back to back.
+ * tinted by item rarity; an item that overflowed to the economy inbox or the ground gets a colored corner
+ * marker, and one line under the cards counts them (a tag per card overlapped at 20+ items). Multiple rewards
+ * queue up and play back to back.
  */
 public final class LootRevealHud {
     private static final float CARD = 30;
@@ -40,6 +41,8 @@ public final class LootRevealHud {
     private static final float ROW_GAP = 6;
     /** Horizontal gap between the Items and Effects sections on a single line. */
     private static final float SECTION_GAP = 14;
+    /** The inbox/ground corner marker on a card, and before its summary line. */
+    private static final float MARKER = 7;
     private static final long CARD_STAGGER_MS = 130;
     private static final long CARD_POP_MS = 220;
     private static final long COUNT_UP_MS = 700;
@@ -54,6 +57,9 @@ public final class LootRevealHud {
     private static long startedAtMs;
     private static @Nullable CanvasOverlay.Handle handle;
     private static VectorCanvas canvas;
+    /** The reveal's content, inside the backing panel. */
+    private static CanvasGroup root;
+    private static final float PANEL_PAD = 5;
     private static final List<CanvasGroup> cardGroups = new ArrayList<>();
     private static @Nullable TextNode currencyText;
     private static int revealedCards;
@@ -68,6 +74,11 @@ public final class LootRevealHud {
             return;
         }
         QUEUE.addLast(payload);
+    }
+
+    /** Whether a loot popup is showing or queued (the end-of-run screen waits for it). */
+    public static boolean isActive() {
+        return active != null || !QUEUE.isEmpty();
     }
 
     public static void clear() {
@@ -169,8 +180,9 @@ public final class LootRevealHud {
         }
 
         // Effect cards always show their duration below, so they need the tall text offset.
-        boolean anyTag = effectCount > 0 || payload.items().stream()
-            .anyMatch(e -> e.destination() != LootRewardPayload.Destination.INVENTORY);
+        boolean anyTag = effectCount > 0;
+        int toInbox = (int) payload.items().stream().filter(e -> e.destination() == LootRewardPayload.Destination.INBOX).count();
+        int toGround = (int) payload.items().stream().filter(e -> e.destination() == LootRewardPayload.Destination.GROUND).count();
         float rowStride = CARD + (anyTag ? 13 : ROW_GAP);
         // Rows never run off the screen: at GUI scale 3+ a big reward wraps onto centered rows.
         float maxRowW = Math.max(CARD, Minecraft.getInstance().getWindow().getGuiScaledWidth() - 24);
@@ -236,22 +248,33 @@ public final class LootRevealHud {
 
         float width = Math.max(170, contentW + 20);
         float textY = rows > 0 ? CARDS_Y + (rows - 1) * rowStride + CARD + (anyTag ? 13 : 4) : CARDS_Y;
-        float height = textY + (payload.currency() > 0 ? 15 : 0) + (payload.skillXp() > 0 ? 12 : 0) + 2;
+        float height = textY + (toInbox > 0 ? 12 : 0) + (toGround > 0 ? 12 : 0)
+            + (payload.currency() > 0 ? 15 : 0) + (payload.skillXp() > 0 ? 12 : 0) + 2;
 
-        canvas = VectorCanvas.create(width, height);
+        // UI rework step 4 (D5: keep the reveal, restyle): a dark translucent panel behind it, so it reads over terrain.
+        // The client setting loot_reveal_style "classic" leaves the panel out (the look before 4.34.0).
+        boolean classic = net.ledok.arenas_ld.client.ArenasClientConfig.get().classicLootReveal();
+        float pad = classic ? 0 : PANEL_PAD;
+        canvas = VectorCanvas.create(width + pad * 2, height + pad * 2);
         canvas.theme(ArenasUi.THEME);
+        if (!classic) {
+            canvas.add(Shapes.roundRect(0, 0, width + pad * 2, height + pad * 2, 3).fill(0xB40E1218)
+                .stroke(net.ledok.arenas_ld.screen.RunTheme.current().palette().accent(), 1));
+        }
+        root = canvas.add(CanvasGroup.create());
+        root.at(pad, pad);
 
-        TextNode header = canvas.add(TextNode.of(headerFor(payload.source()))
+        TextNode header = root.add(TextNode.of(headerFor(payload.source()))
             .color(ArenasUi.INK_MID).shadow(true).align(TextNode.Align.CENTER));
         header.at(width / 2, 0);
 
         float originX = (width - contentW) / 2;
         for (Placed label : labels) {
-            canvas.add(TextNode.of(label.label()).color(ArenasUi.INK_MID).shadow(true))
+            root.add(TextNode.of(label.label()).color(ArenasUi.INK_MID).shadow(true))
                 .at(originX + label.x(), CARDS_Y + label.y() + 11);
         }
         for (Placed card : placed) {
-            CanvasGroup group = canvas.add(CanvasGroup.create());
+            CanvasGroup group = root.add(CanvasGroup.create());
             group.at(originX + card.x(), CARDS_Y + card.y());
             card.builder().accept(group);
             group.visible(false);
@@ -259,21 +282,36 @@ public final class LootRevealHud {
         }
 
         float y = textY;
+        if (toInbox > 0) {
+            y = destinationLine(width, y, Component.translatable("hud.arenas_ld.loot.inbox_summary", toInbox), ArenasUi.INFO);
+        }
+        if (toGround > 0) {
+            y = destinationLine(width, y, Component.translatable("hud.arenas_ld.loot.ground_summary", toGround), ArenasUi.WARN);
+        }
         if (payload.currency() > 0) {
-            currencyText = canvas.add(TextNode.of(Component.translatable("hud.arenas_ld.loot.currency", "0"))
+            currencyText = root.add(TextNode.of(Component.translatable("hud.arenas_ld.loot.currency", "0"))
                 .color(ArenasUi.WARN).shadow(true).scale(1.4f).align(TextNode.Align.CENTER));
             currencyText.at(width / 2, y);
             y += 15;
         }
         if (payload.skillXp() > 0) {
-            TextNode xpText = canvas.add(TextNode.of(Component.translatable("hud.arenas_ld.loot.xp",
+            TextNode xpText = root.add(TextNode.of(Component.translatable("hud.arenas_ld.loot.xp",
                     String.format("%,d", payload.skillXp())))
                 .color(ArenasUi.INFO).shadow(true).align(TextNode.Align.CENTER));
             xpText.at(width / 2, y);
         }
 
-        // Sits below the run-timer bar's full footprint (its canvas is 50 tall + 6 margin).
-        handle = CanvasOverlay.show(canvas, Placement.Screen.top(62));
+        // Sits below the run timer, whichever look it has.
+        handle = CanvasOverlay.show(canvas, Placement.Screen.top(RunTimerHud.bottom() + 4));
+    }
+
+    /** "Items sent to your inbox: 20 (inventory full)", with the cards' corner marker before it; returns the next y. */
+    private static float destinationLine(float width, float y, Component text, int color) {
+        float textW = Minecraft.getInstance().font.width(text);
+        root.add(Shapes.roundRect(0, 0, MARKER, MARKER, 2).fill(color).stroke(0xFF000000, 1))
+            .at((width - textW) / 2 - MARKER - 4, y);
+        root.add(TextNode.of(text).color(color).shadow(true).align(TextNode.Align.CENTER)).at(width / 2, y);
+        return y + 12;
     }
 
     /** A captioned run of cards (items or effects); {@code label} is null for an uncaptioned run. */
@@ -304,11 +342,10 @@ public final class LootRevealHud {
         }
 
         if (entry.destination() != LootRewardPayload.Destination.INVENTORY) {
+            // The corner marker; the line under the cards says what it means.
             boolean inbox = entry.destination() == LootRewardPayload.Destination.INBOX;
-            TextNode tag = group.add(TextNode.of(Component.translatable(
-                    inbox ? "hud.arenas_ld.loot.to_inbox" : "hud.arenas_ld.loot.to_ground"))
-                .color(inbox ? ArenasUi.INFO : ArenasUi.WARN).shadow(true).align(TextNode.Align.CENTER));
-            tag.at(CARD / 2, CARD + 3);
+            group.add(Shapes.roundRect(CARD - MARKER - 1, 1, MARKER, MARKER, 2)
+                .fill(inbox ? ArenasUi.INFO : ArenasUi.WARN).stroke(0xFF000000, 1));
         }
     }
 

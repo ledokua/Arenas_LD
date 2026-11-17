@@ -25,9 +25,9 @@ final class NeoForgeLivingEntityHandlers {
     }
 
     private static void onIncomingDamage(LivingIncomingDamageEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) {
+        if (!event.getEntity().level().isClientSide()) {
             float amount = event.getAmount();
-            float modified = LivingEntityHooks.modifyPlayerHurtAmount(player, event.getSource(), amount);
+            float modified = LivingEntityHooks.modifyHurtAmount(event.getEntity(), event.getSource(), amount);
             if (modified != amount) {
                 event.setAmount(modified);
             }
