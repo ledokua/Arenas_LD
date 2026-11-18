@@ -695,6 +695,24 @@ public final class ArenasApi {
         EntryGates.inviteFilter = filter;
     }
 
+    /** How a player stands to another, for the lobby's invite picker (closest first). 4.40.3+. */
+    public enum PlayerRelation { FRIEND, PARTY, GUILD, NONE }
+
+    /** Tells Arenas who is whose friend, party member or guildmate (Eden_LD), for sorting the invite picker. */
+    @FunctionalInterface
+    public interface PlayerRelations {
+        /**
+         * How {@code other} (online) stands to {@code viewer}, the closest when several apply (a friend in the same
+         * guild: FRIEND). Called once per online player each time the picker opens; keep it cheap.
+         */
+        PlayerRelation relation(ServerPlayer viewer, UUID other);
+    }
+
+    /** Registers the relations provider (null removes it: everyone is {@link PlayerRelation#NONE}). 4.40.3+. */
+    public static void setPlayerRelations(@Nullable PlayerRelations relations) {
+        net.ledok.arenas_ld.util.InviteCandidates.relations = relations;
+    }
+
     // ── Admin ────────────────────────────────────────────────────────────────
     // For staff tools. Arenas_LD checks op (permission level 2) only where noted; the caller decides
     // who may use the others. A refusal is returned as the reason to show; null means done. An
@@ -767,6 +785,16 @@ public final class ArenasApi {
      */
     public static Optional<Double> baseLootRolls(MinecraftServer server, ResourceLocation id) {
         return ActivityAdmin.runSettings(server, id).map(net.ledok.arenas_ld.util.RunSettings::baseLootRolls);
+    }
+
+    /** The global base loot rolls ({@code completion_loot_rolls}), what a controller with no own rolls uses. 4.40.4+. */
+    public static double completionLootRolls(MinecraftServer server) {
+        return net.ledok.arenas_ld.config.ArenasLdConfig.getInstance().completion_loot_rolls;
+    }
+
+    /** The rolls a controller's completion really starts from: its own, else the global. Empty as {@link #baseLootRolls}. 4.40.4+. */
+    public static Optional<Double> effectiveLootRolls(MinecraftServer server, ResourceLocation id) {
+        return ActivityAdmin.runSettings(server, id).map(net.ledok.arenas_ld.util.RunSettings::lootRolls);
     }
 
     /** Sets {@link #baseLootRolls} (below 0 = the global value again); returns why it's refused, or null. 4.39.0+. */

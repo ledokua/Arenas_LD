@@ -1437,4 +1437,9 @@ public class ArenaControllerBlockEntity extends BlockEntity
         }
         return new ArrayList<>(out);
     }
+
+    @Override
+    public java.util.List<PendingInvite> pendingInvites() {
+        return getPendingInvites();
+    }
 }

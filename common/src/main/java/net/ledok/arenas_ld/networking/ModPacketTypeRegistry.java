@@ -188,6 +188,8 @@ final class ModPacketTypeRegistry {
         ArenasNetwork.playC2S(net.ledok.arenas_ld.packet.RequestRentalPreviewPayload.TYPE, net.ledok.arenas_ld.packet.RequestRentalPreviewPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(net.ledok.arenas_ld.packet.SummonDataPayloads.Set.TYPE, net.ledok.arenas_ld.packet.SummonDataPayloads.Set.STREAM_CODEC);
         ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.RentalPreviewPayload.TYPE, net.ledok.arenas_ld.packet.RentalPreviewPayload.STREAM_CODEC);
+        ArenasNetwork.playC2S(net.ledok.arenas_ld.packet.RequestInviteCandidatesPayload.TYPE, net.ledok.arenas_ld.packet.RequestInviteCandidatesPayload.STREAM_CODEC);
+        ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.InviteCandidatesPayload.TYPE, net.ledok.arenas_ld.packet.InviteCandidatesPayload.STREAM_CODEC);
         ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.AllyHealthPayload.TYPE, net.ledok.arenas_ld.packet.AllyHealthPayload.STREAM_CODEC);
         ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.LobbyOpeningPayload.TYPE, net.ledok.arenas_ld.packet.LobbyOpeningPayload.STREAM_CODEC);
         ArenasNetwork.playS2C(RaidControllerSnapshotPayload.TYPE, RaidControllerSnapshotPayload.STREAM_CODEC);

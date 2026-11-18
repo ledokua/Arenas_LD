@@ -1,5 +1,55 @@
 # Changelog
 
+## 4.40.4
+
+Spell picker round 3 (LeDok, 2026-11-18, via MCP eden). **Needs the client update:** the preview packet changed.
+- **One spell per tier ("3 pairs"):**
+  - The picker shows only the tiers in the new config `rental_spell_tiers` (default `[2, 3, 4]`), one row each («Тир 1/2/3»), picked like radio buttons.
+  - Other tiers are hidden and refused, which removes the lne_* tier-5 spells.
+  - The server keeps exactly one spell per tier, at the pick and again at the run start. An empty tier gets the kit's own spell of that tier, else the row's first.
+  - `rental_spell_max_tier` still drops rows above its cap. An empty `rental_spell_tiers` brings back the free choice.
+- **Performance:** spell slots no longer poll anything per frame; they rebuild only on a click. Icon textures are checked once. A new preview closes the old one instead of stacking modals.
+- **API:** `ArenasApi.completionLootRolls(server)` and `effectiveLootRolls(server, id)` (for Eden's hub).
+
+## 4.40.3
+
+Lobby UI (LeDok, 2026-11-18, via MCP eden). **Needs the client update:** new packets and the lobby screen.
+- **No "Lobbies" tab:** the tabs are My lobby / Leaderboard / Invites. Without a lobby, the screen opens on My lobby
+  with "Create lobby" in the footer. The Eden hub lists the open lobbies.
+- **The invite picker:**
+  - "+ Invite a player" opens a picker with a search and the online players: heads, names, state, and an Invite
+    button each.
+  - Groups: friends, then party & guild, then everyone else.
+  - In your lobby, invited, busy, in a run, or not accepting your invites: the row is disabled and says why.
+  - The name field, its dropdown and the INVITE button are gone.
+- **API:** `ArenasApi.setPlayerRelations` (friend / party / guild, for sorting the picker), `PlayerRelation`, and
+  `ActivityHost.pendingInvites()`.
+
+## 4.40.2
+
+TEST feedback on 4.40.1 (LeDok, 2026-11-18, via MCP eden). **Needs the client update** (the preview screen only; the
+packets are unchanged).
+- **The spell picker looks like the spell binding table:**
+  - Each pool spell is an icon slot, the same size as the kit's item slots.
+  - A spell in the book has an accent frame; the others are dimmed.
+  - Hovering shows Spell Engine's own spell tooltip (name, description with values, cast, range, cooldown). Without it,
+    the name and description.
+  - The counter reads "Spells in the book: 2 / 3". When the book is full, a click on another spell does nothing and the
+    tooltip says to take one out first.
+- **Preview header:** it shows the kits' level ("level 5"). Before, it showed the cap itself, the lower of the player
+  and run level (e.g. 6).
+
+## 4.40.1
+
+TEST feedback on 4.40.0 (LeDok, 2026-11-18, via MCP eden). **Needs the client update** (lobby + end screen).
+- **Fix: the spell picker never showed.** Fallen Eden's kit books have no `max_spell_count` (Spell Engine reads it as
+  0). Such a book now holds as many spells as its `spell_ids`. The book itself isn't changed. A game test covers it.
+- **Base loot rolls and "Rental kits only" are shown in the own lobby**, above Run modifiers. The hub-hosted lobby has
+  no title bar, so it didn't show them before.
+- **End screen:** the Rewards tab starts with "Base loot rolls: 9". The per-player breakdown already had
+  "Loot: base 9 · Rental kit ×0.5 → 4.5 (rolled 4)". The rental source is now translated («Орендований набір»).
+- **Unit tests:** updated to the current code (they had stopped compiling).
+
 ## 4.40.0
 
 **Needs the client update.** Rental round 2 (LeDok, 2026-11-17, via MCP eden), plus a 4.39.0 fix:

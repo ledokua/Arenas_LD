@@ -41,6 +41,14 @@ public interface LobbyHost {
     /** Extra header facts (run modifiers on this activity, arena max wave and requirement); may be empty. */
     List<Component> meta();
 
+    /**
+     * The controller's run settings ("Rental kits only", "Base loot rolls: 9"), shown in the own lobby's settings above
+     * the run modifiers, so they are seen in the hub-hosted view too (which has no title bar). Empty by default.
+     */
+    default List<Component> settingsLines() {
+        return List.of();
+    }
+
     List<Lobby> visibleLobbies();
 
     Optional<Lobby> ownLobby();

@@ -111,6 +111,11 @@ public interface ActivityHost {
         return -1;
     }
 
+    /** The open invites of this controller's lobbies (expired ones may still be listed: compare their tick). */
+    default List<net.ledok.arenas_ld.dungeon.lobby.PendingInvite> pendingInvites() {
+        return List.of();
+    }
+
     /** The loot tables a win pays out here ({@code tier} null: arenas, or any). For "possible drops". */
     List<String> rewardLootTables(@org.jetbrains.annotations.Nullable DifficultyTier tier);
 

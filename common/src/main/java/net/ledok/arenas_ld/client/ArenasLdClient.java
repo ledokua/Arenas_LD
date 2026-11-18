@@ -122,6 +122,8 @@ public class ArenasLdClient {
             context.client().execute(() -> net.ledok.arenas_ld.screen.RentalPick.onPayload(payload)));
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RentalPreviewPayload.TYPE, (payload, context) ->
             context.client().execute(() -> net.ledok.arenas_ld.screen.RentalPick.onPreview(payload)));
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.InviteCandidatesPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> net.ledok.arenas_ld.screen.lobby.InvitePicker.onPayload(payload)));
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RunBreakableBlocksPayload.TYPE, (payload, context) ->
             context.client().execute(() -> net.ledok.arenas_ld.util.RunBlockBreaking.onClientPayload(payload)));
 

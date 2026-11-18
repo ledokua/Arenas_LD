@@ -1,7 +1,6 @@
 package net.ledok.arenas_ld.screen.lobby;
 
 import net.ledok.arenas_ld.dungeon.lobby.Lobby;
-import net.ledok.arenas_ld.dungeon.lobby.LobbyStatus;
 import net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility;
 import net.ledok.arenas_ld.dungeon.lobby.PendingInvite;
 import net.ledok.arenas_ld.dungeon.lobby.PendingJoinRequest;
@@ -9,7 +8,6 @@ import net.ledok.arenas_ld.dungeon.run.DifficultyTier;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
 import net.ledok.arenas_ld.platform.ArenasNetwork;
 import net.ledok.arenas_ld.rewards.RunModifierOption;
-import net.ledok.arenas_ld.screen.IdSuggestionDropdown;
 import net.ledok.arenas_ld.screen.InstancePills;
 import net.ledok.arenas_ld.screen.RelativeTime;
 import net.ledok.arenas_ld.screen.RentalPick;
@@ -32,7 +30,6 @@ import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
 import net.ledok.vectorlib.client.canvas.widget.UiSounds;
 import net.ledok.vectorlib.client.canvas.widget.Widget;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -70,9 +67,9 @@ public final class LobbyView {
     private static final int MAX_SHELL_H = 440;
     private static final int TWO_COLUMNS_MIN = 560;
     private static final int PARTY_COLUMN_W = 272;
-    private static final int INVITE_DROPDOWN_MAX = 132;
 
-    enum Tab { LOBBIES, MY_LOBBY, LEADERBOARD, INVITES }
+    /** 4.40.3: no public lobby list (LeDok: the Eden hub lists the open lobbies). */
+    enum Tab { MY_LOBBY, LEADERBOARD, INVITES }
 
     enum Sub { PARTY, SETTINGS }
 
@@ -84,7 +81,7 @@ public final class LobbyView {
     private float hostHeight = 300;
     private float builtWidth = 560;
 
-    private Tab tab = Tab.LOBBIES;
+    private Tab tab = Tab.MY_LOBBY;
     private Sub sub = Sub.PARTY;
     private DifficultyTier leaderboardTier = DifficultyTier.NORMAL;
     private @Nullable String footerError;
@@ -102,15 +99,6 @@ public final class LobbyView {
     private final List<Countdown> countdowns = new ArrayList<>();
     private final InstancePills instancePills = new InstancePills();
     private long lastSecond = -1;
-
-    // invite field
-    private @Nullable IdSuggestionDropdown.Field inviteField;
-    private String inviteInput = "";
-    private boolean inviteDropdownOpen;
-    private boolean refocusInvite;
-    private @Nullable Flex inviteFieldRow;
-    private @Nullable Flex inviteDropdownPanel;
-    private @Nullable Button inviteChevron;
 
     private record Countdown(Label label, long expiresAtTick) {
     }
@@ -153,8 +141,9 @@ public final class LobbyView {
         if (has && !hadOwnLobby) {
             tab = Tab.MY_LOBBY;
             sub = Sub.PARTY;
-        } else if (!has && tab == Tab.MY_LOBBY) {
-            tab = Tab.LOBBIES;
+        }
+        if (!has && hadOwnLobby) {
+            InvitePicker.close(); // the lobby is gone: nothing left to invite to
         }
         hadOwnLobby = has;
         build();
@@ -185,24 +174,12 @@ public final class LobbyView {
 
     /** After a click (canvas units): a click outside the invite field and its list closes the list. */
     public void clickedAt(float x, float y) {
-        if (inviteDropdownOpen && !inside(inviteFieldRow, x, y) && !inside(inviteDropdownPanel, x, y)) {
-            inviteDropdownOpen = false;
-            refreshInviteDropdown();
-        }
-    }
-
-    private static boolean inside(@Nullable CanvasNode node, float x, float y) {
-        if (node == null || node.canvas() == null) {
-            return false;
-        }
-        float[] local = node.rootToLocal(x, y);
-        return node.hitTest(local[0], local[1]);
+        // 4.40.3: the invite field's list is gone (the picker is a modal); kept for the screens that call it.
     }
 
     /** The whole screen again, keeping the tab, scroll positions and the invite field's text and focus. */
     public void build() {
         captureScroll();
-        refocusInvite = inviteField != null && inviteField.isFocused();
         look = RunTheme.current();
         p = look.palette();
         builtThemeKey = RunTheme.key();
@@ -213,10 +190,6 @@ public final class LobbyView {
         scrolls.clear();
         countdowns.clear();
         instancePills.clear();
-        inviteField = null;
-        inviteFieldRow = null;
-        inviteDropdownPanel = null;
-        inviteChevron = null;
 
         float cw = hosted ? hostWidth : ((VectorCanvas) target).width();
         float ch = hosted ? hostHeight : ((VectorCanvas) target).height();
@@ -242,7 +215,6 @@ public final class LobbyView {
         body.backgroundFill(p.panel());
         shell.item(body);
         switch (tab) {
-            case LOBBIES -> body.item(scroll("lobbies", lobbiesContent()));
             case MY_LOBBY -> myLobby(body);
             case LEADERBOARD -> body.item(scroll("leaderboard", leaderboardContent()));
             case INVITES -> body.item(scroll("invites", invitesContent()));
@@ -252,9 +224,6 @@ public final class LobbyView {
         root.layoutIn(cw, ch);
         restoreScroll();
         restoreScrollNextTick = true;
-        if (refocusInvite && inviteField != null && inviteField.canvas() != null) {
-            inviteField.canvas().focus(inviteField);
-        }
     }
 
     // ── frame ────────────────────────────────────────────────────────────────
@@ -299,8 +268,6 @@ public final class LobbyView {
         Flex row = Flex.row().gap(2).padding(Insets.of(4, 0, 0, 0)).alignItems(Align.END);
         row.sizing(Sizing.fill(), Sizing.content());
         Optional<Lobby> own = host.ownLobby();
-        row.item(tabButton(Tab.LOBBIES, tr("gui.arenas_ld.lobby.tab.lobbies").copy()
-            .append(count(host.visibleLobbies().size()))));
         row.item(tabButton(Tab.MY_LOBBY, tr("gui.arenas_ld.lobby.tab.my_lobby").copy()
             .append(own.map(l -> count(l.members().size())).orElse(Component.empty()))));
         row.item(tabButton(Tab.LEADERBOARD, tr("gui.arenas_ld.lobby.tab.leaderboard")));
@@ -383,9 +350,9 @@ public final class LobbyView {
         bar.item(RunWidgets.grow(status, statusColor));
 
         if (own.isEmpty()) {
-            if (tab != Tab.LOBBIES) {
-                bar.item(RunWidgets.button(tr("gui.arenas_ld.lobby.to_lobbies"), () -> {
-                    tab = Tab.LOBBIES;
+            if (tab != Tab.MY_LOBBY) {
+                bar.item(RunWidgets.button(tr("gui.arenas_ld.lobby.tab.my_lobby"), () -> {
+                    tab = Tab.MY_LOBBY;
                     build();
                 }));
             }
@@ -508,95 +475,6 @@ public final class LobbyView {
         }
     }
 
-    // ── Lobbies ──────────────────────────────────────────────────────────────
-
-    private Flex lobbiesContent() {
-        Flex col = column();
-        // Create Lobby is the action bar's primary button (not repeated here).
-        List<Lobby> lobbies = host.visibleLobbies().stream()
-            .sorted(Comparator.comparing(Lobby::ownerName, String.CASE_INSENSITIVE_ORDER)).toList();
-        col.item(RunWidgets.section(p, tr("gui.arenas_ld.dungeon_controller.public_lobbies"),
-            Component.literal("· " + lobbies.size()), null));
-        if (lobbies.isEmpty()) {
-            col.item(RunWidgets.text(tr("gui.arenas_ld.dungeon_controller.no_lobbies"), p.inkDim()));
-        }
-        for (Lobby lobby : lobbies) {
-            col.item(lobbyRow(lobby));
-        }
-        return col;
-    }
-
-    private Flex lobbyRow(Lobby lobby) {
-        Flex row = Flex.row().gap(6).padding(Insets.of(4, 6, 4, 5)).alignItems(Align.CENTER);
-        row.sizing(Sizing.fill(), Sizing.fixed(26));
-        row.backgroundFill(p.row(), (p.hairline() & 0x00FFFFFF) | 0x66000000, 1);
-        Component lock = host.hasTiers() ? host.tierLock(lobby.selectedTier()) : null;
-        row.item(RunWidgets.head(lobby.ownerUuid(), 14));
-        Label name = RunWidgets.grow(Component.literal(lobby.ownerName()), lock != null ? p.inkDim() : p.ink());
-        name.tooltip(Component.literal(shortId(lobby.lobbyId())));
-        row.item(name);
-        if (lobby.minLevel() > 0) {
-            row.item(RunWidgets.pill(Component.translatable("gui.arenas_ld.lobby.min_level_short", lobby.minLevel()), p.inkMid()));
-        }
-        if (lobby.hardcoreEnabled()) {
-            row.item(RunWidgets.pill(tr("gui.arenas_ld.lobby.hardcore_short"), p.danger()));
-        }
-        row.item(fixed(Component.literal(lobby.members().size() + "/" + host.maxPartySize()), 30, p.inkMid(), TextNode.Align.CENTER));
-        if (host.hasTiers()) {
-            row.item(RunWidgets.pill(tierName(lobby.selectedTier()), lock != null ? p.inkDim() : tierColor(lobby.selectedTier()), 64));
-        }
-        if (wide) {
-            row.item(RunWidgets.pill(visibilityName(lobby.visibility()), visibilityColor(lobby.visibility()), 62));
-            row.item(RunWidgets.pill(Component.literal(lobby.status() == LobbyStatus.IN_RUN ? "IN RUN" : lobby.status().name()),
-                statusColor(lobby.status()), 58));
-        }
-        row.item(lobbyAction(lobby, lock));
-        return row;
-    }
-
-    private Button lobbyAction(Lobby lobby, @Nullable Component lock) {
-        UUID lobbyId = lobby.lobbyId();
-        boolean mine = host.ownLobby().map(l -> l.lobbyId().equals(lobbyId)).orElse(false);
-        Button action;
-        if (lobby.status() == LobbyStatus.IN_RUN) {
-            action = disabled("gui.arenas_ld.dungeon_controller.ui.action.running");
-        } else if (lobby.isFull(host.maxPartySize())) {
-            action = disabled("gui.arenas_ld.dungeon_controller.ui.action.full");
-        } else if (lock != null && !mine) {
-            action = RunWidgets.button(tr("gui.arenas_ld.lobby.locked"), 72, () -> {
-            });
-            action.enabled(false);
-            action.tooltip(lock);
-        } else if (lobby.visibility() == LobbyVisibility.PUBLIC) {
-            action = RunWidgets.button(tr("gui.arenas_ld.dungeon_controller.ui.action.join"), 72, () -> {
-                footerError = null;
-                host.join(lobbyId);
-            });
-            action.enabled(!mine && host.ownLobby().isEmpty());
-        } else {
-            UUID self = self();
-            boolean requested = host.joinRequests().stream()
-                .anyMatch(r -> r.lobbyId().equals(lobbyId) && r.requesterUuid().equals(self));
-            if (requested) {
-                action = disabled("gui.arenas_ld.dungeon_controller.ui.action.pending");
-            } else {
-                action = RunWidgets.button(tr("gui.arenas_ld.dungeon_controller.ui.action.request"), 72, () -> {
-                    footerError = null;
-                    host.request(lobbyId);
-                });
-                action.enabled(!mine && host.ownLobby().isEmpty());
-            }
-        }
-        return action;
-    }
-
-    private Button disabled(String key) {
-        Button button = RunWidgets.button(tr(key), 72, () -> {
-        });
-        button.enabled(false);
-        return button;
-    }
-
     // ── My lobby ─────────────────────────────────────────────────────────────
 
     private void myLobby(Flex body) {
@@ -686,7 +564,6 @@ public final class LobbyView {
         }
         if (owner && !lobby.isFull(host.maxPartySize())) {
             col.item(emptySlot());
-            col.item(inviteControls());
         }
         Flex rental = RentalPick.build(host.controllerPos(), p);
         col.item(rental);
@@ -748,17 +625,16 @@ public final class LobbyView {
     }
 
     private Widget emptySlot() {
-        EmptySlot slot = new EmptySlot(p, tr("gui.arenas_ld.lobby.invite_slot"), () -> {
-            inviteDropdownOpen = true;
-            refreshInviteDropdown();
-            if (inviteField != null) {
-                if (inviteField.canvas() != null) {
-                    inviteField.canvas().focus(inviteField);
-                }
+        EmptySlot[] slot = new EmptySlot[1];
+        slot[0] = new EmptySlot(p, tr("gui.arenas_ld.lobby.invite_slot"), () -> {
+            footerError = null;
+            if (slot[0].canvas() != null) {
+                InvitePicker.show(slot[0].canvas(), host); // 4.40.3: a picker like the Eden hub's Friends tab
             }
         });
-        slot.sizing(Sizing.fill(), Sizing.fixed(22));
-        return slot;
+        EmptySlot result = slot[0];
+        result.sizing(Sizing.fill(), Sizing.fixed(22));
+        return result;
     }
 
     /** The dashed "+ Invite a player" slot. */
@@ -851,6 +727,17 @@ public final class LobbyView {
             col.item(RunWidgets.pill(visibilityName(lobby.visibility()), visibilityColor(lobby.visibility())));
         }
         col.item(RunWidgets.spacer(2));
+
+        // 4.40.1: the controller's run settings, here because the hub-hosted view has no title bar for them.
+        List<Component> settings = host.settingsLines();
+        if (!settings.isEmpty()) {
+            for (Component setting : settings) {
+                Label line = RunWidgets.label(100, setting, p.accent());
+                line.sizing(Sizing.fill(), Sizing.content());
+                col.item(line);
+            }
+            col.item(RunWidgets.spacer(2));
+        }
 
         List<RunModifierOption> options = host.modifierOptions();
         if (!options.isEmpty()) {
@@ -983,207 +870,6 @@ public final class LobbyView {
         public boolean onKeyPressed(int key, int scanCode, int modifiers) {
             if (!owner) return false;
             if (key == 257 || key == 335 || key == 32) { onMouseDown(0, 0, 0); return true; }
-            return false;
-        }
-    }
-
-    // ── invite field ─────────────────────────────────────────────────────────
-
-    private Flex inviteControls() {
-        Flex section = Flex.column().gap(0);
-        section.sizing(Sizing.fill(), Sizing.content());
-        Flex row = Flex.row().gap(4).alignItems(Align.CENTER);
-        row.sizing(Sizing.fill(), Sizing.content());
-        inviteFieldRow = row;
-
-        Flex fieldWrap = Flex.row().alignItems(Align.CENTER);
-        fieldWrap.sizing(Sizing.expand(), Sizing.content());
-        fieldWrap.backgroundFill(p.panel2(), p.hairline(), 1);
-        IdSuggestionDropdown.Field field = IdSuggestionDropdown.textBox(100, inviteInput, 32);
-        field.sizing(Sizing.expand(), Sizing.fixed(18));
-        field.hint(tr("gui.arenas_ld.lobby.invite_hint").getString());
-        field.changeListeners.add(value -> {
-            inviteInput = value;
-            if (inviteDropdownOpen) {
-                refreshInviteDropdown();
-            }
-        });
-        field.mouseDownHooks.add(() -> {
-            if (!inviteDropdownOpen) {
-                inviteDropdownOpen = true;
-                refreshInviteDropdown();
-            }
-        });
-        inviteField = field;
-        fieldWrap.item(field);
-        Button chevron = new Button(16, 18, Component.literal(inviteDropdownOpen ? "▲" : "▼"), () -> {
-            inviteDropdownOpen = !inviteDropdownOpen;
-            refreshInviteDropdown();
-        });
-        chevron.style(RunWidgets.flatStyle(p));
-        inviteChevron = chevron;
-        fieldWrap.item(chevron);
-        row.item(fieldWrap);
-        row.item(RunWidgets.button(tr("gui.arenas_ld.dungeon_controller.ui.action.invite"), this::sendInvite));
-        section.item(row);
-
-        Flex panel = Flex.column();
-        panel.sizing(Sizing.fill(), Sizing.content());
-        inviteDropdownPanel = panel;
-        section.item(panel);
-        refreshInviteDropdown();
-        return section;
-    }
-
-    private void sendInvite() {
-        footerError = null;
-        UUID invitee = resolvePlayer(inviteInput);
-        if (invitee == null) {
-            footerError = tr("gui.arenas_ld.dungeon_controller.error.invitee_not_found").getString();
-            build();
-            return;
-        }
-        host.invite(invitee);
-        inviteInput = "";
-        inviteDropdownOpen = false;
-        build();
-    }
-
-    private void refreshInviteDropdown() {
-        if (inviteChevron != null) {
-            inviteChevron.label(Component.literal(inviteDropdownOpen ? "▲" : "▼"));
-        }
-        Flex panel = inviteDropdownPanel;
-        if (panel == null) {
-            return;
-        }
-        panel.clear();
-        if (!inviteDropdownOpen) {
-            panel.background(null);
-            return;
-        }
-        panel.backgroundFill(p.panel2(), p.hairline(), 1);
-        List<Candidate> candidates = candidates(inviteInput);
-        long available = candidates.stream().filter(Candidate::selectable).count();
-        Flex header = Flex.row().padding(Insets.of(3, 6, 3, 6)).alignItems(Align.CENTER);
-        header.sizing(Sizing.fill(), Sizing.content());
-        header.backgroundFill(p.row());
-        Label headerLabel = RunWidgets.label(10, tr("gui.arenas_ld.dungeon_controller.ui.invite.header"), p.inkDim())
-            .secondary(Component.translatable("gui.arenas_ld.dungeon_controller.ui.invite.available", available))
-            .secondaryColor(p.accent());
-        headerLabel.sizing(Sizing.fill(), Sizing.content());
-        header.item(headerLabel);
-        panel.item(header);
-        if (candidates.isEmpty()) {
-            Flex empty = Flex.row().padding(Insets.of(6)).alignItems(Align.CENTER);
-            empty.sizing(Sizing.fill(), Sizing.content());
-            empty.item(RunWidgets.text(tr("gui.arenas_ld.dungeon_controller.ui.invite.empty"), p.inkDim()));
-            panel.item(empty);
-            return;
-        }
-        Flex list = Flex.column();
-        list.sizing(Sizing.fill(), Sizing.content());
-        for (Candidate candidate : candidates) {
-            CandidateRow row = new CandidateRow(p, candidate, () -> {
-                footerError = null;
-                host.invite(candidate.uuid());
-                inviteInput = "";
-                inviteDropdownOpen = false;
-                build();
-            });
-            row.sizing(Sizing.fill(), Sizing.fixed(20));
-            list.item(row);
-        }
-        int visible = Math.min(candidates.size() * 20, INVITE_DROPDOWN_MAX);
-        ScrollPanel scroll = new ScrollPanel(100, visible, list);
-        scroll.sizing(Sizing.fill(), Sizing.fixed(visible));
-        panel.item(scroll);
-    }
-
-    private record Candidate(UUID uuid, String name, LobbyHost.InviteStatus status) {
-        boolean selectable() {
-            return status == LobbyHost.InviteStatus.ONLINE;
-        }
-    }
-
-    private List<Candidate> candidates(String filter) {
-        List<Candidate> result = new ArrayList<>();
-        var connection = Minecraft.getInstance().getConnection();
-        if (connection == null) {
-            return result;
-        }
-        UUID self = self();
-        Set<UUID> members = host.ownLobby().map(Lobby::members).orElse(Set.of());
-        String needle = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
-        if (needle.startsWith("@")) {
-            needle = needle.substring(1);
-        }
-        for (PlayerInfo info : connection.getOnlinePlayers()) {
-            UUID id = info.getProfile().getId();
-            String name = info.getProfile().getName();
-            if (id == null || name == null || id.equals(self) || members.contains(id)) {
-                continue;
-            }
-            if (!needle.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(needle)) {
-                continue;
-            }
-            result.add(new Candidate(id, name, host.inviteStatus(id)));
-        }
-        result.sort(Comparator.comparing((Candidate c) -> c.selectable() ? 0 : 1)
-            .thenComparing(c -> c.name().toLowerCase(Locale.ROOT)));
-        return result;
-    }
-
-    /** One invite candidate: head, "@name", its status on the right; only online, free players can be picked. */
-    private static final class CandidateRow extends Widget {
-        private final RunTheme.Palette p;
-        private final Candidate candidate;
-        private final Runnable action;
-
-        CandidateRow(RunTheme.Palette p, Candidate candidate, Runnable action) {
-            super(100, 20);
-            this.p = p;
-            this.candidate = candidate;
-            this.action = action;
-        }
-
-        @Override
-        protected void rebuild() {
-            boolean selectable = candidate.selectable();
-            int alpha = selectable ? 0xFF000000 : 0x73000000;
-            boolean hover = selectable && (hovered || focused);
-            add(Shapes.rect(0, 0, width, height).fill(hover ? p.row() : p.panel2()));
-            if (hover) {
-                add(Shapes.rect(0, 0, 2, height).fill(p.accent()));
-            }
-            int statusColor = selectable ? p.good() : p.warn();
-            add(Shapes.rect(7, height / 2 - 3, 6, 6).fill((statusColor & 0x00FFFFFF) | alpha));
-            add(TextNode.of("@" + candidate.name()).at(20, textY(height)).color((p.ink() & 0x00FFFFFF) | alpha).shadow(false));
-            String status = switch (candidate.status()) {
-                case ONLINE -> Component.translatable("gui.arenas_ld.dungeon_controller.ui.member.online").getString();
-                case IN_LOBBY -> Component.translatable("gui.arenas_ld.dungeon_controller.ui.candidate.in_lobby").getString();
-                case IN_RUN -> Component.translatable("gui.arenas_ld.dungeon_controller.ui.candidate.in_run").getString();
-                case BUSY -> Component.translatable("gui.arenas_ld.dungeon_controller.ui.candidate.busy").getString();
-            };
-            add(TextNode.of(status).at(width - 8, textY(height)).align(TextNode.Align.RIGHT)
-                .color((statusColor & 0x00FFFFFF) | alpha).shadow(false));
-        }
-
-        @Override
-        public boolean onMouseDown(float x, float y, int button) {
-            if (!candidate.selectable() || button != 0) return false;
-            UiSounds.click();
-            action.run();
-            return true;
-        }
-
-        @Override
-        public boolean focusable() { return candidate.selectable(); }
-
-        @Override
-        public boolean onKeyPressed(int key, int scanCode, int modifiers) {
-            if (!candidate.selectable()) return false;
-            if (key == 257 || key == 335 || key == 32) { UiSounds.click(); action.run(); return true; }
             return false;
         }
     }
@@ -1381,31 +1067,6 @@ public final class LobbyView {
         return true;
     }
 
-    private static @Nullable UUID resolvePlayer(String input) {
-        String trimmed = input == null ? "" : input.trim();
-        if (trimmed.startsWith("@")) {
-            trimmed = trimmed.substring(1);
-        }
-        if (trimmed.isEmpty()) {
-            return null;
-        }
-        try {
-            return UUID.fromString(trimmed);
-        } catch (IllegalArgumentException ignored) {
-            // a name
-        }
-        var connection = Minecraft.getInstance().getConnection();
-        if (connection == null) {
-            return null;
-        }
-        for (PlayerInfo info : connection.getOnlinePlayers()) {
-            if (info.getProfile().getName().equalsIgnoreCase(trimmed)) {
-                return info.getProfile().getId();
-            }
-        }
-        return null;
-    }
-
     private static List<UUID> ordered(Lobby lobby) {
         return lobby.members().stream()
             .sorted(Comparator.comparing((UUID m) -> m.equals(lobby.ownerUuid()) ? 0 : 1)
@@ -1455,12 +1116,4 @@ public final class LobbyView {
         };
     }
 
-    private int statusColor(LobbyStatus status) {
-        return switch (status) {
-            case READY -> p.good();
-            case IN_RUN -> p.warn();
-            case DISBANDED -> p.danger();
-            default -> p.info();
-        };
-    }
 }

@@ -941,6 +941,14 @@ public final class SpawnerPacketHandlers {
                     ArenasNetwork.sendToPlayer(context.player(), preview);
                 }
             }));
+        // A lobby owner opens the invite picker (4.40.3).
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.RequestInviteCandidatesPayload.TYPE, (payload, context) ->
+            context.server().execute(() -> {
+                var list = net.ledok.arenas_ld.util.InviteCandidates.build(context.player(), payload.controller());
+                if (list != null) {
+                    ArenasNetwork.sendToPlayer(context.player(), list);
+                }
+            }));
         // A dungeon or raid admin screen's breakable blocks list.
         ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.SetBreakableBlocksPayload.TYPE, (payload, context) -> {
             context.server().execute(() -> {

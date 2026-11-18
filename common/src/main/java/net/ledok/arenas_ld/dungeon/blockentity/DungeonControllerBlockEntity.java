@@ -1869,4 +1869,9 @@ public class DungeonControllerBlockEntity extends BlockEntity
         }
         return out;
     }
+
+    @Override
+    public java.util.List<PendingInvite> pendingInvites() {
+        return getPendingInvites();
+    }
 }

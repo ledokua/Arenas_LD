@@ -89,6 +89,9 @@ public class ArenasLdConfig {
     // Rental spell books: the highest spell tier each kit level folder may pick ("0": 1, "15": 2, …; the highest folder
     // at or below the kit's level counts). Empty = the book's whole pool.
     public java.util.Map<String, Integer> rental_spell_max_tier = new java.util.LinkedHashMap<>();
+    // Rental spell books: the spell tiers the picker offers, one spell each (LeDok 2026-11-18: "3 pairs" per class).
+    // Pool spells of other tiers are hidden and can't be picked. Empty = free choice of the pool, up to the book's size.
+    public java.util.List<Integer> rental_spell_tiers = new java.util.ArrayList<>(java.util.List.of(2, 3, 4));
     // Arena per-player wave rows roll this many times their own rolls (communal rows don't). Live keeps 3, what the
     // old LuckPerms arena_loot_rolls 3 gave every player.
     public double arena_player_row_rolls = 1;

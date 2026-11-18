@@ -74,6 +74,11 @@ public class RaidControllerScreen extends LobbyScreen<RaidControllerScreenHandle
         return meta;
     }
 
+    @Override
+    public List<Component> settingsLines() {
+        return net.ledok.arenas_ld.screen.RentalPick.settingsMeta(menu.getRunSettings());
+    }
+
     @Override public List<Lobby> visibleLobbies() { return menu.getVisibleLobbies(); }
     @Override public Optional<Lobby> ownLobby() { return menu.getOwnLobby(); }
     @Override public List<PendingInvite> invites() { return menu.getMyInvites(); }

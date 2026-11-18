@@ -22,9 +22,14 @@ public record RentalPreviewPayload(BlockPos controller, int level, List<Kit> kit
      * {@code chosen} what the picker starts with; no spells: no choice).
      */
     public record Kit(String kitId, String name, int level, List<ItemStack> items, boolean recommended,
-                      List<String> spells, int maxSpells, List<String> chosen) {
+                      List<String> spells, int maxSpells, List<String> chosen, List<Integer> spellTiers) {
         public Kit(String kitId, String name, int level, List<ItemStack> items) {
-            this(kitId, name, level, items, false, List.of(), 0, List.of());
+            this(kitId, name, level, items, false, List.of(), 0, List.of(), List.of());
+        }
+
+        /** {@code spellTiers}: each spell's tier when the book takes one spell per tier (4.40.4); empty: free choice. */
+        public boolean perTier() {
+            return !spellTiers.isEmpty() && spellTiers.size() == spells.size();
         }
 
         static final StreamCodec<RegistryFriendlyByteBuf, Kit> CODEC = StreamCodec.of(
@@ -37,11 +42,13 @@ public record RentalPreviewPayload(BlockPos controller, int level, List<Kit> kit
                 ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list(64)).encode(buf, k.spells());
                 buf.writeVarInt(k.maxSpells());
                 ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list(64)).encode(buf, k.chosen());
+                ByteBufCodecs.VAR_INT.apply(ByteBufCodecs.list(64)).encode(buf, k.spellTiers());
             },
             buf -> new Kit(buf.readUtf(), buf.readUtf(), buf.readVarInt(),
                 ItemStack.OPTIONAL_STREAM_CODEC.apply(ByteBufCodecs.list(128)).decode(buf), buf.readBoolean(),
                 ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list(64)).decode(buf), buf.readVarInt(),
-                ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list(64)).decode(buf)));
+                ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list(64)).decode(buf),
+                ByteBufCodecs.VAR_INT.apply(ByteBufCodecs.list(64)).decode(buf)));
     }
 
     public static final Type<RentalPreviewPayload> TYPE =

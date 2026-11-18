@@ -46,8 +46,23 @@ public final class RentalSpells {
      * @param max      how many spells it holds
      * @param defaults the kit's own spell_ids
      * @param allowed  the pool's spells the kit level may pick, in tag order
+     * @param tiers    each allowed spell's tier when the picker is one spell per tier ({@code rental_spell_tiers});
+     *                 empty: a free choice of {@code allowed}, up to {@code max}
      */
-    public record Choice(String pool, int max, List<String> defaults, List<String> allowed) {
+    public record Choice(String pool, int max, List<String> defaults, List<String> allowed, Map<String, Integer> tiers) {
+        public Choice(String pool, int max, List<String> defaults, List<String> allowed) {
+            this(pool, max, defaults, allowed, Map.of());
+        }
+
+        /** One spell per tier (4.40.4). */
+        public boolean perTier() {
+            return !tiers.isEmpty();
+        }
+
+        /** The tiers with a row, in order. */
+        public List<Integer> tierRows() {
+            return tiers.values().stream().distinct().sorted().toList();
+        }
     }
 
     private static boolean looked;
@@ -80,19 +95,36 @@ public final class RentalSpells {
         }
         try {
             String pool = clean((String) poolOf.invoke(container));
-            int max = (int) maxOf.invoke(container);
             @SuppressWarnings("unchecked") List<String> ids = (List<String>) idsOf.invoke(container);
+            int max = capacity((int) maxOf.invoke(container), ids);
             if (pool.isEmpty() || max <= 0) {
                 return null;
             }
-            List<String> allowed = poolSpells(access, pool, maxTier(kitLevel));
-            if (allowed.isEmpty()) {
-                return null;
+            Map<String, Integer> tiers = poolSpells(access, pool, maxTier(kitLevel));
+            List<Integer> offered = ArenasLdConfig.getInstance().rental_spell_tiers;
+            List<String> defaults = ids == null ? List.of() : List.copyOf(ids);
+            if (offered == null || offered.isEmpty()) {
+                List<String> allowed = List.copyOf(tiers.keySet());
+                return allowed.isEmpty() ? null : new Choice(pool, max, defaults, allowed);
             }
-            return new Choice(pool, max, ids == null ? List.of() : List.copyOf(ids), allowed);
+            return perTier(pool, defaults, tiers, offered);
         } catch (ReflectiveOperationException | RuntimeException e) {
             return null;
         }
+    }
+
+    /**
+     * How many spells a book holds: its {@code max_spell_count}, or, when that is unset (Spell Engine's codec makes it
+     * 0, as in Fallen Eden's rental kits), the number of its {@code spell_ids}. The book itself is never changed to say
+     * so: a container with a max could become editable at a binding table.
+     */
+    public static int capacity(int maxSpellCount, @Nullable List<String> spellIds) {
+        return maxSpellCount > 0 ? maxSpellCount : spellIds == null ? 0 : spellIds.size();
+    }
+
+    /** Whether the stack has a Spell Engine spell container (a spell book). */
+    public static boolean hasContainer(ItemStack stack) {
+        return container(stack) != null;
     }
 
     /** The spell_ids of the stack's container (empty without one). */
@@ -141,8 +173,54 @@ public final class RentalSpells {
         return out;
     }
 
-    /** {@code picked} cut to the allowed spells, without repeats, at most {@code max}. */
+    /**
+     * The one-spell-per-tier choice (4.40.4) of a pool whose spells have {@code tiers}: only the {@code offered} tiers,
+     * one row each; null when none of them has a spell. Public for the game tests.
+     */
+    public static @Nullable Choice perTier(String pool, List<String> defaults, Map<String, Integer> tiers, List<Integer> offered) {
+        Map<String, Integer> kept = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, Integer> entry : tiers.entrySet()) {
+            if (offered.contains(entry.getValue())) {
+                kept.put(entry.getKey(), entry.getValue());
+            }
+        }
+        if (kept.isEmpty()) {
+            return null;
+        }
+        // Allowed in tier order, tag order within a tier: the picker's rows.
+        List<String> allowed = kept.entrySet().stream()
+            .sorted(java.util.Comparator.comparingInt(Map.Entry::getValue)).map(Map.Entry::getKey).toList();
+        int rows = (int) kept.values().stream().distinct().count();
+        return new Choice(pool, rows, defaults, allowed, Map.copyOf(kept));
+    }
+
+    /**
+     * {@code picked} cut to what {@code choice} allows. Free choice: the allowed spells, no repeats, at most {@code max}.
+     * One per tier: the first pick of each tier row, and every row filled (the kit's own spell of that tier, else the
+     * row's first), so the book always holds one of each pair.
+     */
     public static List<String> validate(List<String> picked, Choice choice) {
+        if (choice.perTier()) {
+            Map<Integer, String> byTier = new java.util.TreeMap<>();
+            for (String id : picked) {
+                Integer tier = id == null ? null : choice.tiers().get(id);
+                if (tier != null) {
+                    byTier.putIfAbsent(tier, id);
+                }
+            }
+            for (int tier : choice.tierRows()) {
+                if (byTier.containsKey(tier)) {
+                    continue;
+                }
+                String fill = choice.defaults().stream().filter(d -> Integer.valueOf(tier).equals(choice.tiers().get(d)))
+                    .findFirst().orElseGet(() -> choice.allowed().stream()
+                        .filter(a -> choice.tiers().get(a) == tier).findFirst().orElse(null));
+                if (fill != null) {
+                    byTier.put(tier, fill);
+                }
+            }
+            return List.copyOf(byTier.values());
+        }
         LinkedHashSet<String> out = new LinkedHashSet<>();
         for (String id : picked) {
             if (id != null && choice.allowed().contains(id) && out.size() < choice.max()) {
@@ -194,28 +272,29 @@ public final class RentalSpells {
         return stack.get(component);
     }
 
-    /** The pool's spells (registry tag), those above {@code maxTier} left out (-1: all). */
-    private static List<String> poolSpells(RegistryAccess access, String pool, int maxTier) {
+    /** The pool's spells (registry tag) with their tiers, those above {@code maxTier} left out (-1: all). */
+    private static Map<String, Integer> poolSpells(RegistryAccess access, String pool, int maxTier) {
         ResourceLocation id = ResourceLocation.tryParse(pool);
         if (id == null || spellRegistry == null) {
-            return List.of();
+            return Map.of();
         }
         @SuppressWarnings({"unchecked", "rawtypes"})
         var registry = access.registry((ResourceKey) spellRegistry);
         if (registry.isEmpty()) {
-            return List.of();
+            return Map.of();
         }
         @SuppressWarnings({"unchecked", "rawtypes"})
         Registry<Object> spells = (Registry<Object>) registry.get();
         var tag = spells.getTag(TagKey.create(spells.key(), id));
         if (tag.isEmpty()) {
-            return List.of();
+            return Map.of();
         }
-        List<String> out = new ArrayList<>();
+        Map<String, Integer> out = new java.util.LinkedHashMap<>();
         for (Holder<Object> holder : tag.get()) {
             String spellId = holder.unwrapKey().map(k -> k.location().toString()).orElse(null);
-            if (spellId != null && (maxTier < 0 || tierOf(holder.value()) <= maxTier)) {
-                out.add(spellId);
+            int tier = tierOf(holder.value());
+            if (spellId != null && (maxTier < 0 || tier <= maxTier)) {
+                out.putIfAbsent(spellId, tier);
             }
         }
         return out;

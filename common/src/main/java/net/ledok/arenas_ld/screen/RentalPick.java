@@ -21,6 +21,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
 import java.util.Map;
 
 import static net.ledok.arenas_ld.screen.ArenasParchment.ACCENT;
@@ -56,6 +57,8 @@ public final class RentalPick {
 
     /** The controller whose "rental kits only" preview opened by itself (once per lobby visit); null for none. */
     private static @Nullable BlockPos autoOpened;
+    /** The preview modal on screen, if any. */
+    private static @Nullable Modal openPreview;
 
     public static void onPayload(RentalLobbyPayload payload) {
         state = payload;
@@ -218,8 +221,18 @@ public final class RentalPick {
         footer.item(net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable("gui.arenas_ld.rental.close"), () -> modal[0].close()));
         panel.item(footer);
 
+        if (openPreview != null) {
+            openPreview.close(); // a second preview replaces the first: never a stack of them
+        }
         modal[0] = Modal.open(host.rentalCanvas(), panel);
         modal[0].closeOnClickOutside(true);
+        Modal opened = modal[0];
+        openPreview = opened;
+        opened.onClose(() -> {
+            if (openPreview == opened) {
+                openPreview = null;
+            }
+        });
     }
 
     /** One class: its name, a Pick button, and its items as slots (vanilla tooltips on hover). */
@@ -259,31 +272,62 @@ public final class RentalPick {
         block.item(head);
 
         if (!kit.spells().isEmpty()) {
-            block.item(net.ledok.arenas_ld.screen.run.RunWidgets.text(Component.translatable("gui.arenas_ld.rental.spells",
-                kit.maxSpells()), p.inkMid()));
-            Flex row = null;
-            float chipW = (PREVIEW_W - 24 - 12 - 8) / 3f;
-            for (int i = 0; i < kit.spells().size(); i++) {
-                if (i % 3 == 0) {
-                    row = Flex.row().gap(4);
+            // 4.40.2 (LeDok): icon slots like the spell binding table, Spell Engine's tooltip on hover.
+            // 4.40.4: one spell per tier ("3 pairs"), a row per tier, picked like radio buttons.
+            ItemStack book = kit.items().stream().filter(net.ledok.arenas_ld.util.RentalSpells::hasContainer)
+                .findFirst().orElse(ItemStack.EMPTY); // the kit's book: its spell power goes into the tooltip's values
+            List<SpellSlot> all = new java.util.ArrayList<>();
+            Runnable changed = () -> {
+                for (SpellSlot slot : all) {
+                    slot.refresh(); // only on a click: nothing is polled per frame
+                }
+                refreshPick.run();
+            };
+            if (kit.perTier()) {
+                block.item(net.ledok.arenas_ld.screen.run.RunWidgets.text(Component.translatable("gui.arenas_ld.rental.spells_per_tier"), p.inkMid()));
+                List<Integer> tiers = kit.spellTiers().stream().distinct().toList();
+                for (int r = 0; r < tiers.size(); r++) {
+                    int tier = tiers.get(r);
+                    List<String> mates = new java.util.ArrayList<>();
+                    for (int i = 0; i < kit.spells().size(); i++) {
+                        if (kit.spellTiers().get(i) == tier) {
+                            mates.add(kit.spells().get(i));
+                        }
+                    }
+                    Flex row = Flex.row().gap(2).alignItems(Align.CENTER);
                     row.sizing(Sizing.fill(), Sizing.content());
+                    var label = net.ledok.vectorlib.client.canvas.widget.Label.of(56,
+                        Component.translatable("gui.arenas_ld.rental.spell_tier", r + 1)).color(p.inkDim());
+                    label.sizing(Sizing.fixed(56), Sizing.content());
+                    row.item(label);
+                    for (String spell : mates) {
+                        SpellSlot slot = new SpellSlot(p, spell, book, selected, kit.maxSpells(), mates, changed);
+                        all.add(slot);
+                        row.item(slot);
+                    }
                     block.item(row);
                 }
-                String spell = kit.spells().get(i);
-                Button[] chip = new Button[1];
-                chip[0] = net.ledok.arenas_ld.screen.run.RunWidgets.button(spellLabel(spell, selected.contains(spell)), chipW, () -> {
-                    if (selected.contains(spell)) {
-                        selected.remove(spell);
-                    } else if (selected.size() < kit.maxSpells()) {
-                        selected.add(spell);
-                    } else {
-                        return; // full: switch one off first
+            } else {
+                var counter = net.ledok.vectorlib.client.canvas.widget.Label.of(PREVIEW_W - 36,
+                    spellCounter(selected.size(), kit.maxSpells())).color(p.inkMid());
+                counter.sizing(Sizing.fill(), Sizing.content());
+                block.item(counter);
+                Runnable inner = changed;
+                changed = () -> {
+                    counter.text(spellCounter(selected.size(), kit.maxSpells()));
+                    inner.run();
+                };
+                Flex row = null;
+                for (int i = 0; i < kit.spells().size(); i++) {
+                    if (i % SLOTS_PER_ROW == 0) {
+                        row = Flex.row().gap(2);
+                        row.sizing(Sizing.fill(), Sizing.content());
+                        block.item(row);
                     }
-                    chip[0].label(spellLabel(spell, selected.contains(spell)));
-                    refreshPick.run();
-                });
-                chip[0].tooltipWhenCut(true);
-                row.item(chip[0]);
+                    SpellSlot slot = new SpellSlot(p, kit.spells().get(i), book, selected, kit.maxSpells(), null, changed);
+                    all.add(slot);
+                    row.item(slot);
+                }
             }
         }
 
@@ -302,12 +346,154 @@ public final class RentalPick {
         return block;
     }
 
-    /** "● Earthquake" (in the book) / "○ Earthquake": Spell Engine's name key, the id's path when it has none. */
-    private static Component spellLabel(String spellId, boolean on) {
+    /** "Spells in the book: 2 / 3". */
+    private static Component spellCounter(int picked, int max) {
+        return Component.translatable("gui.arenas_ld.rental.spells", picked, max);
+    }
+
+    /** Spell Engine's name key, the id's path when it has none. */
+    private static Component spellName(String spellId) {
         var id = net.minecraft.resources.ResourceLocation.tryParse(spellId);
         String key = id == null ? spellId : "spell." + id.getNamespace() + "." + id.getPath() + ".name";
         String fallback = id == null ? spellId : id.getPath().replace('_', ' ');
-        return Component.literal(on ? "● " : "○ ").append(Component.translatableWithFallback(key, fallback));
+        return Component.translatableWithFallback(key, fallback);
+    }
+
+    private static @Nullable java.lang.reflect.Method spellEntry;
+    private static boolean spellEntryLooked;
+
+    /**
+     * Spell Engine's own tooltip of a spell, as on the spell binding table (name, description with values, cast,
+     * range, cooldown). Read by reflection (Arenas runs without Spell Engine); name + description when it can't.
+     */
+    @SuppressWarnings("unchecked")
+    static List<Component> spellTooltip(String spellId, ItemStack book) {
+        var id = net.minecraft.resources.ResourceLocation.tryParse(spellId);
+        var player = Minecraft.getInstance().player;
+        if (id != null && player != null) {
+            if (!spellEntryLooked) {
+                spellEntryLooked = true;
+                try {
+                    spellEntry = Class.forName("net.spell_engine.client.gui.SpellTooltip").getMethod("spellEntry",
+                        net.minecraft.resources.ResourceLocation.class, net.minecraft.world.entity.player.Player.class,
+                        ItemStack.class, boolean.class, int.class);
+                } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+                    spellEntry = null;
+                }
+            }
+            if (spellEntry != null) {
+                try {
+                    List<Component> lines = (List<Component>) spellEntry.invoke(null, id, player, book, true, 0);
+                    if (lines != null && !lines.isEmpty()) {
+                        return new java.util.ArrayList<>(lines);
+                    }
+                } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+                }
+            }
+        }
+        List<Component> out = new java.util.ArrayList<>();
+        out.add(spellName(spellId).copy().withStyle(net.minecraft.ChatFormatting.BOLD));
+        if (id != null) {
+            String key = "spell." + id.getNamespace() + "." + id.getPath() + ".description";
+            if (net.minecraft.client.resources.language.I18n.exists(key)) {
+                out.add(Component.translatable(key).withStyle(net.minecraft.ChatFormatting.GRAY));
+            }
+        }
+        return out;
+    }
+
+    /** Whether a spell icon texture exists, checked once per texture (a missing one draws no icon). */
+    private static final Map<net.minecraft.resources.ResourceLocation, Boolean> ICONS = new java.util.HashMap<>();
+
+    private static @Nullable net.minecraft.resources.ResourceLocation icon(String spell) {
+        var id = net.minecraft.resources.ResourceLocation.tryParse(spell);
+        if (id == null) {
+            return null;
+        }
+        var texture = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(id.getNamespace(),
+            "textures/spell/" + id.getPath() + ".png");
+        boolean exists = ICONS.computeIfAbsent(texture,
+            t -> Minecraft.getInstance().getResourceManager().getResource(t).isPresent());
+        return exists ? texture : null;
+    }
+
+    /**
+     * One spell of the book's pool: its Spell Engine icon in a slot. A spell in the book is framed in the accent color,
+     * the others are dimmed. One per tier ({@code rowMates}): a click picks it instead of its row mate. Free choice
+     * (no row mates): a click puts it in or takes it out, ignored while the book is full. Built once; it changes only
+     * on a click ({@link #refresh} from the kit block), and its tooltip lines are built on the first hover.
+     */
+    private static final class SpellSlot extends Widget {
+        private final net.ledok.arenas_ld.screen.RunTheme.Palette p;
+        private final String spell;
+        private final java.util.Set<String> selected;
+        private final int max;
+        private final @Nullable List<String> rowMates;
+        private final Runnable changed;
+        private final @Nullable net.minecraft.resources.ResourceLocation icon;
+        private @Nullable List<Component> spellLines;
+
+        SpellSlot(net.ledok.arenas_ld.screen.RunTheme.Palette p, String spell, ItemStack book, java.util.Set<String> selected,
+                  int max, @Nullable List<String> rowMates, Runnable changed) {
+            super(20, 20);
+            this.p = p;
+            this.spell = spell;
+            this.selected = selected;
+            this.max = max;
+            this.rowMates = rowMates;
+            this.changed = changed;
+            this.icon = icon(spell);
+            tooltip(() -> {
+                if (spellLines == null) {
+                    spellLines = spellTooltip(spell, book); // once, on the first hover
+                }
+                boolean on = selected.contains(spell);
+                String hint = rowMates != null ? (on ? "gui.arenas_ld.rental.spell_in_book" : "gui.arenas_ld.rental.spell_swap")
+                    : on ? "gui.arenas_ld.rental.spell_click_off"
+                    : selected.size() >= max ? "gui.arenas_ld.rental.spell_full" : "gui.arenas_ld.rental.spell_click_on";
+                List<Component> lines = new java.util.ArrayList<>(spellLines.size() + 1);
+                lines.addAll(spellLines);
+                lines.add(Component.translatable(hint).withStyle(rowMates == null && !on && selected.size() >= max
+                    ? net.minecraft.ChatFormatting.RED : net.minecraft.ChatFormatting.DARK_GRAY));
+                return lines;
+            });
+        }
+
+        @Override
+        protected void rebuild() {
+            boolean on = selected.contains(spell);
+            boolean hover = hovered || focused;
+            int bg = on ? p.rowAlt() : hover ? p.row() : (p.hairline() & 0x00FFFFFF) | 0x55000000;
+            int frame = on ? p.accent() : hover ? p.inkMid() : (p.hairline() & 0x00FFFFFF) | 0x88000000;
+            add(net.ledok.vectorlib.client.canvas.Shapes.rect(0, 0, 20, 20).fill(bg).stroke(frame, on ? 2 : 1));
+            if (icon != null) {
+                add(net.ledok.vectorlib.client.canvas.ImageNode.of(icon, 2, 2, 16, 16, 16, 16)
+                    .tint(on ? 0xFFFFFFFF : hover ? 0xFFB0B0B0 : 0xFF6E6E6E));
+            }
+        }
+
+        @Override
+        public boolean onMouseDown(float x, float y, int button) {
+            if (button != 0) {
+                return false;
+            }
+            if (rowMates != null) {
+                if (selected.contains(spell)) {
+                    return true; // a row always keeps one
+                }
+                selected.removeAll(rowMates);
+                selected.add(spell);
+            } else if (selected.contains(spell)) {
+                selected.remove(spell);
+            } else if (selected.size() < max) {
+                selected.add(spell);
+            } else {
+                return true; // full: switch one off first (the tooltip says so)
+            }
+            net.ledok.vectorlib.client.canvas.widget.UiSounds.click();
+            changed.run();
+            return true;
+        }
     }
 
     /** An item in a slot: count and durability, the vanilla tooltip on hover. */

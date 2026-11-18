@@ -413,7 +413,7 @@ public class RunDetailsScreen extends CanvasScreen {
     // ── Rewards ──────────────────────────────────────────────────────────────
 
     private void rewards(Flex col) {
-        if (!payload.over() && !payload.rewards().getString().isEmpty()) {
+        if (!payload.rewards().getString().isEmpty()) {
             col.item(RunWidgets.section(pal, Component.translatable("gui.arenas_ld.run_details.rewards"), null, null));
             col.item(wrapped(payload.rewards(), pal.good()));
             col.item(RunWidgets.spacer(4));

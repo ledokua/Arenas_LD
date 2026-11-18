@@ -564,3 +564,25 @@ disappear without a major version, and new features arrive as new methods or typ
 constants in a minor version (4.9.0 added `Outcome.FORCED`; `Warning` may grow), so give a `switch`
 over them a default. Anything outside `net.ledok.arenas_ld.api` is internal and may change in any
 release.
+
+
+## Player relations (4.40.3+)
+
+`ArenasApi.setPlayerRelations(PlayerRelations)`: one provider; the last call wins; null removes it. The lobby's invite
+picker calls `relation(ServerPlayer viewer, UUID other)` once per online player each time it opens, and groups the
+players by the answer:
+- `FRIEND` comes first;
+- `PARTY` and `GUILD` come next;
+- `NONE` comes last.
+
+Return the closest relation when several apply. A provider that throws is logged once and dropped. Without a provider,
+everyone is `NONE`. The picker also asks the invite filter (`setInviteFilter`) for each player, without telling anyone,
+so blocked players show as "Doesn't accept invites from you".
+
+
+## Loot rolls (4.40.4+)
+
+- `ArenasApi.completionLootRolls(server)`: the global `completion_loot_rolls`.
+- `ArenasApi.effectiveLootRolls(server, id)`: what a controller's completion starts from, its own rolls or else the
+  global. It's empty for an unknown id or an arena.
+- `baseLootRolls` is unchanged: -1 when the controller uses the global value.

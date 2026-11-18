@@ -179,8 +179,10 @@ public final class RunRentals {
                 chosen = current != null && current.kitId().equals(kit) && !current.spells().isEmpty()
                     ? current.spells() : RentalSpells.prefill(player, presetName(kit), spells);
             }
+            List<Integer> tiers = spells == null || !spells.perTier() ? List.of()
+                : spells.allowed().stream().map(s -> spells.tiers().get(s)).toList();
             kits.add(new RentalPreviewPayload.Kit(kit, p.displayName(kit), kitLevel(kit), items, isRecommended,
-                spells == null ? List.of() : spells.allowed(), spells == null ? 0 : spells.max(), chosen));
+                spells == null ? List.of() : spells.allowed(), spells == null ? 0 : spells.max(), chosen, tiers));
         }
         // The player's skill-tree class first (stable: the provider's order otherwise).
         kits.sort(java.util.Comparator.comparing(k -> !k.recommended()));
@@ -189,7 +191,10 @@ public final class RunRentals {
                 .withStyle(ChatFormatting.RED), false);
             return null;
         }
-        return new RentalPreviewPayload(controller, level, kits);
+        // The header names the kits' level (4.40.2): the cap (min of player and run level) can sit between folders,
+        // e.g. a level-6 player gets the level-5 kits.
+        int shown = kits.stream().mapToInt(RentalPreviewPayload.Kit::level).max().orElse(level);
+        return new RentalPreviewPayload(controller, shown, kits);
     }
 
     /**
@@ -239,7 +244,8 @@ public final class RunRentals {
         RentalSpells.Choice book = RentalSpells.forKit(player.registryAccess(), p.preview(kitId), kitLevel(kitId));
         if (book != null) {
             pool = book.pool();
-            picked = RentalSpells.validate(spells == null ? List.of() : spells, book);
+            // Nothing sent (an old client, a plain "Pick"): the prefill; else the pick, cut to the rule, and remembered.
+            picked = spells == null || spells.isEmpty() ? List.of() : RentalSpells.validate(spells, book);
             if (picked.isEmpty()) {
                 picked = RentalSpells.prefill(player, presetName(kitId), book);
             } else {
@@ -328,6 +334,11 @@ public final class RunRentals {
             counters.rentalBand = band;
             counters.rentalPool = choice.pool();
             counters.rentalSpells = choice.spells();
+            if (!choice.pool().isEmpty()) {
+                // Checked again at the start (4.40.4): the rule (rental_spell_tiers, max tier) may have changed.
+                RentalSpells.Choice book = RentalSpells.forKit(player.registryAccess(), p.preview(kit), band);
+                counters.rentalSpells = book == null ? List.of() : RentalSpells.validate(choice.spells(), book);
+            }
             applySpells(player, counters);
             RENTING.put(uuid, session);
             player.sendSystemMessage(Component.translatable("message.arenas_ld.rental.started", p.displayName(kit), band)
@@ -402,7 +413,7 @@ public final class RunRentals {
         }
         List<RewardModifier> out = new ArrayList<>();
         for (RewardModifier.Stat stat : RewardModifier.Stat.values()) {
-            out.add(RewardModifier.more(stat, REWARD_FACTOR, "rental", "Rental"));
+            out.add(RewardModifier.more(stat, REWARD_FACTOR, "rental", "message.arenas_ld.reward.source.rental"));
         }
         return out;
     }

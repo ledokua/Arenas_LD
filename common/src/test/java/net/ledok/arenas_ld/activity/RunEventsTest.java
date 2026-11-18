@@ -29,6 +29,12 @@ class RunEventsTest {
         @Override public int getMaxPartySize() { return 1; }
         @Override public boolean leaveLobby(java.util.UUID player) { return false; }
         @Override public int resetCooldowns(ArenasApi.InstanceRef instance) { return 0; }
+        @Override public List<String> rewardLootTables(DifficultyTier tier) { return List.of(); }
+        @Override public boolean joinLobby(net.minecraft.server.level.ServerPlayer player, java.util.UUID lobbyId) { return false; }
+        @Override public boolean requestJoin(net.minecraft.server.level.ServerPlayer player, java.util.UUID lobbyId) { return false; }
+        @Override public boolean createLobbyFor(net.minecraft.server.level.ServerPlayer player) { return false; }
+        @Override public net.minecraft.network.chat.Component applyLobbySettings(net.minecraft.server.level.ServerPlayer player,
+                DifficultyTier tier, java.util.Set<String> modifiers, net.ledok.arenas_ld.dungeon.lobby.LobbyVisibility visibility, int maxSize) { return null; }
     }
 
     @Test

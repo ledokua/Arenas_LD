@@ -281,7 +281,7 @@ public final class RunDetails {
         List<RunDetailsPayload.Row> rows = rows(record, staff, registries, p -> new float[]{-1, -1, -1});
         return new RunDetailsPayload(Component.literal(record.activityName), tier(record.difficulty), record.hardcore,
             modifiers(record), Component.empty(), 0, 0, record.durationSeconds, RunHudPayload.NO_BOSS_HP,
-            Component.empty(), result(record), highlights(record), phases(record), rows,
+            recordRewards(record), result(record), highlights(record), phases(record), rows,
             staff ? round(record.unattributed) : -1, true, staff, end, end);
     }
 
@@ -475,6 +475,12 @@ public final class RunDetails {
                 : Component.translatable("gui.arenas_ld.run_details.phase.mark", phase.boss, phase.percent, time));
         }
         return out;
+    }
+
+    /** A finished run's base rolls (4.40.1, so the end screen shows them too); empty in records before 4.39.0. */
+    private static Component recordRewards(RunRecord record) {
+        return record.baseLootRolls < 0 ? Component.empty()
+            : Component.translatable("gui.arenas_ld.lobby.base_loot_rolls", RewardMath.number(record.baseLootRolls));
     }
 
     /** "3 loot rolls · 500 currency · 1,000 XP — Picked: ×2 loot · +25% XP". */

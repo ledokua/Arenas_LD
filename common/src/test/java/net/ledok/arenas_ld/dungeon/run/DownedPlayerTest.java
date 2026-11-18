@@ -47,8 +47,9 @@ class DownedPlayerTest {
 
     @Test
     void isReadyToRespawnTrueBelowZero() {
-        // Defensive: even if some path produces a negative value, the predicate stays correct.
-        assertTrue(new DownedPlayer(TEST_UUID, -1).isReadyToRespawn());
+        // Defensive: even if some path produces a negative value, the predicate stays correct (-1 is OUT, below).
+        assertTrue(new DownedPlayer(TEST_UUID, -2).isReadyToRespawn());
+        assertFalse(DownedPlayer.out(TEST_UUID).isReadyToRespawn(), "an out player never respawns");
     }
 
     @Test

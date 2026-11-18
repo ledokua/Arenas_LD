@@ -1996,6 +1996,69 @@ public final class ApiGameTests {
                 helper.assertTrue(net.ledok.arenas_ld.util.RentalSpells.validate(
                         List.of("ns:d", "ns:x", "ns:d", "ns:a", "ns:b", "ns:e"), book).equals(List.of("ns:d", "ns:a", "ns:b")),
                     "picks keep the pool's spells, no repeats, at most the book's size");
+                // 4.40.1: Fallen Eden's kit books have no max_spell_count (0); they hold as many as their spell_ids.
+                int noMax = net.ledok.arenas_ld.util.RentalSpells.capacity(0, List.of("ns:a", "ns:b", "ns:c"));
+                helper.assertTrue(noMax == 3 && net.ledok.arenas_ld.util.RentalSpells.capacity(5, List.of("ns:a")) == 5
+                    && net.ledok.arenas_ld.util.RentalSpells.capacity(0, List.of()) == 0
+                    && net.ledok.arenas_ld.util.RentalSpells.capacity(0, null) == 0, "a book without max_spell_count holds its spell_ids' count");
+                var noMaxBook = new net.ledok.arenas_ld.util.RentalSpells.Choice("ns:pool", noMax, List.of("ns:a", "ns:b", "ns:c"),
+                    List.of("ns:a", "ns:b", "ns:c", "ns:d", "ns:e"));
+                helper.assertTrue(net.ledok.arenas_ld.util.RentalSpells.validate(
+                        List.of("ns:e", "ns:d", "ns:c", "ns:b"), noMaxBook).equals(List.of("ns:e", "ns:d", "ns:c")),
+                    "a book without max_spell_count takes 3 picks");
+                // 4.40.4: one spell per tier ("3 pairs"), tiers 2–4 only; a rogue-like pool with a tier-5 addon spell.
+                var rogueTiers = new java.util.LinkedHashMap<String, Integer>();
+                rogueTiers.put("rogues:slice_and_dice", 2);
+                rogueTiers.put("rogues:shock_powder", 2);
+                rogueTiers.put("rogues:shadow_step", 3);
+                rogueTiers.put("rogues:bear_trap", 3);
+                rogueTiers.put("rogues:vanish", 4);
+                rogueTiers.put("rogues:mutilate", 4);
+                rogueTiers.put("lne_rogues:dancing_dagger", 5);
+                var rogue = net.ledok.arenas_ld.util.RentalSpells.perTier("rogues:spell_book/rogue",
+                    List.of("rogues:shock_powder", "rogues:shadow_step", "rogues:vanish"), rogueTiers, List.of(2, 3, 4));
+                helper.assertTrue(rogue != null && rogue.max() == 3 && rogue.tierRows().equals(List.of(2, 3, 4))
+                    && rogue.allowed().size() == 6 && !rogue.allowed().contains("lne_rogues:dancing_dagger"),
+                    "three rows of two, the tier-5 spell hidden: " + (rogue == null ? null : rogue.allowed()));
+                helper.assertTrue(net.ledok.arenas_ld.util.RentalSpells.validate(List.of("rogues:slice_and_dice",
+                        "rogues:shock_powder", "lne_rogues:dancing_dagger", "rogues:mutilate"), rogue)
+                    .equals(List.of("rogues:slice_and_dice", "rogues:shadow_step", "rogues:mutilate")),
+                    "one per tier: the first of a tier, no hidden tier, an empty tier gets the kit's own spell");
+                helper.assertTrue(net.ledok.arenas_ld.util.RentalSpells.validate(List.of(), rogue)
+                    .equals(List.of("rogues:shock_powder", "rogues:shadow_step", "rogues:vanish")), "nothing picked: the kit's spells");
+                var noDefaults = net.ledok.arenas_ld.util.RentalSpells.perTier("p", List.of(), rogueTiers, List.of(2, 3, 4));
+                helper.assertTrue(net.ledok.arenas_ld.util.RentalSpells.validate(List.of("rogues:bear_trap"), noDefaults)
+                    .equals(List.of("rogues:slice_and_dice", "rogues:bear_trap", "rogues:vanish")), "no kit spell of a tier: the row's first");
+                helper.assertTrue(net.ledok.arenas_ld.util.RentalSpells.perTier("p", List.of(), rogueTiers, List.of(7)) == null,
+                    "no offered tier in the pool: no picker");
+                // 4.40.3: the invite picker's relations hook and its packet.
+                UUID other = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
+                try {
+                    net.ledok.arenas_ld.api.ArenasApi.setPlayerRelations((viewer, id) -> id.equals(other)
+                        ? net.ledok.arenas_ld.api.ArenasApi.PlayerRelation.FRIEND : null);
+                    helper.assertTrue(net.ledok.arenas_ld.util.InviteCandidates.relation(player, other)
+                            == net.ledok.arenas_ld.api.ArenasApi.PlayerRelation.FRIEND
+                        && net.ledok.arenas_ld.util.InviteCandidates.relation(player, player.getUUID())
+                            == net.ledok.arenas_ld.api.ArenasApi.PlayerRelation.NONE, "the relations provider sorts the picker");
+                    net.ledok.arenas_ld.api.ArenasApi.setPlayerRelations((viewer, id) -> { throw new IllegalStateException("broken"); });
+                    helper.assertTrue(net.ledok.arenas_ld.util.InviteCandidates.relation(player, other)
+                        == net.ledok.arenas_ld.api.ArenasApi.PlayerRelation.NONE, "a failing provider reads as no relation");
+                } finally {
+                    net.ledok.arenas_ld.api.ArenasApi.setPlayerRelations(null);
+                }
+                var candidates = new net.ledok.arenas_ld.packet.InviteCandidatesPayload(net.minecraft.core.BlockPos.ZERO, List.of(
+                    new net.ledok.arenas_ld.packet.InviteCandidatesPayload.Entry(other, "Bob", 0, false, true,
+                        java.util.Optional.of(net.minecraft.network.chat.Component.literal("no"))),
+                    new net.ledok.arenas_ld.packet.InviteCandidatesPayload.Entry(player.getUUID(), "Alice", 3, true, false,
+                        java.util.Optional.empty())));
+                var buf = new net.minecraft.network.RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.buffer(),
+                    helper.getLevel().registryAccess());
+                net.ledok.arenas_ld.packet.InviteCandidatesPayload.STREAM_CODEC.encode(buf, candidates);
+                var decoded = net.ledok.arenas_ld.packet.InviteCandidatesPayload.STREAM_CODEC.decode(buf);
+                helper.assertTrue(decoded.entries().size() == 2 && decoded.entries().get(0).invited()
+                    && decoded.entries().get(0).blocked().map(c -> c.getString().equals("no")).orElse(false)
+                    && decoded.entries().get(1).member() && decoded.entries().get(1).relation() == 3,
+                    "the invite candidates packet round-trips");
                 var tiers = net.ledok.arenas_ld.config.ArenasLdConfig.getInstance().rental_spell_max_tier;
                 var tiersBefore = new java.util.LinkedHashMap<>(tiers);
                 try {
