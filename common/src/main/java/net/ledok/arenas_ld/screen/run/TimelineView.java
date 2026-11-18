@@ -9,7 +9,7 @@ import net.ledok.vectorlib.client.canvas.layout.Flex;
 import net.ledok.vectorlib.client.canvas.layout.Insets;
 import net.ledok.vectorlib.client.canvas.layout.Sizing;
 import net.ledok.vectorlib.client.canvas.widget.Button;
-import net.minecraft.client.Minecraft;
+import net.ledok.vectorlib.client.canvas.widget.Widget;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -18,228 +18,333 @@ import net.minecraft.world.entity.EntityType;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * The run details' Timeline tab (4.37.0): one player's run event log ({@code RunEvents}), paged from the server
- * ({@link RunTimelinePayload}), newest at the bottom. A player picker, type filters, and "show earlier" in steps of
- * {@link #STEP} rows. While the run goes it asks for new events every two seconds. Client only; one at a time.
+ * The run details' Timeline tab (4.37.0; 4.41.0 merged party view): every player's run event log ({@code RunEvents}),
+ * paged from the server one player at a time ({@link RunTimelinePayload}, unchanged) and merged here in time order,
+ * newest at the bottom. In a party run each line names its player. Two rows of on/off toggles filter it: event kinds
+ * and players. "Show earlier" goes back in steps of {@link #STEP} rows. While the run goes it asks for new events every
+ * two seconds. Client only; one at a time.
  */
 public final class TimelineView {
     private static final int STEP = 300;
+    private static final float NAME_MAX = 84;
 
     enum Filter {
-        ALL(null), HITS(Set.of("hit_taken", "hit_cancelled", "dodge")),
+        HITS(Set.of("hit_taken", "hit_cancelled", "dodge")),
         CASTS(Set.of("cast_start", "cast_end", "cast_cancel", "channel_start", "channel_end")),
         PROCS(Set.of("passive")), EFFECTS(Set.of("effect_add", "effect_remove")), SWAPS(Set.of("swap")),
         DOWNS(Set.of("downed", "revived", "death"));
 
-        final @Nullable Set<String> types;
+        final Set<String> types;
 
-        Filter(@Nullable Set<String> types) {
+        Filter(Set<String> types) {
             this.types = types;
+        }
+
+        /** The kind an event type belongs to; null for one no toggle names (always shown). */
+        static @Nullable Filter of(String type) {
+            for (Filter f : values()) {
+                if (f.types.contains(type)) return f;
+            }
+            return null;
         }
     }
 
-    private static @Nullable UUID player;
-    private static final List<List<String>> EVENTS = new ArrayList<>();
-    private static int total;
-    private static int dropped;
-    private static boolean waiting;
-    private static boolean timedOut;
-    private static int waitingTicks;
+    /** One player's log as fetched so far. */
+    private static final class Stream {
+        final UUID uuid;
+        final String name;
+        final List<List<String>> events = new ArrayList<>();
+        int total;
+        int dropped;
+        boolean waiting;
+        boolean timedOut;
+        int waitingTicks;
+
+        Stream(UUID uuid, String name) {
+            this.uuid = uuid;
+            this.name = name;
+        }
+    }
+
+    private record Line(Stream who, List<String> event, long tick) {
+    }
+
+    private static final Map<UUID, Stream> STREAMS = new LinkedHashMap<>();
+    private static final EnumSet<Filter> KINDS = EnumSet.allOf(Filter.class);
+    private static final Set<UUID> HIDDEN = new HashSet<>();
     private static int ticks;
-    private static Filter filter = Filter.ALL;
     private static int shown = STEP;
     private static @Nullable Runnable refresh;
 
     private TimelineView() {
     }
 
-    /** The tab opened (or the screen, with it already picked): the viewer's own row first, else the first. */
+    /** The tab opened (or the screen, with it already picked): everyone's log, filters kept for the same party. */
     public static void open(RunDetailsPayload payload, Runnable onChange) {
         refresh = onChange;
-        UUID self = Minecraft.getInstance().player == null ? null : Minecraft.getInstance().player.getUUID();
-        UUID pick = null;
-        for (RunDetailsPayload.Row row : payload.rows()) {
-            if (row.uuid().equals(player)) {
-                pick = player; // keep the one picked before (same run, reopened tab)
-                break;
-            }
-            if (row.uuid().equals(self) || pick == null) {
-                pick = row.uuid();
+        List<UUID> party = payload.rows().stream().map(RunDetailsPayload.Row::uuid).toList();
+        if (!STREAMS.keySet().equals(new java.util.LinkedHashSet<>(party))) {
+            STREAMS.clear();
+            HIDDEN.clear();
+            KINDS.addAll(EnumSet.allOf(Filter.class));
+            shown = STEP;
+            for (RunDetailsPayload.Row row : payload.rows()) {
+                STREAMS.put(row.uuid(), new Stream(row.uuid(), row.name()));
             }
         }
-        if (pick != null) {
-            select(pick);
-        } else {
-            clear();
+        for (Stream s : STREAMS.values()) {
+            if (s.events.isEmpty()) {
+                s.waiting = false;
+                request(s, 0);
+            }
         }
     }
 
     public static void clear() {
-        player = null;
-        EVENTS.clear();
-        total = dropped = 0;
-        waiting = false;
-        timedOut = false;
-        waitingTicks = ticks = 0;
-        filter = Filter.ALL;
+        STREAMS.clear();
+        HIDDEN.clear();
+        KINDS.addAll(EnumSet.allOf(Filter.class));
+        ticks = 0;
         shown = STEP;
         refresh = null;
     }
 
-    private static void select(UUID uuid) {
-        player = uuid;
-        EVENTS.clear();
-        total = dropped = 0;
-        shown = STEP;
-        waiting = false;
-        request(0);
-    }
-
-    private static void request(int from) {
-        if (player == null || waiting) {
+    private static void request(Stream s, int from) {
+        if (s.waiting) {
             return;
         }
-        waiting = true;
-        timedOut = false;
-        waitingTicks = 0;
-        ArenasNetwork.sendToServer(new RunTimelinePayload.Request(player, from));
+        s.waiting = true;
+        s.timedOut = false;
+        s.waitingTicks = 0;
+        ArenasNetwork.sendToServer(new RunTimelinePayload.Request(s.uuid, from));
     }
 
     public static void onPayload(RunTimelinePayload payload) {
-        if (!payload.player().equals(player)) return;
-        if (payload.from() != EVENTS.size()) {
-            // The server clamps the offset when the viewer's current log is shorter.
-            if (payload.from() == payload.total() && payload.total() < EVENTS.size()) {
-                select(payload.player());
-                if (refresh != null) refresh.run();
+        Stream s = STREAMS.get(payload.player());
+        if (s == null) return;
+        if (payload.from() != s.events.size()) {
+            // The server clamps the offset when the viewer's current log is shorter: start that player over.
+            if (payload.from() == payload.total() && payload.total() < s.events.size()) {
+                s.events.clear();
+                s.total = s.dropped = 0;
+                s.waiting = false;
+                request(s, 0);
+                changed();
             }
             return;
         }
-        boolean recovered = timedOut;
-        waiting = false;
-        timedOut = false;
-        EVENTS.addAll(payload.events());
-        total = payload.total();
-        dropped = payload.dropped();
-        if (EVENTS.size() < total && !payload.events().isEmpty()) {
-            request(EVENTS.size()); // the next page
+        boolean recovered = s.timedOut;
+        s.waiting = false;
+        s.timedOut = false;
+        s.events.addAll(payload.events());
+        s.total = payload.total();
+        s.dropped = payload.dropped();
+        if (s.events.size() < s.total && !payload.events().isEmpty()) {
+            request(s, s.events.size()); // the next page
         }
-        if (refresh != null && (!payload.events().isEmpty() || payload.from() == 0 || recovered)) {
-            refresh.run();
+        if (!payload.events().isEmpty() || payload.from() == 0 || recovered) {
+            changed();
         }
+    }
+
+    private static void changed() {
+        if (refresh != null) refresh.run();
     }
 
     /** Poll an active run every two seconds. A missing reply exposes Retry after five seconds. */
     public static void tick(boolean live) {
-        if (waiting && ++waitingTicks > 100) {
-            waiting = false;
-            timedOut = true;
-            if (refresh != null) refresh.run();
+        boolean timedOutNow = false;
+        for (Stream s : STREAMS.values()) {
+            if (s.waiting && ++s.waitingTicks > 100) {
+                s.waiting = false;
+                s.timedOut = true;
+                timedOutNow = true;
+            }
         }
-        if (live && ++ticks % 40 == 0 && !timedOut) {
-            request(EVENTS.size());
+        if (timedOutNow) changed();
+        if (live && ++ticks % 40 == 0) {
+            for (Stream s : STREAMS.values()) {
+                if (!s.timedOut) request(s, s.events.size());
+            }
         }
+    }
+
+    // ── filters ──────────────────────────────────────────────────────────────
+
+    /** All on: this one alone. Otherwise flips it; switching the last one off turns all back on. */
+    private static void toggleKind(Filter f) {
+        if (KINDS.size() == Filter.values().length) {
+            KINDS.clear();
+            KINDS.add(f);
+        } else if (!KINDS.remove(f)) {
+            KINDS.add(f);
+        } else if (KINDS.isEmpty()) {
+            KINDS.addAll(EnumSet.allOf(Filter.class));
+        }
+        shown = STEP;
+        changed();
+    }
+
+    private static void togglePlayer(UUID uuid) {
+        if (HIDDEN.isEmpty()) {
+            for (UUID other : STREAMS.keySet()) {
+                if (!other.equals(uuid)) HIDDEN.add(other);
+            }
+        } else if (!HIDDEN.remove(uuid)) {
+            HIDDEN.add(uuid);
+            if (HIDDEN.size() >= STREAMS.size()) HIDDEN.clear();
+        }
+        shown = STEP;
+        changed();
     }
 
     // ── build ────────────────────────────────────────────────────────────────
 
     public static void build(Flex col, RunDetailsPayload payload, RunTheme.Palette pal, float availableWidth) {
-        if (payload.rows().size() > 1) {
-            List<RunWidgets.Segment> people = new ArrayList<>();
-            for (RunDetailsPayload.Row row : payload.rows()) {
-                UUID uuid = row.uuid();
-                Component name = Component.literal(row.name());
-                RunWidgets.Segment person = new RunWidgets.Segment(pal, name, pal.accent(),
-                    () -> uuid.equals(player), () -> {
-                        select(uuid);
-                        if (refresh != null) refresh.run();
-                    });
-                if (RunWidgets.width(name) + 6 > availableWidth) person.tooltip(name);
-                person.id("timeline-player-" + uuid);
-                people.add(person);
-            }
-            addSegmentRows(col, people, availableWidth);
-        }
-        List<RunWidgets.Segment> chips = new ArrayList<>();
+        boolean party = STREAMS.size() > 1;
+        List<Widget> kinds = new ArrayList<>();
+        kinds.add(toggle(pal, Component.translatable("gui.arenas_ld.timeline.filter.all"), pal.info(),
+            () -> KINDS.size() == Filter.values().length, () -> {
+                KINDS.addAll(EnumSet.allOf(Filter.class));
+                shown = STEP;
+                changed();
+            }, "timeline-filter-all", availableWidth));
         for (Filter f : Filter.values()) {
             String key = f.name().toLowerCase(Locale.ROOT);
-            Component label = Component.translatable("gui.arenas_ld.timeline.filter." + key);
-            RunWidgets.Segment chip = new RunWidgets.Segment(pal, label, pal.info(), () -> filter == f, () -> {
-                    filter = f;
-                    shown = STEP;
-                    if (refresh != null) refresh.run();
-                });
-            if (RunWidgets.width(label) + 6 > availableWidth) chip.tooltip(label);
-            chip.id("timeline-filter-" + key);
-            chips.add(chip);
+            kinds.add(toggle(pal, Component.translatable("gui.arenas_ld.timeline.filter." + key), pal.info(),
+                () -> KINDS.size() < Filter.values().length && KINDS.contains(f), () -> toggleKind(f),
+                "timeline-filter-" + key, availableWidth));
         }
-        addSegmentRows(col, chips, availableWidth);
+        Flex filters = Flex.column().gap(4);
+        filters.sizing(Sizing.fill(), Sizing.content());
+        wrap(filters, kinds, availableWidth);
+        if (party) {
+            List<Widget> people = new ArrayList<>();
+            people.add(toggle(pal, Component.translatable("gui.arenas_ld.timeline.players.all"), pal.accent(),
+                HIDDEN::isEmpty, () -> {
+                    HIDDEN.clear();
+                    shown = STEP;
+                    changed();
+                }, "timeline-players-all", availableWidth));
+            for (Stream s : STREAMS.values()) {
+                people.add(toggle(pal, Component.literal(s.name), pal.accent(),
+                    () -> !HIDDEN.isEmpty() && !HIDDEN.contains(s.uuid), () -> togglePlayer(s.uuid),
+                    "timeline-player-" + s.uuid, availableWidth));
+            }
+            wrap(filters, people, availableWidth);
+        }
+        col.item(filters);
 
-        List<List<String>> matching = new ArrayList<>();
-        for (List<String> event : EVENTS) {
-            if (event.size() >= 2 && (filter.types == null || filter.types.contains(event.get(1)))) {
-                matching.add(event);
+        List<Line> all = new ArrayList<>();
+        int total = 0;
+        int dropped = 0;
+        boolean loading = false;
+        boolean timedOut = false;
+        for (Stream s : STREAMS.values()) {
+            timedOut |= s.timedOut;
+            if (HIDDEN.contains(s.uuid)) continue;
+            total += s.total;
+            dropped += s.dropped;
+            loading |= s.waiting && (s.events.size() < s.total || s.events.isEmpty());
+            for (List<String> event : s.events) {
+                if (event.size() < 2) continue;
+                Filter kind = Filter.of(event.get(1));
+                if (kind == null || KINDS.contains(kind)) {
+                    all.add(new Line(s, event, tick(event.get(0))));
+                }
             }
         }
-        MutableComponent info = Component.translatable("gui.arenas_ld.timeline.count", total);
+        // Each log is in time order already; a stable sort keeps same-tick events in player order.
+        if (party) all.sort(Comparator.comparingLong(Line::tick));
+
+        boolean filtered = KINDS.size() < Filter.values().length;
+        MutableComponent info = filtered
+            ? Component.translatable("gui.arenas_ld.timeline.count_of", all.size(), total)
+            : Component.translatable("gui.arenas_ld.timeline.count", total);
         if (dropped > 0) {
             info.append(" · ").append(Component.translatable("gui.arenas_ld.timeline.dropped", dropped));
         }
-        if (waiting && (EVENTS.size() < total || EVENTS.isEmpty())) {
+        if (loading) {
             info.append(" · ").append(Component.translatable("gui.arenas_ld.timeline.loading"));
         }
-        col.item(line(info, pal.inkDim()));
+        Flex counter = line(info, pal.inkDim());
+        counter.padding(Insets.of(2, 0, 0, 0));
+        col.item(counter);
         if (timedOut) {
             col.item(line(Component.translatable("gui.arenas_ld.timeline.timeout"), pal.warn()));
             Button retry = RunWidgets.button(Component.translatable("gui.arenas_ld.timeline.retry"), () -> {
-                request(EVENTS.size());
-                if (refresh != null) refresh.run();
+                for (Stream s : STREAMS.values()) {
+                    if (s.timedOut) request(s, s.events.size());
+                }
+                changed();
             });
             retry.style(RunWidgets.flatStyle(pal));
             col.item(retry);
         }
-        if (matching.isEmpty()) {
-            if (!waiting && !timedOut) {
+        if (all.isEmpty()) {
+            if (!loading && !timedOut) {
                 col.item(line(Component.translatable(total == 0 ? "gui.arenas_ld.timeline.none"
                     : "gui.arenas_ld.timeline.none_matching"), pal.inkMid()));
             }
             return;
         }
-        int start = Math.max(0, matching.size() - shown);
+        int start = Math.max(0, all.size() - shown);
         if (start > 0) {
-            Button earlier = new Button(160, 16, Component.translatable("gui.arenas_ld.timeline.earlier", start), () -> {
-                shown += STEP;
-                if (refresh != null) {
-                    refresh.run();
-                }
-            });
+            Component label = Component.translatable("gui.arenas_ld.timeline.earlier", start);
+            Button earlier = new Button(Math.min(availableWidth, Math.max(160, RunWidgets.width(label) + 16)), 16,
+                label, () -> {
+                    shown += STEP;
+                    changed();
+                });
             earlier.style(RunWidgets.flatStyle(pal));
             col.item(earlier);
         }
-        for (int i = start; i < matching.size(); i++) {
-            col.item(row(matching.get(i), pal));
+        float nameW = 0;
+        if (party) {
+            for (Stream s : STREAMS.values()) {
+                nameW = Math.max(nameW, RunWidgets.width(Component.literal(s.name)));
+            }
+            nameW = Math.min(Math.min(NAME_MAX, availableWidth / 5), nameW + 2);
+        }
+        for (int i = start; i < all.size(); i++) {
+            col.item(row(all.get(i), party ? nameW : 0, pal));
         }
     }
 
-    private static void addSegmentRows(Flex col, List<RunWidgets.Segment> segments, float availableWidth) {
+    private static RunWidgets.Toggle toggle(RunTheme.Palette pal, Component label, int color,
+                                           java.util.function.BooleanSupplier on, Runnable action, String id,
+                                           float availableWidth) {
+        RunWidgets.Toggle t = new RunWidgets.Toggle(pal, label, color, on, action);
+        if (t.bounds().width() > availableWidth) t.tooltip(label);
+        t.id(id);
+        return t;
+    }
+
+    /** The chips left to right, a new row when the next one wouldn't fit; each row as tall as a chip. */
+    private static void wrap(Flex col, List<? extends Widget> chips, float availableWidth) {
         Flex row = null;
         float used = 0;
-        for (RunWidgets.Segment segment : segments) {
-            float width = Math.min(segment.bounds().width(), Math.max(1, availableWidth));
-            if (row == null || used + 3 + width > availableWidth) {
-                row = col.item(Flex.row().gap(3));
-                row.sizing(Sizing.fill(), Sizing.content());
+        for (Widget chip : chips) {
+            float width = Math.min(chip.bounds().width(), Math.max(1, availableWidth));
+            if (row == null || used + 4 + width > availableWidth) {
+                row = col.item(Flex.row().gap(4).alignItems(Align.CENTER));
+                row.sizing(Sizing.fill(), Sizing.fixed(RunWidgets.Toggle.HEIGHT));
                 used = 0;
             }
-            segment.sizing(Sizing.fixed(width), Sizing.fixed(20));
-            row.item(segment);
-            used += (used == 0 ? 0 : 3) + width;
+            chip.sizing(Sizing.fixed(width), Sizing.fixed(RunWidgets.Toggle.HEIGHT));
+            row.item(chip);
+            used += (used == 0 ? 0 : 4) + width;
         }
     }
 
@@ -250,7 +355,8 @@ public final class TimelineView {
         return row;
     }
 
-    private static Flex row(List<String> e, RunTheme.Palette pal) {
+    private static Flex row(Line line, float nameW, RunTheme.Palette pal) {
+        List<String> e = line.event();
         Flex row = Flex.row().gap(6).alignItems(Align.CENTER).padding(Insets.of(1, 4, 1, 4));
         row.sizing(Sizing.fill(), Sizing.content());
         String type = e.get(1);
@@ -262,8 +368,21 @@ public final class TimelineView {
         time.sizing(Sizing.fixed(46), Sizing.content());
         time.item(RunWidgets.text(Component.literal(clock(e.get(0))), pal.inkDim()));
         row.item(time);
+        if (nameW > 0) {
+            var name = RunWidgets.label(nameW, Component.literal(line.who().name), pal.accent());
+            name.sizing(Sizing.fixed(nameW), Sizing.content());
+            row.item(name);
+        }
         row.item(RunWidgets.grow(describe(e), color(type, e, pal)));
         return row;
+    }
+
+    private static long tick(String ticks) {
+        try {
+            return Long.parseLong(ticks);
+        } catch (NumberFormatException ex) {
+            return Long.MAX_VALUE;
+        }
     }
 
     private static int color(String type, List<String> e, RunTheme.Palette pal) {

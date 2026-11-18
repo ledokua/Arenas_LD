@@ -298,6 +298,61 @@ public final class RunWidgets {
         }
     }
 
+    /**
+     * An on/off filter chip (4.41.0, the Timeline's filters): rounded, a check mark and the color's wash while on, plain
+     * and dim while off. Every click runs {@code action}; the owner flips its own state.
+     */
+    public static final class Toggle extends Widget {
+        public static final float HEIGHT = 16;
+        private final Component label;
+        private final int color;
+        private final RunTheme.Palette p;
+        private final BooleanSupplier on;
+        private final Runnable action;
+
+        public Toggle(RunTheme.Palette p, Component label, int color, BooleanSupplier on, Runnable action) {
+            super(RunWidgets.width(label) + 22, HEIGHT);
+            this.p = p;
+            this.label = label;
+            this.color = color;
+            this.on = on;
+            this.action = action;
+            bind(() -> this.on.getAsBoolean());
+        }
+
+        @Override
+        protected void rebuild() {
+            boolean sel = on.getAsBoolean();
+            boolean hover = enabled && (hovered || focused);
+            int fill = sel ? ((color & 0x00FFFFFF) | 0x33000000) : (hover ? p.row() : p.panel2());
+            add(Shapes.roundRect(0, 0, width, height, height / 2).fill(fill).stroke(sel ? color : p.hairline(), 1));
+            int ink = sel ? color : (hover ? p.inkMid() : p.inkDim());
+            add(TextNode.of(Component.literal(sel ? "✓" : "·")).at(9, textY(height)).align(TextNode.Align.CENTER)
+                .color(ink).shadow(false));
+            add(TextNode.of(label).at(16, textY(height)).maxWidth(Math.max(1, (int) width - 20)).ellipsis(true)
+                .color(sel ? p.ink() : ink).shadow(false));
+        }
+
+        @Override
+        public boolean onMouseDown(float x, float y, int button) {
+            if (!enabled || button != 0) return false;
+            UiSounds.click();
+            action.run();
+            return true;
+        }
+
+        @Override
+        public boolean focusable() { return enabled; }
+
+        @Override
+        public boolean onKeyPressed(int key, int scanCode, int modifiers) {
+            if (!enabled || key != 257 && key != 335 && key != 32) return false;
+            UiSounds.click();
+            action.run();
+            return true;
+        }
+    }
+
     /** Segments side by side over the full width. */
     public static Flex segmented(Segment... segments) {
         Flex row = Flex.row().gap(3).alignItems(Align.CENTER);

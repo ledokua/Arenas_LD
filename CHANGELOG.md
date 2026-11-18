@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.41.0
+
+LeDok, 2026-11-18, via MCP eden: run details «Timeline». **Client only:** the pack and Client TEST need it. The packets
+are unchanged, so old clients and old servers keep working with it.
+- **One timeline for the whole party.** The tab loads every player's log and merges them in time order. In a party run
+  each line names its player.
+- **Toggles instead of tabs.** The event kinds (Hits, Casts, Procs, Effects, Swaps, Downs) are on/off toggles, several at
+  once. With all on, a click shows that kind alone; after that each click adds or removes one. "All" turns them all back
+  on, and so does switching the last one off.
+- **Player toggles** in a second row, the same way, with "Everyone" first (party runs only).
+- The counter says "N of M events" while a kind is off.
+- Layout: each toggle row has a fixed height and the counter sits below them with its own space, so the rows, the counter
+  and "Show earlier (N)" can't overlap.
+
 ## 4.40.8
 
 Live bug (LeDok, 2026-11-18, via MCP eden). **Server only.**
