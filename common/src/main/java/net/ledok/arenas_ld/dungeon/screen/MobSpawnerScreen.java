@@ -76,6 +76,8 @@ public class MobSpawnerScreen extends FitCanvasHandledScreen<MobSpawnerScreenHan
     public MobSpawnerScreen(MobSpawnerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         canvas.theme(ArenasUi.THEME);
+        minLogicalWidth(300);
+        minLogicalHeight(220);
         fillWindow();
     }
 
@@ -105,11 +107,13 @@ public class MobSpawnerScreen extends FitCanvasHandledScreen<MobSpawnerScreenHan
         float shellWidth = Math.min(340, Math.max(260, canvas.width() - 40));
 
         Flex shell = root.item(Flex.column());
-        shell.sizing(Sizing.fixed(shellWidth), Sizing.content());
+        shell.sizing(Sizing.fixed(shellWidth), Sizing.fixed(canvas.height() - 24));
         shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
 
         shell.item(buildHeader());
-        shell.item(buildContent());
+        ScrollPanel scroll = new ScrollPanel(100, 100, buildContent());
+        scroll.sizing(Sizing.fill(), Sizing.expand());
+        shell.item(scroll);
 
         root.layoutIn(canvas.width(), canvas.height());
     }
@@ -141,7 +145,7 @@ public class MobSpawnerScreen extends FitCanvasHandledScreen<MobSpawnerScreenHan
 
         header.item(info);
         header.spacer();
-        header.item(ArenasUi.button(Component.literal("X"), 20, 16, this::onClose));
+        header.item(ArenasUi.closeButton(this::onClose));
         return header;
     }
 

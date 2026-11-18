@@ -1215,5 +1215,19 @@
   "gui.arenas_ld.invite_picker.state.in_run": "У забігу",
   "gui.arenas_ld.invite_picker.state.busy": "Зайнятий",
   "gui.arenas_ld.invite_picker.invite": "Запросити",
-  "gui.arenas_ld.invite_picker.invited": "Запрошено"
+  "gui.arenas_ld.invite_picker.invited": "Запрошено",
+  "gui.arenas_ld.close_screen": "Закрити (Esc)",
+  "gui.arenas_ld.room_rewards.back": "Назад до налаштувань кімнати",
+  "gui.arenas_ld.instance.status.free": "Вільний",
+  "gui.arenas_ld.instance.status.running": "Зайнятий",
+  "gui.arenas_ld.instance.status.cooldown": "Відновлення · %s с",
+  "gui.arenas_ld.timeline.timeout": "Сервер не відповів. Хронологія може бути неповною.",
+  "gui.arenas_ld.timeline.retry": "Повторити завантаження",
+  "gui.arenas_ld.rental.empty": "Для цього рівня забігу немає доступних орендованих наборів.",
+  "gui.arenas_ld.rental.use_own_gear": "Використати своє спорядження",
+  "gui.arenas_ld.id_suggestions": "Показати або приховати відповідні ідентифікатори",
+  "gui.arenas_ld.admin.run_settings.allow_own_gear": "Дозволити своє спорядження",
+  "gui.arenas_ld.admin.run_settings.require_rentals": "Вимагати оренду",
+  "gui.arenas_ld.admin.run_settings.rolls_error": "Введіть число від 0 до %s або залиште поле порожнім для глобального значення.",
+  "gui.arenas_ld.admin.position": "Позиція · %s"
 }

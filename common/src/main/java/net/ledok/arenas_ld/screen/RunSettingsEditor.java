@@ -13,6 +13,7 @@ import net.minecraft.network.chat.Component;
 import java.util.function.Consumer;
 
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
+import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
 import static net.ledok.arenas_ld.screen.ArenasUi.INK;
 import static net.ledok.arenas_ld.screen.ArenasUi.INK_DIM;
@@ -43,7 +44,8 @@ public final class RunSettingsEditor {
         rentalRow.sizing(Sizing.fill(), Sizing.content());
         rentalRow.item(ArenasUi.text(Component.translatable(current.rentalRequired()
             ? "gui.arenas_ld.admin.run_settings.rental_required" : "gui.arenas_ld.admin.run_settings.rental_optional"), INK));
-        rentalRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.admin.run_settings.rental_switch"), 120, 16, () ->
+        rentalRow.item(ArenasUi.button(Component.translatable(current.rentalRequired()
+            ? "gui.arenas_ld.admin.run_settings.allow_own_gear" : "gui.arenas_ld.admin.run_settings.require_rentals"), () ->
             send(controllerPos, current.withRentalMode(current.rentalRequired() ? RunSettings.OPTIONAL : RunSettings.REQUIRED))));
         col.item(rentalRow);
         col.item(ArenasUi.text(Component.translatable("gui.arenas_ld.admin.run_settings.rental_hint"), INK_DIM).maxWidth(470));
@@ -62,9 +64,14 @@ public final class RunSettingsEditor {
             : current.hasOwnLootRolls() ? RewardMath.number(current.baseLootRolls()) : "";
         IdSuggestionDropdown.Field field = IdSuggestionDropdown.textBox(100, shown, 16);
         field.sizing(Sizing.expand(), Sizing.fixed(18));
-        field.changeListeners.add(draftSink);
+        var error = ArenasUi.label(100, Component.empty(), DANGER);
+        error.sizing(Sizing.fill(), Sizing.content());
+        field.changeListeners.add(value -> {
+            draftSink.accept(value);
+            error.text(Component.empty());
+        });
         fieldRow.item(field);
-        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.admin.run_settings.rolls_set"), 64, 18, () -> {
+        Runnable apply = () -> {
             String text = field.text().trim().replace(',', '.');
             double rolls;
             if (text.isEmpty()) {
@@ -73,20 +80,26 @@ public final class RunSettingsEditor {
                 try {
                     rolls = Double.parseDouble(text);
                 } catch (NumberFormatException e) {
-                    return;
+                    rolls = Double.NaN;
                 }
-                if (rolls < 0 || rolls > RunSettings.MAX_ROLLS) {
+                if (!Double.isFinite(rolls) || rolls < 0 || rolls > RunSettings.MAX_ROLLS) {
+                    error.text(Component.translatable("gui.arenas_ld.admin.run_settings.rolls_error", RunSettings.MAX_ROLLS));
                     return;
                 }
             }
             draftSink.accept(null);
+            error.text(Component.empty());
             send(controllerPos, current.withBaseLootRolls(rolls));
-        }));
-        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.admin.run_settings.rolls_default"), 64, 18, () -> {
+        };
+        field.onSubmit(apply);
+        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.admin.run_settings.rolls_set"), apply));
+        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.admin.run_settings.rolls_default"), () -> {
+            error.text(Component.empty());
             draftSink.accept(null);
             send(controllerPos, current.withBaseLootRolls(-1));
         }));
         col.item(fieldRow);
+        col.item(error);
         return col;
     }
 

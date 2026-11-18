@@ -11,6 +11,7 @@ import net.ledok.vectorlib.client.canvas.layout.Insets;
 import net.ledok.vectorlib.client.canvas.layout.Justify;
 import net.ledok.vectorlib.client.canvas.layout.Sizing;
 import net.ledok.vectorlib.client.canvas.widget.Button;
+import net.ledok.vectorlib.client.canvas.widget.ScrollPanel;
 import net.ledok.vectorlib.client.canvas.widget.TextField;
 import net.ledok.vectorlib.client.canvas.widget.Widget;
 import net.ledok.vectorlib.client.presentation.Placement;
@@ -58,6 +59,8 @@ public class EquipmentScreen extends FitCanvasHandledScreen<EquipmentScreenHandl
     public EquipmentScreen(EquipmentScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(360, 300), Placement.Screen.center());
         canvas.theme(ArenasUi.THEME);
+        minLogicalWidth(324);
+        minLogicalHeight(220);
         fillWindow();
     }
 
@@ -101,7 +104,7 @@ public class EquipmentScreen extends FitCanvasHandledScreen<EquipmentScreenHandl
 
         float shellWidth = Math.max(300, Math.min(360, canvas.width() - 24));
         Flex shell = root.item(Flex.column());
-        shell.sizing(Sizing.fixed(shellWidth), Sizing.content());
+        shell.sizing(Sizing.fixed(shellWidth), Sizing.fixed(Math.min(390, canvas.height() - 24)));
         shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
 
         shell.item(buildHeader());
@@ -116,7 +119,9 @@ public class EquipmentScreen extends FitCanvasHandledScreen<EquipmentScreenHandl
         content.item(dropToggle());
         content.item(ArenasUi.spacer(6));
         content.item(inventoryGrid());
-        shell.item(content);
+        ScrollPanel scroll = new ScrollPanel(100, 100, content);
+        scroll.sizing(Sizing.fill(), Sizing.expand());
+        shell.item(scroll);
 
         shell.item(buildFooter());
         root.layoutIn(canvas.width(), canvas.height());
@@ -194,7 +199,7 @@ public class EquipmentScreen extends FitCanvasHandledScreen<EquipmentScreenHandl
 
         header.item(ArenasUi.text(this.title, INK));
         header.spacer();
-        header.item(ArenasUi.button(Component.literal("×"), 22, 18, this::onClose));
+        header.item(ArenasUi.closeButton(this::onClose));
         return header;
     }
 
@@ -266,9 +271,23 @@ public class EquipmentScreen extends FitCanvasHandledScreen<EquipmentScreenHandl
         @Override
         protected void rebuild() {
             add(Shapes.rect(0, 0, width(), height())
-                    .fill(isHovered() ? SLOT_BG_HOVER : SLOT_BG)
-                    .stroke(isHovered() ? HAIRLINE_HI : HAIRLINE, 1));
+                    .fill(isHovered() || isFocused() ? SLOT_BG_HOVER : SLOT_BG)
+                    .stroke(isFocused() ? ACCENT : isHovered() ? HAIRLINE_HI : HAIRLINE, 1));
             add(item.stack(menu.getSlot(slotIndex).getItem()));
+        }
+
+        @Override
+        public boolean focusable() {
+            return true;
+        }
+
+        @Override
+        public boolean onKeyPressed(int key, int scanCode, int modifiers) {
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER
+                || key == org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE) {
+                return onMouseDown(0, 0, 0);
+            }
+            return false;
         }
 
         @Override

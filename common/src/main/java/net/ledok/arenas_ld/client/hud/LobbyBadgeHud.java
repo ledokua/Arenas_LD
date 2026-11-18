@@ -42,6 +42,11 @@ public final class LobbyBadgeHud {
         Font font = mc.font;
         Component text = Component.translatable("hud.arenas_ld.lobby_badge", badge.activity(), badge.members(),
             badge.maxMembers(), badge.ready());
+        int available = Math.max(1, screenWidth - PAD * 2 - 4);
+        if (font.width(text) > available) {
+            int shortened = available - font.width("…");
+            text = Component.literal(font.plainSubstrByWidth(text.getString(), Math.max(0, shortened)) + "…");
+        }
         w = font.width(text) + PAD * 2;
         h = font.lineHeight + PAD * 2 - 1;
         if ("top_right".equals(mode)) {

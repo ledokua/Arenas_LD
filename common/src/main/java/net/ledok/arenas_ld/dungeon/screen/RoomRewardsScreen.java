@@ -82,6 +82,8 @@ public class RoomRewardsScreen extends FitCanvasHandledScreen<RoomControllerScre
     public RoomRewardsScreen(RoomControllerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         canvas.theme(ArenasUi.THEME);
+        minLogicalWidth(464);
+        minLogicalHeight(220);
         fillWindow();
     }
 
@@ -106,7 +108,7 @@ public class RoomRewardsScreen extends FitCanvasHandledScreen<RoomControllerScre
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
 
         float shellWidth  = Math.max(440, Math.min(560, canvas.width() - 24));
-        float shellHeight = Math.max(300, canvas.height() - 24);
+        float shellHeight = canvas.height() - 24;
         Flex shell = root.item(Flex.column());
         shell.sizing(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
         shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
@@ -133,7 +135,9 @@ public class RoomRewardsScreen extends FitCanvasHandledScreen<RoomControllerScre
         header.sizing(Sizing.fill(), Sizing.fixed(42));
         header.backgroundFill(PANEL_2);
 
-        header.item(ArenasUi.button(Component.literal("←"), 22, 18, this::returnToRoomScreen));
+        Button back = ArenasUi.button(Component.literal("←"), 22, 18, this::returnToRoomScreen);
+        back.tooltip(Component.translatable("gui.arenas_ld.room_rewards.back"));
+        header.item(back);
 
         Flex mark = Flex.column();
         mark.sizing(Sizing.fixed(18), Sizing.fixed(18));
@@ -148,7 +152,7 @@ public class RoomRewardsScreen extends FitCanvasHandledScreen<RoomControllerScre
         header.item(info);
 
         header.spacer();
-        header.item(ArenasUi.button(Component.literal("×"), 22, 18, this::onClose));
+        header.item(ArenasUi.closeButton(this::onClose));
         return header;
     }
 

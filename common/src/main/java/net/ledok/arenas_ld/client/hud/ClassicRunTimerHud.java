@@ -87,6 +87,8 @@ final class ClassicRunTimerHud {
             hide();
             return;
         }
+        float scale = Math.min(1f, Math.max(1, mc.getWindow().getGuiScaledWidth() - 8) / CANVAS_W);
+        handle.placement(Placement.Screen.top(6).scale(scale));
         long now = mc.level.getGameTime();
         long sinceUpdate = now - receivedAtTick;
         if (sinceUpdate > STALE_TICKS || sinceUpdate < 0) {
@@ -137,7 +139,7 @@ final class ClassicRunTimerHud {
         hardcoreTag.at(PANEL_X + PANEL_W + 6, (PANEL_H - 9) / 2 + 1);
 
         labelText = canvas.add(TextNode.of(Component.empty()).color(ArenasUi.INK_MID).shadow(true)
-            .align(TextNode.Align.CENTER));
+            .align(TextNode.Align.CENTER).maxWidth((int) CANVAS_W - 8).ellipsis(true));
         labelText.at(CANVAS_W / 2, PANEL_H + 4);
 
         bossTrack = canvas.add(Shapes.roundRect(BAR_X, BOSS_Y, BAR_W, 4, 2)

@@ -4,6 +4,7 @@ import net.ledok.arenas_ld.api.ArenasApi;
 import net.ledok.arenas_ld.packet.InviteCandidatesPayload;
 import net.ledok.arenas_ld.packet.RequestInviteCandidatesPayload;
 import net.ledok.arenas_ld.platform.ArenasNetwork;
+import net.ledok.arenas_ld.screen.ArenasUi;
 import net.ledok.arenas_ld.screen.RunTheme;
 import net.ledok.arenas_ld.screen.run.RunWidgets;
 import net.ledok.vectorlib.client.canvas.VectorCanvas;
@@ -60,13 +61,19 @@ public final class InvitePicker {
         }
         InvitePicker picker = new InvitePicker(host, RunTheme.current().palette());
         open = picker;
-        picker.modal = Modal.open(canvas, picker.panel());
+        var input = canvas.input();
+        var opener = input == null ? null : input.focusedNode();
+        Flex panel = picker.panel(Math.max(1, Math.min(WIDTH, canvas.width() - 16)),
+            Math.max(26, Math.min(LIST_H, canvas.height() - 70)));
+        picker.modal = Modal.open(canvas, ArenasUi.fitDialog(panel));
         picker.modal.closeOnClickOutside(true);
         picker.modal.onClose(() -> {
             if (open == picker) {
                 open = null;
+                canvas.focus(opener != null && opener.canvas() == canvas ? opener : null);
             }
         });
+        canvas.focus(panel.find("invite-search"));
         ArenasNetwork.sendToServer(new RequestInviteCandidatesPayload(host.controllerPos()));
     }
 
@@ -80,16 +87,16 @@ public final class InvitePicker {
         picker.fill();
     }
 
-    private Flex panel() {
+    private Flex panel(float width, float listHeight) {
         var look = RunTheme.current();
         Flex panel = Flex.column().gap(4).padding(Insets.of(10));
-        panel.sizing(Sizing.fixed(WIDTH), Sizing.content());
+        panel.sizing(Sizing.fixed(width), Sizing.content());
         panel.background(look.panel());
 
         Flex head = Flex.row().gap(6).alignItems(Align.CENTER);
         head.sizing(Sizing.fill(), Sizing.content());
         head.item(RunWidgets.grow(tr("title"), p.ink()));
-        Button close = new Button(18, 16, Component.literal("✕"), () -> {
+        Button close = ArenasUi.closeButton(() -> {
             if (modal != null) {
                 modal.close();
             }
@@ -98,17 +105,18 @@ public final class InvitePicker {
         head.item(close);
         panel.item(head);
 
-        TextField search = new TextField(WIDTH - 20, query, text -> {
+        TextField search = new TextField(width - 20, query, text -> {
             query = text;
             fill();
         });
+        search.id("invite-search");
         search.sizing(Sizing.fill(), Sizing.fixed(16));
         search.hint(tr("search").getString());
         panel.item(search);
 
         list.sizing(Sizing.fill(), Sizing.content());
-        ScrollPanel scroll = new ScrollPanel(WIDTH - 20, LIST_H, list);
-        scroll.sizing(Sizing.fill(), Sizing.fixed(LIST_H));
+        ScrollPanel scroll = new ScrollPanel(width - 20, listHeight, list);
+        scroll.sizing(Sizing.fill(), Sizing.fixed(listHeight));
         panel.item(scroll);
         fill();
         return panel;

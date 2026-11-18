@@ -1,5 +1,8 @@
 package net.ledok.arenas_ld.screen;
 
+import net.ledok.vectorlib.client.canvas.CanvasGroup;
+import net.ledok.vectorlib.client.canvas.Rect;
+import net.ledok.vectorlib.client.canvas.VectorCanvas;
 import net.ledok.vectorlib.client.canvas.CanvasInput;
 import net.ledok.vectorlib.client.canvas.Shapes;
 import net.ledok.vectorlib.client.canvas.TextNode;
@@ -30,6 +33,24 @@ public final class ArenasUi {
     public static Placement.Screen fitCenter(float canvasW, float canvasH, float guiW, float guiH) {
         float scale = Math.min(1f, Math.min(guiW / Math.max(1f, canvasW), guiH / Math.max(1f, canvasH)));
         return Placement.Screen.center().scale(scale);
+    }
+
+    /** Keep an open dialog on-screen after resize without rebuilding its contents. */
+    public static CanvasGroup fitDialog(Flex panel) {
+        CanvasGroup frame = new CanvasGroup() {
+            @Override
+            public Rect bounds() {
+                Rect bounds = panel.bounds();
+                VectorCanvas canvas = canvas();
+                if (canvas == null || bounds.width() <= 0 || bounds.height() <= 0) return bounds;
+                float scale = Math.min(1, Math.min(Math.max(1, canvas.width() - 12) / bounds.width(),
+                    Math.max(1, canvas.height() - 12) / bounds.height()));
+                panel.transform.scale(scale);
+                return new Rect(bounds.x() * scale, bounds.y() * scale, bounds.width() * scale, bounds.height() * scale);
+            }
+        };
+        frame.add(panel);
+        return frame;
     }
 
     // Shared dark palette (identical to the pre-VectorLib owo screens).
@@ -83,13 +104,33 @@ public final class ArenasUi {
         return true;
     }
 
+    /** Scroll nested viewports so a control reached by Tab can be seen before it is activated. */
+    public static void revealFocus(CanvasInput input) {
+        var node = input.focusedNode();
+        if (node == null || node.bounds() == null) return;
+        var bounds = node.bounds();
+        for (var ancestor = node.parent(); ancestor != null; ancestor = ancestor.parent()) {
+            if (!(ancestor instanceof net.ledok.vectorlib.client.canvas.widget.ScrollPanel scroll)) continue;
+            float[] top = node.localToRoot(bounds.x(), bounds.y());
+            float[] bottom = node.localToRoot(bounds.x(), bounds.bottom());
+            float y = scroll.rootToLocal(top[0], top[1])[1];
+            float end = scroll.rootToLocal(bottom[0], bottom[1])[1];
+            float overflow = end - scroll.bounds().bottom();
+            if (y < 0) {
+                scroll.scrollTo(scroll.scrollY() + y);
+            } else if (overflow > 0) {
+                scroll.scrollTo(scroll.scrollY() + overflow);
+            }
+        }
+    }
+
     public static TextNode text(Component text, int color) {
         return TextNode.of(text).color(color).shadow(false);
     }
 
     /** Single-line, width-bounded label that clips with an ellipsis. */
     public static Label label(float width, Component text, int color) {
-        return Label.of(width, text).color(color);
+        return Label.of(width, text).color(color).tooltipWhenCut(true);
     }
 
     /** Content-width button, 18 px tall — the ported {@code Sizing.content() x fixed(18)} accent button. */
@@ -101,6 +142,12 @@ public final class ArenasUi {
     /** Small fixed-size button (the ▲ ▼ ✕ × row controls). */
     public static Button button(Component label, float w, float h, Runnable onClick) {
         return new Button(w, h, label, onClick);
+    }
+
+    public static Button closeButton(Runnable action) {
+        Button close = button(Component.literal("×"), 22, 18, action);
+        close.tooltip(Component.translatable("gui.arenas_ld.close_screen"));
+        return close;
     }
 
     /**

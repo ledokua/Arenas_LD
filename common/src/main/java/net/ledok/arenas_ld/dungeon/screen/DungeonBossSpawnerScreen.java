@@ -75,6 +75,8 @@ public class DungeonBossSpawnerScreen extends FitCanvasHandledScreen<DungeonBoss
     public DungeonBossSpawnerScreen(DungeonBossSpawnerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         canvas.theme(ArenasUi.THEME);
+        minLogicalWidth(464);
+        minLogicalHeight(220);
         fillWindow();
     }
 
@@ -99,7 +101,7 @@ public class DungeonBossSpawnerScreen extends FitCanvasHandledScreen<DungeonBoss
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
 
         float shellWidth  = Math.max(440, Math.min(560, canvas.width() - 24));
-        float shellHeight = Math.max(300, canvas.height() - 24);
+        float shellHeight = canvas.height() - 24;
         Flex shell = root.item(Flex.column());
         shell.sizing(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
         shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
@@ -140,7 +142,7 @@ public class DungeonBossSpawnerScreen extends FitCanvasHandledScreen<DungeonBoss
 
         header.spacer();
 
-        header.item(ArenasUi.button(Component.literal("×"), 22, 18, this::onClose));
+        header.item(ArenasUi.closeButton(this::onClose));
         return header;
     }
 

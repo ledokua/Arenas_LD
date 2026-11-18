@@ -43,27 +43,34 @@ public final class AllyHealthHud {
     }
 
     public static void onPayload(AllyHealthPayload payload) {
-        allies = payload.allies();
-        if (allies.isEmpty() || "hidden".equals(ArenasClientConfig.get().ally_sidebar)) {
-            clear();
-            return;
+        if (!allies.equals(payload.allies())) {
+            allies = payload.allies();
+            hide();
         }
-        rebuild();
+        tick();
     }
 
     public static void clear() {
+        allies = List.of();
+        hide();
+    }
+
+    private static void hide() {
         if (handle != null) {
             handle.hide();
             handle = null;
         }
         canvas = null;
-        allies = List.of();
     }
 
-    /** Per frame: keep it placed (the window may have been resized). */
+    /** Re-anchor after resize or a config change, keeping the hotbar clear. */
     public static void tick() {
-        if (handle == null || canvas == null) {
+        if (allies.isEmpty() || "hidden".equals(ArenasClientConfig.get().ally_sidebar)) {
+            hide();
             return;
+        }
+        if (canvas == null) {
+            rebuild();
         }
         handle.placement(placement(canvas.height()));
     }
@@ -72,11 +79,16 @@ public final class AllyHealthHud {
         var window = Minecraft.getInstance().getWindow();
         int guiW = window.getGuiScaledWidth();
         int guiH = window.getGuiScaledHeight();
+        int top = RunTimerHud.isActive() ? RunTimerHud.bottom() + 4 : 4;
+        int bottom = guiH - 30;
+        float scale = Math.min(1f, Math.min(Math.max(1, guiW - 8) / W, Math.max(1, bottom - top) / height));
+        float visibleHeight = height * scale;
         ArenasClientConfig config = ArenasClientConfig.get();
         boolean right = "right".equals(config.ally_sidebar);
-        float x = right ? guiW - W - 4 : 4;
-        float y = Math.max(4, Math.min(guiH - height - 30, guiH / 2f - height / 2f + config.ally_sidebar_offset_y));
-        return Placement.Screen.at(x, y);
+        float x = right ? guiW - W * scale - 4 : 4;
+        float y = Math.max(top, Math.min(bottom - visibleHeight,
+            guiH / 2f - visibleHeight / 2f + config.ally_sidebar_offset_y));
+        return Placement.Screen.at(x, y).scale(scale);
     }
 
     private static void rebuild() {
@@ -100,12 +112,7 @@ public final class AllyHealthHud {
         for (int i = 0; i < allies.size(); i++) {
             row(allies.get(i), PAD + i * ROW, i == lowest);
         }
-        if (handle == null) {
-            handle = CanvasOverlay.show(canvas, placement(height));
-        } else {
-            handle.hide();
-            handle = CanvasOverlay.show(canvas, placement(height));
-        }
+        handle = CanvasOverlay.show(canvas, placement(height));
     }
 
     private static void row(AllyHealthPayload.Ally ally, float y, boolean lowest) {
@@ -127,9 +134,9 @@ public final class AllyHealthHud {
             case OFFLINE -> Component.translatable("hud.arenas_ld.ally.offline").getString();
         };
         TextNode value = TextNode.of(right).color(alive ? (lowest ? LOW : DIM) : DIM).shadow(true)
-            .align(TextNode.Align.RIGHT);
+            .align(TextNode.Align.RIGHT).maxWidth((int) W - 50).ellipsis(true);
         value.at(W - PAD, y);
-        float valueW = Minecraft.getInstance().font.width(right);
+        float valueW = Math.min(W - 50, Minecraft.getInstance().font.width(right));
         TextNode name = TextNode.of(ally.name()).color(alive ? INK : DIM).shadow(true)
             .maxWidth((int) Math.max(10, W - PAD * 2 - 12 - valueW - 3)).ellipsis(true);
         name.at(PAD + 12, y);

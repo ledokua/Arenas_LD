@@ -96,6 +96,7 @@ public final class IdSuggestionDropdown {
         this.list = new VirtualList<>(100, 0, ROW_H + 1, this::candidateRow);
         field.changeListeners.add(v -> { if (open) refresh(); });
         field.mouseDownHooks.add(this::open);
+        field.suggestions = this;
         attachFullValueTooltip(field);
     }
 
@@ -139,6 +140,7 @@ public final class IdSuggestionDropdown {
     public Button chevron() {
         Button chevron = new Button(18, 20, Component.literal("▼"), this::toggle);
         chevron.style(ROW_STYLE);
+        chevron.tooltip(Component.translatable("gui.arenas_ld.id_suggestions"));
         return chevron;
     }
 
@@ -262,6 +264,7 @@ public final class IdSuggestionDropdown {
     public static final class Field extends TextField {
         public final List<Consumer<String>> changeListeners = new ArrayList<>();
         public final List<Runnable> mouseDownHooks = new ArrayList<>();
+        private @Nullable IdSuggestionDropdown suggestions;
 
         public Field(float width) {
             super(width, "", null);
@@ -274,8 +277,23 @@ public final class IdSuggestionDropdown {
         }
 
         @Override
+        public boolean onKeyPressed(int key, int scanCode, int modifiers) {
+            if (suggestions != null && enabled) {
+                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE && suggestions.open) {
+                    suggestions.close();
+                    return true;
+                }
+                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN && !suggestions.open) {
+                    suggestions.open();
+                    return true;
+                }
+            }
+            return super.onKeyPressed(key, scanCode, modifiers);
+        }
+
+        @Override
         public boolean onMouseDown(float x, float y, int button) {
-            mouseDownHooks.forEach(Runnable::run);
+            if (button == 0) mouseDownHooks.forEach(Runnable::run);
             return super.onMouseDown(x, y, button);
         }
     }

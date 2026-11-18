@@ -176,6 +176,8 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
     public DungeonControllerAdminScreen(DungeonControllerAdminScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         canvas.theme(ArenasUi.THEME);
+        minLogicalWidth(524);
+        minLogicalHeight(220);
         fillWindow();
     }
 
@@ -198,7 +200,7 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
 
         float shellWidth = Math.max(500, Math.min(620, canvas.width() - 24));
-        float shellHeight = Math.max(300, canvas.height() - 24);
+        float shellHeight = canvas.height() - 24;
         Flex shell = root.item(Flex.column());
         shell.sizing(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
         shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
@@ -281,18 +283,13 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
 
         Flex meta = Flex.row().gap(10).alignItems(Align.CENTER);
         meta.sizing(Sizing.content(), Sizing.content());
-        meta.item(smallMeta("POS · X " + menu.getBlockPos().getX() + " · Y " + menu.getBlockPos().getY() + " · Z " + menu.getBlockPos().getZ()));
-        Flex live = Flex.row().gap(4).alignItems(Align.CENTER);
-        live.sizing(Sizing.content(), Sizing.content());
-        live.item(ArenasUi.text(Component.literal("●"), GOOD));
-        live.item(smallMeta("LIVE", GOOD));
-        meta.item(live);
+        meta.item(ArenasUi.text(Component.translatable("gui.arenas_ld.admin.position", menu.getBlockPos().toShortString()), INK_DIM));
         info.item(meta);
         header.item(info);
 
         header.spacer();
 
-        header.item(ArenasUi.button(Component.literal("X"), 20, 16, this::onClose));
+        header.item(ArenasUi.closeButton(this::onClose));
         return header;
     }
 
@@ -1110,14 +1107,6 @@ public class DungeonControllerAdminScreen extends FitCanvasHandledScreen<Dungeon
             return Integer.toString((int) Math.rint(value));
         }
         return String.format(java.util.Locale.ROOT, "%.2f", value);
-    }
-
-    private TextNode smallMeta(String text, int color) {
-        return ArenasUi.text(Component.literal(text), color);
-    }
-
-    private TextNode smallMeta(String text) {
-        return smallMeta(text, INK_DIM);
     }
 
     private void applyGeneral() {

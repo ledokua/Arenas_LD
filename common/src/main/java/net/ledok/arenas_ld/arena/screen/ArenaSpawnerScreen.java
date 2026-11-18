@@ -59,6 +59,8 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         this.pos = handler.getBlockPos();
         canvas.theme(ArenasUi.THEME);
+        minLogicalWidth(524);
+        minLogicalHeight(220);
         fillWindow();
     }
 
@@ -104,7 +106,7 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
 
         float w = Math.max(500, Math.min(640, canvas.width() - 24));
-        float h = Math.max(300, canvas.height() - 24);
+        float h = canvas.height() - 24;
         Flex shell = root.item(Flex.column());
         shell.sizing(Sizing.fixed(w), Sizing.fixed(h));
         shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
@@ -307,7 +309,7 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
         h.backgroundFill(PANEL_2);
         h.item(ArenasUi.text(Component.translatable("block.arenas_ld.arena_spawner"), INK));
         h.spacer();
-        h.item(button(Component.literal("×"), 22, 18, this::onClose));
+        h.item(ArenasUi.closeButton(this::onClose));
         return h;
     }
 

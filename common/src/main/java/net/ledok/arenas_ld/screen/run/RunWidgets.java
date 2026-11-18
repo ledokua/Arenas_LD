@@ -211,6 +211,7 @@ public final class RunWidgets {
             add(Shapes.rect(0, 0, width, height).fill(fill));
             if (sel) {
                 add(Shapes.rect(0, height - 2, width, 2).fill(p.accent()));
+                if (focused) add(Shapes.rect(0, 0, width, 1).fill(p.accent()));
             }
             add(TextNode.of(label).at(width / 2, textY(height)).align(TextNode.Align.CENTER)
                 .color(sel ? p.ink() : p.inkMid()).shadow(false));
@@ -218,7 +219,8 @@ public final class RunWidgets {
 
         @Override
         public boolean onMouseDown(float x, float y, int button) {
-            if (!enabled || button != 0 || selected.getAsBoolean()) return false;
+            if (!enabled || button != 0) return false;
+            if (selected.getAsBoolean()) return true;
             UiSounds.click();
             action.run();
             return true;
@@ -230,7 +232,13 @@ public final class RunWidgets {
         @Override
         public boolean onKeyPressed(int key, int scanCode, int modifiers) {
             if (!enabled) return false;
-            if (key == 257 || key == 335 || key == 32) { UiSounds.click(); action.run(); return true; }
+            if (key == 257 || key == 335 || key == 32) {
+                if (!selected.getAsBoolean()) {
+                    UiSounds.click();
+                    action.run();
+                }
+                return true;
+            }
             return false;
         }
     }
@@ -244,7 +252,7 @@ public final class RunWidgets {
         private final Runnable action;
 
         public Segment(RunTheme.Palette p, Component label, int color, BooleanSupplier selected, Runnable action) {
-            super(60, 20);
+            super(Math.max(60, RunWidgets.width(label) + 12), 20);
             this.p = p;
             this.label = label;
             this.color = color;
@@ -260,14 +268,14 @@ public final class RunWidgets {
             int fill = sel ? ((color & 0x00FFFFFF) | 0x33000000) : (hover ? p.row() : p.panel2());
             add(Shapes.rect(0, 0, width, height).fill(fill).stroke(sel ? color : p.hairline(), 1));
             int ink = sel ? color : (enabled ? p.ink() : p.inkDim());
-            String text = Minecraft.getInstance().font.plainSubstrByWidth(label.getString(), (int) width - 6);
-            add(TextNode.of(Component.literal(text).withStyle(label.getStyle())).at(width / 2, textY(height))
+            add(TextNode.of(label).at(width / 2, textY(height)).maxWidth(Math.max(1, (int) width - 6)).ellipsis(true)
                 .align(TextNode.Align.CENTER).color(ink).shadow(false));
         }
 
         @Override
         public boolean onMouseDown(float x, float y, int button) {
             if (!enabled || button != 0) return false;
+            if (selected.getAsBoolean()) return true;
             UiSounds.click();
             action.run();
             return true;
@@ -279,7 +287,13 @@ public final class RunWidgets {
         @Override
         public boolean onKeyPressed(int key, int scanCode, int modifiers) {
             if (!enabled) return false;
-            if (key == 257 || key == 335 || key == 32) { UiSounds.click(); action.run(); return true; }
+            if (key == 257 || key == 335 || key == 32) {
+                if (!selected.getAsBoolean()) {
+                    UiSounds.click();
+                    action.run();
+                }
+                return true;
+            }
             return false;
         }
     }

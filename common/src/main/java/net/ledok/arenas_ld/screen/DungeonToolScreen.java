@@ -64,6 +64,15 @@ public class DungeonToolScreen extends CanvasScreen {
         placement(ArenasUi.fitCenter(canvas.width(), canvas.height(), width, height));
     }
 
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB && input.focusNext(hasShiftDown())) {
+            ArenasUi.revealFocus(input);
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
     private void buildUi() {
         DungeonToolItem.Mode current = DungeonToolItem.selectedMode(currentData(hand));
 
@@ -71,7 +80,12 @@ public class DungeonToolScreen extends CanvasScreen {
         root.sizing(Sizing.fill(), Sizing.fill());
         root.background(ArenasUi.flatOutline(ArenasUi.PANEL, ArenasUi.HAIRLINE));
 
-        root.item(ArenasUi.text(Component.translatable("screen.arenas_ld.dungeon_tool.title"), ArenasUi.INK));
+        Flex header = root.item(Flex.row().alignItems(Align.CENTER));
+        header.sizing(Sizing.fill(), Sizing.content());
+        var title = ArenasUi.label(100, Component.translatable("screen.arenas_ld.dungeon_tool.title"), ArenasUi.INK);
+        title.sizing(Sizing.expand(), Sizing.content());
+        header.item(title);
+        header.item(ArenasUi.closeButton(this::onClose));
 
         root.item(ArenasUi.sectionHeader(Component.translatable("screen.arenas_ld.dungeon_tool.section.link")));
         root.item(modeButton(DungeonToolItem.Mode.LINK, current));
@@ -96,7 +110,7 @@ public class DungeonToolScreen extends CanvasScreen {
             ArenasNetwork.sendToServer(new ModPackets.SetDungeonToolModePayload(
                 mode.ordinal(), hand == InteractionHand.MAIN_HAND));
             onClose();
-        });
+        }).tooltipWhenCut(true);
     }
 
     // ---- Room spawner list ----

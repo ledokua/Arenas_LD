@@ -95,6 +95,7 @@ public final class LootRevealHud {
             }
             begin(next);
         }
+        handle.placement(placement());
         long elapsed = System.currentTimeMillis() - startedAtMs;
         int cards = cardGroups.size();
         long allCardsAt = cards == 0 ? 0 : (cards - 1) * CARD_STAGGER_MS + CARD_POP_MS;
@@ -302,7 +303,16 @@ public final class LootRevealHud {
         }
 
         // Sits below the run timer, whichever look it has.
-        handle = CanvasOverlay.show(canvas, Placement.Screen.top(RunTimerHud.bottom() + 4));
+        handle = CanvasOverlay.show(canvas, placement());
+    }
+
+    private static Placement.Screen placement() {
+        var window = Minecraft.getInstance().getWindow();
+        int top = RunTimerHud.isActive() ? RunTimerHud.bottom() + 4 : 4;
+        float width = Math.max(1, window.getGuiScaledWidth() - 8);
+        float height = Math.max(1, window.getGuiScaledHeight() - top - 30);
+        float scale = Math.min(1, Math.min(width / canvas.width(), height / canvas.height()));
+        return Placement.Screen.top(top).scale(scale);
     }
 
     /** "Items sent to your inbox: 20 (inventory full)", with the cards' corner marker before it; returns the next y. */

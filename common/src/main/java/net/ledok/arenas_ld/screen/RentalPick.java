@@ -89,7 +89,7 @@ public final class RentalPick {
     }
 
     /**
-     * The rental row in the lobby's theme (UI rework): the title with Change and On/Off on one line, then the hint, the
+     * The rental row in the lobby's theme: the title and available actions on one line, then the hint, the
      * reward cut and the picked build on lines of their own. Each is one line that ends in "…" with the full text in the
      * tooltip, so nothing runs out of its column.
      */
@@ -97,7 +97,11 @@ public final class RentalPick {
         Flex col = Flex.column().gap(3);
         col.sizing(Sizing.fill(), Sizing.content());
         RentalLobbyPayload s = state;
-        if (!s.active() || !s.controller().equals(controller) || s.presets().isEmpty()) {
+        if (!s.active() || !s.controller().equals(controller)) {
+            return col;
+        }
+        if (s.presets().isEmpty()) {
+            if (s.required()) col.item(line(Component.translatable("gui.arenas_ld.rental.empty"), p.danger()));
             return col;
         }
         boolean on = !s.own().isEmpty();
@@ -110,15 +114,14 @@ public final class RentalPick {
 
         Flex head = Flex.row().gap(6).alignItems(Align.CENTER);
         head.sizing(Sizing.fill(), Sizing.content());
-        head.item(net.ledok.arenas_ld.screen.run.RunWidgets.text(Component.translatable("gui.arenas_ld.rental.title"),
+        head.item(net.ledok.arenas_ld.screen.run.RunWidgets.grow(Component.translatable("gui.arenas_ld.rental.title"),
             on ? p.ink() : p.inkMid()));
-        head.spacer();
         if (on) {
             head.item(net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable("gui.arenas_ld.rental.change"),
                 () -> ArenasNetwork.sendToServer(new RequestRentalPreviewPayload(controller))));
         }
         head.item(net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable(on
-                ? "gui.arenas_ld.dungeon_controller.ui.hardcore.on" : "gui.arenas_ld.dungeon_controller.ui.hardcore.off"),
+                ? "gui.arenas_ld.rental.use_own_gear" : "gui.arenas_ld.rental.choose"),
             () -> ArenasNetwork.sendToServer(on
                 ? new SetRentalChoicePayload(controller, "")
                 : new RequestRentalPreviewPayload(controller))));
@@ -150,8 +153,7 @@ public final class RentalPick {
 
         Flex head = Flex.row().gap(6).alignItems(Align.CENTER);
         head.sizing(Sizing.fill(), Sizing.content());
-        head.item(net.ledok.arenas_ld.screen.run.RunWidgets.text(Component.translatable("gui.arenas_ld.rental.required_title"), p.ink()));
-        head.spacer();
+        head.item(net.ledok.arenas_ld.screen.run.RunWidgets.grow(Component.translatable("gui.arenas_ld.rental.required_title"), p.ink()));
         head.item(net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable(on
                 ? "gui.arenas_ld.rental.change" : "gui.arenas_ld.rental.choose"),
             () -> ArenasNetwork.sendToServer(new RequestRentalPreviewPayload(controller))));
@@ -196,47 +198,61 @@ public final class RentalPick {
         if (host == null) {
             return;
         }
+        VectorCanvas canvas = host.rentalCanvas();
+        float previewWidth = Math.max(1, Math.min(PREVIEW_W, canvas.width() - 16));
+        float listHeight = Math.max(24, Math.min(220, canvas.height() - 88));
         Modal[] modal = new Modal[1];
         Flex panel = Flex.column().gap(4).padding(Insets.of(12));
-        panel.sizing(Sizing.fixed(PREVIEW_W), Sizing.content());
+        panel.sizing(Sizing.fixed(previewWidth), Sizing.content());
         var look = net.ledok.arenas_ld.screen.RunTheme.current();
         var p = look.palette();
         panel.background(look.panel());
-        panel.item(net.ledok.arenas_ld.screen.run.RunWidgets.text(Component.translatable("gui.arenas_ld.rental.preview_title", payload.level()), p.ink()));
-        var hint = net.ledok.vectorlib.client.canvas.widget.Label.of(PREVIEW_W - 24, Component.translatable("gui.arenas_ld.rental.preview_hint")).color(p.inkMid()).tooltipWhenCut(true);
+        panel.item(line(Component.translatable("gui.arenas_ld.rental.preview_title", payload.level()), p.ink()));
+        var hint = net.ledok.vectorlib.client.canvas.widget.Label.of(previewWidth - 24, Component.translatable("gui.arenas_ld.rental.preview_hint")).color(p.inkMid()).tooltipWhenCut(true);
         hint.sizing(Sizing.fill(), Sizing.content());
         panel.item(hint);
 
         Flex list = Flex.column().gap(6);
         list.sizing(Sizing.fill(), Sizing.content());
+        if (payload.kits().isEmpty()) {
+            list.item(line(Component.translatable("gui.arenas_ld.rental.empty"), p.inkMid()));
+        }
         String own = state.own();
         for (RentalPreviewPayload.Kit kit : payload.kits()) {
-            list.item(kitBlock(p, payload.controller(), kit, kit.kitId().endsWith("/" + own) && !own.isEmpty(),
+            list.item(kitBlock(p, payload.controller(), kit, kit.kitId().endsWith("/" + own) && !own.isEmpty(), previewWidth - 32,
                 () -> modal[0].close()));
         }
-        panel.item(new ScrollPanel(PREVIEW_W - 24, 220, list));
+        ScrollPanel kits = new ScrollPanel(previewWidth - 24, listHeight, list);
+        kits.sizing(Sizing.fill(), Sizing.fixed(listHeight));
+        panel.item(kits);
 
         Flex footer = Flex.row().gap(6).alignItems(Align.CENTER);
         footer.sizing(Sizing.fill(), Sizing.content());
-        footer.item(net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable("gui.arenas_ld.rental.close"), () -> modal[0].close()));
+        Button close = net.ledok.arenas_ld.screen.run.RunWidgets.button(
+            Component.translatable("gui.arenas_ld.rental.close"), () -> modal[0].close());
+        footer.item(close);
         panel.item(footer);
 
         if (openPreview != null) {
-            openPreview.close(); // a second preview replaces the first: never a stack of them
+            openPreview.close();
         }
-        modal[0] = Modal.open(host.rentalCanvas(), panel);
-        modal[0].closeOnClickOutside(true);
-        Modal opened = modal[0];
+        var input = canvas.input();
+        var opener = input == null ? null : input.focusedNode();
+        Modal opened = Modal.open(canvas, ArenasUi.fitDialog(panel));
+        modal[0] = opened;
         openPreview = opened;
+        opened.closeOnClickOutside(true);
         opened.onClose(() -> {
             if (openPreview == opened) {
                 openPreview = null;
+                canvas.focus(opener != null && opener.canvas() == canvas ? opener : null);
             }
         });
+        canvas.focus(close);
     }
 
     /** One class: its name, a Pick button, and its items as slots (vanilla tooltips on hover). */
-    private static Flex kitBlock(net.ledok.arenas_ld.screen.RunTheme.Palette p, BlockPos controller, RentalPreviewPayload.Kit kit, boolean current, Runnable close) {
+    private static Flex kitBlock(net.ledok.arenas_ld.screen.RunTheme.Palette p, BlockPos controller, RentalPreviewPayload.Kit kit, boolean current, float width, Runnable close) {
         Flex block = Flex.column().gap(3).padding(Insets.of(5, 6, 5, 6));
         block.sizing(Sizing.fill(), Sizing.content());
         block.backgroundFill(current ? p.rowAlt() : p.row(), current ? p.accent() : p.hairline(), 1);
@@ -249,11 +265,8 @@ public final class RentalPick {
             title.append(Component.literal("  ")).append(Component.translatable("gui.arenas_ld.rental.recommended")
                 .withStyle(s -> s.withColor(p.good() & 0xFFFFFF)));
         }
-        var name = net.ledok.arenas_ld.screen.run.RunWidgets.text(title, current ? p.accent() : p.ink());
+        var name = net.ledok.arenas_ld.screen.run.RunWidgets.grow(title, current ? p.accent() : p.ink());
         head.item(name);
-        Flex spacer = Flex.row();
-        spacer.sizing(Sizing.expand(), Sizing.content());
-        head.item(spacer);
         // The spell book's spells (rental round 2): toggles, up to the book's size, starting from the server's prefill.
         java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>(kit.chosen());
         Button[] pick = new Button[1];
@@ -263,7 +276,9 @@ public final class RentalPick {
                 : current ? "gui.arenas_ld.rental.save_spells" : "gui.arenas_ld.rental.pick"));
             pick[0].enabled((!current || changed) && (kit.spells().isEmpty() || !selected.isEmpty()));
         };
-        pick[0] = net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable("gui.arenas_ld.rental.pick"), 90, () -> {
+        float pickWidth = net.ledok.arenas_ld.screen.run.RunWidgets.width(
+            Component.translatable("gui.arenas_ld.rental.save_spells")) + 12;
+        pick[0] = net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable("gui.arenas_ld.rental.pick"), pickWidth, () -> {
             ArenasNetwork.sendToServer(new SetRentalChoicePayload(controller, kit.kitId(), new java.util.ArrayList<>(selected)));
             close.run();
         });
@@ -271,6 +286,7 @@ public final class RentalPick {
         head.item(pick[0]);
         block.item(head);
 
+        int slotsPerRow = Math.max(1, Math.min(SLOTS_PER_ROW, (int) (width - 10) / 22));
         if (!kit.spells().isEmpty()) {
             // 4.40.2 (LeDok): icon slots like the spell binding table, Spell Engine's tooltip on hover.
             // 4.40.4: one spell per tier ("3 pairs"), a row per tier, picked like radio buttons.
@@ -300,15 +316,21 @@ public final class RentalPick {
                         Component.translatable("gui.arenas_ld.rental.spell_tier", r + 1)).color(p.inkDim());
                     label.sizing(Sizing.fixed(56), Sizing.content());
                     row.item(label);
-                    for (String spell : mates) {
+                    block.item(row);
+                    int spellsPerRow = Math.max(1, Math.min(SLOTS_PER_ROW, (int) (width - 68) / 22));
+                    for (int i = 0; i < mates.size(); i++) {
+                        if (i > 0 && i % spellsPerRow == 0) {
+                            row = block.item(Flex.row().gap(2).padding(Insets.of(0, 0, 0, 58)));
+                            row.sizing(Sizing.fill(), Sizing.content());
+                        }
+                        String spell = mates.get(i);
                         SpellSlot slot = new SpellSlot(p, spell, book, selected, kit.maxSpells(), mates, changed);
                         all.add(slot);
                         row.item(slot);
                     }
-                    block.item(row);
                 }
             } else {
-                var counter = net.ledok.vectorlib.client.canvas.widget.Label.of(PREVIEW_W - 36,
+                var counter = net.ledok.vectorlib.client.canvas.widget.Label.of(width - 12,
                     spellCounter(selected.size(), kit.maxSpells())).color(p.inkMid());
                 counter.sizing(Sizing.fill(), Sizing.content());
                 block.item(counter);
@@ -319,7 +341,7 @@ public final class RentalPick {
                 };
                 Flex row = null;
                 for (int i = 0; i < kit.spells().size(); i++) {
-                    if (i % SLOTS_PER_ROW == 0) {
+                    if (i % slotsPerRow == 0) {
                         row = Flex.row().gap(2);
                         row.sizing(Sizing.fill(), Sizing.content());
                         block.item(row);
@@ -333,7 +355,7 @@ public final class RentalPick {
 
         Flex slots = null;
         for (int i = 0; i < kit.items().size(); i++) {
-            if (i % SLOTS_PER_ROW == 0) {
+            if (i % slotsPerRow == 0) {
                 slots = Flex.row().gap(2);
                 slots.sizing(Sizing.fill(), Sizing.content());
                 block.item(slots);
@@ -464,12 +486,26 @@ public final class RentalPick {
             boolean on = selected.contains(spell);
             boolean hover = hovered || focused;
             int bg = on ? p.rowAlt() : hover ? p.row() : (p.hairline() & 0x00FFFFFF) | 0x55000000;
-            int frame = on ? p.accent() : hover ? p.inkMid() : (p.hairline() & 0x00FFFFFF) | 0x88000000;
+            int frame = focused ? p.ink() : on ? p.accent() : hover ? p.inkMid() : (p.hairline() & 0x00FFFFFF) | 0x88000000;
             add(net.ledok.vectorlib.client.canvas.Shapes.rect(0, 0, 20, 20).fill(bg).stroke(frame, on ? 2 : 1));
             if (icon != null) {
                 add(net.ledok.vectorlib.client.canvas.ImageNode.of(icon, 2, 2, 16, 16, 16, 16)
                     .tint(on ? 0xFFFFFFFF : hover ? 0xFFB0B0B0 : 0xFF6E6E6E));
             }
+        }
+
+        @Override
+        public boolean focusable() {
+            return true;
+        }
+
+        @Override
+        public boolean onKeyPressed(int key, int scanCode, int modifiers) {
+            return switch (key) {
+                case org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER, org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER,
+                     org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE -> onMouseDown(0, 0, 0);
+                default -> false;
+            };
         }
 
         @Override

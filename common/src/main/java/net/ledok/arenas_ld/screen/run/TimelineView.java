@@ -49,6 +49,7 @@ public final class TimelineView {
     private static int total;
     private static int dropped;
     private static boolean waiting;
+    private static boolean timedOut;
     private static int waitingTicks;
     private static int ticks;
     private static Filter filter = Filter.ALL;
@@ -74,6 +75,8 @@ public final class TimelineView {
         }
         if (pick != null) {
             select(pick);
+        } else {
+            clear();
         }
     }
 
@@ -82,6 +85,10 @@ public final class TimelineView {
         EVENTS.clear();
         total = dropped = 0;
         waiting = false;
+        timedOut = false;
+        waitingTicks = ticks = 0;
+        filter = Filter.ALL;
+        shown = STEP;
         refresh = null;
     }
 
@@ -99,67 +106,80 @@ public final class TimelineView {
             return;
         }
         waiting = true;
+        timedOut = false;
         waitingTicks = 0;
         ArenasNetwork.sendToServer(new RunTimelinePayload.Request(player, from));
     }
 
     public static void onPayload(RunTimelinePayload payload) {
-        if (!payload.player().equals(player)) {
+        if (!payload.player().equals(player)) return;
+        if (payload.from() != EVENTS.size()) {
+            // The server clamps the offset when the viewer's current log is shorter.
+            if (payload.from() == payload.total() && payload.total() < EVENTS.size()) {
+                select(payload.player());
+                if (refresh != null) refresh.run();
+            }
             return;
         }
+        boolean recovered = timedOut;
         waiting = false;
-        if (payload.from() == EVENTS.size()) {
-            EVENTS.addAll(payload.events());
-        }
+        timedOut = false;
+        EVENTS.addAll(payload.events());
         total = payload.total();
         dropped = payload.dropped();
         if (EVENTS.size() < total && !payload.events().isEmpty()) {
             request(EVENTS.size()); // the next page
         }
-        if (refresh != null && (!payload.events().isEmpty() || payload.from() == 0)) {
+        if (refresh != null && (!payload.events().isEmpty() || payload.from() == 0 || recovered)) {
             refresh.run();
         }
     }
 
-    /** Client tick while the tab shows: new events of a going run every 2 s; a lost answer retried after 5 s. */
+    /** Poll an active run every two seconds. A missing reply exposes Retry after five seconds. */
     public static void tick(boolean live) {
         if (waiting && ++waitingTicks > 100) {
             waiting = false;
+            timedOut = true;
+            if (refresh != null) refresh.run();
         }
-        if (live && ++ticks % 40 == 0) {
+        if (live && ++ticks % 40 == 0 && !timedOut) {
             request(EVENTS.size());
         }
     }
 
     // ── build ────────────────────────────────────────────────────────────────
 
-    public static void build(Flex col, RunDetailsPayload payload, RunTheme.Palette pal) {
+    public static void build(Flex col, RunDetailsPayload payload, RunTheme.Palette pal, float availableWidth) {
         if (payload.rows().size() > 1) {
             List<RunWidgets.Segment> people = new ArrayList<>();
             for (RunDetailsPayload.Row row : payload.rows()) {
                 UUID uuid = row.uuid();
-                people.add(new RunWidgets.Segment(pal, Component.literal(row.name()), pal.accent(),
+                Component name = Component.literal(row.name());
+                RunWidgets.Segment person = new RunWidgets.Segment(pal, name, pal.accent(),
                     () -> uuid.equals(player), () -> {
-                    select(uuid);
-                    if (refresh != null) {
-                        refresh.run();
-                    }
-                }));
+                        select(uuid);
+                        if (refresh != null) refresh.run();
+                    });
+                if (RunWidgets.width(name) + 6 > availableWidth) person.tooltip(name);
+                person.id("timeline-player-" + uuid);
+                people.add(person);
             }
-            col.item(RunWidgets.segmented(people.toArray(RunWidgets.Segment[]::new)));
+            addSegmentRows(col, people, availableWidth);
         }
         List<RunWidgets.Segment> chips = new ArrayList<>();
         for (Filter f : Filter.values()) {
-            chips.add(new RunWidgets.Segment(pal, Component.translatable("gui.arenas_ld.timeline.filter."
-                + f.name().toLowerCase(Locale.ROOT)), pal.info(), () -> filter == f, () -> {
-                filter = f;
-                shown = STEP;
-                if (refresh != null) {
-                    refresh.run();
-                }
-            }));
+            String key = f.name().toLowerCase(Locale.ROOT);
+            Component label = Component.translatable("gui.arenas_ld.timeline.filter." + key);
+            RunWidgets.Segment chip = new RunWidgets.Segment(pal, label, pal.info(), () -> filter == f, () -> {
+                    filter = f;
+                    shown = STEP;
+                    if (refresh != null) refresh.run();
+                });
+            if (RunWidgets.width(label) + 6 > availableWidth) chip.tooltip(label);
+            chip.id("timeline-filter-" + key);
+            chips.add(chip);
         }
-        col.item(RunWidgets.segmented(chips.toArray(RunWidgets.Segment[]::new)));
+        addSegmentRows(col, chips, availableWidth);
 
         List<List<String>> matching = new ArrayList<>();
         for (List<String> event : EVENTS) {
@@ -171,13 +191,24 @@ public final class TimelineView {
         if (dropped > 0) {
             info.append(" · ").append(Component.translatable("gui.arenas_ld.timeline.dropped", dropped));
         }
-        if (EVENTS.size() < total || waiting && EVENTS.isEmpty()) {
+        if (waiting && (EVENTS.size() < total || EVENTS.isEmpty())) {
             info.append(" · ").append(Component.translatable("gui.arenas_ld.timeline.loading"));
         }
         col.item(line(info, pal.inkDim()));
+        if (timedOut) {
+            col.item(line(Component.translatable("gui.arenas_ld.timeline.timeout"), pal.warn()));
+            Button retry = RunWidgets.button(Component.translatable("gui.arenas_ld.timeline.retry"), () -> {
+                request(EVENTS.size());
+                if (refresh != null) refresh.run();
+            });
+            retry.style(RunWidgets.flatStyle(pal));
+            col.item(retry);
+        }
         if (matching.isEmpty()) {
-            col.item(line(Component.translatable(total == 0 && !waiting ? "gui.arenas_ld.timeline.none"
-                : "gui.arenas_ld.timeline.none_matching"), pal.inkDim()));
+            if (!waiting && !timedOut) {
+                col.item(line(Component.translatable(total == 0 ? "gui.arenas_ld.timeline.none"
+                    : "gui.arenas_ld.timeline.none_matching"), pal.inkMid()));
+            }
             return;
         }
         int start = Math.max(0, matching.size() - shown);
@@ -193,6 +224,22 @@ public final class TimelineView {
         }
         for (int i = start; i < matching.size(); i++) {
             col.item(row(matching.get(i), pal));
+        }
+    }
+
+    private static void addSegmentRows(Flex col, List<RunWidgets.Segment> segments, float availableWidth) {
+        Flex row = null;
+        float used = 0;
+        for (RunWidgets.Segment segment : segments) {
+            float width = Math.min(segment.bounds().width(), Math.max(1, availableWidth));
+            if (row == null || used + 3 + width > availableWidth) {
+                row = col.item(Flex.row().gap(3));
+                row.sizing(Sizing.fill(), Sizing.content());
+                used = 0;
+            }
+            segment.sizing(Sizing.fixed(width), Sizing.fixed(20));
+            row.item(segment);
+            used += (used == 0 ? 0 : 3) + width;
         }
     }
 

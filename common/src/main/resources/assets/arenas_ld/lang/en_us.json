@@ -1215,5 +1215,19 @@
   "gui.arenas_ld.invite_picker.state.in_run": "In a run",
   "gui.arenas_ld.invite_picker.state.busy": "Busy",
   "gui.arenas_ld.invite_picker.invite": "Invite",
-  "gui.arenas_ld.invite_picker.invited": "Invited"
+  "gui.arenas_ld.invite_picker.invited": "Invited",
+  "gui.arenas_ld.close_screen": "Close (Esc)",
+  "gui.arenas_ld.room_rewards.back": "Back to room settings",
+  "gui.arenas_ld.instance.status.free": "Free",
+  "gui.arenas_ld.instance.status.running": "In use",
+  "gui.arenas_ld.instance.status.cooldown": "Cooldown · %s s",
+  "gui.arenas_ld.timeline.timeout": "No response from the server. The timeline may be incomplete.",
+  "gui.arenas_ld.timeline.retry": "Retry loading",
+  "gui.arenas_ld.rental.empty": "No rental kits are available for this run level.",
+  "gui.arenas_ld.rental.use_own_gear": "Use own gear",
+  "gui.arenas_ld.id_suggestions": "Show or hide matching IDs",
+  "gui.arenas_ld.admin.run_settings.allow_own_gear": "Allow own gear",
+  "gui.arenas_ld.admin.run_settings.require_rentals": "Require rentals",
+  "gui.arenas_ld.admin.run_settings.rolls_error": "Enter a number from 0 to %s, or leave blank to use the global setting.",
+  "gui.arenas_ld.admin.position": "Position · %s"
 }

@@ -177,7 +177,7 @@ public final class LobbyView {
         // 4.40.3: the invite field's list is gone (the picker is a modal); kept for the screens that call it.
     }
 
-    /** The whole screen again, keeping the tab, scroll positions and the invite field's text and focus. */
+    /** The whole screen again, keeping the tab and scroll positions. */
     public void build() {
         captureScroll();
         look = RunTheme.current();
@@ -232,25 +232,28 @@ public final class LobbyView {
         Flex bar = Flex.row().gap(6).padding(Insets.of(0, 4, 0, 6)).alignItems(Align.CENTER);
         bar.sizing(Sizing.fill(), Sizing.fixed(24));
         bar.backgroundFill(p.panel2(), p.hairline(), 1);
-        bar.item(RunWidgets.text(host.title(), p.ink()));
+        bar.item(RunWidgets.grow(host.title(), p.ink()));
         bar.item(statusPill());
-        List<Component> meta = host.meta();
-        if (!meta.isEmpty()) {
-            MutableComponent line = Component.empty();
-            for (int i = 0; i < meta.size(); i++) {
-                if (i > 0) {
-                    line.append(" · ");
-                }
-                line.append(meta.get(i));
-            }
-            bar.item(RunWidgets.grow(line, p.inkDim()));
-        } else {
-            bar.spacer();
-        }
-        Button close = new Button(18, 16, Component.literal("✕"), host::close);
+        Button close = net.ledok.arenas_ld.screen.ArenasUi.closeButton(host::close);
         close.style(RunWidgets.flatStyle(p));
         bar.item(close);
-        return bar;
+        List<Component> meta = host.meta();
+        if (meta.isEmpty()) {
+            return bar;
+        }
+
+        Flex header = Flex.column();
+        header.sizing(Sizing.fill(), Sizing.content());
+        header.item(bar);
+        MutableComponent line = Component.empty();
+        for (Component value : meta) {
+            if (!line.getSiblings().isEmpty()) line.append(" · ");
+            line.append(value);
+        }
+        Flex detail = header.item(Flex.row().padding(Insets.of(2, 4, 0, 6)));
+        detail.sizing(Sizing.fill(), Sizing.content());
+        detail.item(RunWidgets.grow(line, p.inkDim()));
+        return header;
     }
 
     private Flex statusPill() {
@@ -265,20 +268,35 @@ public final class LobbyView {
     }
 
     private Flex tabRow() {
-        Flex row = Flex.row().gap(2).padding(Insets.of(4, 0, 0, 0)).alignItems(Align.END);
-        row.sizing(Sizing.fill(), Sizing.content());
+        Flex header = Flex.column().gap(2).padding(Insets.of(4, 0, 0, 0));
+        header.sizing(Sizing.fill(), Sizing.content());
         Optional<Lobby> own = host.ownLobby();
-        row.item(tabButton(Tab.MY_LOBBY, tr("gui.arenas_ld.lobby.tab.my_lobby").copy()
-            .append(own.map(l -> count(l.members().size())).orElse(Component.empty()))));
-        row.item(tabButton(Tab.LEADERBOARD, tr("gui.arenas_ld.lobby.tab.leaderboard")));
-        row.item(tabButton(Tab.INVITES, tr("gui.arenas_ld.lobby.tab.invites").copy()
-            .append(count(host.invites().size()))));
-        row.spacer();
+        List<RunWidgets.Tab> tabs = List.of(
+            tabButton(Tab.MY_LOBBY, tr("gui.arenas_ld.lobby.tab.my_lobby").copy()
+                .append(own.map(l -> count(l.members().size())).orElse(Component.empty()))),
+            tabButton(Tab.LEADERBOARD, tr("gui.arenas_ld.lobby.tab.leaderboard")),
+            tabButton(Tab.INVITES, tr("gui.arenas_ld.lobby.tab.invites").copy().append(count(host.invites().size())))
+        );
+        float available = builtWidth - (hosted ? 0 : 16);
+        Flex row = null;
+        float used = 0;
+        for (RunWidgets.Tab button : tabs) {
+            float width = button.bounds().width();
+            if (row == null || used + 2 + width > available) {
+                row = header.item(Flex.row().gap(2).alignItems(Align.END));
+                row.sizing(Sizing.fill(), Sizing.content());
+                used = 0;
+            }
+            row.item(button);
+            used += (used == 0 ? 0 : 2) + width;
+        }
         List<LobbyHost.Instance> instances = host.instances();
         if (instances != null) {
-            row.item(instancesStrip(instances));
+            Flex status = header.item(Flex.row());
+            status.sizing(Sizing.fill(), Sizing.content());
+            status.item(instancesStrip(instances));
         }
-        return row;
+        return header;
     }
 
     private static Component count(int n) {
@@ -294,7 +312,7 @@ public final class LobbyView {
         });
     }
 
-    /** The instances: a pill each when they fit next to the tabs (wide), else one summary pill with the list on hover. */
+    /** The instances: a pill each when the strip is wide, else one summary pill with the list on hover. */
     private CanvasNode instancesStrip(List<LobbyHost.Instance> instances) {
         Flex strip = Flex.row().gap(3).alignItems(Align.CENTER);
         strip.sizing(Sizing.content(), Sizing.content());
@@ -319,10 +337,8 @@ public final class LobbyView {
             for (int i = 0; i < instances.size(); i++) {
                 LobbyHost.Instance instance = instances.get(i);
                 long left = instance.cooldownTicks() - Math.max(0, since);
-                String state = instance.status() == net.ledok.arenas_ld.util.InstanceStatus.COOLDOWN && left > 0
-                    ? "COOLDOWN " + ((left + 19) / 20) + "s"
-                    : instance.status() == net.ledok.arenas_ld.util.InstanceStatus.COOLDOWN ? "FREE" : instance.status().name();
-                lines.add(Component.literal("#" + (i + 1) + " " + state));
+                lines.add(Component.literal("#" + (i + 1) + " ")
+                    .append(InstancePills.statusText(instance.status(), left)));
             }
             return lines;
         });
@@ -347,7 +363,17 @@ public final class LobbyView {
             status = tr("gui.arenas_ld.lobby.status.none");
             statusColor = p.inkDim();
         }
-        bar.item(RunWidgets.grow(status, statusColor));
+        Flex footer = bar;
+        if (builtWidth < 365) {
+            footer = Flex.column();
+            footer.sizing(Sizing.fill(), Sizing.content());
+            Flex message = footer.item(Flex.row().padding(Insets.of(3, 6, 0, 6)));
+            message.sizing(Sizing.fill(), Sizing.content());
+            message.item(RunWidgets.grow(status, statusColor));
+            footer.item(bar);
+        } else {
+            bar.item(RunWidgets.grow(status, statusColor));
+        }
 
         if (own.isEmpty()) {
             if (tab != Tab.MY_LOBBY) {
@@ -360,7 +386,7 @@ public final class LobbyView {
             create.style(RunWidgets.primaryStyle(p));
             create.size(RunWidgets.width(tr("gui.arenas_ld.dungeon_controller.button.create")) + 18, 20);
             bar.item(create);
-            return bar;
+            return footer;
         }
         Lobby lobby = own.get();
         UUID self = self();
@@ -382,12 +408,13 @@ public final class LobbyView {
             ? "gui.arenas_ld.raid_controller.button.start" : "gui.arenas_ld.dungeon_controller.button.start");
         Button start = new Button(RunWidgets.width(startLabel) + 20, 20, startLabel, this::start);
         start.style(RunWidgets.primaryStyle(p));
-        start.enabled(canStart(lobby));
-        if (!owner) {
-            start.tooltip(tr(errorKey("only_owner")));
+        boolean canStart = canStart(lobby);
+        start.enabled(canStart);
+        if (!canStart) {
+            start.tooltip(owner ? statusLine(lobby) : tr(errorKey("only_owner")));
         }
         bar.item(start);
-        return bar;
+        return footer;
     }
 
     private Component statusLine(Lobby lobby) {

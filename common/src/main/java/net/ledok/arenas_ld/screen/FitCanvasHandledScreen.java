@@ -18,7 +18,8 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
  */
 public class FitCanvasHandledScreen<T extends AbstractContainerMenu> extends CanvasHandledScreen<T> {
 
-    private float minLogicalWidth = 0;
+    private float minLogicalWidth;
+    private float minLogicalHeight;
 
     public FitCanvasHandledScreen(T handler, Inventory inventory, Component title,
                                   VectorCanvas canvas, Placement.Screen placement) {
@@ -36,10 +37,24 @@ public class FitCanvasHandledScreen<T extends AbstractContainerMenu> extends Can
         return this;
     }
 
+    /** Reserve space for the editor header, footer, and a usable scroll viewport. */
+    protected void minLogicalHeight(float height) {
+        minLogicalHeight = height;
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB && input.focusNext(hasShiftDown())) {
+            ArenasUi.revealFocus(input);
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
     @Override
     protected void init() {
-        if (minLogicalWidth > 0) {
-            placement(Placement.Screen.center().scale(Math.min(1f, width / minLogicalWidth)));
+        if (minLogicalWidth > 0 || minLogicalHeight > 0) {
+            placement(ArenasUi.fitCenter(minLogicalWidth, minLogicalHeight, width, height));
         }
         super.init();
         // For fillWindow screens the canvas was just sized to window/scale, so this resolves to

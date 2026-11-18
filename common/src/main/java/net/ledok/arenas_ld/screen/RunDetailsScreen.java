@@ -134,6 +134,21 @@ public class RunDetailsScreen extends CanvasScreen {
     }
 
     @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB && input.focusNext(hasShiftDown())) {
+            ArenasUi.revealFocus(input);
+            return true;
+        }
+        if (scroll != null && (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP
+            || keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_DOWN)) {
+            float page = Math.max(12, scroll.bounds().height() - 12);
+            scroll.scrollTo(scroll.scrollY() + (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP ? -page : page));
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
     public boolean isPauseScreen() {
         return false;
     }
@@ -147,6 +162,14 @@ public class RunDetailsScreen extends CanvasScreen {
 
     private void update(RunDetailsPayload p) {
         this.payload = p;
+        if (p.opening()) {
+            net.ledok.arenas_ld.screen.run.TimelineView.clear();
+            if (tab == Tab.TIMELINE) {
+                net.ledok.arenas_ld.screen.run.TimelineView.open(p, this::timelineChanged);
+            }
+            savedScroll = 0;
+            scroll = null;
+        }
         build();
     }
 
@@ -156,6 +179,8 @@ public class RunDetailsScreen extends CanvasScreen {
         if (scroll != null) {
             savedScroll = scroll.scrollY();
         }
+        var focused = input.focusedNode();
+        String focusedId = focused == null ? null : focused.id();
         look = RunTheme.current();
         pal = look.palette();
         builtThemeKey = RunTheme.key();
@@ -165,8 +190,8 @@ public class RunDetailsScreen extends CanvasScreen {
 
         float cw = canvas.width();
         float ch = canvas.height();
-        int shellW = (int) Math.max(220, Math.min(MAX_SHELL_W, cw - 12));
-        int shellH = (int) Math.max(160, Math.min(MAX_SHELL_H, ch - 12));
+        int shellW = (int) Math.max(1, Math.min(MAX_SHELL_W, cw - 12));
+        int shellH = (int) Math.max(1, Math.min(MAX_SHELL_H, ch - 12));
         wide = shellW - 16 >= WIDE_MIN;
 
         Flex root = canvas.add(Flex.column());
@@ -181,7 +206,7 @@ public class RunDetailsScreen extends CanvasScreen {
         if (mods != null) {
             shell.item(mods);
         }
-        shell.item(tabRow());
+        shell.item(tabs(shellW - 16));
         Flex body = Flex.column();
         body.sizing(Sizing.fill(), Sizing.expand());
         body.backgroundFill(pal.panel());
@@ -193,7 +218,7 @@ public class RunDetailsScreen extends CanvasScreen {
             case DAMAGE -> damage(content);
             case HEALING -> healing(content);
             case REWARDS -> rewards(content);
-            case TIMELINE -> net.ledok.arenas_ld.screen.run.TimelineView.build(content, payload, pal);
+            case TIMELINE -> net.ledok.arenas_ld.screen.run.TimelineView.build(content, payload, pal, shellW - 42);
         }
         scroll = new ScrollPanel(100, 100, content);
         scroll.sizing(Sizing.fill(), Sizing.expand());
@@ -204,6 +229,9 @@ public class RunDetailsScreen extends CanvasScreen {
         root.layoutIn(cw, ch);
         restoreScroll();
         restoreScrollNextTick = true;
+        if (focusedId != null) {
+            canvas.focus(canvas.find(focusedId));
+        }
     }
 
     private void restoreScroll() {
@@ -214,10 +242,12 @@ public class RunDetailsScreen extends CanvasScreen {
 
     private Flex titleBar() {
         RunDetailsPayload p = payload;
-        Flex bar = Flex.row().gap(6).padding(Insets.of(0, 4, 0, 6)).alignItems(Align.CENTER);
-        bar.sizing(Sizing.fill(), Sizing.fixed(24));
-        bar.backgroundFill(pal.panel2(), pal.hairline(), 1);
-        bar.item(RunWidgets.text(p.activity().copy().append(" — ").append(p.tier()), pal.ink()));
+        Flex header = Flex.column().padding(Insets.of(2, 5, 4, 6));
+        header.sizing(Sizing.fill(), Sizing.content());
+        header.backgroundFill(pal.panel2(), pal.hairline(), 1);
+        Flex bar = header.item(Flex.row().gap(6).alignItems(Align.CENTER));
+        bar.sizing(Sizing.fill(), Sizing.fixed(22));
+        bar.item(RunWidgets.grow(p.activity().copy().append(" — ").append(p.tier()), pal.ink()));
         if (p.hardcore()) {
             bar.item(RunWidgets.pill(Component.translatable("hud.arenas_ld.hardcore"), pal.danger()));
         }
@@ -239,15 +269,14 @@ public class RunDetailsScreen extends CanvasScreen {
         if (p.bossHp() != RunHudPayload.NO_BOSS_HP) {
             meta.append("  ·  ").append(Component.translatable("gui.arenas_ld.run_details.boss_hp", p.bossHp()));
         }
-        Flex grow = Flex.row().justify(Justify.END);
-        grow.sizing(Sizing.expand(), Sizing.content());
-        var metaLabel = RunWidgets.label(Math.min(RunWidgets.width(meta) + 2, 320), meta, pal.inkMid());
-        grow.item(metaLabel);
-        bar.item(grow);
-        Button close = new Button(18, 16, Component.literal("✕"), this::onClose);
+        Button close = ArenasUi.closeButton(this::onClose);
         close.style(RunWidgets.flatStyle(pal));
+        close.id("run-close");
         bar.item(close);
-        return bar;
+        Flex timing = header.item(Flex.row());
+        timing.sizing(Sizing.fill(), Sizing.content());
+        timing.item(RunWidgets.grow(meta, pal.inkMid()));
+        return header;
     }
 
     private int resultColor() {
@@ -270,42 +299,45 @@ public class RunDetailsScreen extends CanvasScreen {
         return row;
     }
 
-    private Flex tabRow() {
-        Flex row = Flex.row().gap(2).padding(Insets.of(4, 0, 0, 0)).alignItems(Align.END);
-        row.sizing(Sizing.fill(), Sizing.content());
-        row.item(tabButton(Tab.PARTY, "party"));
-        row.item(tabButton(Tab.DAMAGE, "damage"));
-        row.item(tabButton(Tab.HEALING, "healing"));
-        row.item(tabButton(Tab.REWARDS, "rewards"));
-        row.item(tabButton(Tab.TIMELINE, "timeline"));
-        if (wide && !payload.highlights().isEmpty()) {
-            Flex grow = Flex.row().justify(Justify.END).padding(Insets.of(0, 2, 4, 8));
-            grow.sizing(Sizing.expand(), Sizing.content());
-            Component highlights = join(payload.highlights());
-            grow.item(RunWidgets.label(Math.min(RunWidgets.width(highlights) + 2, 360), highlights, pal.inkDim()));
-            row.item(grow);
+    private Flex tabs(float availableWidth) {
+        Flex tabs = Flex.column().gap(2).padding(Insets.of(4, 0, 0, 0));
+        tabs.sizing(Sizing.fill(), Sizing.content());
+        Flex row = null;
+        float used = 0;
+        for (Tab target : Tab.values()) {
+            RunWidgets.Tab button = tabButton(target, target.name().toLowerCase(java.util.Locale.ROOT));
+            float width = button.bounds().width();
+            if (row == null || used + 2 + width > availableWidth) {
+                row = tabs.item(Flex.row().gap(2));
+                row.sizing(Sizing.fill(), Sizing.content());
+                used = 0;
+            }
+            row.item(button);
+            used += (used == 0 ? 0 : 2) + width;
         }
-        return row;
+        return tabs;
     }
 
     private RunWidgets.Tab tabButton(Tab target, String key) {
-        return new RunWidgets.Tab(pal, Component.translatable("gui.arenas_ld.run_details.tab." + key),
+        RunWidgets.Tab button = new RunWidgets.Tab(pal, Component.translatable("gui.arenas_ld.run_details.tab." + key),
             () -> tab == target, () -> {
-            tab = target;
-            lastTab = target;
-            savedScroll = 0;
-            scroll = null;
-            if (target == Tab.TIMELINE) {
-                net.ledok.arenas_ld.screen.run.TimelineView.open(payload, this::timelineChanged);
-            }
-            build();
-        });
+                tab = target;
+                lastTab = target;
+                savedScroll = 0;
+                scroll = null;
+                if (target == Tab.TIMELINE) {
+                    net.ledok.arenas_ld.screen.run.TimelineView.open(payload, this::timelineChanged);
+                }
+                build();
+            });
+        button.id("run-tab-" + key);
+        return button;
     }
 
     // ── Party ────────────────────────────────────────────────────────────────
 
     private void party(Flex col) {
-        if (!wide && !payload.highlights().isEmpty()) {
+        if (!payload.highlights().isEmpty()) {
             col.item(wrapped(join(payload.highlights()), pal.inkDim()));
         }
         float hpW = payload.over() ? 0 : wide ? 110 : 76; // a finished run has no HP to show

@@ -48,6 +48,14 @@ public final class InstancePills {
         }
     }
 
+    public static Component statusText(InstanceStatus status, long ticksLeft) {
+        if (status == InstanceStatus.COOLDOWN && ticksLeft > 0) {
+            return Component.translatable("gui.arenas_ld.instance.status.cooldown", (ticksLeft + 19) / 20);
+        }
+        String key = status == InstanceStatus.RUNNING ? "running" : "free";
+        return Component.translatable("gui.arenas_ld.instance.status." + key);
+    }
+
     private static int color(InstanceStatus status) {
         return switch (status) {
             case FREE -> GOOD;
@@ -64,9 +72,8 @@ public final class InstancePills {
                 shown = InstanceStatus.FREE;
             }
             // Round up, so the pill reads 1s (not 0s) in its last second.
-            String text = shown.name() + (shown == InstanceStatus.COOLDOWN ? " " + ((left + 19) / 20) + "s" : "");
             int color = color(shown);
-            label.text(Component.literal(text)).color(color);
+            label.text(statusText(status, left)).color(color);
             tag.backgroundFill((color & 0x00FFFFFF) | 0x22000000, (color & 0x00FFFFFF) | 0x55000000, 1);
         }
     }

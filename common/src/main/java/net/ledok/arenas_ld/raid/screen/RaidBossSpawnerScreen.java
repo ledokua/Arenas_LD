@@ -23,7 +23,6 @@ import java.util.function.Consumer;
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT;
 import static net.ledok.arenas_ld.screen.ArenasUi.ACCENT_DARK;
 import static net.ledok.arenas_ld.screen.ArenasUi.DANGER;
-import static net.ledok.arenas_ld.screen.ArenasUi.GOOD;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE;
 import static net.ledok.arenas_ld.screen.ArenasUi.HAIRLINE_HI;
 import static net.ledok.arenas_ld.screen.ArenasUi.INK;
@@ -52,6 +51,8 @@ public class RaidBossSpawnerScreen extends FitCanvasHandledScreen<RaidBossSpawne
     public RaidBossSpawnerScreen(RaidBossSpawnerScreenHandler handler, Inventory inventory, Component title) {
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         canvas.theme(ArenasUi.THEME);
+        minLogicalWidth(464);
+        minLogicalHeight(220);
         fillWindow();
     }
 
@@ -80,7 +81,7 @@ public class RaidBossSpawnerScreen extends FitCanvasHandledScreen<RaidBossSpawne
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
 
         float shellWidth  = Math.max(440, Math.min(560, canvas.width() - 24));
-        float shellHeight = Math.max(260, canvas.height() - 24);
+        float shellHeight = canvas.height() - 24;
         Flex shell = root.item(Flex.column());
         shell.sizing(Sizing.fixed(shellWidth), Sizing.fixed(shellHeight));
         shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
@@ -119,20 +120,13 @@ public class RaidBossSpawnerScreen extends FitCanvasHandledScreen<RaidBossSpawne
 
         Flex meta = Flex.row().gap(10).alignItems(Align.CENTER);
         meta.sizing(Sizing.content(), Sizing.content());
-        meta.item(smallMeta("POS · X " + menu.blockEntity.getBlockPos().getX()
-            + " · Y " + menu.blockEntity.getBlockPos().getY()
-            + " · Z " + menu.blockEntity.getBlockPos().getZ(), INK_DIM));
-        Flex live = Flex.row().gap(4).alignItems(Align.CENTER);
-        live.sizing(Sizing.content(), Sizing.content());
-        live.item(ArenasUi.text(Component.literal("●"), GOOD));
-        live.item(smallMeta("LIVE", GOOD));
-        meta.item(live);
+        meta.item(ArenasUi.text(Component.translatable("gui.arenas_ld.admin.position", menu.blockEntity.getBlockPos().toShortString()), INK_DIM));
         info.item(meta);
         header.item(info);
 
         header.spacer();
 
-        header.item(ArenasUi.button(Component.literal("×"), 22, 18, this::onClose));
+        header.item(ArenasUi.closeButton(this::onClose));
         return header;
     }
 
@@ -290,10 +284,6 @@ public class RaidBossSpawnerScreen extends FitCanvasHandledScreen<RaidBossSpawne
         row.sizing(Sizing.fill(), Sizing.content());
         row.item(ArenasUi.text(title, INK_DIM));
         return row;
-    }
-
-    private net.ledok.vectorlib.client.canvas.TextNode smallMeta(String text, int color) {
-        return ArenasUi.text(Component.literal(text), color);
     }
 
     private static String tr(String key) {

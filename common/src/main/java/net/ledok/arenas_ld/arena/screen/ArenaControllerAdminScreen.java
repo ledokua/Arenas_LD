@@ -75,6 +75,8 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
         super(handler, inventory, title, VectorCanvas.create(600, 340), Placement.Screen.center());
         this.pos = handler.getBlockPos();
         canvas.theme(ArenasUi.THEME);
+        minLogicalWidth(504);
+        minLogicalHeight(220);
         fillWindow();
     }
 
@@ -187,7 +189,7 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
         root.justify(Justify.CENTER).alignItems(Align.CENTER);
 
         float w = Math.max(480, Math.min(620, canvas.width() - 24));
-        float h = Math.max(300, canvas.height() - 24);
+        float h = canvas.height() - 24;
         Flex shell = root.item(Flex.column());
         shell.sizing(Sizing.fixed(w), Sizing.fixed(h));
         shell.backgroundFill(PANEL, HAIRLINE_HI, 1);
@@ -420,7 +422,7 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
         h.backgroundFill(PANEL_2);
         h.item(ArenasUi.text(Component.translatable("gui.arenas_ld.arena_controller_admin.title"), INK));
         h.spacer();
-        h.item(ArenasUi.button(Component.literal("×"), 22, 18, this::onClose));
+        h.item(ArenasUi.closeButton(this::onClose));
         return h;
     }
 
