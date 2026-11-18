@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.40.5
+
+The GUI/UX overhaul (`docs/ui-rework/gui-ux-overhaul.md`). **Needs the client update** (screens only; the packets
+are the same as 4.40.4).
+- **Lobbies (standalone and hub-hosted):** tabs wrap; titles and status stay in their rows; instance states are
+  translated.
+- **Rental dialog:** sizes to the screen, wraps kit items, has an empty state and keyboard focus. The one-spell-per-tier
+  rows stay.
+- **Run Details / Timeline:** title and stats in separate rows; controls wrap; focus survives refresh; a missed
+  Timeline reply offers a retry.
+- **HUDs:** respond to GUI size.
+- **Admin and configuration editors:** keep their width in a scrollable body with Tab navigation; ID suggestions open
+  and close by keyboard.
+- **Run settings:** Enter applies the rolls, and invalid values are explained.
+
 ## 4.40.4
 
 Spell picker round 3 (LeDok, 2026-11-18, via MCP eden). **Needs the client update:** the preview packet changed.
