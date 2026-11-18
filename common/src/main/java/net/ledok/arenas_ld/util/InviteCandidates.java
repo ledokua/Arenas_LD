@@ -32,8 +32,10 @@ public final class InviteCandidates {
 
     /** The list for {@code viewer}, owner of a lobby at {@code controller}; null when they own none there. */
     public static @Nullable InviteCandidatesPayload build(ServerPlayer viewer, BlockPos controller) {
-        if (!viewer.serverLevel().isLoaded(controller)
-            || !(viewer.serverLevel().getBlockEntity(controller) instanceof ActivityHost host)) {
+        // 4.40.8: the lobby screen's bound controller (a hub-opened lobby is in another dimension), as every lobby
+        // packet resolves it; the player's own level only for a screen opened at the block.
+        if (!(net.ledok.arenas_ld.activity.LobbyScreens.controller(viewer, controller,
+                net.minecraft.world.level.block.entity.BlockEntity.class) instanceof ActivityHost host)) {
             return null;
         }
         Lobby lobby = null;
@@ -46,7 +48,8 @@ public final class InviteCandidates {
         if (lobby == null) {
             return null;
         }
-        long now = viewer.serverLevel().getGameTime();
+        var hostLevel = host.asBlockEntity().getLevel();
+        long now = hostLevel != null ? hostLevel.getGameTime() : viewer.serverLevel().getGameTime();
         Set<UUID> invited = new HashSet<>();
         for (PendingInvite invite : host.pendingInvites()) {
             if (invite.lobbyId().equals(lobby.lobbyId()) && invite.expiresAtTick() > now) {

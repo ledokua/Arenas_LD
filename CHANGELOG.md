@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.40.8
+
+Live bug (LeDok, 2026-11-18, via MCP eden). **Server only.**
+- **Fix: the invite picker stayed on "Loading…" in a lobby opened from the Eden hub.** The server looked for the
+  controller in the player's own dimension. It now uses the lobby screen's bound controller, as every other lobby
+  packet does.
+- The server now always answers. If there's no lobby to invite to, the picker gets an empty list instead of an endless
+  "Loading…".
+
 ## 4.40.7
 
 LeDok, 2026-11-18, via MCP eden. **Client change:** the pack and Client TEST need it; the server takes it too.

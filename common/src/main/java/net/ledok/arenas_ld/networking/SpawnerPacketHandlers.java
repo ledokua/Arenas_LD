@@ -945,9 +945,9 @@ public final class SpawnerPacketHandlers {
         ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.RequestInviteCandidatesPayload.TYPE, (payload, context) ->
             context.server().execute(() -> {
                 var list = net.ledok.arenas_ld.util.InviteCandidates.build(context.player(), payload.controller());
-                if (list != null) {
-                    ArenasNetwork.sendToPlayer(context.player(), list);
-                }
+                // Always an answer (4.40.8): an empty list instead of a picker left on "Loading…".
+                ArenasNetwork.sendToPlayer(context.player(), list != null ? list
+                    : new net.ledok.arenas_ld.packet.InviteCandidatesPayload(payload.controller(), java.util.List.of()));
             }));
         // A dungeon or raid admin screen's breakable blocks list.
         ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.packet.SetBreakableBlocksPayload.TYPE, (payload, context) -> {
