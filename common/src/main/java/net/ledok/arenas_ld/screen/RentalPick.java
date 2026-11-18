@@ -287,15 +287,23 @@ public final class RentalPick {
         block.item(head);
 
         int slotsPerRow = Math.max(1, Math.min(SLOTS_PER_ROW, (int) (width - 10) / 22));
+        // The kit's book: its spell power goes into the spell tooltips' values, and its item slot shows the pick.
+        ItemStack book = kit.spells().isEmpty() ? ItemStack.EMPTY : kit.items().stream()
+            .filter(net.ledok.arenas_ld.util.RentalSpells::hasContainer).findFirst().orElse(ItemStack.EMPTY);
+        // 4.40.6 (LeDok): the book in the item row holds the current pick, so its tooltip lists the picked spells.
+        java.util.function.Supplier<ItemStack> shownBook = () -> net.ledok.arenas_ld.util.RentalSpells.withSpells(book,
+            kit.spells().stream().filter(selected::contains).toList());
+        Slot[] bookSlot = new Slot[1];
         if (!kit.spells().isEmpty()) {
             // 4.40.2 (LeDok): icon slots like the spell binding table, Spell Engine's tooltip on hover.
             // 4.40.4: one spell per tier ("3 pairs"), a row per tier, picked like radio buttons.
-            ItemStack book = kit.items().stream().filter(net.ledok.arenas_ld.util.RentalSpells::hasContainer)
-                .findFirst().orElse(ItemStack.EMPTY); // the kit's book: its spell power goes into the tooltip's values
             List<SpellSlot> all = new java.util.ArrayList<>();
             Runnable changed = () -> {
                 for (SpellSlot slot : all) {
                     slot.refresh(); // only on a click: nothing is polled per frame
+                }
+                if (bookSlot[0] != null) {
+                    bookSlot[0].stack(shownBook.get());
                 }
                 refreshPick.run();
             };
@@ -360,7 +368,12 @@ public final class RentalPick {
                 slots.sizing(Sizing.fill(), Sizing.content());
                 block.item(slots);
             }
-            slots.item(new Slot(kit.items().get(i)));
+            ItemStack item = kit.items().get(i);
+            Slot slot = new Slot(item == book && !book.isEmpty() ? shownBook.get() : item);
+            if (item == book && !book.isEmpty()) {
+                bookSlot[0] = slot;
+            }
+            slots.item(slot);
         }
         if (kit.items().isEmpty()) {
             block.item(net.ledok.arenas_ld.screen.run.RunWidgets.text(Component.translatable("gui.arenas_ld.rental.no_preview"), p.inkDim()));
@@ -534,11 +547,16 @@ public final class RentalPick {
 
     /** An item in a slot: count and durability, the vanilla tooltip on hover. */
     private static final class Slot extends Widget {
-        private final ItemStack stack;
+        private ItemStack stack;
 
         Slot(ItemStack stack) {
             super(20, 20);
             this.stack = stack;
+        }
+
+        void stack(ItemStack stack) {
+            this.stack = stack;
+            refresh();
         }
 
         @Override

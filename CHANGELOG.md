@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.40.7
+
+LeDok, 2026-11-18, via MCP eden. **Client change:** the pack and Client TEST need it; the server takes it too.
+- **The kit's spell book in the preview's item row now holds the current pick.** Its tooltip lists exactly the picked
+  spells and follows every tier click.
+  - When the preview opens again after Pick/Save, it starts from the stored pick.
+  - The kit files are unchanged: their own spell_ids stay as the fallback book.
+
 ## 4.40.6
 
 TEST fix (LeDok, 2026-11-18, via MCP eden). Server only; the client can stay on 4.40.5.

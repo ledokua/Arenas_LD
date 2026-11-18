@@ -122,6 +122,24 @@ public final class RentalSpells {
         return maxSpellCount > 0 ? maxSpellCount : spellIds == null ? 0 : spellIds.size();
     }
 
+    /**
+     * A copy of {@code stack} whose spell container holds {@code spells} (only {@code spell_ids} changes), for showing a
+     * pick; the stack itself when it has no container or nothing is picked.
+     */
+    public static ItemStack withSpells(ItemStack stack, List<String> spells) {
+        Object container = container(stack);
+        if (container == null || spells.isEmpty()) {
+            return stack;
+        }
+        try {
+            ItemStack copy = stack.copy();
+            copy.set(component, copyWith.invoke(container, List.copyOf(spells)));
+            return copy;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return stack;
+        }
+    }
+
     /** Whether the stack has a Spell Engine spell container (a spell book). */
     public static boolean hasContainer(ItemStack stack) {
         return container(stack) != null;
