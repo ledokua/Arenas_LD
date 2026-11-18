@@ -240,6 +240,9 @@ public final class RentalSpells {
         if (spells.isEmpty() || !lookup()) {
             return false;
         }
+        // Fresh sources first: Spell Engine caches them, and right after a gear swap the cache still holds the old
+        // book's stack (4.40.6: the pick went into the player's own, put-aside book of the same pool).
+        refreshSources(player);
         var book = net.ledok.arenas_ld.stats.SpellBooks.of(player);
         if (book == null || !poolOf(book.stack()).equals(clean(pool))) {
             return false;
@@ -249,17 +252,54 @@ public final class RentalSpells {
             return false;
         }
         try {
-            if (spellsOf(book.stack()).equals(spells)) {
+            List<String> before = spellsOf(book.stack());
+            if (before.equals(spells)) {
+                ArenasLdMod.LOGGER.info("[Arenas] Rental: {}'s {} book already holds {}", player.getScoreboardName(),
+                    clean(pool), spells);
                 return true;
             }
             book.stack().set(component, copyWith.invoke(container, List.copyOf(spells)));
+            refreshSources(player);
             if (setDirty != null) {
                 setDirty.invoke(null, player);
             }
-            return true;
+            var check = net.ledok.arenas_ld.stats.SpellBooks.of(player);
+            boolean ok = check != null && spellsOf(check.stack()).equals(spells);
+            ArenasLdMod.LOGGER.info("[Arenas] Rental: {}'s {} book {} -> {}{}", player.getScoreboardName(), clean(pool),
+                before, spells, ok ? "" : " (not read back yet; trying again)");
+            return ok;
         } catch (ReflectiveOperationException | RuntimeException e) {
             ArenasLdMod.LOGGER.warn("[Arenas] Rental: couldn't set the spells of {}'s book", player.getScoreboardName(), e);
             return false;
+        }
+    }
+
+    private static @Nullable Method sourceCache, sourceUpdate;
+    private static boolean sourcesLooked;
+
+    /** Drops Spell Engine's cached spell sources of the player and builds them again from what they wear now. */
+    private static void refreshSources(ServerPlayer player) {
+        if (!sourcesLooked) {
+            sourcesLooked = true;
+            try {
+                Class<?> source = Class.forName("net.spell_engine.internals.container.SpellContainerSource");
+                Class<?> owner = Class.forName("net.spell_engine.internals.container.SpellContainerSource$Owner");
+                sourceCache = owner.getMethod("spellContainerCache");
+                sourceUpdate = source.getMethod("update", net.minecraft.world.entity.player.Player.class);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                ArenasLdMod.LOGGER.warn("[Arenas] Rental: couldn't reach Spell Engine's source cache", e);
+            }
+        }
+        if (sourceCache == null || sourceUpdate == null) {
+            return;
+        }
+        try {
+            if (sourceCache.invoke(player) instanceof Map<?, ?> cache) {
+                cache.clear();
+            }
+            sourceUpdate.invoke(null, player);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            ArenasLdMod.LOGGER.warn("[Arenas] Rental: couldn't refresh {}'s spell sources", player.getScoreboardName(), e);
         }
     }
 

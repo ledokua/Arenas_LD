@@ -339,7 +339,7 @@ public final class RunRentals {
                 RentalSpells.Choice book = RentalSpells.forKit(player.registryAccess(), p.preview(kit), band);
                 counters.rentalSpells = book == null ? List.of() : RentalSpells.validate(choice.spells(), book);
             }
-            applySpells(player, counters);
+            spellsPending(counters); // the next second, once Spell Engine has seen the lent book (4.40.6)
             RENTING.put(uuid, session);
             player.sendSystemMessage(Component.translatable("message.arenas_ld.rental.started", p.displayName(kit), band)
                 .withStyle(ChatFormatting.GOLD));
@@ -352,8 +352,7 @@ public final class RunRentals {
             && player.server.getTickCount() >= counters.rentalRetryTick) {
             if (p.begin(player, session, counters.loadoutId)) {
                 counters.rentalRejoinTries = 0;
-                counters.rentalSpellsTries = 0;
-                applySpells(player, counters);
+                spellsPending(counters);
                 ArenasLdMod.LOGGER.info("[Arenas] {} rents {} again for {} (rejoined)", player.getScoreboardName(),
                     counters.loadoutId, session);
             } else {
@@ -379,8 +378,7 @@ public final class RunRentals {
             RunStats run = RunDetails.runOf(player.getUUID());
             PlayerCounters counters = run == null ? null : run.players().get(player.getUUID());
             if (counters != null) {
-                counters.rentalSpellsTries = 0;
-                applySpells(player, counters); // the respawn handed out the kit's own book again
+                spellsPending(counters); // the respawn handed out the kit's own book again
             }
         }
     }
@@ -389,9 +387,20 @@ public final class RunRentals {
      * The picked spells into the lent book (nothing when none were picked or the kit has no book). The run's stats tick
      * tries again each second until it works (the provider may equip the book a tick later), and warns once after 10 s.
      */
+    /**
+     * Marks the picked spells as still to put in (4.40.6). Not in the same tick as the hand-out: Spell Engine's sources
+     * then still hold the player's previous book (same pool: their own, now put aside), so the pick landed there.
+     */
+    private static void spellsPending(PlayerCounters counters) {
+        counters.rentalSpellsApplied = false;
+        counters.rentalSpellsTries = 0;
+    }
+
     private static void applySpells(ServerPlayer player, PlayerCounters counters) {
         if (counters.rentalSpells.isEmpty() || counters.rentalPool.isEmpty()) {
             counters.rentalSpellsApplied = true;
+            ArenasLdMod.LOGGER.info("[Arenas] Rental: {} has no spell pick to apply (pool '{}')",
+                player.getScoreboardName(), counters.rentalPool);
             return;
         }
         counters.rentalSpellsApplied = RentalSpells.apply(player, counters.rentalPool, counters.rentalSpells);

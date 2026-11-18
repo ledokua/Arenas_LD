@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.40.6
+
+TEST fix (LeDok, 2026-11-18, via MCP eden). Server only; the client can stay on 4.40.5.
+- **Fix: the picked spells weren't in the lent book.** Spell Engine caches each player's spell sources. In the tick
+  the kit was handed out, the cache still held the player's previous book. When that book had the same pool (their own
+  book, just put aside), the pick went into it and counted as done.
+  - The spells now go in a second later.
+  - Spell Engine's sources are rebuilt before the book is looked up and after it's changed, and the result is read
+    back. A failed read-back retries.
+- **Logs:** INFO `[Arenas] Rental: <player>'s <pool> book [old] -> [new]`, or "already holds", or "has no spell pick".
+
 ## 4.40.5
 
 The GUI/UX overhaul (`docs/ui-rework/gui-ux-overhaul.md`). **Needs the client update** (screens only; the packets
