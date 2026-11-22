@@ -34,6 +34,11 @@ settings, and lobby kick packets changed.
 - **Reach the zone** rooms can activate without linked mobs. The client draws the goal outline,
   replacing the server's per-particle updates. Restored dungeons register their mobs once.
 
+- **Healing and buff projectile spells reach teammates in runs again** (Waterballs, Magical Ballad with
+  Soothing Verse, Penance with Hysteria; Duels 2v2 partners too). Arenas no longer stops Spell Engine
+  projectiles at allies with friendly fire off and leaves the target check to Spell Engine. Arrows,
+  tridents and other projectiles still pass through teammates.
+
 ### Builder tools and records
 
 - The instance checker reports shared links, invalid arena waves, missing room respawn points
