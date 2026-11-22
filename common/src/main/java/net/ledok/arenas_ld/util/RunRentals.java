@@ -426,7 +426,6 @@ public final class RunRentals {
                     onRunPlayer(stats, counters, player);
                 } catch (RuntimeException e) {
                     ArenasLdMod.LOGGER.warn("Rental update failed for {}", player.getScoreboardName(), e);
-                    if (stats.rentalRequired() && player.tickCount >= REJOIN_WAIT_TICKS) removeFromRun(player);
                 }
             }
         }
@@ -437,39 +436,52 @@ public final class RunRentals {
         Rental rental = RENTING.get(uuid);
         if (rental != null && rental.run() != stats) return;
         ArenasApi.RentalProvider p = rental == null ? provider : rental.provider();
-        if (p == null) {
-            if (stats.rentalRequired() && player.tickCount >= REJOIN_WAIT_TICKS) removeFromRun(player);
-            return;
-        }
-        String session = "arenas:" + stats.sessionKey();
-        // Rented in this run: after a restart Eden gave their own items back on login; lend the loadout again. A
-        // failing begin (the kit is gone) is tried at most REJOIN_TRIES times, REJOIN_RETRY_TICKS apart.
-        if (!p.isRenting(player) && player.tickCount >= REJOIN_WAIT_TICKS && counters.rentalRejoinTries < REJOIN_TRIES
-            && player.server.getTickCount() >= counters.rentalRetryTick) {
-            if (equip(player, stats, p, session, counters.loadoutId)) {
-                counters.rentalRejoinTries = 0;
-                spellsPending(counters);
-                ArenasLdMod.LOGGER.info("[Arenas] {} rents {} again for {} (rejoined)", player.getScoreboardName(),
-                    counters.loadoutId, session);
-            } else {
-                counters.rentalRejoinTries++;
-                counters.rentalRetryTick = player.server.getTickCount() + REJOIN_RETRY_TICKS;
-                // "Rental kits only": out of the run once every retry has failed (not on the first miss, which a
-                // restart's login timing can cause).
-                if (stats.rentalRequired() && counters.rentalRejoinTries >= REJOIN_TRIES) {
-                    removeFromRun(player);
-                    return;
+        int now = player.server.getTickCount();
+        boolean retryDue = player.tickCount >= REJOIN_WAIT_TICKS && counters.rentalRejoinTries < REJOIN_TRIES
+            && now >= counters.rentalRetryTick;
+        boolean equipped = false;
+        if (p != null) {
+            try {
+                equipped = p.isRenting(player);
+            } catch (RuntimeException e) {
+                if (retryDue) {
+                    ArenasLdMod.LOGGER.warn("Couldn't check the rental for {}", player.getScoreboardName(), e);
+                    failedRejoin(stats, counters, player, now);
                 }
-                if (counters.rentalRejoinTries >= REJOIN_TRIES) {
-                    ArenasLdMod.LOGGER.warn("[Arenas] {} couldn't rent {} again for {}; runs on with their own gear",
-                        player.getScoreboardName(), counters.loadoutId, session);
-                }
+                return;
             }
         }
-        if (!counters.rentalSpellsApplied && p.isRenting(player)) {
-            applySpells(player, counters);
+
+        // Eden can restore the player's own inventory on login after a restart.
+        // Re-equip the saved kit once the login check has finished.
+        if (!equipped && retryDue) {
+            if (p == null || !equip(player, stats, p, "arenas:" + stats.sessionKey(), counters.loadoutId)) {
+                failedRejoin(stats, counters, player, now);
+                return;
+            }
+            spellsPending(counters);
+            equipped = true;
+            ArenasLdMod.LOGGER.info("[Arenas] {} rents {} again for arenas:{} (rejoined)", player.getScoreboardName(),
+                counters.loadoutId, stats.sessionKey());
         }
-        RENTING.putIfAbsent(uuid, new Rental(stats, p));
+        if (equipped) {
+            counters.rentalRejoinTries = 0;
+            counters.rentalRetryTick = 0;
+            RENTING.putIfAbsent(uuid, new Rental(stats, p));
+            if (!counters.rentalSpellsApplied) applySpells(player, counters);
+        }
+    }
+
+    private static void failedRejoin(RunStats stats, PlayerCounters counters, ServerPlayer player, int now) {
+        counters.rentalRejoinTries++;
+        counters.rentalRetryTick = now + REJOIN_RETRY_TICKS;
+        if (counters.rentalRejoinTries < REJOIN_TRIES) return;
+        if (stats.rentalRequired()) {
+            removeFromRun(player);
+        } else {
+            ArenasLdMod.LOGGER.warn("[Arenas] {} couldn't restore {} for arenas:{} and will use their own gear",
+                player.getScoreboardName(), counters.loadoutId, stats.sessionKey());
+        }
     }
 
     private static void removeFromRun(ServerPlayer player) {

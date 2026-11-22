@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.45.1
+
+**Server only.** Rental restoration after a restart counts an unavailable rental provider, or a failed
+rental status check, as one of its three attempts, so a "Rental kits only" player is returned from the run
+only after three real failures, never on a single missed check. Regression tests cover the rental retries
+and the cleanup of raid bosses from before the ownership tag.
+
 ## 4.45.0
 
 **Client and server update.** Install matching builds on both sides because the run HUD, arena
@@ -14,8 +21,9 @@ settings, and lobby kick packets changed.
   seconds and accepts zero. During intermission, every standing player can click **Ready for next
   wave** in chat or use `/arenasld nextwave` to continue early.
 - Zero arrival grace starts wave one, and zero intermission advances immediately. A cleared wave
-  pays loot and applies its heal and repair bonus once. A wave that cannot spawn enemies ends the
-  run without awarding progress or loot for that wave.
+  pays loot and applies its heal and repair bonus once. A mob falls back to the arena center when
+  no clear spawn spot is found. A wave that still fails to spawn any enemies awards no progress or
+  loot for that wave.
 - New arena reward rows default to **Each**. Select **Shared** for loot scattered on the arena
   floor. Loose items now follow normal despawn rules between waves.
 - New mob rows cover all later waves by default. Arena waves cap their mob count at 64 and build
@@ -26,11 +34,12 @@ settings, and lobby kick packets changed.
 - Controllers respect each other's instance reservations. Preparations and runs track the
   spawner's dimension and position, so copies at identical coordinates in different dimensions
   no longer interfere with each other.
-- Raid cleanup only discards stray bosses marked as belonging to that raid instance. Nearby
-  mobs from other runs stay in play.
+- Raid cleanup discards stray bosses from the same instance, including legacy bosses saved
+  before raid ownership tags. Active raid and tracked dungeon bosses stay in play.
 - **Rental kits only** waits for every rental to equip before launch. If a handoff fails, the
-  lobby can retry and any kits already handed out are returned. Rentals work with combat stats
-  disabled. Payout modifiers and loot statistics use the run that awarded the loot.
+  lobby can retry and any kits already handed out are returned. After a restart, rental restoration
+  gets three attempts before a "Rental kits only" player is returned from the run. Rentals work with
+  combat stats disabled. Payout modifiers and loot statistics use the run that awarded the loot.
 - **Reach the zone** rooms can activate without linked mobs. The client draws the goal outline,
   replacing the server's per-particle updates. Restored dungeons register their mobs once.
 
@@ -50,9 +59,6 @@ settings, and lobby kick packets changed.
 - Lobby kick notices match the activity and lobby, so a controller at the same coordinates in
   another dimension keeps its hub view open. A controller without an activity ID shows the notice in
   the action bar.
-- Review follow-ups: stray raid bosses left by runs from before the ownership tag are swept too; a
-  "Rental kits only" player is returned from the run only after every re-equip retry fails; an arena
-  mob with no clear spawn spot spawns at the arena center again instead of ending the run.
 
 ## 4.44.0
 

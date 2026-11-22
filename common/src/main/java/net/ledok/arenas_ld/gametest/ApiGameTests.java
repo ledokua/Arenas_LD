@@ -1843,6 +1843,7 @@ public final class ApiGameTests {
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
         var calls = new java.util.ArrayList<String>();
         boolean[] renting = {false};
+        boolean[] rentalStatusUnavailable = {false};
         net.ledok.arenas_ld.api.ArenasApi.RentalProvider before = ArenasApi.rentalProvider();
         ArenasApi.setRentalProvider(new ArenasApi.RentalProvider() {
             public List<String> presets(int level) { return List.of("test:rental/" + (level >= 20 ? 20 : 0) + "/rogue_shadow"); }
@@ -1850,7 +1851,10 @@ public final class ApiGameTests {
             public boolean begin(ServerPlayer p, String session, String kit) { calls.add("begin " + session + " " + kit); renting[0] = true; return true; }
             public void end(MinecraftServer server, UUID uuid) { calls.add("end"); renting[0] = false; }
             public void reequip(ServerPlayer p) { calls.add("reequip"); }
-            public boolean isRenting(ServerPlayer p) { return renting[0]; }
+            public boolean isRenting(ServerPlayer p) {
+                if (rentalStatusUnavailable[0]) throw new IllegalStateException("rental status unavailable");
+                return renting[0];
+            }
             public List<net.minecraft.world.item.ItemStack> preview(String kit) { return List.of(); }
         });
         try {
@@ -1885,11 +1889,27 @@ public final class ApiGameTests {
             var cut = net.ledok.arenas_ld.util.RunRentals.rewardModifiers(stats, player.getUUID());
             helper.assertTrue(cut.size() == 3 && cut.stream().allMatch(m -> m.kind() == net.ledok.arenas_ld.rewards.RewardModifier.Kind.MORE
                 && m.value() == 0.5), "a renter's loot, XP and currency are halved: " + cut);
+            stats.load("{\"rentalMode\":\"required\"}");
+            helper.assertTrue(stats.rentalRequired(), "the reconnect restores a rental-only run");
             player.tickCount = 0;
             net.ledok.arenas_ld.util.RunRentals.onRunPlayer(stats, counters, player);
             helper.assertTrue(calls.isEmpty(), "not right at login: Eden's own login check goes first");
             player.tickCount = 10;
+            var provider = ArenasApi.rentalProvider();
+            ArenasApi.setRentalProvider(null);
             net.ledok.arenas_ld.util.RunRentals.onRunPlayer(stats, counters, player);
+            helper.assertTrue(counters.rentalRejoinTries == 1 && calls.isEmpty(), "an unavailable provider consumes one attempt");
+            ArenasApi.setRentalProvider(provider);
+            rentalStatusUnavailable[0] = true;
+            net.ledok.arenas_ld.util.RunRentals.onRunPlayer(stats, counters, player);
+            helper.assertTrue(counters.rentalRejoinTries == 1, "the retry delay still applies after an exception");
+            counters.rentalRetryTick = 0;
+            net.ledok.arenas_ld.util.RunRentals.onRunPlayer(stats, counters, player);
+            helper.assertTrue(counters.rentalRejoinTries == 2 && calls.isEmpty(), "a provider exception consumes one attempt");
+            counters.rentalRetryTick = 0;
+            rentalStatusUnavailable[0] = false;
+            net.ledok.arenas_ld.util.RunRentals.onRunPlayer(stats, counters, player);
+            helper.assertTrue(counters.rentalRejoinTries == 0, "the third attempt restores the kit and resets the counter");
             helper.assertTrue(calls.equals(List.of("begin arenas:" + stats.sessionKey() + " test:rental/20/rogue_shadow")),
                 "begun again with the run's session: " + calls);
             net.ledok.arenas_ld.util.RunRentals.onRunPlayer(stats, counters, player);
@@ -3227,6 +3247,9 @@ public final class ApiGameTests {
             var stray = helper.spawn(net.minecraft.world.entity.EntityType.IRON_GOLEM, new BlockPos(2, 1, 6));
             net.ledok.arenas_ld.util.EntityEquipmentHelper.markRunMob(stray);
             net.ledok.arenas_ld.raid.run.RaidRunLifecycle.markRaidBoss(stray, level, spawnerPos);
+            var legacy = helper.spawn(net.minecraft.world.entity.EntityType.IRON_GOLEM, new BlockPos(2, 1, 3));
+            net.ledok.arenas_ld.util.EntityEquipmentHelper.markRunMob(legacy);
+            net.ledok.arenas_ld.stats.RunStats.markBoss(legacy);
             var wild = helper.spawn(net.minecraft.world.entity.EntityType.IRON_GOLEM, new BlockPos(6, 1, 2));
             var otherRunMob = helper.spawn(net.minecraft.world.entity.EntityType.IRON_GOLEM, new BlockPos(3, 1, 6));
             net.ledok.arenas_ld.util.EntityEquipmentHelper.markRunMob(otherRunMob);
@@ -3239,6 +3262,7 @@ public final class ApiGameTests {
             try {
                 helper.assertTrue(controller.createLobby(player) && controller.startRaid(player), "the raid starts");
                 helper.assertTrue(stray.isRemoved(), "the stray tagged golem left by an earlier run was discarded");
+                helper.assertTrue(legacy.isRemoved(), "the stray boss from before the ownership tag was discarded");
                 helper.assertTrue(!wild.isRemoved(), "an untagged golem is left alone");
                 helper.assertTrue(!otherRunMob.isRemoved(), "a different activity's golem is left alone");
                 run = controller.getActiveRuns().get(new net.ledok.arenas_ld.activity.InstanceKey(level.dimension(), spawnerPos));
