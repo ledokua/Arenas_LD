@@ -207,7 +207,6 @@ public final class RaidRunLifecycle {
                 players.get(0).getDisplayName(),
                 mobDisplayName
         ).withStyle(ChatFormatting.GOLD);
-        world.getServer().getPlayerList().broadcastSystemMessage(announcement, false);
 
         if (entityTypeOpt.isEmpty()) {
             ArenasLdMod.LOGGER.error("Invalid mob ID in spawner at {}: {}", run.spawnerPos(), entityDefinition.mobId());
@@ -215,7 +214,7 @@ public final class RaidRunLifecycle {
         }
 
         Entity boss = entityTypeOpt.get().create(world);
-        if (boss == null) {
+        if (!(boss instanceof LivingEntity)) {
             ArenasLdMod.LOGGER.error("Failed to create entity from ID: {}", entityDefinition.mobId());
             return;
         }
@@ -225,21 +224,6 @@ public final class RaidRunLifecycle {
         long now = world.getGameTime();
         RaidTierConfig runTier = run.resolvedTierConfig();
         int raidTimeTicks = Math.max(0, runTier.raidTimeSeconds() * 20);
-
-        net.ledok.arenas_ld.util.RunLeftovers.RunKey leftoversKey = net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run);
-        RaidControllerBlockEntity owningController = findOwningController(world.getServer(), run.instanceKey());
-        for (ServerPlayer p : players) {
-            run.addParticipant(new RunParticipant(
-                p.getUUID(), p.getGameProfile().getName(), ParticipantStatus.ACTIVE, now));
-            net.ledok.arenas_ld.util.RunLeftovers.enter(owningController, leftoversKey, p.getUUID());
-            run.setReturnPoint(p.getUUID(), PlayerReturnPoint.capture(p, false));
-            // Everyone is online now; the snapshot pays an offline winner their perks later.
-            net.ledok.arenas_ld.util.EndRewardPerks.snapshot(run.perkSnapshots(), p.getUUID(), net.ledok.arenas_ld.util.EndRewardPerks.Mode.RAID);
-            PlayerStatsStore.get(world.getServer()).recordRunStart(p.getUUID(), PlayerStatsStore.Mode.RAID);
-        }
-        if (raidTimeTicks > 0) {
-            RunHudSync.send(world, hudTargets(run), raidHudPayload(run, 100));
-        }
 
         if (boss instanceof LivingEntity livingBoss) {
             double healthMult = runTier.healthMultiplier();
@@ -255,6 +239,7 @@ public final class RaidRunLifecycle {
             livingBoss.heal(livingBoss.getMaxHealth());
             // Owned by the run: never let vanilla despawn or convert the boss.
             EntityEquipmentHelper.markRunMob(livingBoss);
+            markRaidBoss(livingBoss, world, run.spawnerPos());
             net.ledok.arenas_ld.stats.RunStats.markBoss(livingBoss);
             net.ledok.arenas_ld.util.RunSplits.markRoot(livingBoss, entityDefinition.splitStrength());
             // For its minions: what reached its own health. Damage to raid players is already
@@ -278,7 +263,27 @@ public final class RaidRunLifecycle {
 
         Vec3 bossSpawnPos = EntityEquipmentHelper.resolveBossSpawnPos(run.spawnerPos(), entityDefinition.spawnOffsets());
         boss.moveTo(bossSpawnPos.x, bossSpawnPos.y, bossSpawnPos.z, 0, 0);
-        world.addFreshEntity(boss);
+        if (!world.addFreshEntity(boss)) {
+            var team = world.getScoreboard().getPlayersTeam(boss.getScoreboardName());
+            if (team != null) world.getScoreboard().removePlayerFromTeam(boss.getScoreboardName(), team);
+            return;
+        }
+        world.getServer().getPlayerList().broadcastSystemMessage(announcement, false);
+
+        net.ledok.arenas_ld.util.RunLeftovers.RunKey leftoversKey = net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run);
+        RaidControllerBlockEntity owningController = findOwningController(world.getServer(), run.instanceKey());
+        for (ServerPlayer p : players) {
+            run.addParticipant(new RunParticipant(
+                p.getUUID(), p.getGameProfile().getName(), ParticipantStatus.ACTIVE, now));
+            net.ledok.arenas_ld.util.RunLeftovers.enter(owningController, leftoversKey, p.getUUID());
+            run.setReturnPoint(p.getUUID(), PlayerReturnPoint.capture(p, false));
+            // Everyone is online now; the snapshot pays an offline winner their perks later.
+            net.ledok.arenas_ld.util.EndRewardPerks.snapshot(run.perkSnapshots(), p.getUUID(), net.ledok.arenas_ld.util.EndRewardPerks.Mode.RAID);
+            PlayerStatsStore.get(world.getServer()).recordRunStart(p.getUUID(), PlayerStatsStore.Mode.RAID);
+        }
+        if (raidTimeTicks > 0) {
+            RunHudSync.send(world, hudTargets(run), raidHudPayload(run, 100));
+        }
 
         ServerLevel entranceWorld = world.getServer().getLevel(spawner.getEntranceDimension());
         BlockPos absoluteEntrance = spawner.getAbsoluteEntrancePos();
@@ -481,20 +486,20 @@ public final class RaidRunLifecycle {
                 run.perkSnapshots(), uuid, player != null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.RAID);
             net.ledok.arenas_ld.rewards.RewardPayout payout = net.ledok.arenas_ld.rewards.RewardPayout.compute(baseRolls,
                 rewardPerPlayer, xpReward, net.ledok.arenas_ld.rewards.RewardPayout.join(net.ledok.arenas_ld.rewards.RewardPayout.join(
-                    perks.modifiers(), net.ledok.arenas_ld.util.RunRentals.rewardModifiers(uuid)), runModifiers), true, world.random);
+                    perks.modifiers(), net.ledok.arenas_ld.util.RunRentals.rewardModifiers(run.runStatsOrNull(), uuid)), runModifiers), true, world.random);
             List<ItemStack> loot = payout.rolls() <= 0 ? List.of() : net.ledok.arenas_ld.util.RewardDelivery.rollLoot(world,
                 perPlayerLoot, player, player != null ? player.position() : Vec3.atCenterOf(run.spawnerPos()), payout.rolls());
             long currency = payout.currency();
 
             if (player == null) {
                 // Offline but loot-eligible: the reward still lands via the economy inbox.
-                net.ledok.arenas_ld.util.RewardDelivery.giveStacksOffline(uuid, loot, "RAID_LOOT");
+                net.ledok.arenas_ld.util.RewardDelivery.giveStacksOffline(run.runStatsOrNull(), uuid, loot, "RAID_LOOT");
                 net.ledok.arenas_ld.util.RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "RAID_REWARD");
                 continue;
             }
 
             List<net.ledok.arenas_ld.packet.LootRewardPayload.Entry> delivered =
-                net.ledok.arenas_ld.util.RewardDelivery.giveStacks(player, loot, "RAID_LOOT");
+                net.ledok.arenas_ld.util.RewardDelivery.giveStacks(run.runStatsOrNull(), player, loot, "RAID_LOOT");
             net.ledok.arenas_ld.util.RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "RAID_REWARD");
 
             int grantedXp = 0;
@@ -508,7 +513,7 @@ public final class RaidRunLifecycle {
                 net.ledok.arenas_ld.packet.LootRewardPayload.Source.RAID_WIN, delivered,
                 net.ledok.arenas_ld.util.RewardDelivery.displayableCurrency(currency), grantedXp);
             // The breakdown goes to the run details' Rewards tab (D5); chat only when the run keeps no stats.
-            if (!net.ledok.arenas_ld.stats.RunStats.recordRewards(uuid,
+            if (!net.ledok.arenas_ld.stats.RunStats.recordRewards(run.runStatsOrNull(), uuid,
                     payout.summary(perPlayerLoot != null && !perPlayerLoot.isEmpty()),
                     payout.lines(perPlayerLoot != null && !perPlayerLoot.isEmpty()))) {
                 payout.tell(player, perPlayerLoot != null && !perPlayerLoot.isEmpty());
@@ -656,6 +661,7 @@ public final class RaidRunLifecycle {
                 if (parent.equals(run.bossUuid()) || run.bossParts().contains(parent)) {
                     run.removeBossPart(parent);
                     run.addBossPart(part.getUUID());
+                    markRaidBoss(part, level, run.spawnerPos());
                     controller.setChanged();
                     return;
                 }
@@ -1214,6 +1220,7 @@ public final class RaidRunLifecycle {
             controller.setChanged();
         }
         followBossChunk(world, run);
+        markRaidBoss(boss, world, run.spawnerPos());
         if ((now - run.startTick()) % STRAY_SWEEP_INTERVAL < BOSS_TRACK_INTERVAL
                 && world.dimension().equals(boss.level().dimension())) {
             // A boss left by an earlier run whose chunk only loaded now (players walked near it).
@@ -1289,6 +1296,7 @@ public final class RaidRunLifecycle {
      * @return how many were discarded
      */
     public static int sweepStrayBosses(ServerLevel level, BlockPos spawnerPos, EntityType<?> bossType) {
+        String ownership = raidBossTag(level, spawnerPos);
         Set<UUID> active = activeRaidBosses(level.getServer());
         AABB box = new AABB(
             spawnerPos.getX() - SWEEP_HORIZONTAL, Math.max(level.getMinBuildHeight(), spawnerPos.getY() - SWEEP_VERTICAL),
@@ -1296,7 +1304,7 @@ public final class RaidRunLifecycle {
             spawnerPos.getX() + SWEEP_HORIZONTAL + 1, Math.min(level.getMaxBuildHeight(), spawnerPos.getY() + SWEEP_VERTICAL + 1),
             spawnerPos.getZ() + SWEEP_HORIZONTAL + 1);
         List<? extends Entity> strays = level.getEntities(bossType, box, entity -> entity.isAlive()
-            && entity.getTags().contains(EntityEquipmentHelper.RUN_MOB_TAG)
+            && (entity.getTags().contains(ownership) || legacyRaidBoss(entity))
             && !RunMinions.isMinion(entity)
             && !active.contains(entity.getUUID()));
         for (Entity stray : strays) {
@@ -1308,6 +1316,26 @@ public final class RaidRunLifecycle {
             ArenasLdMod.LOGGER.info("Raid at {}: discarded {} stray boss(es).", spawnerPos, strays.size());
         }
         return strays.size();
+    }
+
+    /**
+     * A boss left by a run from before the ownership tag (4.44.0 and older): a run mob marked as a boss, with no raid
+     * ownership tag at all, that no running dungeon claims. Swept so an upgrade can't leave one fighting a new run.
+     */
+    private static boolean legacyRaidBoss(Entity entity) {
+        var tags = entity.getTags();
+        return tags.contains(EntityEquipmentHelper.RUN_MOB_TAG)
+            && tags.contains(net.ledok.arenas_ld.stats.RunStats.BOSS_TAG)
+            && tags.stream().noneMatch(tag -> tag.startsWith("arenas_ld_raid_boss:"))
+            && ArenasLdMod.DUNGEON_MANAGER.getRunForEntity(entity.getUUID()) == null;
+    }
+
+    private static String raidBossTag(ServerLevel level, BlockPos spawnerPos) {
+        return "arenas_ld_raid_boss:" + level.dimension().location() + "@" + spawnerPos.asLong();
+    }
+
+    public static void markRaidBoss(Entity entity, ServerLevel level, BlockPos spawnerPos) {
+        entity.addTag(raidBossTag(level, spawnerPos));
     }
 
     // ── Status (ArenasApi.status) ───────────────────────────────────────────────

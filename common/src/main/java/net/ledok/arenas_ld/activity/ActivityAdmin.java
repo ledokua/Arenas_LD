@@ -224,7 +224,7 @@ public final class ActivityAdmin {
         return server.overworld() == null ? null : ActivityIndex.get(server).get(id); // no worlds yet: nothing known
     }
 
-    /** The dungeon or raid controller's own breakable blocks list; empty for an unknown id or another type. */
+    /** The activity controller's own breakable blocks list; empty for an unknown id. */
     public static java.util.Optional<net.ledok.arenas_ld.util.BreakableBlocks> breakableBlocks(MinecraftServer server,
                                                                                              ResourceLocation id) {
         return ActivityRegistry.resolve(server, id) instanceof net.ledok.arenas_ld.util.BreakableBlocks.Holder holder
@@ -232,7 +232,7 @@ public final class ActivityAdmin {
     }
 
     /**
-     * Replaces the dungeon or raid controller's breakable blocks list. Refused for an unknown id, an arena, or an
+     * Replaces the activity controller's breakable blocks list. Refused for an unknown id or an
      * entry that is neither a known block id nor a {@code #tag}.
      */
     public static @Nullable Component setBreakableBlocks(MinecraftServer server, ResourceLocation id,

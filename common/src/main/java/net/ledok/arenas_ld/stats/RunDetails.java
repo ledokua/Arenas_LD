@@ -82,6 +82,9 @@ public final class RunDetails {
     public static @Nullable RunStats runOf(UUID player) {
         RunStats found = null; // the newest: an older run the player left may still be listed for a moment
         for (RunStats stats : LIVE) {
+            if (stats.pvp) {
+                continue; // a duel's combat log (CombatSessions) is no run
+            }
             RunParticipant participant = stats.view.participants().get().get(player);
             if (participant != null && participant.status() != RunParticipant.ParticipantStatus.REMOVED) {
                 found = stats;
@@ -93,7 +96,7 @@ public final class RunDetails {
     /** The going run {@code player} is or was in (out of it too: loot paid to them), or null. */
     public static @Nullable RunStats runOfAny(UUID player) {
         for (RunStats stats : LIVE) {
-            if (stats.view.participants().get().containsKey(player)) {
+            if (!stats.pvp && stats.view.participants().get().containsKey(player)) {
                 return stats;
             }
         }
@@ -104,6 +107,9 @@ public final class RunDetails {
     public static @Nullable RunStats runAt(ResourceLocation activity, @Nullable ArenasApi.InstanceRef instance) {
         RunStats found = null; // the newest
         for (RunStats stats : LIVE) {
+            if (stats.pvp) {
+                continue;
+            }
             RunDetailsSource source = stats.source();
             if (activity.equals(source.activityId()) && (instance == null || instance.equals(source.instance()))) {
                 found = stats;
@@ -231,6 +237,12 @@ public final class RunDetails {
         if (participant.status() == RunParticipant.ParticipantStatus.REMOVED) {
             return "out";
         }
+        if (stats.pvp) {
+            if (stats.winnerSide != null && !stats.winnerSide.isEmpty() && counters != null) {
+                return stats.winnerSide.equals(counters.side) ? "won" : "lost";
+            }
+            return server.getPlayerList().getPlayer(uuid) == null ? "offline" : "alive";
+        }
         // Everyone still in it when it ended (downed and hardcore-out players too): its result.
         String result = stats.source().result();
         if ("win".equals(result)) {
@@ -266,7 +278,7 @@ public final class RunDetails {
             hud == null ? Component.empty() : hud.label(),
             hud == null ? 0 : hud.remainingTicks(), hud == null ? 0 : hud.totalTicks(), record.durationSeconds,
             hud == null ? RunHudPayload.NO_BOSS_HP : hud.bossHpPercent(),
-            rewards(source), Component.empty(), highlights(record), phases(record), rows,
+            stats.pvp ? Component.empty() : rewards(source), Component.empty(), highlights(record), phases(record), rows,
             staff ? round(record.unattributed) : -1, stats.ended(), staff, false, false);
     }
 
@@ -308,7 +320,7 @@ public final class RunDetails {
             float blocked = p.blockedShield + p.blockedArmor + p.blockedResistance + p.blockedEnchant + p.blockedAbsorption;
             rows.add(new RunDetailsPayload.Row(p.name, state(p.state), p.deaths, (int) now[2], now[0], now[1],
                 round(p.dealt), round(p.taken), round(blocked), round(p.healedSelf + p.healedOthers), p.kills,
-                staff ? Component.literal(levelLine(record, p)).append(staffLine(p)) : Component.empty(),
+                staff ? Component.literal(levelLine(record, p)).append(staffLine(p, "duel".equals(record.type))) : Component.empty(),
                 uuidOf(p.uuid), p.gear == null || p.gear.playerClass == null ? "" : p.gear.playerClass,
                 p.gear == null ? -1 : p.gear.playerLevel, round(p.healedOthers), rewardLines(p), classStack(p, registries)));
         }
@@ -367,7 +379,8 @@ public final class RunDetails {
                 out.append(' ').append(shown);
             }
             if (p.loadoutId != null && !p.loadoutId.isEmpty()) {
-                out.append(" RENTAL ").append(p.rentalClass).append(" L").append(p.rentalBand);
+                out.append(" RENTAL ").append(p.rentalClass == null || p.rentalClass.isEmpty() ? p.loadoutId
+                    : p.rentalClass + " L" + p.rentalBand);
             }
             if (record.runLevel >= 0) {
                 out.append(" (run ").append(record.runLevel);
@@ -420,7 +433,14 @@ public final class RunDetails {
         return value == Math.floor(value) ? Integer.toString((int) value) : String.format(Locale.ROOT, "%.1f", value);
     }
 
-    private static Component staffLine(RunRecord.Player p) {
+    private static Component staffLine(RunRecord.Player p, boolean duel) {
+        if (duel) { // no bosses, no loot (4.42.0)
+            return Component.translatable("gui.arenas_ld.run_details.staff_line_duel",
+                number(p.overkill), number(p.takenRaw), number(p.takenEnemies), number(p.takenEnvironment),
+                number(p.blockedShield), number(p.blockedArmor), number(p.blockedResistance), number(p.blockedEnchant),
+                number(p.blockedAbsorption), number(p.healedOthers), number(p.overheal), p.assists,
+                String.format(Locale.ROOT, "%d:%02d", p.aliveSeconds / 60, p.aliveSeconds % 60));
+        }
         return Component.translatable("gui.arenas_ld.run_details.staff_line",
             number(p.bossDealt), number(p.overkill), number(p.takenRaw), number(p.takenEnemies), number(p.takenEnvironment),
             number(p.blockedShield), number(p.blockedArmor), number(p.blockedResistance), number(p.blockedEnchant),
@@ -430,7 +450,7 @@ public final class RunDetails {
     }
 
     private static Component tier(String difficulty) {
-        return Component.translatable("gui.arenas_ld.tier." + difficulty);
+        return difficulty.isEmpty() ? Component.empty() : Component.translatable("gui.arenas_ld.tier." + difficulty);
     }
 
     private static List<Component> modifiers(RunRecord record) {
@@ -442,6 +462,18 @@ public final class RunDetails {
     }
 
     private static Component result(RunRecord record) {
+        if ("duel".equals(record.type)) {
+            if (record.winnerSide == null || record.winnerSide.isEmpty()) {
+                return Component.translatable("gui.arenas_ld.run_details.result.draw");
+            }
+            List<String> names = new ArrayList<>();
+            for (RunRecord.Player p : record.players) {
+                if (record.winnerSide.equals(p.side)) {
+                    names.add(p.name);
+                }
+            }
+            return Component.translatable("gui.arenas_ld.run_details.result.duel_won", String.join(", ", names));
+        }
         return Component.translatable("gui.arenas_ld.run_details.result." + (record.result.isEmpty() ? "fail" : record.result));
     }
 

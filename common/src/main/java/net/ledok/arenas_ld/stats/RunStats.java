@@ -84,6 +84,14 @@ public final class RunStats {
     private @Nullable String rentalMode;
     /** The server tick of the run's last tick; a run that stops ticking (taken away by its controller) is ended. */
     long lastTick = -1;
+    /**
+     * A combat log session (a duel, 4.42.0: {@link CombatSessions}) instead of a dungeon or raid run: its players'
+     * hits on each other count as dealt damage and kills, it has no mobs, no rentals and no rewards, and Arenas' own
+     * run lookups ({@link RunDetails#runOf}) skip it.
+     */
+    public final boolean pvp;
+    /** A finished duel's winning side ("" = a draw); null while it goes. */
+    @Nullable String winnerSide;
 
     /** Who hit a run mob how much (for assists); made on its first credited hit, dropped when it dies. */
     public static final class Hits {
@@ -111,8 +119,13 @@ public final class RunStats {
     }
 
     public RunStats(DownedSpectators.RunView view, Supplier<RunDetailsSource> source) {
+        this(view, source, false);
+    }
+
+    RunStats(DownedSpectators.RunView view, Supplier<RunDetailsSource> source, boolean pvp) {
         this.view = view;
         this.source = source;
+        this.pvp = pvp;
         RunDetails.track(this);
     }
 
@@ -130,6 +143,15 @@ public final class RunStats {
 
     public Map<UUID, PlayerCounters> players() {
         return players;
+    }
+
+    public boolean hasParticipant(UUID uuid) {
+        RunParticipant participant = view.participants().get().get(uuid);
+        return !view.over().getAsBoolean() && participant != null && participant.status() != RunParticipant.ParticipantStatus.REMOVED;
+    }
+
+    public void discard(MinecraftServer server) {
+        finish(server, false);
     }
 
     public boolean ended() {
@@ -299,9 +321,8 @@ public final class RunStats {
     }
 
     /** Loot the run paid a player (run file, staff). */
-    public static void onLoot(UUID player, List<ItemStack> stacks) {
-        RunStats stats = RunDetails.runOfAny(player);
-        if (stats == null || stacks.isEmpty()) {
+    public static void onLoot(@Nullable RunStats stats, UUID player, List<ItemStack> stacks) {
+        if (stats == null || stats.ended || !enabled() || stacks.isEmpty()) {
             return;
         }
         PlayerCounters counters = stats.players.get(player);
@@ -319,10 +340,9 @@ public final class RunStats {
      * A player's reward breakdown on a win: kept for the run details' Rewards tab (UI rework D5) instead of chat.
      * False when the player's run has no stats (stats off): then the caller says it in chat as before.
      */
-    public static boolean recordRewards(UUID player, net.minecraft.network.chat.Component summary,
+    public static boolean recordRewards(@Nullable RunStats stats, UUID player, net.minecraft.network.chat.Component summary,
                                         List<net.minecraft.network.chat.Component> lines) {
-        RunStats stats = RunDetails.runOfAny(player);
-        if (stats == null || stats.ended) {
+        if (stats == null || stats.ended || !enabled()) {
             return false;
         }
         RunParticipant participant = stats.view.participants().get().get(player);
@@ -364,17 +384,29 @@ public final class RunStats {
             if (holder.arenasLd$runStats() != counters) {
                 holder.arenasLd$setRunStats(counters);
             }
-            if (counters.gear == null) {
-                counters.gear = RunGear.capture(player); // once: their level, gear and skills as they start
-                counters.skills = RunGear.skills(player);
-            }
-            net.ledok.arenas_ld.util.RunRentals.onRunPlayer(this, counters, player);
+            captureStart(server, counters, player);
             if (!view.downed().test(entry.getKey())) {
                 counters.aliveTicks += 20;
                 FightStats.moment(counters, player, (int) Math.max(0, (server.overworld().getGameTime() - startTick()) / 20));
             }
         }
         claimPending();
+    }
+
+    /**
+     * Once per player: their level, gear and skills as they start; in a combat session (duel) their stats too, at the
+     * start (4.42.2: a fighter who never landed a hit had none, as runs take them at the first hit).
+     */
+    void captureStart(MinecraftServer server, PlayerCounters counters, ServerPlayer player) {
+        if (counters.gear == null) {
+            counters.gear = RunGear.capture(player);
+            counters.skills = RunGear.skills(player);
+        }
+        if (pvp && counters.statsStart == null) {
+            counters.statsStart = RunGear.stats(player,
+                (int) Math.max(0, (server.overworld().getGameTime() - startTick()) / 20));
+            counters.statsStartOnBoss = true; // a duel has no boss: never retaken
+        }
     }
 
     private void claimPending() {
@@ -398,8 +430,13 @@ public final class RunStats {
 
     /** The run is over: its players stop counting (its mobs on their next hit), and its run file is written. */
     public void end(MinecraftServer server) {
+        finish(server, true);
+    }
+
+    /** {@link #end}; {@code keep} false drops the record (a cancelled duel). The record, or null when already ended. */
+    @Nullable RunRecord finish(MinecraftServer server, boolean keep) {
         if (ended) {
-            return;
+            return null;
         }
         RunRecord record = snapshot(server);
         ended = true;
@@ -411,9 +448,10 @@ public final class RunStats {
                 ((RunStatsHolder) player).arenasLd$setRunStats(null);
             }
         }
-        if (enabled()) {
+        if (keep && enabled()) {
             RunRecords.finish(server, this, record);
         }
+        return record;
     }
 
     // ── saving ───────────────────────────────────────────────────────────────
@@ -425,12 +463,13 @@ public final class RunStats {
         record.activityId = s.activityId() == null ? "" : s.activityId().toString();
         record.activityName = s.activityName().getString();
         record.type = s.type();
-        record.difficulty = s.tier().name().toLowerCase(java.util.Locale.ROOT);
+        record.difficulty = pvp ? "" : s.tier().name().toLowerCase(java.util.Locale.ROOT);
         record.runLevel = s.runLevel();
         record.hardcore = s.hardcore();
         record.modifiers = new ArrayList<>(s.modifiers());
         record.rentalMode = rentalMode(server);
-        record.baseLootRolls = s.lootRolls();
+        record.baseLootRolls = pvp ? -1 : s.lootRolls();
+        record.winnerSide = winnerSide == null ? "" : winnerSide;
         record.dimension = s.instance().dimension().location().toString();
         record.x = s.instance().pos().getX();
         record.y = s.instance().pos().getY();
@@ -581,6 +620,70 @@ public final class RunStats {
             counters.blockedEnchant += enchant;
             counters.blockedAbsorption += absorbed;
             RunEvents.landed(victim, counters, source, raw, armor, resistance, enchant, absorbed, lost, toHealth);
+            if (counters.run.pvp) {
+                pvpHit(victim, counters, source, lost, toHealth);
+            }
+        }
+    }
+
+    /**
+     * A duel: a fighter took a hit. The fighter (or pet/summon owner, or harmful-effect applier) on the other end gets
+     * it as dealt damage; a hit that leaves the victim at 0 HP is a kill and a death (duels stop the death itself),
+     * with assists for others who did 10%+ of their max HP since their last death.
+     */
+    private static void pvpHit(LivingEntity victim, PlayerCounters target, DamageSource source, float lost, float toHealth) {
+        RunStats stats = target.run;
+        RunStatsHolder holder = (RunStatsHolder) victim;
+        // Only a real attacker (or pet/summon owner) or the applier of a harmful effect: damage with neither (falls,
+        // lava, an effect from the console) isn't anyone's dealt damage, unlike a run's "last hitter" credit.
+        PlayerCounters credit = source.getEntity() != null ? countersOf(source.getEntity(), stats)
+            : holder.arenasLd$applier() != null && holder.arenasLd$applier().run == stats ? holder.arenasLd$applier() : null;
+        if (credit == target) {
+            credit = null; // their own damage
+        }
+        if (credit != null && lost > 0) {
+            credit.dealt += lost;
+            credit.overkill += Math.max(0, toHealth - lost);
+            Hits hits = holder.arenasLd$hits();
+            if (hits == null) {
+                hits = new Hits();
+                holder.arenasLd$setHits(hits);
+            }
+            hits.add(credit, lost);
+            Object key = sourceKey(source);
+            float[] total = credit.bySource.get(key);
+            if (total == null) {
+                credit.bySource.put(key, new float[]{lost});
+            } else {
+                total[0] += lost;
+            }
+            // A duel's top hits are what came off HP (a 1000 hit on 70 HP is 70), unlike a run's (overkill included).
+            if (credit.topHits.size() < TOP_HITS || lost > credit.topHits.get(credit.topHits.size() - 1).amount) {
+                stats.topHit(credit, victim, false, source, key, lost);
+            }
+            stats.fightData(credit, victim, false, lost);
+        }
+        if (victim.getHealth() <= 0) {
+            target.pvpDeaths++;
+            PlayerCounters killer = credit != null ? credit : countersOf(victim.getKillCredit(), stats); // knocked into lava
+            if (killer == target) {
+                killer = null;
+            }
+            if (killer != null) {
+                killer.kills++;
+            }
+            Hits hits = holder.arenasLd$hits();
+            if (hits != null) {
+                float threshold = victim.getMaxHealth() * 0.1f;
+                for (int i = 0; i < hits.size; i++) {
+                    if (hits.who[i] != killer && hits.who[i] != target && hits.amount[i] >= threshold) {
+                        hits.who[i].assists++;
+                    }
+                }
+            }
+            holder.arenasLd$setHits(null);
+            holder.arenasLd$setApplier(null);
+            RunEvents.died(victim, source);
         }
     }
 
@@ -591,7 +694,8 @@ public final class RunStats {
     private void topHit(PlayerCounters credit, LivingEntity victim, boolean boss, DamageSource source, Object key, float amount) {
         RunRecord.Hit hit = new RunRecord.Hit();
         hit.amount = Math.round(amount * 10) / 10f;
-        hit.target = BuiltInRegistries.ENTITY_TYPE.getKey(victim.getType()).toString();
+        hit.target = victim instanceof Player ? "player:" + victim.getName().getString()
+            : BuiltInRegistries.ENTITY_TYPE.getKey(victim.getType()).toString();
         hit.boss = boss;
         hit.seconds = (int) Math.max(0, (victim.level().getGameTime() - source().startTick()) / 20);
         hit.source = sourceLabel(key);
@@ -806,6 +910,12 @@ public final class RunStats {
         if (mark instanceof PlayerCounters counters && mob instanceof net.minecraft.world.entity.player.Player
             && !counters.run.ended) {
             RunEvents.effectAdded(mob, counters, effect, source);
+            if (counters.run.pvp && source != null && effect.getEffect().value().getCategory() == MobEffectCategory.HARMFUL) {
+                PlayerCounters applier = countersOf(source, counters.run);
+                if (applier != null && applier != counters) {
+                    ((RunStatsHolder) mob).arenasLd$setApplier(applier);
+                }
+            }
             return;
         }
         if (mark instanceof RunStats stats && source != null

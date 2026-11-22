@@ -365,7 +365,11 @@ public final class SpawnerPacketHandlers {
                         Math.clamp(objective.surviveWaveIntervalSeconds(), 5, 600),
                         protectMobId, objective.protectStationary(),
                         room.getObjective().protectOffset(), List.copyOf(protectAttributes),
-                        Math.clamp(objective.entryPercent(), 1, 100)));
+                        Math.clamp(objective.entryPercent(), 1, 100),
+                        // The goal zone is set in-world with the Dungeon Tool too: keep the server's.
+                        room.getObjective().zoneCornerA(), room.getObjective().zoneCornerB(),
+                        Math.clamp(objective.maxAliveMobs(), 0,
+                            net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig.MAX_MOB_CAP)));
                     markDirtyAndSync(world, room);
                     broadcastRoomControllerSnapshot(player, room);
                 }
@@ -383,6 +387,23 @@ public final class SpawnerPacketHandlers {
                 BlockEntity be = world.getBlockEntity(payload.blockPos());
                 if (be instanceof RoomControllerBlockEntity room) {
                     room.setProtectPos(null);
+                    markDirtyAndSync(world, room);
+                    broadcastRoomControllerSnapshot(player, room);
+                }
+            });
+        });
+
+        ArenasNetwork.registerServerReceiver(net.ledok.arenas_ld.dungeon.packet.RoomClearZonePayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                ServerPlayer player = context.player();
+                if (!player.hasPermissions(2)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.room_controller.no_permission"));
+                    return;
+                }
+                Level world = player.level();
+                BlockEntity be = world.getBlockEntity(payload.blockPos());
+                if (be instanceof RoomControllerBlockEntity room) {
+                    room.setZone(null, null);
                     markDirtyAndSync(world, room);
                     broadcastRoomControllerSnapshot(player, room);
                 }
@@ -1135,7 +1156,8 @@ public final class SpawnerPacketHandlers {
                                        Lobby lobby, net.minecraft.core.BlockPos instancePos) {
         ServerLevel dbsLevel = serverLevel.getServer().getLevel(controller.getInstanceDimension(instancePos));
         if (dbsLevel == null) {
-            dbsLevel = serverLevel;
+            controller.notifyLobbyMembers(lobby, Component.translatable("message.arenas_ld.dungeon.loss_spawner_missing"));
+            return;
         }
         UUID lobbyId = lobby.lobbyId();
         java.util.Set<UUID> party = new java.util.HashSet<>(lobby.members());
@@ -1194,19 +1216,26 @@ public final class SpawnerPacketHandlers {
         }
     }
 
-    /** Starts the dungeon run on {@code instancePos} (the lobby is already taken off) and closes the members' screens. */
+    /** Starts the dungeon run on {@code instancePos} and closes the members' screens. */
     private static void launchDungeon(ServerLevel serverLevel, net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity controller,
                                       Lobby lobby, net.minecraft.core.BlockPos instancePos) {
         List<UUID> party = new ArrayList<>(lobby.members());
         // The DBS may live in a different dimension than the controller.
         ServerLevel dbsLevel = serverLevel.getServer().getLevel(controller.getInstanceDimension(instancePos));
         if (dbsLevel == null) {
-            dbsLevel = serverLevel;
+            controller.finishLaunch(lobby.lobbyId(), false);
+            controller.notifyLobbyMembers(lobby, Component.translatable("message.arenas_ld.dungeon.loss_spawner_missing"));
+            return;
         }
-        ServerLevel startLevel = dbsLevel;
-        DungeonRun run = net.ledok.arenas_ld.util.RunEffects.during(lobby.modifiers(), () -> DungeonRunLifecycle.startRun(
-            startLevel, controller, instancePos, party,
-            lobby.selectedTier(), lobby.hardcoreEnabled(), lobby.ownerName(), lobby.modifiers()));
+        DungeonRun run = null;
+        try {
+            ServerLevel startLevel = dbsLevel;
+            run = net.ledok.arenas_ld.util.RunEffects.during(lobby.modifiers(), () -> DungeonRunLifecycle.startRun(
+                startLevel, controller, instancePos, party,
+                lobby.selectedTier(), lobby.hardcoreEnabled(), lobby.ownerName(), lobby.modifiers(), lobby));
+        } finally {
+            controller.finishLaunch(lobby.lobbyId(), run != null);
+        }
         if (run == null) {
             ArenasLdMod.LOGGER.warn("startRun failed for lobby {}", lobby.lobbyId());
             return;

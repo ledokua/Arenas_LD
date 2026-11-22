@@ -147,6 +147,7 @@ public final class RunRecords {
             INDEX.addAll(kept);
             INDEX.addAll(fresh);
             for (Entry entry : INDEX) {
+                if (duel(entry)) continue;
                 for (String uuid : entry.partyUuids) {
                     try {
                         LAST.put(UUID.fromString(uuid), entry.runId);
@@ -157,13 +158,17 @@ public final class RunRecords {
         }));
     }
 
-    /** The finished runs, newest first, that match: one activity (null: any), one player (null: anyone). */
+    static boolean duel(Entry entry) {
+        return "duel".equals(entry.type);
+    }
+
+    /** The finished dungeon and raid runs (no duels), newest first, that match: one activity (null: any), one player (null: anyone). */
     public static List<Entry> history(@Nullable String activityId, @Nullable UUID player, int limit) {
         List<Entry> out = new ArrayList<>();
         String uuid = player == null ? null : player.toString();
         for (int i = INDEX.size() - 1; i >= 0 && out.size() < Math.max(1, limit); i--) {
             Entry entry = INDEX.get(i);
-            if ((activityId == null || activityId.equals(entry.activityId)) && (uuid == null || entry.partyUuids.contains(uuid))) {
+            if (!duel(entry) && (activityId == null || activityId.equals(entry.activityId)) && (uuid == null || entry.partyUuids.contains(uuid))) {
                 out.add(entry);
             }
         }
@@ -172,6 +177,18 @@ public final class RunRecords {
 
     public static @Nullable String lastRunOf(UUID player) {
         return LAST.get(player);
+    }
+
+    /** Whether {@code player} was in the finished run or duel {@code runId}. */
+    public static boolean wasIn(String runId, UUID player) {
+        String uuid = player.toString();
+        for (int i = INDEX.size() - 1; i >= 0; i--) {
+            Entry entry = INDEX.get(i);
+            if (entry.runId.equals(runId)) {
+                return entry.partyUuids.contains(uuid);
+            }
+        }
+        return false;
     }
 
     public static boolean known(String runId) {
@@ -191,7 +208,7 @@ public final class RunRecords {
     /** {@link RunStats#end}: keeps the record, writes its file, and shows it to its players. */
     static void finish(MinecraftServer server, RunStats stats, RunRecord record) {
         String path = record.activityId.isEmpty() ? "run" : record.activityId.substring(record.activityId.indexOf(':') + 1);
-        record.runId = record.startEpochMs + "-" + path.replaceAll("[^a-z0-9_.-]", "_");
+        record.runId = record.startEpochMs + "-" + path.replaceAll("[^a-z0-9_.-]", "_") + "-" + UUID.randomUUID();
         Entry entry = new Entry();
         entry.runId = record.runId;
         entry.activityId = record.activityId;
@@ -211,7 +228,9 @@ public final class RunRecords {
             entry.gearPower.add(p.gear == null ? -1f : p.gear.powerAvg);
             entry.classes.add(p.gear == null || p.gear.playerClass == null ? "" : p.gear.playerClass);
             entry.loadouts.add(p.loadoutId == null ? "" : p.loadoutId);
-            LAST.put(UUID.fromString(p.uuid), record.runId);
+            if (!duel(entry)) {
+                LAST.put(UUID.fromString(p.uuid), record.runId); // "/arenasld run last" stays the last dungeon/raid run
+            }
         }
         INDEX.add(entry);
         RECENT.put(record.runId, record);
@@ -238,6 +257,9 @@ public final class RunRecords {
             }
         }, Util.ioPool());
 
+        if (duel(entry)) {
+            return; // the duel mod says how it ended and links ArenasApi.openCombatLog
+        }
         // The chat line only; its [Details] opens the screen (LeDok 4.36.1: no auto-opened end screen).
         for (RunRecord.Player p : record.players) {
             ServerPlayer player = server.getPlayerList().getPlayer(UUID.fromString(p.uuid));

@@ -94,6 +94,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
     private int entryPercentInput = RoomObjectiveConfig.DEFAULT_ENTRY_PERCENT;
     private int surviveSecondsInput = 60;
     private int surviveIntervalInput = 15;
+    private int maxAliveMobsInput = 0;
     private String protectMobIdInput = "minecraft:villager";
     private boolean protectStationaryInput = true;
     private final List<net.ledok.arenas_ld.util.AttributeData> protectAttributesInput = new ArrayList<>();
@@ -213,6 +214,16 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
             contentArea.item(ArenasUi.spacer(2));
             contentArea.item(buildSurviveSecondsRow());
         }
+        if (objectiveType == RoomObjectiveConfig.Type.REACH_ZONE) {
+            contentArea.item(ArenasUi.spacer(2));
+            contentArea.item(buildIntervalRow());
+            contentArea.item(ArenasUi.spacer(2));
+            contentArea.item(buildZoneRow());
+        }
+        if (objectiveType == RoomObjectiveConfig.Type.SURVIVE || objectiveType == RoomObjectiveConfig.Type.REACH_ZONE) {
+            contentArea.item(ArenasUi.spacer(2));
+            contentArea.item(buildMobCapRow());
+        }
         if (objectiveType == RoomObjectiveConfig.Type.PROTECT) {
             contentArea.item(ArenasUi.spacer(2));
             buildProtectRows(contentArea);
@@ -301,12 +312,98 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
         return fieldRow;
     }
 
+    /** The objective types as buttons, wrapping onto a second row when they don't fit the screen's width. */
     private Flex buildObjectiveTypeRow() {
-        Flex row = Flex.row().gap(4).alignItems(Align.CENTER);
-        row.sizing(Sizing.fill(), Sizing.content());
+        Flex col = Flex.column().gap(4);
+        col.sizing(Sizing.fill(), Sizing.content());
+        float available = canvas.width() - 40;
+        Flex row = null;
+        float used = 0;
         for (RoomObjectiveConfig.Type type : RoomObjectiveConfig.Type.values()) {
-            row.item(objectiveTypeButton(type));
+            Button button = objectiveTypeButton(type);
+            float width = button.bounds().width();
+            if (row == null || used + 4 + width > available) {
+                row = Flex.row().gap(4).alignItems(Align.CENTER);
+                row.sizing(Sizing.fill(), Sizing.content());
+                col.item(row);
+                used = 0;
+            } else {
+                used += 4;
+            }
+            row.item(button);
+            used += width;
         }
+        return col;
+    }
+
+    /** REACH_ZONE: how often a wave spawns while the party makes its way to the zone. */
+    private Flex buildIntervalRow() {
+        Flex fieldRow = Flex.row().gap(6).alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
+        fieldRow.item(accentBar());
+        fieldRow.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.objective.wave_interval"), INK_MID));
+        IdSuggestionDropdown.Field intervalField = IdSuggestionDropdown.textBox(48, String.valueOf(surviveIntervalInput), 3);
+        intervalField.size(48, 18);
+        intervalField.changeListeners.add(v -> {
+            try {
+                surviveIntervalInput = Math.clamp(Integer.parseInt(v.trim()), 5, 600);
+            } catch (NumberFormatException ignored) {
+            }
+        });
+        fieldRow.item(intervalField);
+        fieldRow.spacer();
+        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.set_time"), 64, 18,
+            () -> ArenasNetwork.sendToServer(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)))));
+        return fieldRow;
+    }
+
+    /** SURVIVE / REACH_ZONE: the most mobs alive in the room at once (0 = no cap). */
+    private Flex buildMobCapRow() {
+        Flex fieldRow = Flex.row().gap(6).alignItems(Align.CENTER);
+        fieldRow.sizing(Sizing.fill(), Sizing.fixed(22));
+        fieldRow.backgroundFill(PANEL_2, HAIRLINE, 1);
+        fieldRow.item(accentBar());
+        fieldRow.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.objective.mob_cap"), INK_MID));
+        IdSuggestionDropdown.Field field = IdSuggestionDropdown.textBox(48, String.valueOf(maxAliveMobsInput), 3);
+        field.size(48, 18);
+        field.changeListeners.add(v -> {
+            try {
+                maxAliveMobsInput = Math.clamp(Integer.parseInt(v.trim()), 0, RoomObjectiveConfig.MAX_MOB_CAP);
+            } catch (NumberFormatException ignored) {
+            }
+        });
+        fieldRow.item(field);
+        fieldRow.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.objective.mob_cap_hint"), INK_DIM));
+        fieldRow.spacer();
+        fieldRow.item(ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.set_time"), 64, 18,
+            () -> ArenasNetwork.sendToServer(new RoomSetObjectivePayload(menu.getBlockPos(), editedObjective(objectiveType)))));
+        return fieldRow;
+    }
+
+    /** REACH_ZONE: the zone as set with the Dungeon Tool (its size), a hint, and Clear. */
+    private Flex buildZoneRow() {
+        Flex row = Flex.row().gap(8).alignItems(Align.CENTER);
+        row.sizing(Sizing.fill(), Sizing.content());
+        RoomObjectiveConfig objective = menu.getObjective();
+        Component status;
+        if (objective.hasZone()) {
+            BlockPos a = objective.zoneCornerA().get();
+            BlockPos b = objective.zoneCornerB().get();
+            status = Component.translatable("gui.arenas_ld.room_controller.objective.zone_size",
+                Math.abs(a.getX() - b.getX()) + 1, Math.abs(a.getY() - b.getY()) + 1, Math.abs(a.getZ() - b.getZ()) + 1);
+        } else if (objective.zoneCornerA().isPresent()) {
+            status = Component.translatable("gui.arenas_ld.room_controller.objective.zone_half");
+        } else {
+            status = Component.translatable("gui.arenas_ld.room_controller.objective.zone_none");
+        }
+        row.item(ArenasUi.text(status, objective.hasZone() ? INK : DANGER));
+        row.item(ArenasUi.text(Component.translatable("gui.arenas_ld.room_controller.objective.zone_hint"), INK_DIM));
+        row.spacer();
+        Button clear = ArenasUi.button(Component.translatable("gui.arenas_ld.room_controller.button.clear_respawn"),
+            () -> ArenasNetwork.sendToServer(new net.ledok.arenas_ld.dungeon.packet.RoomClearZonePayload(menu.getBlockPos())));
+        clear.enabled(objective.zoneCornerA().isPresent() || objective.zoneCornerB().isPresent());
+        row.item(clear);
         return row;
     }
 
@@ -623,6 +720,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
         entryPercentInput = menu.getObjective().clampedEntryPercent();
         surviveSecondsInput = menu.getObjective().surviveSeconds();
         surviveIntervalInput = menu.getObjective().surviveWaveIntervalSeconds();
+        maxAliveMobsInput = menu.getObjective().maxAliveMobs();
         protectMobIdInput = menu.getObjective().protectMobId();
         protectStationaryInput = menu.getObjective().protectStationary();
         protectAttributesInput.clear();
@@ -634,7 +732,7 @@ public class RoomControllerScreen extends FitCanvasHandledScreen<RoomControllerS
     private RoomObjectiveConfig editedObjective(RoomObjectiveConfig.Type type) {
         return new RoomObjectiveConfig(type, surviveSecondsInput, surviveIntervalInput,
             protectMobIdInput, protectStationaryInput, Optional.empty(), List.copyOf(protectAttributesInput),
-            entryPercentInput);
+            entryPercentInput, Optional.empty(), Optional.empty(), maxAliveMobsInput);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

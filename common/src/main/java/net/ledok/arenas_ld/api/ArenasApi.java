@@ -224,6 +224,16 @@ public final class ArenasApi {
     }
 
     /**
+     * {@link #openLobbies}, opened on its Leaderboard tab (4.43.2), in a hub or on Arenas' own screen. A hosted view is
+     * titled with the activity's name.
+     *
+     * @return false if the id is unknown, or the entry gate refused (the player is told why)
+     */
+    public static boolean openLeaderboard(ServerPlayer player, ResourceLocation activity) {
+        return LobbyScreens.openRemote(player, activity, true);
+    }
+
+    /**
      * The lobby a player is in (forming, ready, queued, or in a run), across every activity.
      *
      * @param activity   its activity id (for {@link #openLobbies})
@@ -643,8 +653,8 @@ public final class ArenasApi {
 
         /**
          * Puts the player's own items (and whatever else the provider swaps) aside and hands out the loadout.
-         * Returns false, changing nothing, when it can't; Arenas then runs them without rental (and without the
-         * rental reward cut), or tries again later.
+         * Returns false, changing nothing, when it can't. An optional rental failure leaves the player in
+         * their own gear. A required rental failure cancels the start.
          */
         boolean begin(ServerPlayer player, String sessionId, String kitId);
 
@@ -744,17 +754,17 @@ public final class ArenasApi {
     }
 
     /**
-     * The dungeon or raid controller's own breakable blocks list ({@code mode} "add" to the global
-     * {@code run_breakable_blocks} or "replace" it, and its block ids / {@code #tags}). Empty for an unknown id
-     * or an arena. Runs use it only in difficulties with {@code allowBlockBreaking} on.
+     * The controller's breakable blocks list ({@code mode} "add" to the global
+     * {@code run_breakable_blocks} or "replace" it, and its block ids / {@code #tags}). Empty for an unknown id.
+     * The difficulty or arena spawner must enable block breaking.
      */
     public static Optional<net.ledok.arenas_ld.util.BreakableBlocks> breakableBlocks(MinecraftServer server, ResourceLocation id) {
         return ActivityAdmin.breakableBlocks(server, id);
     }
 
     /**
-     * Sets the dungeon or raid controller's breakable blocks list (takes effect for its players within a
-     * second). Refused for an unknown id, an arena, or an entry that is neither a known block id nor a
+     * Sets the controller's breakable blocks list (takes effect for its players within a
+     * second). Refused for an unknown id or an entry that is neither a known block id nor a
      * {@code #tag}. {@code actor} is only for the log.
      */
     public static @Nullable Component setBreakableBlocks(MinecraftServer server, ResourceLocation id,

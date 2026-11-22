@@ -98,6 +98,7 @@ public class DungeonToolScreen extends CanvasScreen {
         root.item(modeButton(DungeonToolItem.Mode.ENTRANCE_POSITION, current));
         root.item(modeButton(DungeonToolItem.Mode.RESPAWN_POSITION, current));
         root.item(modeButton(DungeonToolItem.Mode.PROTECT_POSITION, current));
+        root.item(modeButton(DungeonToolItem.Mode.GOAL_ZONE, current));
 
         buildSpawnerSection(root);
     }

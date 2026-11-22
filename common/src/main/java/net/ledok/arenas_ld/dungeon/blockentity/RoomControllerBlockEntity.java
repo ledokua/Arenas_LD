@@ -83,6 +83,11 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
     private RoomObjectiveConfig objective = RoomObjectiveConfig.DEFAULT;
     /** SURVIVE countdown in ticks, set at activation. -1 = no timer running. */
     private int surviveTicksRemaining = -1;
+    /** REACH_ZONE: ticks since activation, for the looping wave schedule (4.44.0). */
+    private int zoneTicksElapsed = 0;
+    /** REACH_ZONE: active players in the zone and how many it takes, for the HUD. Transient. */
+    private int zoneInside = 0;
+    private int zoneRequired = 1;
     /** PROTECT target spawned at activation; null when none is alive/tracked. */
     @Nullable private UUID protectTargetUuid = null;
     /** Set for one poll when the protect target is found dead, so the lifecycle can fail the run.
@@ -185,9 +190,33 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
         return surviveTicksRemaining;
     }
 
-    /** True while a SURVIVE timer runs: waves loop and mob deaths don't clear the room. */
+    /**
+     * True while waves loop and mob deaths don't clear the room: a running SURVIVE timer, or a REACH_ZONE room
+     * (with its zone set) that nobody has reached yet.
+     */
     private boolean isSurviveLooping() {
-        return objective.type() == RoomObjectiveConfig.Type.SURVIVE && surviveTicksRemaining > 0;
+        return objective.type() == RoomObjectiveConfig.Type.SURVIVE && surviveTicksRemaining > 0
+            || isZoneLooping();
+    }
+
+    /** A REACH_ZONE room with a zone, activated and not cleared yet. */
+    private boolean isZoneLooping() {
+        return objective.type() == RoomObjectiveConfig.Type.REACH_ZONE && objective.hasZone() && activated && !cleared;
+    }
+
+    /** Whether this room runs as a REACH_ZONE room now (its zone is set and it's going). */
+    public boolean isReachZoneActive() {
+        return isZoneLooping();
+    }
+
+    /** REACH_ZONE: active players in the zone at the last check. */
+    public int getZoneInside() {
+        return zoneInside;
+    }
+
+    /** REACH_ZONE: active players needed in the zone at once. */
+    public int getZoneRequired() {
+        return zoneRequired;
     }
 
     /** Designer-facing name for this room, used for the ARMED hint and the DBS rooms list. May be blank. */
@@ -251,6 +280,41 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
     public void setProtectPos(@Nullable BlockPos absolutePos) {
         setObjective(objective.withProtectOffset(
             Optional.ofNullable(absolutePos).map(pos -> pos.subtract(worldPosition))));
+    }
+
+    /**
+     * Sets the goal zone from two absolute corners (blocks, inclusive); nulls clear it. A single corner (the
+     * other null) is kept while the builder picks the second one.
+     */
+    public void setZone(@Nullable BlockPos absoluteA, @Nullable BlockPos absoluteB) {
+        setObjective(objective.withZone(
+            Optional.ofNullable(absoluteA).map(pos -> pos.subtract(worldPosition)),
+            Optional.ofNullable(absoluteB).map(pos -> pos.subtract(worldPosition))));
+    }
+
+    /** Absolute first zone corner, or null. */
+    @Nullable
+    public BlockPos getZoneCornerA() {
+        return objective.zoneCornerA().map(worldPosition::offset).orElse(null);
+    }
+
+    /** Absolute second zone corner, or null. */
+    @Nullable
+    public BlockPos getZoneCornerB() {
+        return objective.zoneCornerB().map(worldPosition::offset).orElse(null);
+    }
+
+    /** The goal zone as a box covering both corner blocks, or null when it isn't fully set. */
+    @Nullable
+    public net.minecraft.world.phys.AABB getZoneBox() {
+        BlockPos a = getZoneCornerA();
+        BlockPos b = getZoneCornerB();
+        if (a == null || b == null) {
+            return null;
+        }
+        return new net.minecraft.world.phys.AABB(
+            Math.min(a.getX(), b.getX()), Math.min(a.getY(), b.getY()), Math.min(a.getZ(), b.getZ()),
+            Math.max(a.getX(), b.getX()) + 1, Math.max(a.getY(), b.getY()) + 1, Math.max(a.getZ(), b.getZ()) + 1);
     }
 
     /** Returns true if the spawner was added (false if already present). */
@@ -382,6 +446,9 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
         currentWaveSize = 0;
         bossInCurrentWave = false;
         surviveTicksRemaining = -1;
+        zoneTicksElapsed = 0;
+        zoneInside = 0;
+        zoneRequired = 1;
         protectTargetUuid = null;
         protectTargetDied = false;
         setChanged();
@@ -433,6 +500,17 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
      */
     public int activate(ServerLevel world, TierConfig tier, double partyHealthMultiplier) {
         if (activated) return 0;
+        if (objective.type() == RoomObjectiveConfig.Type.REACH_ZONE && objective.hasZone()) {
+            waveNumbers.clear();
+            waveNumbers.addAll(collectWaveNumbers(world));
+            zoneTicksElapsed = 0;
+            currentWaveIndex = 0;
+            nextWaveDelayTicks = -1;
+            int spawned = waveNumbers.isEmpty() ? 0
+                : spawnWave(world, tier.healthMultiplier() * partyHealthMultiplier, waveNumbers.getFirst(), true).size();
+            markActivated();
+            return spawned;
+        }
         if (spawnerOffsets.isEmpty()) {
             ArenasLdMod.LOGGER.warn(
                 "RoomController at {} has no linked spawners; activation deferred",
@@ -455,6 +533,11 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
         for (int index = 0; index < waves.size(); index++) {
             int spawned = spawnWave(world, healthMultiplier, waves.get(index), true).size();
             if (spawned > 0) {
+                if (objective.type() == RoomObjectiveConfig.Type.REACH_ZONE && !objective.hasZone()) {
+                    ArenasLdMod.LOGGER.warn(
+                        "RoomController at {}: REACH_ZONE objective has no zone set; falling back to kill-all", worldPosition);
+                }
+                zoneTicksElapsed = 0;
                 waveNumbers.clear();
                 waveNumbers.addAll(waves);
                 currentWaveIndex = index;
@@ -517,11 +600,15 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
     private List<UUID> spawnWave(ServerLevel world, double healthMultiplier, int waveNumber, boolean logInvalid) {
         bossInCurrentWave = false;
         List<UUID> spawned = new ArrayList<>();
+        // The room's mob cap (SURVIVE / REACH_ZONE): only as many as fit under it. Boss spawners always spawn.
+        int cap = objective.mobCap();
         for (BlockPos absolutePos : getSpawnerPositions()) {
             BlockEntity be = world.getBlockEntity(absolutePos);
             if (be instanceof net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity newMobSpawner) {
                 if (Math.max(1, newMobSpawner.getEntityDefinition().wave()) != waveNumber) continue;
-                for (LivingEntity entity : newMobSpawner.spawnScaled(world, healthMultiplier)) {
+                int room = cap > 0 ? cap - aliveMobs.size() : Integer.MAX_VALUE;
+                if (room <= 0) continue;
+                for (LivingEntity entity : newMobSpawner.spawnScaled(world, healthMultiplier, room)) {
                     trackSpawnedMob(entity.getUUID());
                     spawned.add(entity.getUUID());
                 }
@@ -593,7 +680,17 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
                 markCleared();
                 return List.of();
             }
-            return tickSurviveSchedule(world, tier, partyHealthMultiplier);
+            int elapsed = Math.max(1, objective.surviveSeconds()) * 20 - surviveTicksRemaining;
+            return tickSurviveSchedule(world, tier, partyHealthMultiplier, elapsed);
+        }
+        // REACH_ZONE: the same looping schedule with no time limit; reaching the zone ends the room (tickReachZone).
+        if (isZoneLooping()) {
+            nextWaveDelayTicks = -1;
+            zoneTicksElapsed++;
+            if (zoneTicksElapsed % 200 == 0) {
+                setChanged(); // saved now and then (a restart resumes the schedule close to where it was)
+            }
+            return tickSurviveSchedule(world, tier, partyHealthMultiplier, zoneTicksElapsed);
         }
         tickLowWaveGlow(world);
         if (!aliveMobs.isEmpty() || isOnFinalWave()) {
@@ -632,12 +729,12 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
      *
      * @return UUIDs of newly spawned mobs, for run registration
      */
-    private List<UUID> tickSurviveSchedule(ServerLevel world, TierConfig tier, double partyHealthMultiplier) {
+    private List<UUID> tickSurviveSchedule(ServerLevel world, TierConfig tier, double partyHealthMultiplier,
+                                           int elapsedTicks) {
         if (waveNumbers.isEmpty()) {
             return List.of();
         }
         int intervalTicks = Math.max(1, objective.surviveWaveIntervalSeconds()) * 20;
-        int elapsedTicks = Math.max(1, objective.surviveSeconds()) * 20 - surviveTicksRemaining;
         if (elapsedTicks <= 0) {
             return List.of();
         }
@@ -657,6 +754,34 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
             }
         }
         return List.of();
+    }
+
+    /**
+     * REACH_ZONE, once per tick while the room runs: counts the active players (online, not downed) standing in
+     * the zone and clears the room once enough of them are in at once ({@code Required players %} of the active
+     * party, rounded up, at least 1). Remaining mobs are discarded then. The zone's edges show as particles.
+     */
+    public void tickReachZone(ServerLevel world, List<ServerPlayer> activePlayers) {
+        if (!isZoneLooping()) {
+            return;
+        }
+        net.minecraft.world.phys.AABB zone = getZoneBox();
+        if (zone == null) {
+            return;
+        }
+        int inside = 0;
+        for (ServerPlayer player : activePlayers) {
+            if (player.level() == world && player.getBoundingBox().intersects(zone)) {
+                inside++;
+            }
+        }
+        zoneInside = inside;
+        zoneRequired = Math.max(1, (int) Math.ceil(activePlayers.size() * objective.clampedEntryPercent() / 100.0));
+        if (!activePlayers.isEmpty() && inside >= zoneRequired) {
+            discardAliveMobs(world);
+            markCleared();
+            return;
+        }
     }
 
     /**
@@ -1007,12 +1132,13 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
 
     /** Objective and wave runtime state, nested because the State codec is at the 16-field cap. */
     private record ObjectiveRuntime(int surviveTicksRemaining, Optional<UUID> protectTargetUuid,
-                                    int currentWaveSize) {
-        static final ObjectiveRuntime EMPTY = new ObjectiveRuntime(-1, Optional.empty(), 0);
+                                    int currentWaveSize, int zoneTicksElapsed) {
+        static final ObjectiveRuntime EMPTY = new ObjectiveRuntime(-1, Optional.empty(), 0, 0);
         static final Codec<ObjectiveRuntime> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.optionalFieldOf("surviveTicksRemaining", -1).forGetter(ObjectiveRuntime::surviveTicksRemaining),
             UUIDUtil.CODEC.optionalFieldOf("protectTargetUuid").forGetter(ObjectiveRuntime::protectTargetUuid),
-            Codec.INT.optionalFieldOf("currentWaveSize", 0).forGetter(ObjectiveRuntime::currentWaveSize)
+            Codec.INT.optionalFieldOf("currentWaveSize", 0).forGetter(ObjectiveRuntime::currentWaveSize),
+            Codec.INT.optionalFieldOf("zoneTicksElapsed", 0).forGetter(ObjectiveRuntime::zoneTicksElapsed)
         ).apply(i, ObjectiveRuntime::new));
     }
 
@@ -1024,7 +1150,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
             waveNumbers, currentWaveIndex, nextWaveDelayTicks, bossInCurrentWave, roomReward,
             List.of() /* legacy entranceOffsets — merged into doorOffsets since the undirected-door rework */,
             objective, new ObjectiveRuntime(surviveTicksRemaining, Optional.ofNullable(protectTargetUuid),
-                currentWaveSize));
+                currentWaveSize, zoneTicksElapsed));
         State.CODEC.encodeStart(NbtOps.INSTANCE, state)
             .resultOrPartial(err -> ArenasLdMod.LOGGER.error(
                 "Failed to save RoomController at {}: {}", worldPosition, err))
@@ -1075,6 +1201,7 @@ public class RoomControllerBlockEntity extends BlockEntity implements ExtendedMe
                     surviveTicksRemaining = state.objectiveRuntime().surviveTicksRemaining();
                     protectTargetUuid = state.objectiveRuntime().protectTargetUuid().orElse(null);
                     currentWaveSize = state.objectiveRuntime().currentWaveSize();
+                    zoneTicksElapsed = state.objectiveRuntime().zoneTicksElapsed();
                 });
         }
     }

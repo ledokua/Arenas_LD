@@ -16,7 +16,7 @@ public final class RunRecord {
     public String runId = "";
     public String activityId = "";
     public String activityName = "";
-    /** "dungeon" or "raid". */
+    /** "dungeon", "raid", or "duel" (a combat log session, 4.42.0: {@code ArenasApi.startCombatLog}). */
     public String type = "";
     public String difficulty = "";
     /** The difficulty's level (from its loot table, "…/level_40" → 40); -1 when it has none. */
@@ -42,6 +42,8 @@ public final class RunRecord {
     public float bossMaxHealth, bossHealthLeft;
     public List<Phase> phases = new ArrayList<>();
     public List<Player> players = new ArrayList<>();
+    /** A duel's winning side ("" = a draw, or not a duel). 4.42.0+. */
+    public String winnerSide = "";
 
     public static final class Boss {
         public String uuid = "";
@@ -65,6 +67,8 @@ public final class RunRecord {
         public String name = "";
         /** "alive", "downed", "out", "offline", "forfeited" (left with /exit mid-run), "won", "lost" when the run ended. */
         public String state = "";
+        /** A duel fighter's side ("A", "B", a team label); "" in runs. 4.42.0+. */
+        public String side = "";
         public int deaths;
         public float dealt, bossDealt, overkill;
         public float taken, takenEnemies, takenEnvironment, takenRaw;

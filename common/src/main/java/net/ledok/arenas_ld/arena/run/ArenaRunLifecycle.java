@@ -30,11 +30,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
@@ -62,6 +58,7 @@ public final class ArenaRunLifecycle {
     private static final int DOWNED_RESPAWN_TICKS_FALLBACK = 60;
     private static final int DEATH_TIME_PENALTY_FALLBACK = 200;
     private static final double ELITE_SCALE = 1.6;
+    private static final int MAX_WAVE_MOBS = 64;
 
     private ArenaRunLifecycle() {}
 
@@ -74,6 +71,7 @@ public final class ArenaRunLifecycle {
         ServerLevel entranceWorld = spawner != null ? world.getServer().getLevel(spawner.getEntranceDimension()) : world;
         BlockPos entrance = spawner != null ? spawner.getAbsoluteEntrancePos() : run.spawnerPos();
 
+        run.setSurvivalMode(spawner != null && spawner.survivalMode());
         for (ServerPlayer player : players) {
             run.setReturnPoint(player.getUUID(), PlayerReturnPoint.capture(player, true));
             run.addParticipant(new RunParticipant(player.getUUID(), player.getGameProfile().getName(),
@@ -81,10 +79,12 @@ public final class ArenaRunLifecycle {
             net.ledok.arenas_ld.util.RunLeftovers.enter(controller, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run), player.getUUID());
             // Everyone is online now; the snapshot pays an offline player their summary perks later.
             net.ledok.arenas_ld.util.EndRewardPerks.snapshot(run.perkSnapshots(), player.getUUID(), net.ledok.arenas_ld.util.EndRewardPerks.Mode.ARENA);
-            net.ledok.arenas_ld.util.PlayerStatsStore.get(world.getServer())
-                .recordRunStart(player.getUUID(), net.ledok.arenas_ld.util.PlayerStatsStore.Mode.ARENA);
+            if (!run.practice()) {
+                net.ledok.arenas_ld.util.PlayerStatsStore.get(world.getServer())
+                    .recordRunStart(player.getUUID(), net.ledok.arenas_ld.util.PlayerStatsStore.Mode.ARENA);
+            }
             net.ledok.arenas_ld.util.RunPlayerSafety.secure(player);
-            player.setGameMode(GameType.SURVIVAL);
+            player.setGameMode(run.survivalMode() ? GameType.SURVIVAL : GameType.ADVENTURE);
             player.setHealth(player.getMaxHealth());
             // Run mates share a no-friendly-fire team, so AOE and sweeps never hit each other (the
             // lobby may be PUBLIC: they need not be partied or guilded). Mobs keep their own team.
@@ -98,11 +98,10 @@ public final class ArenaRunLifecycle {
         // Their spell summons left here by an earlier run go; this run's own and real pets stay.
         net.ledok.arenas_ld.util.RunLeftovers.startSweep(net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run), players);
 
-        run.setCurrentWave(0);
         run.clearAliveMobs();
         // Freeze the per-player HP multiplier at run start — players leaving mid-run don't weaken it.
         run.setPartyHealthMultiplier(controller.resolvePartyHealthMultiplier(players.size()));
-        run.setPrepareTicksRemaining(spawner != null ? spawner.getPrepareTime() * 20 : 200);
+        run.setPrepareTicksRemaining(spawner != null ? spawner.getPrepareTime() * 20 : 60);
         run.setPhase(ArenaPhase.RUNNING);
         holdChunks(world, run, spawner);
         ArenasLdMod.LOGGER.info("Arena run started at {} with {} players", run.spawnerPos(), players.size());
@@ -218,14 +217,15 @@ public final class ArenaRunLifecycle {
             return;
         }
 
-        if (run.prepareTicksRemaining() > 0) {
-            run.setPrepareTicksRemaining(run.prepareTicksRemaining() - 1);
-            if (run.prepareTicksRemaining() == 0) startWave(world, controller, run, spawner);
-            return;
-        }
-        if (run.betweenWaveTicksRemaining() > 0) {
-            run.setBetweenWaveTicksRemaining(run.betweenWaveTicksRemaining() - 1);
-            if (run.betweenWaveTicksRemaining() == 0) startWave(world, controller, run, spawner);
+        if (run.currentWave() == 0 || run.betweenWaves()) {
+            int remaining = run.prepareTicksRemaining();
+            if (remaining > 0) {
+                run.setPrepareTicksRemaining(remaining - 1);
+            } else if (run.betweenWaveTicksRemaining() > 0 && !allStandingPlayersReady(world, run)) {
+                remaining = run.betweenWaveTicksRemaining();
+                run.setBetweenWaveTicksRemaining(remaining - 1);
+            }
+            if (remaining <= 1) startWave(world, controller, run, spawner);
             return;
         }
 
@@ -233,7 +233,7 @@ public final class ArenaRunLifecycle {
         boolean cleared;
         if (run.currentObjective() == ObjectiveType.KILL_MARKED && run.markedMob() != null) {
             Entity marked = world.getEntity(run.markedMob());
-            cleared = marked == null || !marked.isAlive();
+            cleared = marked == null ? !run.aliveMobs().contains(run.markedMob()) : !marked.isAlive();
         } else {
             cleared = run.aliveMobs().isEmpty();
         }
@@ -299,7 +299,11 @@ public final class ArenaRunLifecycle {
             }
             for (ArenaRun run : controller.getActiveRuns().values()) {
                 if (run.aliveMobs().contains(parent)) {
-                    run.addAliveMob(part.getUUID());
+                    if (run.aliveMobs().size() >= MAX_WAVE_MOBS) {
+                        part.discard();
+                    } else {
+                        run.addAliveMob(part.getUUID());
+                    }
                     controller.setChanged();
                     return;
                 }
@@ -310,7 +314,12 @@ public final class ArenaRunLifecycle {
     private static void startWave(ServerLevel world, ArenaControllerBlockEntity controller,
                                   ArenaRun run, ArenaSpawnerBlockEntity spawner) {
         int wave = run.currentWave() + 1;
+        if (wave <= 0) {
+            handleLoss(world, controller, run, ArenaOutcome.FORCED, "Wave limit reached");
+            return;
+        }
         run.setCurrentWave(wave);
+        run.setBetweenWaveTicksRemaining(0);
         run.setMarkedMob(null);
         run.setObjectiveProgress(0);
 
@@ -319,16 +328,18 @@ public final class ArenaRunLifecycle {
         run.setCurrentObjective(archetype == WaveArchetype.OBJECTIVE ? pickObjective(world, spawner) : ObjectiveType.NONE);
         announceObjective(world, run, spawner);
 
-        // Clear dropped items from the previous wave.
-        for (ItemEntity item : world.getEntitiesOfClass(ItemEntity.class, new AABB(run.spawnerPos()).inflate(spawner.getBattleRadius()))) {
-            item.discard();
+        boolean bossSpawned = spawnWaveMobs(world, controller, run, spawner, archetype);
+        if (run.aliveMobs().isEmpty()) {
+            run.setCurrentWave(wave - 1);
+            broadcast(world, run, Component.translatableWithFallback("message.arenas_ld.arena.empty_wave",
+                "Arena wave %s could not spawn any enemies.", wave));
+            handleLoss(world, controller, run, ArenaOutcome.FORCED, "No enemies could spawn for wave " + wave);
+            return;
         }
 
-        boolean bossSpawned = spawnWaveMobs(world, controller, run, spawner, archetype);
-
-        int waveSeconds = spawner.getWaveTimer() + (wave - 1) * spawner.getAdditionalTime();
+        long waveSeconds = spawner.getWaveTimer() + (wave - 1L) * spawner.getAdditionalTime();
         if (bossSpawned) waveSeconds += spawner.getBossWaveAdditionalTime();
-        run.setWaveTicksRemaining(waveSeconds * 20);
+        run.setWaveTicksRemaining((int) Math.min(Integer.MAX_VALUE, waveSeconds * 20));
 
         Component subtitle = switch (archetype) {
             case BOSS -> Component.translatable("subtitle.arenas_ld.wave.boss").withStyle(net.minecraft.ChatFormatting.DARK_RED);
@@ -346,8 +357,24 @@ public final class ArenaRunLifecycle {
         controller.markDirtyAndSync();
     }
 
+    private static boolean inWave(MobArenaMobData mob, int wave) {
+        return wave >= mob.minWave && wave <= mob.maxWave;
+    }
+
+    public static boolean isValidMob(ServerLevel world, MobArenaMobData mob) {
+        return EntityType.byString(mob.mobId).map(type -> type.create(world) instanceof LivingEntity).orElse(false);
+    }
+
+    /** Used by the checker and staff's single-wave test. */
+    public static boolean hasValidWave(ServerLevel world, ArenaSpawnerBlockEntity spawner, int wave) {
+        int every = spawner.getBossEveryNWaves();
+        boolean bossWave = every > 0 && wave % every == 0;
+        return spawner.getMobs().stream().anyMatch(mob -> inWave(mob, wave)
+            && (!mob.isBoss || bossWave) && isValidMob(world, mob));
+    }
+
     private static WaveArchetype chooseArchetype(int wave, ArenaSpawnerBlockEntity spawner) {
-        boolean hasBoss = spawner.getMobs().stream().anyMatch(m -> m.isBoss && wave >= m.minWave && wave <= m.maxWave);
+        boolean hasBoss = spawner.getMobs().stream().anyMatch(m -> m.isBoss && inWave(m, wave));
         int bossN = spawner.getBossEveryNWaves();
         int objN = spawner.getObjectiveEveryNWaves();
         int eliteN = spawner.getEliteEveryNWaves();
@@ -398,7 +425,7 @@ public final class ArenaRunLifecycle {
         List<MobArenaMobData> bosses = new ArrayList<>();
         List<MobArenaMobData> regulars = new ArrayList<>();
         for (MobArenaMobData mob : spawner.getMobs()) {
-            if (wave < mob.minWave || wave > mob.maxWave) continue;
+            if (!inWave(mob, wave) || EntityType.byString(mob.mobId).isEmpty()) continue;
             (mob.isBoss ? bosses : regulars).add(mob);
         }
 
@@ -406,26 +433,26 @@ public final class ArenaRunLifecycle {
         // Party-scaled base HP, further grown per wave — a bigger party's base compounds into a
         // much bigger number at high waves than a solo player's.
         double partyHp = run.partyHealthMultiplier() * controller.resolveWaveHealthMultiplier(wave);
-        double waveScale = Math.pow(1.0 + spawner.getAttributeScale(), wave - 1);
+        double waveScale = Math.min(1_000_000, Math.pow(1.0 + spawner.getAttributeScale(), wave - 1));
 
         boolean bossSpawned = false;
         if (archetype == WaveArchetype.BOSS && !bosses.isEmpty()) {
             MobArenaMobData bossData = bosses.get(world.random.nextInt(bosses.size()));
-            spawnMob(world, run, spawner, bossData, true, partyHp);
-            bossSpawned = true;
+            bossSpawned = spawnMob(world, run, spawner, bossData, true, partyHp) != null;
         }
 
-        if (!regulars.isEmpty() && archetype != WaveArchetype.BOSS) {
+        if (!regulars.isEmpty() && !bossSpawned) {
             int base = 5 + wave / 2 + 2 * (partySize - 1);
             int count = switch (archetype) {
                 case HORDE -> (int) Math.round(base * 1.5);
                 case ELITE -> Math.max(1, base / 3);
                 default -> base; // OBJECTIVE
             };
-            double scale = waveScale * partyHp * (archetype == WaveArchetype.ELITE ? ELITE_SCALE : 1.0);
+            double scale = Math.min(1_000_000, waveScale * partyHp) * (archetype == WaveArchetype.ELITE ? ELITE_SCALE : 1.0);
             UUID firstSpawned = null;
-            for (int i = 0; i < count; i++) {
-                MobArenaMobData mobData = selectRandomMob(world, regulars);
+            long[] weights = cumulativeWeights(regulars);
+            for (int i = 0; i < Math.min(MAX_WAVE_MOBS, count); i++) {
+                MobArenaMobData mobData = selectRandomMob(world, regulars, weights);
                 if (mobData == null) continue;
                 UUID spawned = spawnMob(world, run, spawner, mobData, false, scale);
                 if (firstSpawned == null) firstSpawned = spawned;
@@ -440,17 +467,28 @@ public final class ArenaRunLifecycle {
         return bossSpawned;
     }
 
-    @Nullable
-    private static MobArenaMobData selectRandomMob(ServerLevel world, List<MobArenaMobData> valid) {
-        int totalWeight = 0;
-        for (MobArenaMobData mob : valid) totalWeight += Math.max(0, mob.weight);
-        if (valid.isEmpty() || totalWeight <= 0) return valid.isEmpty() ? null : valid.get(0);
-        int roll = world.random.nextInt(totalWeight);
-        for (MobArenaMobData mob : valid) {
-            roll -= Math.max(0, mob.weight);
-            if (roll < 0) return mob;
+    private static long[] cumulativeWeights(List<MobArenaMobData> mobs) {
+        long[] weights = new long[mobs.size()];
+        long total = 0;
+        for (int i = 0; i < mobs.size(); i++) {
+            total += Math.max(0, mobs.get(i).weight);
+            weights[i] = total;
         }
-        return valid.get(0);
+        return weights;
+    }
+
+    private static MobArenaMobData selectRandomMob(ServerLevel world, List<MobArenaMobData> mobs, long[] weights) {
+        long total = weights[weights.length - 1];
+        if (total == 0) return mobs.getFirst();
+        long roll = (long) (world.random.nextDouble() * total);
+        int low = 0;
+        int high = weights.length - 1;
+        while (low < high) {
+            int middle = (low + high) >>> 1;
+            if (weights[middle] <= roll) low = middle + 1;
+            else high = middle;
+        }
+        return mobs.get(low);
     }
 
     @Nullable
@@ -473,11 +511,9 @@ public final class ArenaRunLifecycle {
         net.ledok.arenas_ld.util.RunMinions.recordScale(living, spawner,
             EntityEquipmentHelper.setsMaxHealth(mobData.attributes) ? scaleFactor : 1.0,
             EntityEquipmentHelper.setsAttackDamage(mobData.attributes) ? scaleFactor : 1.0);
-        assignTeam(world, spawner, living);
-
         BlockPos origin = run.spawnerPos();
         int radius = spawner.getBattleRadius();
-        int spawnDistance = spawner.getSpawnDistance();
+        int spawnDistance = Math.min(spawner.getSpawnDistance(), Math.max(0, radius - 3));
         boolean placed = false;
         for (int attempt = 0; attempt < 10 && !placed; attempt++) {
             double x, z;
@@ -493,13 +529,12 @@ public final class ArenaRunLifecycle {
                 z = origin.getZ() + 0.5 + r * Math.sin(angle);
             }
             for (int yOff = 0; yOff <= 5; yOff++) {
-                BlockPos pos = new BlockPos((int) x, origin.getY() + yOff, (int) z);
+                BlockPos pos = BlockPos.containing(x, origin.getY() + yOff, z);
                 if (world.getBlockState(pos).getCollisionShape(world, pos).isEmpty()
                     && !world.getBlockState(pos.below()).getCollisionShape(world, pos.below()).isEmpty()) {
                     living.moveTo(x, origin.getY() + yOff, z, world.random.nextFloat() * 360.0F, 0.0F);
                     if (world.noCollision(living) && !world.containsAnyLiquid(living.getBoundingBox())) {
-                        world.addFreshEntity(living);
-                        run.addAliveMob(living.getUUID());
+                        if (!world.addFreshEntity(living)) return null;
                         placed = true;
                         break;
                     }
@@ -507,10 +542,13 @@ public final class ArenaRunLifecycle {
             }
         }
         if (!placed) {
+            // No clear spot found: the arena center, as before (a cramped or wet center still gets its wave; only
+            // a mob the world refuses outright is dropped).
             living.moveTo(origin.getX() + 0.5, origin.getY() + 1, origin.getZ() + 0.5, world.random.nextFloat() * 360.0F, 0.0F);
-            world.addFreshEntity(living);
-            run.addAliveMob(living.getUUID());
+            if (!world.addFreshEntity(living)) return null;
         }
+        run.addAliveMob(living.getUUID());
+        assignTeam(world, spawner, living);
         return living.getUUID();
     }
 
@@ -542,6 +580,7 @@ public final class ArenaRunLifecycle {
 
     private static void completeWave(ServerLevel world, ArenaControllerBlockEntity controller,
                                      ArenaRun run, ArenaSpawnerBlockEntity spawner) {
+        if (!run.markWaveCleared()) return;
         // KILL_MARKED clears the wave by killing the target — discard the leftover mobs.
         if (run.currentObjective() == ObjectiveType.KILL_MARKED) {
             for (UUID uuid : new ArrayList<>(run.aliveMobs())) {
@@ -556,7 +595,7 @@ public final class ArenaRunLifecycle {
             null, null, net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, 0.6f, 1.4f);
         // A failed objective forfeits the wave bonus (loot + heal/repair); downed players still revive.
         if (run.objectiveProgress() == 0) {
-            distributeWaveLoot(world, controller, run, spawner);
+            if (!run.practice()) distributeWaveLoot(world, controller, run, spawner);
             applyWaveCompletionBonus(world, run);
         }
         reviveDowned(world, run, spawner);
@@ -567,7 +606,39 @@ public final class ArenaRunLifecycle {
             return;
         }
         run.setBetweenWaveTicksRemaining(spawner.getTimeBetweenWaves() * 20);
+        if (run.betweenWaveTicksRemaining() > 0) {
+            broadcast(world, run, net.ledok.arenas_ld.util.LobbyChatActions.button(
+                Component.translatableWithFallback("message.arenas_ld.arena.ready_for_wave", "[Ready for next wave]"),
+                0x86D36C, "/arenasld nextwave",
+                Component.translatableWithFallback("message.arenas_ld.arena.ready_for_wave.hover",
+                    "Start the next wave when every standing player is ready.")));
+        }
         controller.markDirtyAndSync();
+    }
+
+    public static boolean readyForNextWave(ServerPlayer player) {
+        UUID uuid = player.getUUID();
+        for (var host : net.ledok.arenas_ld.activity.LobbyMembership.liveHosts(player.server)) {
+            if (!(host instanceof ArenaControllerBlockEntity controller)) continue;
+            for (ArenaRun run : controller.getActiveRuns().values()) {
+                RunParticipant participant = run.participants().get(uuid);
+                if (run.phase() != ArenaPhase.RUNNING || !run.betweenWaves()
+                    || participant == null || participant.status() != ParticipantStatus.ACTIVE) continue;
+                if (run.readyForNextWave(uuid)) {
+                    player.sendSystemMessage(Component.translatableWithFallback(
+                        "message.arenas_ld.arena.wave_ready", "Ready for the next wave"));
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean allStandingPlayersReady(ServerLevel world, ArenaRun run) {
+        for (UUID uuid : run.activeParticipantUuids()) {
+            if (world.getServer().getPlayerList().getPlayer(uuid) != null && !run.isReadyForNextWave(uuid)) return false;
+        }
+        return true;
     }
 
     private static void distributeWaveLoot(ServerLevel world, ArenaControllerBlockEntity controller,
@@ -675,7 +746,7 @@ public final class ArenaRunLifecycle {
             }
             if (player != null) {
                 net.ledok.arenas_ld.util.DownedSpectators.release(player);
-                player.setGameMode(GameType.SURVIVAL);
+                player.setGameMode(run.survivalMode() ? GameType.SURVIVAL : GameType.ADVENTURE);
                 player.setHealth(player.getMaxHealth());
                 teleportToRespawn(world, run, spawner, player);
             }
@@ -702,7 +773,7 @@ public final class ArenaRunLifecycle {
 
     private static void handleWin(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
         run.setOutcome(ArenaOutcome.COMPLETED);
-        for (UUID uuid : run.lootEligibleUuids()) {
+        for (UUID uuid : run.practice() ? java.util.Set.<UUID>of() : run.lootEligibleUuids()) {
             net.ledok.arenas_ld.util.PlayerStatsStore.get(world.getServer())
                 .recordWin(uuid, net.ledok.arenas_ld.util.PlayerStatsStore.Mode.ARENA);
         }
@@ -744,12 +815,13 @@ public final class ArenaRunLifecycle {
     }
 
     private static void enterClosing(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
-        payoutSummary(world, controller, run);
-        // After the payout, before a zero close timer finalizes and the queue launches the next run.
-        fireRunResult(world, controller, run, apiOutcome(run.outcome()));
+        if (!run.practice()) {
+            payoutSummary(world, controller, run);
+            fireRunResult(world, controller, run, apiOutcome(run.outcome()));
+        }
         discardAliveMobs(world, run);
         run.setPhase(ArenaPhase.CLOSING);
-        int closeTicks = Math.max(0, controller.getCloseTimerSeconds() * 20);
+        int closeTicks = run.practice() ? 0 : Math.max(0, controller.getCloseTimerSeconds() * 20);
         run.setInitialCloseTimerTicks(closeTicks);
         run.setCloseTimerTicks(closeTicks);
         if (closeTicks <= 0) {
@@ -956,14 +1028,17 @@ public final class ArenaRunLifecycle {
     }
 
     private static void finalizeRun(ServerLevel world, ArenaControllerBlockEntity controller, ArenaRun run) {
-        for (UUID uuid : run.lootEligibleUuids()) {
+        for (UUID uuid : run.practice() ? java.util.Set.<UUID>of() : run.lootEligibleUuids()) {
             net.ledok.arenas_ld.util.PlayerStatsStore.get(world.getServer())
                 .recordArenaWave(uuid, run.currentWave());
         }
         List<String> names = new ArrayList<>();
         for (UUID uuid : run.participants().keySet()) {
             RunParticipant p = run.participants().get(uuid);
-            if (p != null) names.add(p.playerName());
+            if (p != null && p.isEligibleForLoot()) {
+                names.add(p.playerName());
+                if (run.practice()) net.ledok.arenas_ld.util.BusyStateCompat.clearBusy(uuid, BUSY_REASON);
+            }
             restoreToReturnPoint(world, run, uuid);
         }
         net.ledok.arenas_ld.util.RunPartyTeams.teardown(world, partyTeamNameFor(run),
@@ -972,7 +1047,7 @@ public final class ArenaRunLifecycle {
         RunHudSync.hide(world, hudTargets(run));
         run.setPhase(ArenaPhase.DONE);
         net.ledok.arenas_ld.util.RunChunkTickets.release(world.getServer(), chunkOwner(run));
-        controller.onArenaEnded(run.instanceKey(), run.currentWave(), names);
+        controller.onArenaEnded(run.instanceKey(), run.practice() ? 0 : run.currentWave(), names);
     }
 
     // ── Per-player handlers (invoked from the mixin via the manager in a later phase) ──
@@ -1062,7 +1137,7 @@ public final class ArenaRunLifecycle {
             run.clearDowned(player.getUUID());
             run.updateParticipant(participant.withStatus(ParticipantStatus.ACTIVE, world.getGameTime()));
             net.ledok.arenas_ld.util.DownedSpectators.release(player);
-            player.setGameMode(GameType.SURVIVAL);
+            player.setGameMode(run.survivalMode() ? GameType.SURVIVAL : GameType.ADVENTURE);
             player.setHealth(player.getMaxHealth());
             teleportToRespawn(world, run, spawner, player);
             return;

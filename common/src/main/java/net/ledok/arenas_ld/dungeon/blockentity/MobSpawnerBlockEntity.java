@@ -122,6 +122,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
      * @return list of successfully spawned entities (may be empty on failure)
      */
     public List<LivingEntity> spawnScaled(ServerLevel world, double healthMultiplier) {
+        return spawnScaled(world, healthMultiplier, Integer.MAX_VALUE);
+    }
+
+    /** {@link #spawnScaled(ServerLevel, double)}, at most {@code limit} mobs (a room's mob cap, 4.44.0). */
+    public List<LivingEntity> spawnScaled(ServerLevel world, double healthMultiplier, int limit) {
         Optional<EntityType<?>> entityTypeOpt = EntityType.byString(this.entityDefinition.mobId());
         if (entityTypeOpt.isEmpty()) {
             ArenasLdMod.LOGGER.warn("MobSpawner: invalid mob ID {} at {}", entityDefinition.mobId(), worldPosition);
@@ -129,7 +134,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements AttributeProvi
         }
 
         List<BlockPos> offsets = this.entityDefinition.spawnOffsets();
-        int count = Math.max(1, this.entityDefinition.spawnCount());
+        int count = Math.min(Math.max(1, this.entityDefinition.spawnCount()), Math.max(0, limit));
         List<LivingEntity> result = new ArrayList<>(count);
 
         for (int i = 0; i < count; i++) {

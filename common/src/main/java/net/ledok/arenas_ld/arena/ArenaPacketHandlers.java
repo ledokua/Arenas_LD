@@ -175,6 +175,7 @@ public final class ArenaPacketHandlers {
                     try { objs.add(ObjectiveType.valueOf(o)); } catch (Exception ignored) {}
                 }
                 s.setEnabledObjectives(objs);
+                s.setPlayerRules(payload.survivalMode(), payload.allowBlockBreaking());
             }));
 
         ArenasNetwork.registerServerReceiver(ArenaSpawnerMobsPayload.TYPE, (payload, context) ->

@@ -5,6 +5,9 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.ledok.arenas_ld.client.ArenasClientEvents.WorldRenderContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.ledok.arenas_ld.packet.RunHudPayload;
+import net.minecraft.client.multiplayer.ClientLevel;
+import org.jetbrains.annotations.Nullable;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 
@@ -22,6 +25,18 @@ import java.util.List;
 public final class SpawnTelegraphRenderer {
     private static final float[] TELEGRAPH_COLOR = {0.95f, 0.12f, 0.12f};
 
+    private static final float[] ZONE_COLOR = {0.35f, 1.0f, 0.45f};
+    private static @Nullable RunHudPayload.GoalZone goalZone;
+    private static @Nullable ClientLevel goalLevel;
+    private static long goalExpires;
+
+    public static void onRunHud(RunHudPayload payload) {
+        ClientLevel level = Minecraft.getInstance().level;
+        goalZone = payload.goalZone();
+        goalLevel = goalZone == null ? null : level;
+        goalExpires = level == null ? 0 : level.getGameTime() + 60;
+    }
+
     private SpawnTelegraphRenderer() {
     }
 
@@ -35,7 +50,9 @@ public final class SpawnTelegraphRenderer {
             return;
         }
         List<BlockPos> positions = SpawnTelegraphStore.active(mc.level.getGameTime());
-        if (positions.isEmpty()) {
+        var zone = goalLevel == mc.level && mc.level.getGameTime() <= goalExpires ? goalZone : null;
+        if (zone != null && !zone.dimension().equals(mc.level.dimension())) zone = null;
+        if (positions.isEmpty() && zone == null) {
             return;
         }
 
@@ -53,6 +70,9 @@ public final class SpawnTelegraphRenderer {
             BufferBuilder buffer = SelectionOverlayRenderer.beginLines();
             for (BlockPos pos : positions) {
                 SelectionOverlayRenderer.addBoxEdges(buffer, matrix, pos, TELEGRAPH_COLOR, alpha);
+            }
+            if (zone != null) {
+                SelectionOverlayRenderer.addBoundsEdges(buffer, matrix, zone.min(), zone.max(), ZONE_COLOR, 0.75f, 0.01f);
             }
             SelectionOverlayRenderer.drawMesh(buffer);
         } finally {

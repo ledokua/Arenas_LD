@@ -70,7 +70,7 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
     private int waveTimer = 120;
     private int additionalTime = 5;
     private int timeBetweenWaves = 10;
-    private int prepareTime = 10;
+    private int prepareTime = 3;
     private int bossWaveAdditionalTime = 60;
 
     // --- Archetype / objective cadence (every N waves; 0 = never) ---
@@ -83,6 +83,17 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
     // --- Content ---
     private List<MobArenaMobData> mobs = new ArrayList<>();
     private List<MobArenaRewardData> rewards = new ArrayList<>();
+    private boolean survivalMode;
+    private boolean allowBlockBreaking;
+
+    public boolean survivalMode() { return survivalMode; }
+    public boolean allowsBlockBreaking() { return allowBlockBreaking; }
+
+    public void setPlayerRules(boolean survivalMode, boolean allowBlockBreaking) {
+        this.survivalMode = survivalMode;
+        this.allowBlockBreaking = allowBlockBreaking;
+        markDirtyAndSync();
+    }
 
     public ArenaSpawnerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntitiesRegistry.ARENA_SPAWNER_BLOCK_ENTITY, pos, state);
@@ -128,24 +139,24 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
 
     // ── Combat geometry / timing / cadence ──────────────────────────────────────
     public int getBattleRadius() { return battleRadius; }
-    public void setBattleRadius(int v) { this.battleRadius = v; markDirtyAndSync(); }
+    public void setBattleRadius(int v) { this.battleRadius = Math.clamp(v, 4, 128); markDirtyAndSync(); }
     public int getSpawnDistance() { return spawnDistance; }
-    public void setSpawnDistance(int v) { this.spawnDistance = v; markDirtyAndSync(); }
+    public void setSpawnDistance(int v) { this.spawnDistance = Math.clamp(v, 0, 128); markDirtyAndSync(); }
     public double getAttributeScale() { return attributeScale; }
-    public void setAttributeScale(double v) { this.attributeScale = v; markDirtyAndSync(); }
+    public void setAttributeScale(double v) { this.attributeScale = Double.isFinite(v) ? Math.clamp(v, 0.0, 10.0) : 0.1; markDirtyAndSync(); }
     public int getEntityHighlightTime() { return entityHighlightTime; }
     public void setEntityHighlightTime(int v) { this.entityHighlightTime = v; markDirtyAndSync(); }
 
     public int getWaveTimer() { return waveTimer; }
-    public void setWaveTimer(int v) { this.waveTimer = v; markDirtyAndSync(); }
+    public void setWaveTimer(int v) { this.waveTimer = Math.clamp(v, 0, 86400); markDirtyAndSync(); }
     public int getAdditionalTime() { return additionalTime; }
-    public void setAdditionalTime(int v) { this.additionalTime = v; markDirtyAndSync(); }
+    public void setAdditionalTime(int v) { this.additionalTime = Math.clamp(v, 0, 86400); markDirtyAndSync(); }
     public int getTimeBetweenWaves() { return timeBetweenWaves; }
-    public void setTimeBetweenWaves(int v) { this.timeBetweenWaves = v; markDirtyAndSync(); }
-    public int getPrepareTime() { return prepareTime; }
-    public void setPrepareTime(int v) { this.prepareTime = v; markDirtyAndSync(); }
+    public void setTimeBetweenWaves(int v) { this.timeBetweenWaves = Math.clamp(v, 0, 86400); markDirtyAndSync(); }
+    public int getPrepareTime() { return Math.min(3, prepareTime); }
+    public void setPrepareTime(int v) { this.prepareTime = Math.clamp(v, 0, 86400); markDirtyAndSync(); }
     public int getBossWaveAdditionalTime() { return bossWaveAdditionalTime; }
-    public void setBossWaveAdditionalTime(int v) { this.bossWaveAdditionalTime = v; markDirtyAndSync(); }
+    public void setBossWaveAdditionalTime(int v) { this.bossWaveAdditionalTime = Math.clamp(v, 0, 86400); markDirtyAndSync(); }
 
     public int getBossEveryNWaves() { return bossEveryNWaves; }
     public void setBossEveryNWaves(int v) { this.bossEveryNWaves = Math.max(0, v); markDirtyAndSync(); }
@@ -228,6 +239,8 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.saveAdditional(nbt, registryLookup);
+        if (survivalMode) nbt.putBoolean("SurvivalMode", true);
+        if (allowBlockBreaking) nbt.putBoolean("AllowBlockBreaking", true);
         net.ledok.arenas_ld.util.MinionScalingHost.save(nbt, scaleMinions);
         State state = new State(groupId, entranceOffset, entranceDimension, new ArrayList<>(respawnPointOffsets),
             battleRadius, spawnDistance, attributeScale, entityHighlightTime,
@@ -242,6 +255,8 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
     @Override
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.loadAdditional(nbt, registryLookup);
+        survivalMode = nbt.getBoolean("SurvivalMode");
+        allowBlockBreaking = nbt.getBoolean("AllowBlockBreaking");
         scaleMinions = net.ledok.arenas_ld.util.MinionScalingHost.load(nbt);
         if (nbt.contains("State")) {
             State.CODEC.parse(registryLookup.createSerializationContext(NbtOps.INSTANCE), nbt.get("State"))
@@ -256,15 +271,15 @@ public class ArenaSpawnerBlockEntity extends BlockEntity
         entranceDimension = state.entranceDim();
         respawnPointOffsets.clear();
         respawnPointOffsets.addAll(state.respawnPointOffsets());
-        battleRadius = state.battleRadius();
-        spawnDistance = state.spawnDistance();
-        attributeScale = state.attributeScale();
+        battleRadius = Math.clamp(state.battleRadius(), 4, 128);
+        spawnDistance = Math.clamp(state.spawnDistance(), 0, 128);
+        attributeScale = Double.isFinite(state.attributeScale()) ? Math.clamp(state.attributeScale(), 0.0, 10.0) : 0.1;
         entityHighlightTime = state.entityHighlightTime();
-        waveTimer = state.timing().waveTimer();
-        additionalTime = state.timing().additionalTime();
-        timeBetweenWaves = state.timing().timeBetweenWaves();
-        prepareTime = state.timing().prepareTime();
-        bossWaveAdditionalTime = state.timing().bossWaveAdditionalTime();
+        waveTimer = Math.clamp(state.timing().waveTimer(), 0, 86400);
+        additionalTime = Math.clamp(state.timing().additionalTime(), 0, 86400);
+        timeBetweenWaves = Math.clamp(state.timing().timeBetweenWaves(), 0, 86400);
+        prepareTime = Math.clamp(state.timing().prepareTime(), 0, 86400);
+        bossWaveAdditionalTime = Math.clamp(state.timing().bossWaveAdditionalTime(), 0, 86400);
         bossEveryNWaves = state.cadence().bossEveryN();
         eliteEveryNWaves = state.cadence().eliteEveryN();
         objectiveEveryNWaves = state.cadence().objectiveEveryN();

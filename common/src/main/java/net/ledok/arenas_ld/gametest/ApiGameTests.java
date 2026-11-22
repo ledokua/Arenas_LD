@@ -1296,6 +1296,88 @@ public final class ApiGameTests {
     }
 
     /**
+     * Combat log sessions (4.42.0): a duel's hits between fighters count as dealt damage, a hit to 0 HP is a kill and a
+     * death, Arenas' run lookups skip the session, a player can't be in two, and ending it stores a "duel" record
+     * (outside the run history) with per-fighter totals; a cancelled one stores nothing.
+     */
+    public static void combatLogDuel(GameTestHelper helper) {
+        ServerPlayer a = helper.makeMockServerPlayerInLevel();
+        ServerPlayer b = helper.makeMockServerPlayerInLevel();
+        var level = helper.getLevel();
+        var server = level.getServer();
+        boolean pvp = server.isPvpAllowed();
+        server.setPvpAllowed(true); // the test server has PvP off
+        try {
+            var title = net.minecraft.network.chat.Component.literal("Test duel");
+            var start = net.ledok.arenas_ld.api.ArenasCombatLog.start(server, "duels:test1", title, List.of(
+                new net.ledok.arenas_ld.api.ArenasCombatLog.Fighter(a.getUUID(), "A", ""),
+                new net.ledok.arenas_ld.api.ArenasCombatLog.Fighter(b.getUUID(), "B", "kits:rental_mage")));
+            helper.assertTrue(start.session() != null, "the session starts: " + start.refusal());
+            var session = start.session();
+            helper.assertTrue(net.ledok.arenas_ld.stats.RunDetails.runOf(a.getUUID()) == null
+                    && !net.ledok.arenas_ld.api.ArenasCombatLog.inRun(a.getUUID()),
+                "a duel is no Arenas run");
+            var again = net.ledok.arenas_ld.api.ArenasCombatLog.start(server, "duels:test2", title, List.of(
+                new net.ledok.arenas_ld.api.ArenasCombatLog.Fighter(a.getUUID(), "A", "")));
+            helper.assertTrue(again.session() == null && again.refusal() != null, "one session per player");
+            helper.assertTrue(((net.ledok.arenas_ld.stats.RunStatsHolder) a).arenasLd$runStats()
+                    instanceof net.ledok.arenas_ld.stats.PlayerCounters, "the fighters carry the session's mark");
+            helper.assertTrue(((net.ledok.arenas_ld.stats.PlayerCounters) ((net.ledok.arenas_ld.stats.RunStatsHolder) a).arenasLd$runStats()).hasStartStats()
+                    && ((net.ledok.arenas_ld.stats.PlayerCounters) ((net.ledok.arenas_ld.stats.RunStatsHolder) b).arenasLd$runStats()).hasStartStats(),
+                "every fighter's stats are taken at the start, hit or not (4.42.2)");
+
+            // Mock players are invulnerable: a damage type that bypasses it, with A as the attacker.
+            var byA = new net.minecraft.world.damagesource.DamageSource(level.registryAccess()
+                .registryOrThrow(net.minecraft.core.registries.Registries.DAMAGE_TYPE)
+                .getHolderOrThrow(net.minecraft.world.damagesource.DamageTypes.GENERIC_KILL), a);
+            b.invulnerableTime = 0;
+            b.hurt(byA, 5);
+            var ca = (net.ledok.arenas_ld.stats.PlayerCounters) ((net.ledok.arenas_ld.stats.RunStatsHolder) a).arenasLd$runStats();
+            var cb = (net.ledok.arenas_ld.stats.PlayerCounters) ((net.ledok.arenas_ld.stats.RunStatsHolder) b).arenasLd$runStats();
+            helper.assertTrue(Math.abs(ca.dealt - 5) < 1e-3 && Math.abs(cb.taken - 5) < 1e-3,
+                "A's hit on B is A's dealt and B's taken: " + ca.dealt + " / " + cb.taken);
+            b.invulnerableTime = 0;
+            b.hurt(level.damageSources().fellOutOfWorld(), 1);
+            helper.assertTrue(Math.abs(ca.dealt - 5) < 1e-3, "damage with no attacker isn't the opponent's: " + ca.dealt);
+            b.invulnerableTime = 0;
+            b.setHealth(2);
+            b.hurt(byA, 10);
+            helper.assertTrue(ca.kills == 1 && cb.pvpDeaths == 1, "a hit to 0 HP: a kill and a death: " + ca.kills + " / " + cb.pvpDeaths);
+
+            var result = session.end(server, "A");
+            helper.assertTrue(result != null && !result.recordId().isEmpty() && session.ended(), "ending stores it");
+            var sa = result.players().stream().filter(p -> p.uuid().equals(a.getUUID())).findFirst().orElseThrow();
+            var sb = result.players().stream().filter(p -> p.uuid().equals(b.getUUID())).findFirst().orElseThrow();
+            helper.assertTrue(sa.kills() == 1 && Math.abs(sa.dealt() - 7) < 1e-3 && Math.abs(sa.topHit() - 5) < 1e-3
+                    && "A".equals(sa.side())
+                    && sb.deaths() == 1 && "B".equals(sb.side()),
+                "the totals: " + sa + " / " + sb);
+            helper.assertTrue(session.end(server, "A") == null, "ending twice gives nothing");
+            helper.assertTrue(((net.ledok.arenas_ld.stats.RunStatsHolder) a).arenasLd$runStats() == null,
+                "the marks are let go");
+            helper.assertTrue(net.ledok.arenas_ld.stats.RunRecords.wasIn(result.recordId(), a.getUUID())
+                    && !net.ledok.arenas_ld.stats.RunRecords.wasIn(result.recordId(), UUID.randomUUID()),
+                "only its fighters may open it");
+            helper.assertTrue(ArenasApi.runHistory(server, null, a.getUUID(), 5).stream()
+                    .noneMatch(e -> e.runId().equals(result.recordId())), "a duel is left out of the run history");
+
+            var cancelled = net.ledok.arenas_ld.api.ArenasCombatLog.start(server, "duels:test3", title, List.of(
+                new net.ledok.arenas_ld.api.ArenasCombatLog.Fighter(a.getUUID(), "A", ""),
+                new net.ledok.arenas_ld.api.ArenasCombatLog.Fighter(b.getUUID(), "B", "")));
+            helper.assertTrue(cancelled.session() != null, "a new session after the last ended");
+            cancelled.session().cancel(server);
+            helper.assertTrue(cancelled.session().ended() && cancelled.session().end(server, "A") == null
+                    && ((net.ledok.arenas_ld.stats.RunStatsHolder) a).arenasLd$runStats() == null,
+                "a cancelled session stores nothing and lets go");
+        } finally {
+            server.setPvpAllowed(pvp);
+            server.getPlayerList().remove(a);
+            server.getPlayerList().remove(b);
+        }
+        helper.succeed();
+    }
+
+    /**
      * Run stats counting: a run player's hit and the poison they applied count as their damage (HP really lost,
      * capped at the mob's health), their HP lost and healed are theirs, a mob outside the run isn't counted, the
      * details payload carries the numbers, and an ended run counts nothing more.
@@ -1465,7 +1547,7 @@ public final class ApiGameTests {
                     && me.weapons.get(0).stats.containsKey("attack_damage"),
                 "boss hits per weapon pair: " + (me.weapons.isEmpty() ? "none" : me.weapons.get(0).mainHand + " " + me.weapons.get(0).stats.keySet()));
             // Rewards tab (4.36.0, D5): a win's breakdown is kept for the run details instead of chat.
-            helper.assertTrue(net.ledok.arenas_ld.stats.RunStats.recordRewards(player.getUUID(),
+            helper.assertTrue(net.ledok.arenas_ld.stats.RunStats.recordRewards(stats, player.getUUID(),
                     net.minecraft.network.chat.Component.literal("6 loot rolls"),
                     List.of(net.minecraft.network.chat.Component.literal("Loot: base 3 · Hardcore ×2 → 6"))),
                 "a run with stats keeps the reward lines");
@@ -1475,7 +1557,7 @@ public final class ApiGameTests {
             helper.assertTrue(rewardRow.rewards().size() == 2 && rewardRow.rewards().get(0).getString().equals("6 loot rolls")
                     && rewardRow.rewards().get(1).getString().contains("Hardcore"),
                 "the row carries the totals then the breakdown: " + rewardRow.rewards());
-            helper.assertTrue(!net.ledok.arenas_ld.stats.RunStats.recordRewards(UUID.randomUUID(),
+            helper.assertTrue(!net.ledok.arenas_ld.stats.RunStats.recordRewards(null, UUID.randomUUID(),
                     net.minecraft.network.chat.Component.empty(), List.of()),
                 "someone in no run: false (the caller says it in chat)");
             level.getServer().getPlayerList().remove(player); // (a NeoForge mock player can't take the end screen packet)
@@ -1794,13 +1876,13 @@ public final class ApiGameTests {
                     "raid", DifficultyTier.NORMAL, new ArenasApi.InstanceRef(level.dimension(), helper.absolutePos(BlockPos.ZERO)),
                     false, List.of(), level.getGameTime(), 0, 0, ""));
             var counters = stats.counters(player.getUUID(), player.getScoreboardName());
-            helper.assertTrue(net.ledok.arenas_ld.util.RunRentals.rewardModifiers(player.getUUID()).isEmpty(),
+            helper.assertTrue(net.ledok.arenas_ld.util.RunRentals.rewardModifiers(stats, player.getUUID()).isEmpty(),
                 "own gear: no reward cut");
 
             counters.loadoutId = "test:rental/20/rogue_shadow"; // rented before a restart (saved with the run)
             counters.rentalClass = "rogue";
             counters.rentalBand = 20;
-            var cut = net.ledok.arenas_ld.util.RunRentals.rewardModifiers(player.getUUID());
+            var cut = net.ledok.arenas_ld.util.RunRentals.rewardModifiers(stats, player.getUUID());
             helper.assertTrue(cut.size() == 3 && cut.stream().allMatch(m -> m.kind() == net.ledok.arenas_ld.rewards.RewardModifier.Kind.MORE
                 && m.value() == 0.5), "a renter's loot, XP and currency are halved: " + cut);
             player.tickCount = 0;
@@ -1833,10 +1915,7 @@ public final class ApiGameTests {
         }
     }
 
-    /**
-     * Rental in a dungeon (4.26.4 fix): a dungeon removes its lobby when the run starts, so the pick made in the lobby
-     * must survive that and be taken by the run's stats tick; a pick whose player left the lobby without a run goes.
-     */
+    /** A required rental must be equipped before the dungeon starts, even with stats recording off. */
     public static void rentalDungeonPick(GameTestHelper helper) {
         helper.setBlock(DUNGEON, BlockRegistry.DUNGEON_CONTROLLER_BLOCK);
         helper.runAfterDelay(3, () -> {
@@ -1845,58 +1924,49 @@ public final class ApiGameTests {
             DungeonControllerBlockEntity controller = helper.getBlockEntity(DUNGEON);
             ServerPlayer player = helper.makeMockServerPlayerInLevel();
             String kit = "test:rental/0/rogue_shadow";
-            var calls = new java.util.ArrayList<String>();
             boolean[] renting = {false};
+            boolean[] canEquip = {false};
             ArenasApi.RentalProvider before = ArenasApi.rentalProvider();
+            var config = net.ledok.arenas_ld.config.ArenasLdConfig.getInstance().run_stats;
+            boolean statsWereEnabled = config.enabled;
+            config.enabled = false;
             ArenasApi.setRentalProvider(new ArenasApi.RentalProvider() {
                 public List<String> presets(int lvl) { return List.of(kit); }
                 public String displayName(String k) { return "Shadow rogue"; }
-                public boolean begin(ServerPlayer p, String session, String k) { calls.add("begin " + k); renting[0] = true; return true; }
-                public void end(MinecraftServer s, UUID uuid) { calls.add("end"); renting[0] = false; }
+                public boolean begin(ServerPlayer p, String session, String k) { return renting[0] = canEquip[0]; }
+                public void end(MinecraftServer s, UUID uuid) { renting[0] = false; }
                 public void reequip(ServerPlayer p) { }
                 public boolean isRenting(ServerPlayer p) { return renting[0]; }
                 public List<net.minecraft.world.item.ItemStack> preview(String k) { return List.of(); }
             });
-            Runnable cleanup = () -> {
-                ArenasApi.setRentalProvider(before);
-                server.getPlayerList().remove(player);
-            };
+            controller.setRunSettings(new net.ledok.arenas_ld.util.RunSettings(net.ledok.arenas_ld.util.RunSettings.REQUIRED, -1));
+            var stats = new net.ledok.arenas_ld.stats.RunStats(
+                new net.ledok.arenas_ld.util.DownedSpectators.RunView(new Object(), java.util.Map::of, () -> false,
+                    uuid -> false, (time, uuid) -> -1L),
+                () -> new net.ledok.arenas_ld.stats.RunDetailsSource(controller.activityId(),
+                    net.minecraft.network.chat.Component.literal("Test"), "dungeon", DifficultyTier.NORMAL,
+                    new ArenasApi.InstanceRef(level.dimension(), helper.absolutePos(DUNGEON)),
+                    false, List.of(), level.getGameTime(), 0, 0, ""));
             try {
                 helper.assertTrue(controller.createLobby(player).isPresent(), "lobby created");
+                var lobby = controller.getLobbies().getFirst();
                 helper.assertTrue(net.ledok.arenas_ld.util.RunRentals.choose(player, helper.absolutePos(DUNGEON), kit) == null,
                     "a preset is picked in the dungeon lobby");
-
-                // The run starts: the dungeon drops its lobby and the player is in the run.
-                var participants = new java.util.LinkedHashMap<UUID, net.ledok.arenas_ld.dungeon.run.RunParticipant>();
-                participants.put(player.getUUID(), new net.ledok.arenas_ld.dungeon.run.RunParticipant(player.getUUID(),
-                    player.getScoreboardName(), net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus.ACTIVE, 0L, 0));
-                var stats = new net.ledok.arenas_ld.stats.RunStats(
-                    new net.ledok.arenas_ld.util.DownedSpectators.RunView(new Object(), () -> participants, () -> false,
-                        uuid -> false, (time, uuid) -> -1L),
-                    () -> new net.ledok.arenas_ld.stats.RunDetailsSource(null, net.minecraft.network.chat.Component.literal("Test"),
-                        "dungeon", DifficultyTier.NORMAL, new ArenasApi.InstanceRef(level.dimension(), helper.absolutePos(DUNGEON)),
-                        false, List.of(), level.getGameTime(), 0, 0, ""));
-                helper.assertTrue(controller.leaveLobby(player.getUUID()), "the lobby is gone (as at a dungeon start)");
-            } catch (RuntimeException e) {
-                cleanup.run();
-                throw e;
+                helper.assertFalse(net.ledok.arenas_ld.util.RunRentals.beginRun(server, stats, controller, lobby, List.of(player)),
+                    "failed rental prevents launch");
+                helper.assertTrue(net.ledok.arenas_ld.util.RunRentals.hasPick(player.getUUID(), lobby), "the lobby can retry");
+                canEquip[0] = true;
+                helper.assertTrue(net.ledok.arenas_ld.util.RunRentals.beginRun(server, stats, controller, lobby, List.of(player))
+                    && renting[0] && kit.equals(stats.players().get(player.getUUID()).loadoutId),
+                    "the accepted launch equips the kit without combat stats");
+            } finally {
+                net.ledok.arenas_ld.util.RunRentals.cancelRun(server, stats);
+                stats.discard(server);
+                config.enabled = statsWereEnabled;
+                ArenasApi.setRentalProvider(before);
+                server.getPlayerList().remove(player);
             }
-            // Past a lobby sync sweep: the pick must still be there for the run.
-            helper.runAfterDelay(25, () -> {
-                try {
-                    var stats = net.ledok.arenas_ld.stats.RunDetails.runOf(player.getUUID());
-                    helper.assertTrue(stats != null, "the player is in the run");
-                    var counters = stats.counters(player.getUUID(), player.getScoreboardName());
-                    net.ledok.arenas_ld.util.RunRentals.onRunPlayer(stats, counters, player);
-                    helper.assertTrue(calls.equals(List.of("begin " + kit)) && kit.equals(counters.loadoutId)
-                        && counters.rentalClass.equals("rogue") && counters.rentalBand == 0,
-                        "the dungeon run begins the rental: " + calls);
-                    stats.end(server);
-                } finally {
-                    cleanup.run();
-                }
-                helper.succeed();
-            });
+            helper.succeed();
         });
     }
 
@@ -1967,7 +2037,7 @@ public final class ApiGameTests {
                 var counters = stats.counters(player.getUUID(), player.getScoreboardName());
                 counters.loadoutId = kit;
                 helper.assertTrue(stats.rentalRequired(), "the run keeps the controller's mode");
-                helper.assertTrue(net.ledok.arenas_ld.util.RunRentals.rewardModifiers(player.getUUID()).isEmpty(),
+                helper.assertTrue(net.ledok.arenas_ld.util.RunRentals.rewardModifiers(stats, player.getUUID()).isEmpty(),
                     "rental only: no reward cut");
                 var record = stats.snapshot(server);
                 helper.assertTrue(record.rentalMode.equals("required") && record.baseLootRolls == 9,
@@ -2543,7 +2613,7 @@ public final class ApiGameTests {
                         == net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus.ACTIVE,
                     () -> "back in the run standing: " + participant.get(), () -> {
                         try {
-                            helper.assertTrue(back.gameMode.getGameModeForPlayer() == net.minecraft.world.level.GameType.SURVIVAL,
+                            helper.assertTrue(back.gameMode.getGameModeForPlayer() == net.minecraft.world.level.GameType.ADVENTURE,
                                 "in survival, not a spectator");
                             helper.assertTrue(results(id).isEmpty(), "still not lost: " + results(id));
                             helper.assertTrue(net.ledok.arenas_ld.arena.run.ArenaRunLifecycle.exitEarly(server, back), "they can leave");
@@ -2596,6 +2666,53 @@ public final class ApiGameTests {
             }
             helper.succeed();
         });
+    }
+
+    /**
+     * 4.44.0, the REACH_ZONE room: the mob cap holds the wave down, dead waves don't clear it, a player outside the
+     * zone doesn't either, and once enough active players stand in the zone it clears and its mobs go.
+     */
+    public static void reachZoneRoom(GameTestHelper helper) {
+        BlockPos roomRel = new BlockPos(1, 1, 1);
+        BlockPos spawnerRel = new BlockPos(3, 1, 1);
+        helper.setBlock(roomRel, BlockRegistry.ROOM_CONTROLLER_BLOCK);
+        helper.setBlock(spawnerRel, BlockRegistry.MOB_SPAWNER_BLOCK);
+        ServerLevel level = helper.getLevel();
+        net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity room = helper.getBlockEntity(roomRel);
+        net.ledok.arenas_ld.dungeon.blockentity.MobSpawnerBlockEntity spawner = helper.getBlockEntity(spawnerRel);
+        spawner.setEntityDefinition(spawner.getEntityDefinition().withSpawnCount(5));
+        helper.assertTrue(room.toggleSpawner(helper.absolutePos(spawnerRel)), "spawner linked");
+        net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig base = net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig.DEFAULT;
+        room.setObjective(new net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig(
+            net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig.Type.REACH_ZONE, base.surviveSeconds(), 5,
+            base.protectMobId(), base.protectStationary(), java.util.Optional.empty(), List.of(), 100,
+            java.util.Optional.empty(), java.util.Optional.empty(), 3));
+        room.setZone(helper.absolutePos(new BlockPos(6, 1, 6)), helper.absolutePos(new BlockPos(7, 2, 7)));
+        net.ledok.arenas_ld.dungeon.run.TierConfig tier =
+            net.ledok.arenas_ld.dungeon.run.TierConfig.defaultFor(DifficultyTier.EASY);
+        int spawned = room.activate(level, tier, 1.0);
+        helper.assertTrue(spawned == 3 && room.getAliveMobs().size() == 3, "the mob cap holds the wave to 3: " + spawned);
+        helper.assertTrue(room.isReachZoneActive(), "the zone room runs");
+        for (UUID uuid : List.copyOf(room.getAliveMobs())) {
+            net.minecraft.world.entity.Entity mob = level.getEntity(uuid);
+            if (mob != null) mob.discard();
+        }
+        room.refreshAliveMobs(level, true);
+        helper.assertTrue(!room.isCleared(), "dead waves don't clear a zone room");
+        ServerPlayer player = survivalPlayer(helper, helper.absolutePos(new BlockPos(1, 1, 6)));
+        try {
+            room.tickReachZone(level, List.of(player));
+            helper.assertTrue(!room.isCleared() && room.getZoneInside() == 0 && room.getZoneRequired() == 1,
+                "a player outside the zone doesn't clear it");
+            BlockPos inside = helper.absolutePos(new BlockPos(6, 1, 6));
+            player.teleportTo(inside.getX() + 0.5, inside.getY(), inside.getZ() + 0.5);
+            room.tickReachZone(level, List.of(player));
+            helper.assertTrue(room.isCleared() && room.getAliveMobs().isEmpty(), "standing in the zone clears it");
+        } finally {
+            level.getServer().getPlayerList().remove(player);
+            room.reset(level);
+        }
+        helper.succeed();
     }
 
     /**
@@ -3109,7 +3226,10 @@ public final class ApiGameTests {
 
             var stray = helper.spawn(net.minecraft.world.entity.EntityType.IRON_GOLEM, new BlockPos(2, 1, 6));
             net.ledok.arenas_ld.util.EntityEquipmentHelper.markRunMob(stray);
+            net.ledok.arenas_ld.raid.run.RaidRunLifecycle.markRaidBoss(stray, level, spawnerPos);
             var wild = helper.spawn(net.minecraft.world.entity.EntityType.IRON_GOLEM, new BlockPos(6, 1, 2));
+            var otherRunMob = helper.spawn(net.minecraft.world.entity.EntityType.IRON_GOLEM, new BlockPos(3, 1, 6));
+            net.ledok.arenas_ld.util.EntityEquipmentHelper.markRunMob(otherRunMob);
             ServerPlayer player = survivalPlayer(helper, helper.absolutePos(new BlockPos(3, 1, 6)));
             moddedClient.accept(player);
             net.ledok.arenas_ld.raid.run.RaidRun run;
@@ -3120,6 +3240,7 @@ public final class ApiGameTests {
                 helper.assertTrue(controller.createLobby(player) && controller.startRaid(player), "the raid starts");
                 helper.assertTrue(stray.isRemoved(), "the stray tagged golem left by an earlier run was discarded");
                 helper.assertTrue(!wild.isRemoved(), "an untagged golem is left alone");
+                helper.assertTrue(!otherRunMob.isRemoved(), "a different activity's golem is left alone");
                 run = controller.getActiveRuns().get(new net.ledok.arenas_ld.activity.InstanceKey(level.dimension(), spawnerPos));
                 helper.assertTrue(run != null && run.bossUuid() != null, "the run has a boss");
                 boss = level.getEntity(run.bossUuid());
@@ -3244,5 +3365,141 @@ public final class ApiGameTests {
         ghost.storeActivityId(id); // before it has a level: nothing to sync
         ghost.setLevel(level);
         ActivityRegistry.attach(ghost);
+    }
+
+    /** Exercises zero timers, one-time clear bonuses, Adventure rules, and a shared instance reservation. */
+    public static void arenaWaveTransitions(GameTestHelper helper, Consumer<ServerPlayer> moddedClient) {
+        BlockPos firstRel = new BlockPos(1, 1, 1);
+        BlockPos secondRel = new BlockPos(2, 1, 1);
+        BlockPos spawnerRel = new BlockPos(5, 1, 5);
+        helper.setBlock(firstRel, BlockRegistry.ARENA_CONTROLLER_BLOCK);
+        helper.setBlock(secondRel, BlockRegistry.ARENA_CONTROLLER_BLOCK);
+        helper.setBlock(spawnerRel, BlockRegistry.ARENA_SPAWNER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            ArenaControllerBlockEntity first = helper.getBlockEntity(firstRel);
+            ArenaControllerBlockEntity second = helper.getBlockEntity(secondRel);
+            ArenaSpawnerBlockEntity spawner = helper.getBlockEntity(spawnerRel);
+            spawner.setBattleRadius(8);
+            spawner.setSpawnDistance(2);
+            spawner.setPrepareTime(0);
+            spawner.setTimeBetweenWaves(0);
+            spawner.setEntrancePosition(helper.absolutePos(new BlockPos(5, 1, 3)), level.dimension());
+            spawner.setMobs(List.of(new net.ledok.arenas_ld.util.MobArenaMobData()));
+            spawner.setPlayerRules(false, true);
+            first.setBreakableBlocks(new net.ledok.arenas_ld.util.BreakableBlocks("replace", List.of("minecraft:stone")));
+            first.setMaxWave(3);
+            BlockPos spawnerPos = helper.absolutePos(spawnerRel);
+            first.addInstance(spawnerPos, level.dimension());
+            second.addInstance(spawnerPos, level.dimension());
+            ServerPlayer player = survivalPlayer(helper, helper.absolutePos(new BlockPos(3, 1, 6)));
+            moddedClient.accept(player);
+            helper.assertTrue(first.createLobby(player) && first.startRun(player), "arena starts");
+            var run = first.getActiveRuns().values().iterator().next();
+            helper.assertTrue(player.gameMode.getGameModeForPlayer() == net.minecraft.world.level.GameType.ADVENTURE,
+                "arenas default to Adventure mode");
+            helper.assertTrue(net.ledok.arenas_ld.util.RunBlockBreaking.entriesFor(player).equals(List.of("minecraft:stone")),
+                "arena uses the existing breakable-block rules");
+            helper.assertTrue(net.ledok.arenas_ld.activity.ActivityRegistry.instanceHeldByOther(second, run.instanceKey()),
+                "another controller cannot reserve the same instance");
+            whenTrue(helper, 40, () -> run.currentWave() == 1 && !run.aliveMobs().isEmpty(), "wave 1 starts with zero prep", () -> {
+                var sword = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_SWORD);
+                sword.setDamageValue(500);
+                player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, sword);
+                for (UUID uuid : List.copyOf(run.aliveMobs())) {
+                    var mob = level.getEntity(uuid);
+                    if (mob != null) mob.discard();
+                }
+                var dropped = new net.minecraft.world.entity.item.ItemEntity(level, spawnerPos.getX() + 0.5,
+                    spawnerPos.getY() + 3, spawnerPos.getZ() + 0.5,
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND));
+                dropped.setNoGravity(true);
+                dropped.setPickUpDelay(32767);
+                level.addFreshEntity(dropped);
+                whenTrue(helper, 50, () -> run.currentWave() == 2, "zero intermission advances to wave 2", () -> {
+                    helper.assertTrue(sword.getDamageValue() == 500 - (int) (sword.getMaxDamage() * 0.01f),
+                        "wave one applied its clear bonus once: " + sword.getDamageValue());
+                    helper.assertTrue(!dropped.isRemoved(), "wave transition leaves loose items alone");
+                    spawner.setTimeBetweenWaves(60);
+                    for (UUID uuid : List.copyOf(run.aliveMobs())) {
+                        var mob = level.getEntity(uuid);
+                        if (mob != null) mob.discard();
+                    }
+                    whenTrue(helper, 15, run::betweenWaves, "party enters intermission", () -> {
+                        helper.assertTrue(net.ledok.arenas_ld.arena.run.ArenaRunLifecycle.readyForNextWave(player),
+                            "standing player can ready up");
+                        whenTrue(helper, 15, () -> run.currentWave() == 3, "readying skips the wait", () -> {
+                            try {
+                                helper.assertTrue(run.betweenWaveTicksRemaining() == 0, "the previous countdown is cleared");
+                            } finally {
+                                dropped.discard();
+                                helper.setBlock(firstRel, Blocks.AIR);
+                                helper.setBlock(secondRel, Blocks.AIR);
+                                server.getPlayerList().remove(player);
+                            }
+                            helper.succeed();
+                        });
+                    });
+                });
+            });
+        });
+    }
+
+    /** The checker can launch a selected no-mob room, and a practice clear has no rewards or history. */
+    public static void practiceRoom(GameTestHelper helper, Consumer<ServerPlayer> moddedClient) {
+        BlockPos controllerRel = new BlockPos(1, 1, 1);
+        BlockPos dbsRel = new BlockPos(2, 1, 1);
+        BlockPos roomRel = new BlockPos(3, 1, 1);
+        helper.setBlock(controllerRel, BlockRegistry.DUNGEON_CONTROLLER_BLOCK);
+        helper.setBlock(dbsRel, BlockRegistry.DUNGEON_BOSS_SPAWNER_BLOCK);
+        helper.setBlock(roomRel, BlockRegistry.ROOM_CONTROLLER_BLOCK);
+        helper.runAfterDelay(3, () -> {
+            ServerLevel level = helper.getLevel();
+            MinecraftServer server = level.getServer();
+            DungeonControllerBlockEntity controller = helper.getBlockEntity(controllerRel);
+            net.ledok.arenas_ld.dungeon.blockentity.DungeonBossSpawnerBlockEntity dbs = helper.getBlockEntity(dbsRel);
+            net.ledok.arenas_ld.dungeon.blockentity.RoomControllerBlockEntity room = helper.getBlockEntity(roomRel);
+            BlockPos dbsPos = helper.absolutePos(dbsRel);
+            BlockPos roomPos = helper.absolutePos(roomRel);
+            BlockPos respawn = helper.absolutePos(new BlockPos(4, 1, 3));
+            BlockPos goal = helper.absolutePos(new BlockPos(6, 1, 6));
+            BlockPos home = helper.absolutePos(new BlockPos(4, 1, 1));
+            dbs.addRoom(roomPos);
+            controller.addInstance(dbsPos, level.dimension());
+            room.addRespawnPointOffset(respawn.subtract(roomPos));
+            room.setObjective(new net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig(
+                net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig.Type.REACH_ZONE, 60, 10, "", true,
+                java.util.Optional.empty(), List.of(), 100));
+            room.setZone(goal, goal.above());
+            ServerPlayer player = survivalPlayer(helper, home);
+            moddedClient.accept(player);
+            // GameTestServer assigns permission level zero when asked to op a player.
+            server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(player.getGameProfile(), 2, false));
+            var before = net.ledok.arenas_ld.util.PlayerStatsStore.get(server).stats(player.getUUID());
+            var source = player.createCommandSourceStack();
+            String command = "arenasld instance test room " + controller.activityId()
+                + " " + dbsPos.getX() + " " + dbsPos.getY() + " " + dbsPos.getZ() + " " + level.dimension().location() + " 1";
+            server.getCommands().performPrefixedCommand(source, command);
+            var run = controller.getActiveRuns().get(dbsPos);
+            helper.assertTrue(run != null && run.practice(), "the command launches a practice session");
+            helper.assertTrue(player.blockPosition().equals(respawn), "the builder lands in the selected room");
+            whenTrue(helper, 95, room::isReachZoneActive, "the goal zone activates without mobs", () -> {
+                player.teleportTo(goal.getX() + 0.5, goal.getY(), goal.getZ() + 0.5);
+                whenTrue(helper, 20, () -> controller.getActiveRuns().isEmpty(), "goal clear ends this practice room", () -> {
+                    try {
+                        helper.assertTrue(player.blockPosition().equals(home), "the builder returns home");
+                        helper.assertTrue(net.ledok.arenas_ld.util.PlayerStatsStore.get(server).stats(player.getUUID()).equals(before),
+                            "practice has no ranked stats");
+                        helper.assertTrue(ArenasApi.runHistory(server, controller.activityId(), player.getUUID(), 5).isEmpty(),
+                            "practice has no run history");
+                    } finally {
+                        server.getPlayerList().getOps().remove(player.getGameProfile());
+                        server.getPlayerList().remove(player);
+                    }
+                    helper.succeed();
+                });
+            });
+        });
     }
 }

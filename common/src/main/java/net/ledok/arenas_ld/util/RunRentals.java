@@ -12,7 +12,6 @@ import net.ledok.arenas_ld.platform.ArenasEvents;
 import net.ledok.arenas_ld.platform.ArenasNetwork;
 import net.ledok.arenas_ld.rewards.RewardModifier;
 import net.ledok.arenas_ld.stats.PlayerCounters;
-import net.ledok.arenas_ld.stats.RunDetails;
 import net.ledok.arenas_ld.stats.RunGear;
 import net.ledok.arenas_ld.stats.RunStats;
 import net.minecraft.ChatFormatting;
@@ -23,6 +22,7 @@ import net.minecraft.server.level.ServerPlayer;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,9 +41,8 @@ import java.util.UUID;
  *   <li><b>Lobby</b>: a member's pick is kept with the lobby it was made in (a pick for another lobby is dropped);
  *       once a second each member of a waiting dungeon/raid lobby gets the lobby's picks when they change
  *       ({@link RentalLobbyPayload}).</li>
- *   <li><b>Start</b>: the run's stats tick ({@link #onRunPlayer}, once a second) begins the rental for each member
- *       who picked one: effects cleared, loadout handed out, the class/band/loadout noted in their run counters.
- *       After a restart the same tick begins it again (Eden ends rentals on login), a few ticks after the login.</li>
+ *   <li><b>Start</b>: {@link #beginRun} equips the lobby's picks before admitting the party.
+ *       {@link #tickRun} maintains equipped kits and restores them after a restart independently of combat stats.</li>
  *   <li><b>End</b>: once a second, a rental whose player is no longer in its running run (run over, left, removed)
  *       is ended.</li>
  * </ul>
@@ -69,7 +68,8 @@ public final class RunRentals {
 
     private static final Map<UUID, Choice> CHOICES = new HashMap<>();
     /** Player → the rental session Arenas began for them. */
-    private static final Map<UUID, String> RENTING = new HashMap<>();
+    private record Rental(RunStats run, ArenasApi.RentalProvider provider) {}
+    private static final Map<UUID, Rental> RENTING = new HashMap<>();
     private static Map<UUID, RentalLobbyPayload> sent = new HashMap<>();
 
     private RunRentals() {
@@ -295,62 +295,158 @@ public final class RunRentals {
 
     // ── run ──────────────────────────────────────────────────────────────────
 
-    /**
-     * The run's stats tick, for each online participant still in it: begins a picked rental (or again after a
-     * restart).
-     */
-    public static void onRunPlayer(RunStats stats, PlayerCounters counters, ServerPlayer player) {
-        ArenasApi.RentalProvider p = provider;
-        if (p == null) {
-            return;
+    /** Applies picks from this lobby before launch, rolling back any rentals if a required kit fails. */
+    public static boolean beginRun(MinecraftServer server, RunStats stats, ActivityHost host, Lobby lobby,
+                                   List<ServerPlayer> players) {
+        boolean required = stats.rentalMode(server).equals(RunSettings.REQUIRED);
+        ArenasApi.RentalProvider rentalProvider = provider;
+        if (required && (rentalProvider == null || players.size() != lobby.members().size())) {
+            refuseLaunch(host, players);
+            return false;
         }
-        UUID uuid = player.getUUID();
+        if (rentalProvider == null) return true;
+
+        endFinished(server);
+        Map<ServerPlayer, Choice> equipped = new LinkedHashMap<>();
         String session = "arenas:" + stats.sessionKey();
-        if (counters.loadoutId == null) {
-            Choice choice = CHOICES.get(uuid);
-            if (choice == null) {
-                return;
+        for (ServerPlayer player : players) {
+            Choice choice = CHOICES.get(player.getUUID());
+            if (choice == null || !choice.lobbyId().equals(lobby.lobbyId())) {
+                if (!required) continue;
+                rollback(server, stats, equipped.keySet(), rentalProvider);
+                refuseLaunch(host, players);
+                return false;
             }
-            // The pick is for this run unless its lobby is still waiting (then it is for that lobby's run). A dungeon
-            // removes its lobby when the run starts and a raid keeps it IN_RUN, so the lobby itself can't be required.
-            LobbyMembership.Membership membership = LobbyMembership.find(player.server, uuid);
-            if (membership != null && membership.lobby().lobbyId().equals(choice.lobbyId()) && waiting(membership.lobby())) {
-                return;
+            boolean success = false;
+            try {
+                if (rentalProvider.presets(capped(player, stats.source().runLevel())).contains(choice.kitId())
+                    && !rentalProvider.isRenting(player)) {
+                    RunPlayerSafety.secure(player);
+                    success = equip(player, stats, rentalProvider, session, choice.kitId());
+                }
+            } catch (RuntimeException e) {
+                ArenasLdMod.LOGGER.error("Rental provider failed to verify kit for {}", player.getScoreboardName(), e);
             }
-            CHOICES.remove(uuid);
-            String kit = choice.kitId();
-            int band = kitLevel(kit);
-            if (!p.presets(capped(player, stats.source().runLevel())).contains(kit)) { // their level changed since the pick, or the kit went
+            if (success) {
+                equipped.put(player, choice);
+            } else if (required) {
+                rollback(server, stats, equipped.keySet(), rentalProvider);
+                refuseLaunch(host, players);
+                return false;
+            } else {
                 player.sendSystemMessage(Component.translatable("message.arenas_ld.rental.failed").withStyle(ChatFormatting.RED));
-                return;
             }
-            player.removeAllEffects(); // food buffs, overdrives, relic stacks, potions: a clean start
-            if (!p.isRenting(player) && !p.begin(player, session, kit)) {
-                player.sendSystemMessage(Component.translatable("message.arenas_ld.rental.failed").withStyle(ChatFormatting.RED));
-                return;
-            }
-            counters.loadoutId = kit;
-            counters.rentalClass = classOf(kit);
-            counters.rentalBand = band;
+        }
+        for (Map.Entry<ServerPlayer, Choice> entry : equipped.entrySet()) {
+            ServerPlayer player = entry.getKey();
+            Choice choice = entry.getValue();
+            UUID uuid = player.getUUID();
+            PlayerCounters counters = stats.counters(uuid, player.getGameProfile().getName());
+            counters.loadoutId = choice.kitId();
+            counters.rentalClass = classOf(choice.kitId());
+            counters.rentalBand = kitLevel(choice.kitId());
             counters.rentalPool = choice.pool();
-            counters.rentalSpells = choice.spells();
             if (!choice.pool().isEmpty()) {
-                // Checked again at the start (4.40.4): the rule (rental_spell_tiers, max tier) may have changed.
-                RentalSpells.Choice book = RentalSpells.forKit(player.registryAccess(), p.preview(kit), band);
-                counters.rentalSpells = book == null ? List.of() : RentalSpells.validate(choice.spells(), book);
+                try {
+                    var book = RentalSpells.forKit(player.registryAccess(), rentalProvider.preview(choice.kitId()), counters.rentalBand);
+                    counters.rentalSpells = book == null ? List.of() : RentalSpells.validate(choice.spells(), book);
+                } catch (RuntimeException e) {
+                    ArenasLdMod.LOGGER.warn("Couldn't verify picked rental spells for {}", player.getScoreboardName(), e);
+                }
             }
-            spellsPending(counters); // the next second, once Spell Engine has seen the lent book (4.40.6)
-            RENTING.put(uuid, session);
-            player.sendSystemMessage(Component.translatable("message.arenas_ld.rental.started", p.displayName(kit), band)
-                .withStyle(ChatFormatting.GOLD));
-            ArenasLdMod.LOGGER.info("[Arenas] {} rents {} for {}", player.getScoreboardName(), kit, session);
+            spellsPending(counters);
+            RENTING.put(uuid, new Rental(stats, rentalProvider));
+            player.removeAllEffects();
+            String kitName = choice.kitId();
+            try {
+                kitName = rentalProvider.displayName(choice.kitId());
+            } catch (RuntimeException e) {
+                ArenasLdMod.LOGGER.debug("Rental display name unavailable for {}", choice.kitId(), e);
+            }
+            var message = required
+                ? Component.translatableWithFallback("message.arenas_ld.rental.started_required",
+                    "Rental build %s (level %s). Your gear will be restored after the run. Rewards are paid in full.",
+                    kitName, counters.rentalBand)
+                : Component.translatable("message.arenas_ld.rental.started", kitName, counters.rentalBand);
+            player.sendSystemMessage(message.withStyle(ChatFormatting.GOLD));
+        }
+        for (ServerPlayer player : players) {
+            CHOICES.computeIfPresent(player.getUUID(), (uuid, choice) -> choice.lobbyId().equals(lobby.lobbyId()) ? null : choice);
+        }
+        return true;
+    }
+
+    private static void refuseLaunch(ActivityHost host, List<ServerPlayer> players) {
+        for (ServerPlayer player : players) {
+            player.sendSystemMessage(Component.translatableWithFallback("message.arenas_ld.rental.launch_failed",
+                "Could not equip every rental build for %s. Check your kits and start again.", host.activityName())
+                .withStyle(ChatFormatting.RED));
+        }
+    }
+
+    private static boolean equip(ServerPlayer player, RunStats run, ArenasApi.RentalProvider rentalProvider,
+                                 String session, String kit) {
+        try {
+            if (!rentalProvider.begin(player, session, kit)) return false;
+            if (rentalProvider.isRenting(player)) return true;
+        } catch (RuntimeException e) {
+            ArenasLdMod.LOGGER.error("Rental provider failed to equip {} for {}", player.getScoreboardName(), session, e);
+        }
+        restoreOrRetry(player.server, player.getUUID(), run, rentalProvider);
+        return false;
+    }
+
+    private static void rollback(MinecraftServer server, RunStats run, Collection<ServerPlayer> equipped,
+                                 ArenasApi.RentalProvider rentalProvider) {
+        for (ServerPlayer player : equipped) restoreOrRetry(server, player.getUUID(), run, rentalProvider);
+    }
+
+    private static void restoreOrRetry(MinecraftServer server, UUID uuid, RunStats run, ArenasApi.RentalProvider rentalProvider) {
+        if (!endRental(server, uuid, rentalProvider)) RENTING.put(uuid, new Rental(run, rentalProvider));
+    }
+
+    public static void cancelRun(MinecraftServer server, RunStats run) {
+        for (var entry : new ArrayList<>(RENTING.entrySet())) {
+            if (entry.getValue().run() == run) {
+                if (endRental(server, entry.getKey(), entry.getValue().provider())) RENTING.remove(entry.getKey());
+            }
+        }
+    }
+
+    /** Keeps rentals working across restarts even when combat-stat recording is disabled. */
+    public static void tickRun(MinecraftServer server, RunStats stats) {
+        if (server.getTickCount() % SWEEP_TICKS != 0 || stats.players().isEmpty()) return;
+        stats.rentalMode(server);
+        for (PlayerCounters counters : stats.players().values()) {
+            if (counters.loadoutId == null) continue;
+            UUID uuid = counters.player;
+            ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+            if (player != null && stats.hasParticipant(uuid)) {
+                try {
+                    onRunPlayer(stats, counters, player);
+                } catch (RuntimeException e) {
+                    ArenasLdMod.LOGGER.warn("Rental update failed for {}", player.getScoreboardName(), e);
+                    if (stats.rentalRequired() && player.tickCount >= REJOIN_WAIT_TICKS) removeFromRun(player);
+                }
+            }
+        }
+    }
+
+    public static void onRunPlayer(RunStats stats, PlayerCounters counters, ServerPlayer player) {
+        UUID uuid = player.getUUID();
+        Rental rental = RENTING.get(uuid);
+        if (rental != null && rental.run() != stats) return;
+        ArenasApi.RentalProvider p = rental == null ? provider : rental.provider();
+        if (p == null) {
+            if (stats.rentalRequired() && player.tickCount >= REJOIN_WAIT_TICKS) removeFromRun(player);
             return;
         }
+        String session = "arenas:" + stats.sessionKey();
         // Rented in this run: after a restart Eden gave their own items back on login; lend the loadout again. A
         // failing begin (the kit is gone) is tried at most REJOIN_TRIES times, REJOIN_RETRY_TICKS apart.
         if (!p.isRenting(player) && player.tickCount >= REJOIN_WAIT_TICKS && counters.rentalRejoinTries < REJOIN_TRIES
             && player.server.getTickCount() >= counters.rentalRetryTick) {
-            if (p.begin(player, session, counters.loadoutId)) {
+            if (equip(player, stats, p, session, counters.loadoutId)) {
                 counters.rentalRejoinTries = 0;
                 spellsPending(counters);
                 ArenasLdMod.LOGGER.info("[Arenas] {} rents {} again for {} (rejoined)", player.getScoreboardName(),
@@ -358,6 +454,12 @@ public final class RunRentals {
             } else {
                 counters.rentalRejoinTries++;
                 counters.rentalRetryTick = player.server.getTickCount() + REJOIN_RETRY_TICKS;
+                // "Rental kits only": out of the run once every retry has failed (not on the first miss, which a
+                // restart's login timing can cause).
+                if (stats.rentalRequired() && counters.rentalRejoinTries >= REJOIN_TRIES) {
+                    removeFromRun(player);
+                    return;
+                }
                 if (counters.rentalRejoinTries >= REJOIN_TRIES) {
                     ArenasLdMod.LOGGER.warn("[Arenas] {} couldn't rent {} again for {}; runs on with their own gear",
                         player.getScoreboardName(), counters.loadoutId, session);
@@ -367,19 +469,24 @@ public final class RunRentals {
         if (!counters.rentalSpellsApplied && p.isRenting(player)) {
             applySpells(player, counters);
         }
-        RENTING.putIfAbsent(uuid, session);
+        RENTING.putIfAbsent(uuid, new Rental(stats, p));
     }
 
-    /** After a respawn in the run: the death emptied the inventory, so the loadout is handed out again. */
+    private static void removeFromRun(ServerPlayer player) {
+        player.sendSystemMessage(Component.translatableWithFallback("message.arenas_ld.rental.resume_failed",
+            "Your rental could not be restored. You have been returned from the run.").withStyle(ChatFormatting.RED));
+        if (!net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle.exitEarly(player.server, player)) {
+            net.ledok.arenas_ld.raid.run.RaidRunLifecycle.exitEarly(player.server, player);
+        }
+    }
+
+    /** After a respawn in the run: hand out the kit again. */
     public static void reequip(ServerPlayer player) {
-        ArenasApi.RentalProvider p = provider;
-        if (p != null && RENTING.containsKey(player.getUUID()) && p.isRenting(player)) {
-            p.reequip(player);
-            RunStats run = RunDetails.runOf(player.getUUID());
-            PlayerCounters counters = run == null ? null : run.players().get(player.getUUID());
-            if (counters != null) {
-                spellsPending(counters); // the respawn handed out the kit's own book again
-            }
+        Rental rental = RENTING.get(player.getUUID());
+        if (rental != null && rental.provider().isRenting(player)) {
+            rental.provider().reequip(player);
+            PlayerCounters counters = rental.run().players().get(player.getUUID());
+            if (counters != null) spellsPending(counters);
         }
     }
 
@@ -414,8 +521,7 @@ public final class RunRentals {
      * The rental reward cut for {@code player} ("Rental ×0.5" on loot, XP and currency), or nothing. Read from their
      * run counters (saved with the run), so it holds for a renter who is offline after a restart too.
      */
-    public static List<RewardModifier> rewardModifiers(UUID player) {
-        RunStats run = RunDetails.runOfAny(player);
+    public static List<RewardModifier> rewardModifiers(@Nullable RunStats run, UUID player) {
         PlayerCounters counters = run == null ? null : run.players().get(player);
         if (counters == null || counters.loadoutId == null || run.rentalRequired()) {
             return List.of(); // a "rental kits only" run pays in full (LeDok 2026-11-17)
@@ -446,16 +552,20 @@ public final class RunRentals {
         if (RENTING.isEmpty()) {
             return;
         }
-        for (Map.Entry<UUID, String> entry : new ArrayList<>(RENTING.entrySet())) {
-            RunStats run = RunDetails.runOf(entry.getKey());
-            if (run != null && entry.getValue().equals("arenas:" + run.sessionKey())) {
-                continue;
-            }
-            RENTING.remove(entry.getKey());
-            ArenasApi.RentalProvider p = provider;
-            if (p != null) {
-                p.end(server, entry.getKey());
-            }
+        for (Map.Entry<UUID, Rental> entry : new ArrayList<>(RENTING.entrySet())) {
+            UUID uuid = entry.getKey();
+            Rental rental = entry.getValue();
+            if (!rental.run().hasParticipant(uuid) && endRental(server, uuid, rental.provider())) RENTING.remove(uuid);
+        }
+    }
+
+    private static boolean endRental(MinecraftServer server, UUID player, ArenasApi.RentalProvider rentalProvider) {
+        try {
+            rentalProvider.end(server, player);
+            return true;
+        } catch (RuntimeException e) {
+            ArenasLdMod.LOGGER.error("Rental provider failed to restore {}", player, e);
+            return false;
         }
     }
 
@@ -464,12 +574,9 @@ public final class RunRentals {
         ArenasApi.RentalProvider p = provider;
         boolean any = p != null;
         Map<UUID, LobbyMembership.Membership> all = LobbyMembership.all(server);
-        // A pick goes when its player left its lobby, unless they're in a run now (a dungeon removes its lobby when the
-        // run starts; the run takes the pick at its next stats tick).
-        CHOICES.entrySet().removeIf(e -> {
-            LobbyMembership.Membership m = all.get(e.getKey());
-            boolean inLobby = m != null && m.lobby().lobbyId().equals(e.getValue().lobbyId());
-            return !inLobby && RunDetails.runOf(e.getKey()) == null;
+        CHOICES.entrySet().removeIf(entry -> {
+            LobbyMembership.Membership member = all.get(entry.getKey());
+            return member == null || !member.lobby().lobbyId().equals(entry.getValue().lobbyId());
         });
         Map<UUID, RentalLobbyPayload> now = new HashMap<>();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {

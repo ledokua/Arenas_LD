@@ -94,6 +94,15 @@ public final class RentalPick {
      * tooltip, so nothing runs out of its column.
      */
     public static Flex build(BlockPos controller, net.ledok.arenas_ld.screen.RunTheme.Palette p) {
+        return build(controller, p, 0);
+    }
+
+    /**
+     * {@link #build} for a panel {@code width} wide (canvas units; 0 = unknown): the text wraps to it, and the buttons
+     * move under the title, one row each if needed, when they don't fit beside it (4.43.0, GUI scale 3).
+     */
+    public static Flex build(BlockPos controller, net.ledok.arenas_ld.screen.RunTheme.Palette p, float width) {
+        inner = width > 0 ? Math.max(60, width - 16) : 0;
         Flex col = Flex.column().gap(3);
         col.sizing(Sizing.fill(), Sizing.content());
         RentalLobbyPayload s = state;
@@ -112,20 +121,17 @@ public final class RentalPick {
         box.sizing(Sizing.fill(), Sizing.content());
         box.backgroundFill(on ? p.rowAlt() : p.row(), on ? p.accent() : p.hairline(), 1);
 
-        Flex head = Flex.row().gap(6).alignItems(Align.CENTER);
-        head.sizing(Sizing.fill(), Sizing.content());
-        head.item(net.ledok.arenas_ld.screen.run.RunWidgets.grow(Component.translatable("gui.arenas_ld.rental.title"),
-            on ? p.ink() : p.inkMid()));
+        java.util.List<Button> buttons = new java.util.ArrayList<>();
         if (on) {
-            head.item(net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable("gui.arenas_ld.rental.change"),
+            buttons.add(net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable("gui.arenas_ld.rental.change"),
                 () -> ArenasNetwork.sendToServer(new RequestRentalPreviewPayload(controller))));
         }
-        head.item(net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable(on
+        buttons.add(net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable(on
                 ? "gui.arenas_ld.rental.use_own_gear" : "gui.arenas_ld.rental.choose"),
             () -> ArenasNetwork.sendToServer(on
                 ? new SetRentalChoicePayload(controller, "")
                 : new RequestRentalPreviewPayload(controller))));
-        box.item(head);
+        head(box, Component.translatable("gui.arenas_ld.rental.title"), on ? p.ink() : p.inkMid(), buttons);
 
         box.item(line(Component.translatable("gui.arenas_ld.rental.hint"), p.inkMid()));
         box.item(line(Component.translatable("gui.arenas_ld.rental.rewards"), p.danger()));
@@ -151,13 +157,10 @@ public final class RentalPick {
         box.sizing(Sizing.fill(), Sizing.content());
         box.backgroundFill(p.rowAlt(), on ? p.accent() : p.danger(), 1);
 
-        Flex head = Flex.row().gap(6).alignItems(Align.CENTER);
-        head.sizing(Sizing.fill(), Sizing.content());
-        head.item(net.ledok.arenas_ld.screen.run.RunWidgets.grow(Component.translatable("gui.arenas_ld.rental.required_title"), p.ink()));
-        head.item(net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable(on
-                ? "gui.arenas_ld.rental.change" : "gui.arenas_ld.rental.choose"),
-            () -> ArenasNetwork.sendToServer(new RequestRentalPreviewPayload(controller))));
-        box.item(head);
+        head(box, Component.translatable("gui.arenas_ld.rental.required_title"), p.ink(),
+            java.util.List.of(net.ledok.arenas_ld.screen.run.RunWidgets.button(Component.translatable(on
+                    ? "gui.arenas_ld.rental.change" : "gui.arenas_ld.rental.choose"),
+                () -> ArenasNetwork.sendToServer(new RequestRentalPreviewPayload(controller)))));
 
         box.item(line(Component.translatable("gui.arenas_ld.rental.required_hint"), p.inkMid()));
         box.item(line(Component.translatable("gui.arenas_ld.rental.required_rewards"), p.accent()));
@@ -182,8 +185,54 @@ public final class RentalPick {
         return out;
     }
 
-    /** One full-width line, cut with "…" and the full text in its tooltip. */
-    private static net.ledok.vectorlib.client.canvas.widget.Label line(Component text, int color) {
+    /** The panel's inner width for the current {@link #build} (0: unknown, lines are cut with "…"). */
+    private static float inner;
+
+    /**
+     * The title with its buttons: beside it when everything fits in {@link #inner}, else the title alone and the
+     * buttons under it, as many per row as fit. Buttons never cover text.
+     */
+    private static void head(Flex box, Component title, int color, java.util.List<Button> buttons) {
+        float buttonsWidth = 0;
+        for (Button b : buttons) {
+            buttonsWidth += b.bounds().width() + 6;
+        }
+        float titleWidth = net.ledok.arenas_ld.screen.run.RunWidgets.width(title);
+        if (inner <= 0 || titleWidth + 12 + buttonsWidth <= inner) {
+            Flex head = Flex.row().gap(6).alignItems(Align.CENTER);
+            head.sizing(Sizing.fill(), Sizing.content());
+            head.item(net.ledok.arenas_ld.screen.run.RunWidgets.grow(title, color));
+            buttons.forEach(head::item);
+            box.item(head);
+            return;
+        }
+        box.item(line(title, color));
+        Flex row = null;
+        float used = 0;
+        for (Button b : buttons) {
+            float w = b.bounds().width();
+            if (row == null || used + 6 + w > inner) {
+                row = Flex.row().gap(6).alignItems(Align.CENTER);
+                row.sizing(Sizing.fill(), Sizing.content());
+                box.item(row);
+                used = 0;
+            } else {
+                used += 6;
+            }
+            if (w > inner) {
+                b.size(inner, b.bounds().height()); // one long label: as wide as the panel, its text cut inside
+                w = inner;
+            }
+            row.item(b);
+            used += w;
+        }
+    }
+
+    /** One full-width line: wrapped to the panel when its width is known, else cut with "…" (full text on hover). */
+    private static net.ledok.vectorlib.client.canvas.CanvasNode line(Component text, int color) {
+        if (inner > 0) {
+            return net.ledok.arenas_ld.screen.run.RunWidgets.text(text, color).maxWidth((int) inner);
+        }
         var label = net.ledok.vectorlib.client.canvas.widget.Label.of(100, text).color(color).tooltipWhenCut(true);
         label.sizing(Sizing.fill(), Sizing.content());
         return label;

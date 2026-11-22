@@ -1,5 +1,151 @@
 # Changelog
 
+## 4.45.0
+
+**Client and server update.** Install matching builds on both sides because the run HUD, arena
+settings, and lobby kick packets changed.
+
+### Arenas
+
+- Players enter and revive in **Adventure** by default. Enable **Survival mode** on the Arena
+  Spawner for builds that need vanilla placing and breaking. Enable **Allow configured block
+  breaking** to use the same global and controller block lists as dungeons and raids.
+- The lobby's chunk-loading countdown is followed by **Arrival grace**, which defaults to three
+  seconds and accepts zero. During intermission, every standing player can click **Ready for next
+  wave** in chat or use `/arenasld nextwave` to continue early.
+- Zero arrival grace starts wave one, and zero intermission advances immediately. A cleared wave
+  pays loot and applies its heal and repair bonus once. A wave that cannot spawn enemies ends the
+  run without awarding progress or loot for that wave.
+- New arena reward rows default to **Each**. Select **Shared** for loot scattered on the arena
+  floor. Loose items now follow normal despawn rules between waves.
+- New mob rows cover all later waves by default. Arena waves cap their mob count at 64 and build
+  the weighted selection once per wave.
+
+### Dungeons, raids, and rentals
+
+- Controllers respect each other's instance reservations. Preparations and runs track the
+  spawner's dimension and position, so copies at identical coordinates in different dimensions
+  no longer interfere with each other.
+- Raid cleanup only discards stray bosses marked as belonging to that raid instance. Nearby
+  mobs from other runs stay in play.
+- **Rental kits only** waits for every rental to equip before launch. If a handoff fails, the
+  lobby can retry and any kits already handed out are returned. Rentals work with combat stats
+  disabled. Payout modifiers and loot statistics use the run that awarded the loot.
+- **Reach the zone** rooms can activate without linked mobs. The client draws the goal outline,
+  replacing the server's per-particle updates. Restored dungeons register their mobs once.
+
+### Builder tools and records
+
+- The instance checker reports shared links, invalid arena waves, missing room respawn points
+  or goal-zone corners, and unreachable Final rooms.
+- Operators can open **Test Run** from the checker and choose a room or wave to play solo.
+  Test runs skip Arenas_LD rewards, lifetime stats, and rankings.
+- `/arenasld run last` continues to return the last PvE run after a server restart. New run
+  records use unique IDs to prevent filename collisions.
+- Lobby kick notices match the activity and lobby, so a controller at the same coordinates in
+  another dimension keeps its hub view open. A controller without an activity ID shows the notice in
+  the action bar.
+- Review follow-ups: stray raid bosses left by runs from before the ownership tag are swept too; a
+  "Rental kits only" player is returned from the run only after every re-equip retry fails; an arena
+  mob with no clear spawn spot spawns at the arena center again instead of ending the run.
+
+## 4.44.0
+
+LeDok's room-building requests (2026-11-20). **Client and server** (new packets, screen and overlay changes).
+- **New room objective: Reach the zone.** Waves spawn every *Wave every (s)* seconds, looping, with no time
+  limit, until *Required players %* of the active party (online, not downed) stand in the goal zone at once.
+  The room then clears and its remaining mobs are discarded. The zone is a box set with the Dungeon Tool's
+  new **Goal zone** mode (first click one corner, then the opposite one) and cleared from the Room
+  Controller screen. Players see its edges as green particles; the HUD shows *Reach the zone: x/y ·
+  enemies n*. Without a full zone the room plays as Kill everything (with a warning in the log).
+- **Mob cap** for Survive and Reach the zone rooms (a field shown only for those two; 0 = none, at most 500):
+  a wave spawns only as many mobs as fit under it. Boss spawners always spawn.
+- **Outlines stay when you walk away from the selected block.** The Dungeon Tool overlay keeps the last data
+  it saw for the selection, its spawners and its doors after their chunks leave your view distance, and a
+  tool click on an out-of-range block sends you its new data (`ToolSourceSyncPayload`), so doors, spawn and
+  respawn positions placed far from the room controller still show and update.
+- The Room Controller's objective buttons wrap onto a second row when they don't fit.
+- **Run stats: FloraFare's natural regen no longer counts as healing.** With FloraFare's `regenMode "curve"`
+  (the live server's) the hunger heal runs in `NaturalRegeneration#curveHeal` instead of `FoodData#tick`, so it
+  slipped past the natural-regen exclusion. A Fabric compat mixin marks it too (found by Eden_LD).
+
+## 4.43.2
+
+For Eden_LD 1.3.126 (LeDok on TEST, 2026-11-19: the create panel's «Таблиця лідерів» opened what looked like the
+controller screen). **Client and server.**
+- **`ArenasApi.openLeaderboard(player, activity)`:** as `openLobbies`, but it opens on the Leaderboard tab (hosted in
+  the hub or on Arenas' own screen). The tab stays until the player picks another, even when they are in a lobby.
+- **A hub-hosted lobby view is titled with the activity's name** («Забуті печери»), not the controller block's name;
+  an activity without a name keeps the block's name. The opening packet carries the name and the tab.
+
+## 4.43.1
+
+LeDok's follow-up on the hub pass (2026-11-19). **Client and server** (a new packet).
+- **Kicked from a lobby: back to the hub's lobby list with a notice.** The server tells the kicked player
+  (`LobbyRemovedPayload`). A hub-hosted view on that controller closes as after «Leave», and a toast says
+  "You were removed from the lobby." On Arenas' own lobby screen it's the toast only; elsewhere, the action bar.
+  This replaces the raid and arena kick chat line, whose key was missing (it showed the raw key).
+- There is no "owner disbands" case to cover: in dungeons, raids and arenas an owner who leaves hands ownership to
+  another member, and a lobby only dissolves when nobody else is in it (or everyone has been offline past the
+  timeout). The packet still carries a "disbanded" reason, with its text, should one be added.
+- A run start never sends the notice: the hub closes as before.
+
+## 4.43.0
+
+Hub layout pass with Eden_LD (LeDok 2026-11-19, Issues/2026-11-19-hub-ui). **Client** (and server: same jar).
+- **Leaving a lobby in the hub goes back to the hub's lobby list** («Покинути», and a raid's «leave queue»): the
+  hosted view closes itself from the client and reports `closed()`. It no longer stays on "You're not in a lobby".
+  Arenas' own lobby screen (no hub) is unchanged.
+- **The rental build box never draws buttons over text.** «Change» and «Use my own gear» sit beside the title only
+  when everything fits; otherwise they go under it, one row each if needed (GUI scale 3, narrow window).
+- **The rental box's text wraps** instead of being cut with "…" (the hint, the reward cut line, your rental).
+
+## 4.42.2
+
+TEST duels (2026-11-19). **Server only.**
+- **Every duel fighter's stats are taken at the start** (max health, damage reduction and the rest), also for a
+  fighter who never lands a hit. Runs take them at the first hit, so a 3 s duel had none for the side that dealt 0.
+  The gear and skills snapshot is also taken at once instead of at the next full second.
+
+## 4.42.1
+
+Duels_LD's dev test of 4.42.0 (2026-11-18). **Server and client** (the Rewards tab); duels only otherwise.
+- **A duel credits only real attackers.** Damage with no attacker or effect applier (falls, lava, an effect given
+  from the console) used to go to the last fighter who hit; it is now nobody's dealt damage. Kills still go to that
+  fighter (knocked into lava).
+- **A duel's top hits are the HP they took off,** not the raw amount (a 1000 hit on 70 HP counts 70).
+- **The Rewards tab is hidden when there are no rewards** (duels).
+- **Duel staff line** without the boss and loot parts.
+
+## 4.42.0
+
+LeDok, 2026-11-18 (option D, via the Duels_LD session): the duel combat log. **Server and client:** the pack needs it
+for the details screen title fix; the API is server side.
+- **New `ArenasCombatLog` API** (API.md, "Combat log sessions"): Duels records a match with the run recorder and opens
+  the result in the run details screen (Party, Damage, Healing, Timeline with the 4.41.0 toggles). Duels uses it only
+  when Arenas is installed, and Arenas doesn't depend on Duels.
+- **Duel hits count:** a fighter's hit on another fighter (pets and summons, and damage over time from their harmful
+  effects, included) is dealt damage, with top hits and the best minute. A hit to 0 HP is a kill and a death, with
+  assists at 10%+ of max HP.
+- **Stored like a run**, as type "duel": kept 30 days; left out of the run history, `/arenasld run last` and the
+  run-end chat line. Arenas' own run lookups (rentals, `/exit`, live details) skip duel sessions.
+- **The event log names player attackers** as `player:<name>`, in runs too; it used to say `minecraft:player`. Top
+  hits on players name the player as well.
+- **Details screen:** no " — " after the title when there is no difficulty. A duel's result is "<names> won" or
+  "Draw".
+- Staff line: a rental kit without a class shows its kit id.
+- New game test: a duel session's hits, kill, record and cancel (52 tests); 4.42.1 adds environment damage.
+
+## 4.41.1
+
+LeDok's TEST run, 2026-11-18, via MCP eden. **Server fix;** the jar also carries the 4.41.0 client changes.
+- **Fix: a picked rental could be dropped at a dungeon run's start, so the player ran with their own gear.** Starting a
+  dungeon run removes its lobby at once, but the run's stats only appear at the controller's next tick. A once-a-second
+  check that landed in between saw the player in neither a lobby nor a run and dropped the pick. A pick now survives 5
+  seconds without its lobby before it goes.
+- **Logs:** a WARN when a pick can't be lent at the start (the kit isn't offered at the run's level, or the rental
+  couldn't begin), and an INFO when a pick is dropped because its player left the lobby.
+
 ## 4.41.0
 
 LeDok, 2026-11-18, via MCP eden: run details «Timeline». **Client only:** the pack and Client TEST need it. The packets

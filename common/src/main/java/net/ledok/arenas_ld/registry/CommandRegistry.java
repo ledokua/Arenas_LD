@@ -65,6 +65,8 @@ public class CommandRegistry {
                 }))
             .then(literal("exit").executes(CommandRegistry::exitDungeon))
             .then(literal("stats").executes(CommandRegistry::showStats))
+            .then(literal("nextwave").executes(ctx ->
+                net.ledok.arenas_ld.arena.run.ArenaRunLifecycle.readyForNextWave(ctx.getSource().getPlayerOrException()) ? 1 : 0))
             .then(buildLobbyNode())
             .then(literal("run")
                 .then(literal("details").executes(CommandRegistry::openRunDetails))

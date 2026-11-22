@@ -55,6 +55,8 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
 
     private final BlockPos pos;
     private Flex dynamicArea;
+    private Flex breakableArea;
+    private String breakableDraft = "";
     private final Map<String, TextField> intFields = new LinkedHashMap<>();
     /** Every settings box by key (the int keys are also the payload keys). */
     private final Map<String, TextField> fields = new LinkedHashMap<>();
@@ -101,7 +103,9 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
      * leaderboard rows rebuild on the next frame when they changed.
      */
     public void applyData(ArenaControllerAdminData data) {
+        boolean refreshBreakableBlocks = !data.breakableBlocks().equals(data().breakableBlocks());
         menu.applyData(data);
+        if (refreshBreakableBlocks) rebuildBreakableBlocks();
         if (fields.isEmpty()) {
             return; // buildAll takes everything at once
         }
@@ -202,6 +206,9 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
             if (!box.text().equals(drafts.get(key))) box.text(drafts.get(key));
         });
         refreshEditNotice(null);
+        breakableArea = content.item(Flex.column());
+        breakableArea.sizing(Sizing.fill(), Sizing.content());
+        rebuildBreakableBlocks();
         dynamicArea = content.item(Flex.column().gap(4));
         dynamicArea.sizing(Sizing.fill(), Sizing.content());
         ScrollPanel scroll = new ScrollPanel(100, 100, content);
@@ -289,6 +296,13 @@ public class ArenaControllerAdminScreen extends FitCanvasHandledScreen<ArenaCont
         editNotice.sizing(Sizing.fill(), Sizing.content());
         box.item(editNotice);
         return box;
+    }
+
+    private void rebuildBreakableBlocks() {
+        if (breakableArea == null) return;
+        breakableArea.clear();
+        breakableArea.item(net.ledok.arenas_ld.screen.BreakableBlocksEditor.build(pos, data().breakableBlocks(),
+            breakableDraft, value -> breakableDraft = value));
     }
 
     private void rebuildDynamic() {

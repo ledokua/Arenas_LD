@@ -71,6 +71,23 @@ public final class DungeonRunLifecycle {
         }
     }
 
+    public static boolean testRoom(ServerPlayer player, ServerLevel world, DungeonControllerBlockEntity controller,
+                                   BlockPos dbsPos, int roomNumber) {
+        if (!player.hasPermissions(2) || BusyStateCompat.isBusy(player.getUUID())
+            || net.ledok.arenas_ld.util.RunItemRestrictions.isPlayerInRun(player)
+            || !controller.getInstances().contains(dbsPos)
+            || !controller.getInstanceDimension(dbsPos).equals(world.dimension())
+            || controller.holdsInstance(new net.ledok.arenas_ld.activity.InstanceKey(world.dimension(), dbsPos))
+            || !(world.getBlockEntity(dbsPos) instanceof DungeonBossSpawnerBlockEntity dbs)
+            || roomNumber < 1 || roomNumber > dbs.getRooms().size()) return false;
+        BlockPos room = dbs.getRooms().get(roomNumber - 1);
+        if (!(world.getBlockEntity(room) instanceof RoomControllerBlockEntity roomController)
+            || roomController.getRespawnPositions().isEmpty()) return false;
+        DifficultyTier tier = controller.enabledTiers().stream().findFirst().orElse(DifficultyTier.NORMAL);
+        return startRun(world, controller, dbsPos, List.of(player.getUUID()), tier, false,
+            player.getScoreboardName(), List.of(), null, room) != null;
+    }
+
     @Nullable
     public static DungeonRun startRun(
         ServerLevel world,
@@ -80,9 +97,20 @@ public final class DungeonRunLifecycle {
         DifficultyTier tier,
         boolean hardcore,
         String ownerName,
-        java.util.Collection<String> runModifiers
+        java.util.Collection<String> runModifiers,
+        @Nullable net.ledok.arenas_ld.dungeon.lobby.Lobby lobby
     ) {
+        return startRun(world, controller, dbsPos, partyUuids, tier, hardcore, ownerName, runModifiers, lobby, null);
+    }
+
+    private static @Nullable DungeonRun startRun(ServerLevel world, DungeonControllerBlockEntity controller,
+                                                  BlockPos dbsPos, List<UUID> partyUuids, DifficultyTier tier,
+                                                  boolean hardcore, String ownerName, java.util.Collection<String> runModifiers,
+                                                  @Nullable net.ledok.arenas_ld.dungeon.lobby.Lobby lobby,
+                                                  @Nullable BlockPos practiceRoom) {
         if (controller.getActiveRuns().containsKey(dbsPos)) return null;
+        if (net.ledok.arenas_ld.activity.ActivityRegistry.instanceHeldByOther(controller,
+            new net.ledok.arenas_ld.activity.InstanceKey(world.dimension(), dbsPos))) return null;
         if (controller.getInstanceCooldownTimers().containsKey(dbsPos)) return null;
 
         BlockEntity dbsBe = world.getBlockEntity(dbsPos);
@@ -91,7 +119,7 @@ public final class DungeonRunLifecycle {
         // A dungeon with no rooms would count as cleared on its first tick and pay out in full.
         // Branching dungeons also need explicit Start/Final markers before a run may begin.
         boolean branching = isBranching(world, dbs);
-        if (dbs.getRooms().isEmpty() || branching) {
+        if (practiceRoom == null && (dbs.getRooms().isEmpty() || branching)) {
             BlockPos startRoom = dbs.getAbsoluteStartRoomPos();
             BlockPos finalRoom = dbs.getAbsoluteFinalRoomPos();
             String errorKey = null;
@@ -122,11 +150,21 @@ public final class DungeonRunLifecycle {
             }
         }
 
-        holdChunksForRun(world, dbsPos);
-
         TierConfig tierConfig = controller.getTierConfigs().getOrDefault(tier, TierConfig.defaultFor(tier));
         DungeonRun run = new DungeonRun(tier, tierConfig, hardcore, dbsPos, world.dimension(), world.getGameTime(), ownerName);
         run.setRunModifiers(runModifiers);
+        run.setPractice(practiceRoom != null);
+        run.registerRestoredIndex();
+        if (lobby != null) {
+            var stats = controller.runStats(run);
+            var players = partyUuids.stream().map(world.getServer().getPlayerList()::getPlayer)
+                .filter(java.util.Objects::nonNull).toList();
+            if (!net.ledok.arenas_ld.util.RunRentals.beginRun(world.getServer(), stats, controller, lobby, players)) {
+                stats.discard(world.getServer());
+                return null;
+            }
+        }
+        holdChunksForRun(world, dbsPos);
 
         ServerLevel targetLevel = world.getServer().getLevel(dbs.getEntranceDimension());
         if (targetLevel == null) {
@@ -150,7 +188,7 @@ public final class DungeonRunLifecycle {
             net.ledok.arenas_ld.util.RunLeftovers.enter(controller, net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run), uuid);
             BusyStateCompat.setBusy(uuid, BUSY_REASON);
             addToPartyTeam(world, run, player);
-            PlayerStatsStore.get(world.getServer()).recordRunStart(uuid, PlayerStatsStore.Mode.DUNGEON);
+            if (!run.practice()) PlayerStatsStore.get(world.getServer()).recordRunStart(uuid, PlayerStatsStore.Mode.DUNGEON);
         }
 
         // Freeze the per-player HP multiplier at run start — players leaving mid-run don't weaken it.
@@ -165,7 +203,7 @@ public final class DungeonRunLifecycle {
 
         // Branching: the start room begins like any other — its boundary doors (spawn-side,
         // shared with no other room) open armed/orange; doors into neighbor rooms stay shut.
-        if (isBranching(world, dbs)
+        if (!run.practice() && isBranching(world, dbs)
                 && world.getBlockEntity(dbs.getAbsoluteStartRoomPos()) instanceof RoomControllerBlockEntity startRoom) {
             BlockPos startRoomPos = dbs.getAbsoluteStartRoomPos();
             for (RoomGraph.Door door : RoomGraph.build(world, dbs).doorsOf(startRoomPos)) {
@@ -182,6 +220,10 @@ public final class DungeonRunLifecycle {
         controller.startRun(dbsPos, run);
 
         BlockPos entrance = dbs.getAbsoluteEntrancePos();
+        if (practiceRoom != null && world.getBlockEntity(practiceRoom) instanceof RoomControllerBlockEntity room) {
+            targetLevel = world;
+            entrance = room.getRespawnPositions().getFirst();
+        }
         DebugLog.log("startRun: dbs={} in {} -> entrance={} in {}, party={}",
             dbsPos, world.dimension().location(), entrance, targetLevel.dimension().location(), partyUuids.size());
         List<ServerPlayer> arrived = new ArrayList<>();
@@ -203,6 +245,7 @@ public final class DungeonRunLifecycle {
 
         // Their spell summons left here by an earlier run go; this run's own and real pets stay.
         net.ledok.arenas_ld.util.RunLeftovers.startSweep(net.ledok.arenas_ld.util.RunLeftovers.RunKey.of(run), arrived);
+        if (practiceRoom != null && !arrived.isEmpty()) beginRoomEntry(world, run, practiceRoom, arrived.getFirst());
 
         controller.syncAdminViewers();
         return run;
@@ -213,22 +256,17 @@ public final class DungeonRunLifecycle {
     }
 
     private static void tickRunning(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run) {
-        if (!run.participants().isEmpty()) {
-            UUID anyUuid = run.participants().keySet().iterator().next();
-            if (ArenasLdMod.DUNGEON_MANAGER.getRunForPlayer(anyUuid) == null) {
-                for (Map.Entry<UUID, RunParticipant> entry : run.participants().entrySet()) {
-                    if (entry.getValue().status() != ParticipantStatus.REMOVED) {
-                        ArenasLdMod.DUNGEON_MANAGER.registerParticipant(entry.getKey(), run);
-                    }
+        if (run.registerRestoredIndex()) {
+            for (var entry : run.participants().entrySet()) {
+                if (entry.getValue().status() != ParticipantStatus.REMOVED) {
+                    ArenasLdMod.DUNGEON_MANAGER.registerParticipant(entry.getKey(), run);
                 }
-                BlockEntity bootstrapDbsBe = world.getBlockEntity(run.dbsPos());
-                if (bootstrapDbsBe instanceof DungeonBossSpawnerBlockEntity bootstrapDbs) {
-                    for (BlockPos roomPos : bootstrapDbs.getRooms()) {
-                        BlockEntity roomBe = world.getBlockEntity(roomPos);
-                        if (roomBe instanceof RoomControllerBlockEntity roomController) {
-                            for (UUID mobUuid : roomController.getAliveMobs()) {
-                                ArenasLdMod.DUNGEON_MANAGER.registerMob(mobUuid, run);
-                            }
+            }
+            if (world.getBlockEntity(run.dbsPos()) instanceof DungeonBossSpawnerBlockEntity dbs) {
+                for (BlockPos roomPos : dbs.getRooms()) {
+                    if (world.getBlockEntity(roomPos) instanceof RoomControllerBlockEntity room) {
+                        for (UUID mobUuid : room.getAliveMobs()) {
+                            ArenasLdMod.DUNGEON_MANAGER.registerMob(mobUuid, run);
                         }
                     }
                 }
@@ -265,7 +303,7 @@ public final class DungeonRunLifecycle {
             return;
         }
 
-        if (isBranching(world, dbs)) {
+        if (run.practice() || isBranching(world, dbs)) {
             tickBranching(world, controller, run, dbs);
             tickDownedPlayers(world, controller, run);
             tickDisconnectedPlayers(world, controller, run);
@@ -301,6 +339,7 @@ public final class DungeonRunLifecycle {
                 handleLoss(world, controller, run, DungeonOutcome.LOSS_OBJECTIVE);
                 return;
             }
+            if (room.isReachZoneActive()) room.tickReachZone(world, activePlayers(world, run));
             for (UUID uuid : room.tickWaveProgression(world, run.resolvedTierConfig(), run.partyHealthMultiplier())) {
                 ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
             }
@@ -429,6 +468,7 @@ public final class DungeonRunLifecycle {
             handleLoss(world, controller, run, DungeonOutcome.LOSS_OBJECTIVE);
             return;
         }
+        if (room.isReachZoneActive()) room.tickReachZone(world, activePlayers(world, run));
         for (UUID uuid : room.tickWaveProgression(world, run.resolvedTierConfig(), run.partyHealthMultiplier())) {
             ArenasLdMod.DUNGEON_MANAGER.registerMob(uuid, run);
         }
@@ -493,6 +533,13 @@ public final class DungeonRunLifecycle {
     private static void finishRoom(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run,
                                    DungeonBossSpawnerBlockEntity dbs, BlockPos roomPos,
                                    @Nullable RoomControllerBlockEntity room) {
+        if (run.practice()) {
+            run.setOutcome(DungeonOutcome.WIN);
+            broadcastToParty(world, run, Component.translatableWithFallback("message.arenas_ld.instance.test_complete",
+                "Test room completed."), null);
+            finalize(world, controller, run);
+            return;
+        }
         if (room != null) {
             grantRoomReward(world, controller, run, room);
             openClearedRoomDoors(world, dbs, roomPos, room);
@@ -704,14 +751,14 @@ public final class DungeonRunLifecycle {
                 run.perkSnapshots(), uuid, player != null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.DUNGEON);
             net.ledok.arenas_ld.rewards.RewardPayout payout = net.ledok.arenas_ld.rewards.RewardPayout.compute(baseRolls,
                 rewardPerPlayer, xpReward, net.ledok.arenas_ld.rewards.RewardPayout.join(net.ledok.arenas_ld.rewards.RewardPayout.join(
-                    perks.modifiers(), net.ledok.arenas_ld.util.RunRentals.rewardModifiers(uuid)), runModifiers), true, world.random);
+                    perks.modifiers(), net.ledok.arenas_ld.util.RunRentals.rewardModifiers(run.runStatsOrNull(), uuid)), runModifiers), true, world.random);
             List<ItemStack> loot = payout.rolls() <= 0 ? List.of() : RewardDelivery.rollLoot(world, lootTableId, player,
                 player != null ? player.position() : Vec3.atCenterOf(run.dbsPos()), payout.rolls());
             long currency = payout.currency();
 
             if (player == null) {
                 // Offline but loot-eligible: the reward still lands via the economy inbox.
-                RewardDelivery.giveStacksOffline(uuid, loot, "DUNGEON_LOOT");
+                RewardDelivery.giveStacksOffline(run.runStatsOrNull(), uuid, loot, "DUNGEON_LOOT");
                 RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "DUNGEON_REWARD");
                 continue;
             }
@@ -722,7 +769,7 @@ public final class DungeonRunLifecycle {
             );
 
             List<net.ledok.arenas_ld.packet.LootRewardPayload.Entry> delivered =
-                RewardDelivery.giveStacks(player, loot, "DUNGEON_LOOT");
+                RewardDelivery.giveStacks(run.runStatsOrNull(), player, loot, "DUNGEON_LOOT");
             RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "DUNGEON_REWARD");
 
             int grantedXp = 0;
@@ -735,7 +782,7 @@ public final class DungeonRunLifecycle {
             RewardDelivery.notify(player, net.ledok.arenas_ld.packet.LootRewardPayload.Source.DUNGEON_WIN,
                 delivered, RewardDelivery.displayableCurrency(currency), grantedXp);
             // The breakdown goes to the run details' Rewards tab (D5); chat only when the run keeps no stats.
-            if (!net.ledok.arenas_ld.stats.RunStats.recordRewards(uuid,
+            if (!net.ledok.arenas_ld.stats.RunStats.recordRewards(run.runStatsOrNull(), uuid,
                     payout.summary(!lootTableId.isEmpty()), payout.lines(!lootTableId.isEmpty()))) {
                 payout.tell(player, !lootTableId.isEmpty());
             }
@@ -771,6 +818,7 @@ public final class DungeonRunLifecycle {
     /** Reports the finished run to {@code ArenasApi} run listeners. */
     private static void fireRunResult(ServerLevel world, DungeonControllerBlockEntity controller, DungeonRun run,
                                       net.ledok.arenas_ld.api.ArenasApi.Outcome outcome) {
+        if (run.practice()) return;
         net.ledok.arenas_ld.activity.RunEvents.fire(controller, run.tier(), outcome,
             run.startTick(), world.getGameTime(), 0,
             run.participants().keySet());
@@ -911,7 +959,7 @@ public final class DungeonRunLifecycle {
         // rather than ticking through the (pointless) close timer.
         boolean anyRemaining = run.participants().values().stream()
             .anyMatch(p -> p.status() != ParticipantStatus.REMOVED);
-        if (!anyRemaining) {
+        if (run.practice() || !anyRemaining) {
             finalize(world, controller, run);
             return;
         }
@@ -969,7 +1017,8 @@ public final class DungeonRunLifecycle {
         hideBossBars(world, run, elsewhere);
         run.setPhase(DungeonPhase.DONE);
         controller.removeRun(run.dbsPos());
-        controller.startInstanceCooldown(run.dbsPos());
+        if (!run.practice()) controller.startInstanceCooldown(run.dbsPos());
+        else if (run.runStatsOrNull() != null) run.runStatsOrNull().discard(world.getServer());
 
         if (controller.getPendingInstanceRemovals().contains(run.dbsPos())) {
             controller.executePendingRemoval(run.dbsPos());
@@ -1175,6 +1224,22 @@ public final class DungeonRunLifecycle {
         }
     }
 
+    /** The run's active players: online, in the run's world, not downed (a REACH_ZONE room counts them). */
+    private static List<ServerPlayer> activePlayers(ServerLevel world, DungeonRun run) {
+        List<ServerPlayer> out = new ArrayList<>();
+        for (var entry : run.participants().entrySet()) {
+            UUID uuid = entry.getKey();
+            if (entry.getValue().status() == net.ledok.arenas_ld.dungeon.run.RunParticipant.ParticipantStatus.REMOVED) {
+                continue;
+            }
+            ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+            if (player != null && player.level() == world && !run.isDowned(uuid) && !player.isSpectator()) {
+                out.add(player);
+            }
+        }
+        return out;
+    }
+
     private static void updateDungeonTimeBossBar(ServerLevel world, DungeonRun run, RoomControllerBlockEntity room) {
         // The HUD draws the countdown itself from remainingTicks, so the label only carries
         // objective context. The boss-HP slot shows a protect target's health, or the health
@@ -1193,6 +1258,9 @@ public final class DungeonRunLifecycle {
             int surviveSeconds = (room.getSurviveTicksRemaining() + 19) / 20;
             label = Component.translatable("hud.arenas_ld.dungeon.survive",
                 String.format("%d:%02d", surviveSeconds / 60, surviveSeconds % 60));
+        } else if (room.isReachZoneActive()) {
+            label = Component.translatable("hud.arenas_ld.dungeon.reach_zone",
+                room.getZoneInside(), room.getZoneRequired(), room.getAliveMobs().size());
         } else if (room.getTotalWaves() > 1) {
             label = Component.translatable("hud.arenas_ld.dungeon.waves",
                 room.getWaveDisplay(), room.getTotalWaves(), room.getAliveMobs().size());
@@ -1200,7 +1268,10 @@ public final class DungeonRunLifecycle {
             label = Component.translatable("hud.arenas_ld.dungeon.kill_all", room.getAliveMobs().size());
         }
 
-        sendRunHud(world, run, label, bossHp);
+        var goalZone = room.isReachZoneActive()
+            ? net.ledok.arenas_ld.packet.RunHudPayload.GoalZone.between(world.dimension(), room.getZoneCornerA(), room.getZoneCornerB())
+            : null;
+        sendRunHud(world, run, label, bossHp, goalZone);
     }
 
     /**
@@ -1252,10 +1323,15 @@ public final class DungeonRunLifecycle {
 
     /** Once-a-second RUN-kind HUD update carrying the dungeon timer plus the given context line. */
     private static void sendRunHud(ServerLevel world, DungeonRun run, Component label, int bossHp) {
+        sendRunHud(world, run, label, bossHp, null);
+    }
+
+    private static void sendRunHud(ServerLevel world, DungeonRun run, Component label, int bossHp,
+                                   @Nullable net.ledok.arenas_ld.packet.RunHudPayload.GoalZone goalZone) {
         int totalTicks = run.resolvedTierConfig().dungeonTimeSeconds() * 20;
         var payload = new net.ledok.arenas_ld.packet.RunHudPayload(
             net.ledok.arenas_ld.packet.RunHudPayload.Kind.RUN, label,
-            Math.max(0, run.dungeonTimerTicks()), totalTicks, run.hardcoreEnabled(), bossHp);
+            Math.max(0, run.dungeonTimerTicks()), totalTicks, run.hardcoreEnabled(), bossHp, goalZone);
         rememberHud(run, payload);
         RunHudSync.tickSend(world, hudTargets(run), payload);
     }
@@ -1322,7 +1398,7 @@ public final class DungeonRunLifecycle {
                 run.perkSnapshots(), uuid, player != null, net.ledok.arenas_ld.util.EndRewardPerks.Mode.DUNGEON);
             net.ledok.arenas_ld.rewards.RewardPayout payout = net.ledok.arenas_ld.rewards.RewardPayout.compute(1,
                 reward.currency(), reward.skillXp(), net.ledok.arenas_ld.rewards.RewardPayout.join(net.ledok.arenas_ld.rewards.RewardPayout.join(
-                    perks.modifiers(), net.ledok.arenas_ld.util.RunRentals.rewardModifiers(uuid)), runModifiers),
+                    perks.modifiers(), net.ledok.arenas_ld.util.RunRentals.rewardModifiers(run.runStatsOrNull(), uuid)), runModifiers),
                 false, world.random);
             long currency = payout.currency();
             int skillXp = payout.xp();
@@ -1330,13 +1406,13 @@ public final class DungeonRunLifecycle {
                 player != null ? player.position() : Vec3.atCenterOf(room.getBlockPos()), payout.rolls());
 
             if (player == null) {
-                RewardDelivery.giveStacksOffline(uuid, loot, "DUNGEON_LOOT");
+                RewardDelivery.giveStacksOffline(run.runStatsOrNull(), uuid, loot, "DUNGEON_LOOT");
                 RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "DUNGEON_REWARD");
                 continue;
             }
 
             List<net.ledok.arenas_ld.packet.LootRewardPayload.Entry> delivered =
-                RewardDelivery.giveStacks(player, loot, "DUNGEON_LOOT");
+                RewardDelivery.giveStacks(run.runStatsOrNull(), player, loot, "DUNGEON_LOOT");
             RewardDelivery.giveCurrency(world.getServer(), uuid, currency, "DUNGEON_REWARD");
 
             int grantedXp = 0;

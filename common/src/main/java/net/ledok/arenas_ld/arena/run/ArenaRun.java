@@ -53,6 +53,10 @@ public final class ArenaRun {
     private int waveTicksRemaining;
     private int prepareTicksRemaining;
     private int betweenWaveTicksRemaining;
+    private int lastClearedWave;
+    private final Set<UUID> readyForNextWave = new LinkedHashSet<>();
+    private boolean survivalMode;
+    private boolean practice;
 
     // CLOSING grace.
     private int closeTimerTicks;
@@ -141,6 +145,9 @@ public final class ArenaRun {
         this.waveTicksRemaining = waveState.waveTicksRemaining();
         this.prepareTicksRemaining = waveState.prepareTicksRemaining();
         this.betweenWaveTicksRemaining = waveState.betweenWaveTicksRemaining();
+        this.lastClearedWave = waveState.lastClearedWave() < 0
+            ? Math.max(0, currentWave - (betweenWaveTicksRemaining > 0 || aliveMobs.isEmpty() ? 0 : 1))
+            : waveState.lastClearedWave();
         this.closeTimerTicks = timers.closeTimerTicks();
         this.initialCloseTimerTicks = timers.initialCloseTimerTicks();
         this.aliveMobs = new LinkedHashSet<>(aliveMobs);
@@ -170,6 +177,24 @@ public final class ArenaRun {
     public int waveTicksRemaining() { return waveTicksRemaining; }
     public int prepareTicksRemaining() { return prepareTicksRemaining; }
     public int betweenWaveTicksRemaining() { return betweenWaveTicksRemaining; }
+    public boolean betweenWaves() { return currentWave > 0 && lastClearedWave == currentWave; }
+    boolean markWaveCleared() {
+        if (currentWave <= lastClearedWave) return false;
+        lastClearedWave = currentWave;
+        readyForNextWave.clear();
+        return true;
+    }
+    boolean readyForNextWave(UUID player) { return readyForNextWave.add(player); }
+    boolean isReadyForNextWave(UUID player) { return readyForNextWave.contains(player); }
+    public boolean survivalMode() { return survivalMode; }
+    public void setSurvivalMode(boolean survivalMode) { this.survivalMode = survivalMode; }
+    public boolean practice() { return practice; }
+    public void preparePracticeWave(int wave) {
+        practice = true;
+        currentWave = wave - 1;
+        lastClearedWave = currentWave;
+    }
+
     public int closeTimerTicks() { return closeTimerTicks; }
     public int initialCloseTimerTicks() { return initialCloseTimerTicks; }
     public double partyHealthMultiplier() { return partyHealthMultiplier; }
@@ -234,7 +259,7 @@ public final class ArenaRun {
 
     private WaveState waveStateSnapshot() {
         return new WaveState(currentWave, currentArchetype, currentObjective, objectiveProgress,
-            Optional.ofNullable(markedMob), waveTicksRemaining, prepareTicksRemaining, betweenWaveTicksRemaining);
+            Optional.ofNullable(markedMob), waveTicksRemaining, prepareTicksRemaining, betweenWaveTicksRemaining, lastClearedWave);
     }
 
     private ArenaRunTimers timersSnapshot() {
@@ -249,10 +274,11 @@ public final class ArenaRun {
         Optional<UUID> markedMob,
         int waveTicksRemaining,
         int prepareTicksRemaining,
-        int betweenWaveTicksRemaining
+        int betweenWaveTicksRemaining,
+        int lastClearedWave
     ) {
         public static final WaveState ZERO =
-            new WaveState(0, WaveArchetype.HORDE, ObjectiveType.NONE, 0, Optional.empty(), 0, 0, 0);
+            new WaveState(0, WaveArchetype.HORDE, ObjectiveType.NONE, 0, Optional.empty(), 0, 0, 0, -1);
 
         public static final Codec<WaveState> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.INT.fieldOf("currentWave").forGetter(WaveState::currentWave),
@@ -262,7 +288,8 @@ public final class ArenaRun {
             UUIDUtil.CODEC.optionalFieldOf("markedMob").forGetter(WaveState::markedMob),
             Codec.INT.optionalFieldOf("waveTicksRemaining", 0).forGetter(WaveState::waveTicksRemaining),
             Codec.INT.optionalFieldOf("prepareTicksRemaining", 0).forGetter(WaveState::prepareTicksRemaining),
-            Codec.INT.optionalFieldOf("betweenWaveTicksRemaining", 0).forGetter(WaveState::betweenWaveTicksRemaining)
+            Codec.INT.optionalFieldOf("betweenWaveTicksRemaining", 0).forGetter(WaveState::betweenWaveTicksRemaining),
+            Codec.INT.optionalFieldOf("lastClearedWave", -1).forGetter(WaveState::lastClearedWave)
         ).apply(i, WaveState::new));
     }
 
@@ -311,8 +338,12 @@ public final class ArenaRun {
         instance.group(
             BASE_CODEC.forGetter(run -> run),
             net.ledok.arenas_ld.util.EndRewardPerks.SNAPSHOT_CODEC.optionalFieldOf("perkSnapshots", Map.of()).forGetter(ArenaRun::perkSnapshots),
-            Codec.STRING.listOf().optionalFieldOf("runModifiers", java.util.List.of()).forGetter(r -> r.runModifiers)
-        ).apply(instance, (run, perkSnapshots, runModifiers) -> {
+            Codec.STRING.listOf().optionalFieldOf("runModifiers", java.util.List.of()).forGetter(r -> r.runModifiers),
+            Codec.BOOL.optionalFieldOf("survivalMode", false).forGetter(ArenaRun::survivalMode),
+            Codec.BOOL.optionalFieldOf("practice", false).forGetter(ArenaRun::practice)
+        ).apply(instance, (run, perkSnapshots, runModifiers, survivalMode, practice) -> {
+            run.survivalMode = survivalMode;
+            run.practice = practice;
             // Saved before hardcore became the hardcore_run modifier: the flag alone means it.
             run.runModifiers.addAll(net.ledok.arenas_ld.rewards.RunModifierCatalog.withLegacyHardcore(runModifiers, run.hardcoreEnabled()));
             run.perkSnapshots.putAll(perkSnapshots);

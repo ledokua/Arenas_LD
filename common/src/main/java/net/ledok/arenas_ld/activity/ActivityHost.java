@@ -68,6 +68,9 @@ public interface ActivityHost {
      */
     int resetCooldowns(@Nullable ArenasApi.InstanceRef instance);
 
+    /** True while an instance is being prepared, started, played, or closed here. */
+    default boolean holdsInstance(InstanceKey instance) { return false; }
+
     /**
      * Sends fresh data to everyone looking at this controller after a change made from outside its
      * screens (a rename through the API): a block update, the lobby screens' snapshot and the admin

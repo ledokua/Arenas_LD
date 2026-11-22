@@ -105,6 +105,16 @@ public final class NeoForgeGametests {
     }
 
     @GameTest(template = "empty")
+    public static void apiReachZoneRoom(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.reachZoneRoom(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void apiCombatLogDuel(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.combatLogDuel(helper);
+    }
+
+    @GameTest(template = "empty")
     public static void apiRunStatsCounting(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.runStatsCounting(helper);
     }
@@ -276,6 +286,16 @@ public final class NeoForgeGametests {
     @GameTest(template = "empty")
     public static void controllerBrokenMidRun(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.controllerBrokenMidRun(helper, NeoForgeGametests::acceptModPayloads);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 120)
+    public static void arenaWaveTransitions(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.arenaWaveTransitions(helper, NeoForgeGametests::acceptModPayloads);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 120)
+    public static void practiceRoom(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.practiceRoom(helper, NeoForgeGametests::acceptModPayloads);
     }
 
     @GameTest(template = "empty")

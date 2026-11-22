@@ -46,6 +46,11 @@ public final class PlayerCounters {
     /** Stats when the fight began (their first boss hit; their first hit until then). */
     RunRecord.Stats statsStart;
     boolean statsStartOnBoss;
+
+    /** Whether their stats at the start are taken (game tests). */
+    public boolean hasStartStats() {
+        return statsStart != null;
+    }
     /** Best damage minute so far, and the minute going on now (run minute, its damage, stats at its first hit). */
     RunRecord.Stats statsBestMinute;
     float bestMinuteDealt;
@@ -62,6 +67,9 @@ public final class PlayerCounters {
     long lastMomentTick = Long.MIN_VALUE;
     net.minecraft.world.item.Item lastMain, lastOff;
     double lastSpeed, lastDamage;
+    /** A duel fighter's side, and how often they went down (a duel's lethal hits; 4.42.0). */
+    public String side = "";
+    public int pvpDeaths;
     /** Left the run with /exit before it was over ("forfeited"). */
     public boolean forfeited;
     /** Rental build in this run: the loadout id, the class and the level band (null/""/0: their own gear). */
@@ -134,6 +142,7 @@ public final class PlayerCounters {
         p.uuid = player.toString();
         p.name = name;
         p.state = state;
+        p.side = side;
         p.deaths = deaths;
         for (net.minecraft.network.chat.Component line : rewards) {
             p.rewards.add(net.minecraft.network.chat.Component.Serializer.toJson(line,
@@ -205,6 +214,7 @@ public final class PlayerCounters {
             eventCounts.putAll(p.eventCounts);
         }
         eventsDropped = p.eventsDropped;
+        side = p.side == null ? "" : p.side;
         if (p.rewards != null) {
             for (String json : p.rewards) {
                 try {

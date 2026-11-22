@@ -90,6 +90,16 @@ public final class ArenasLdGametests implements FabricGameTest {
     }
 
     @GameTest(template = EMPTY_STRUCTURE)
+    public void apiReachZoneRoom(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.reachZoneRoom(helper);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void apiCombatLogDuel(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.combatLogDuel(helper);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
     public void apiRunStatsCounting(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.runStatsCounting(helper);
     }
@@ -269,6 +279,16 @@ public final class ArenasLdGametests implements FabricGameTest {
     public void controllerBrokenMidRun(GameTestHelper helper) {
         net.ledok.arenas_ld.gametest.ApiGameTests.controllerBrokenMidRun(helper, player -> {
         });
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE, timeoutTicks = 120)
+    public void arenaWaveTransitions(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.arenaWaveTransitions(helper, player -> {});
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE, timeoutTicks = 120)
+    public void practiceRoom(GameTestHelper helper) {
+        net.ledok.arenas_ld.gametest.ApiGameTests.practiceRoom(helper, player -> {});
     }
 
     @GameTest(template = EMPTY_STRUCTURE)

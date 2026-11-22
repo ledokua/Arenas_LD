@@ -62,7 +62,9 @@ public class DungeonToolItem extends Item {
         MOB_SPAWN_POSITION("item.arenas_ld.dungeon_tool.mode.mob_spawn_position"),
         ENTRANCE_POSITION("item.arenas_ld.dungeon_tool.mode.entrance_position"),
         RESPAWN_POSITION("item.arenas_ld.dungeon_tool.mode.respawn_position"),
-        PROTECT_POSITION("item.arenas_ld.dungeon_tool.mode.protect_position");
+        PROTECT_POSITION("item.arenas_ld.dungeon_tool.mode.protect_position"),
+        /** A room's goal zone (REACH_ZONE objective, 4.44.0): first click one corner, then the opposite one. */
+        GOAL_ZONE("item.arenas_ld.dungeon_tool.mode.goal_zone");
 
         private final String translationKey;
 
@@ -82,7 +84,7 @@ public class DungeonToolItem extends Item {
                     || blockEntity instanceof ArenaControllerBlockEntity
                     || blockEntity instanceof DungeonBossSpawnerBlockEntity
                     || blockEntity instanceof RoomControllerBlockEntity;
-                case ROOM_DOOR, PROTECT_POSITION -> blockEntity instanceof RoomControllerBlockEntity;
+                case ROOM_DOOR, PROTECT_POSITION, GOAL_ZONE -> blockEntity instanceof RoomControllerBlockEntity;
                 case MOB_SPAWN_POSITION -> blockEntity instanceof MobSpawnerBlockEntity
                     || blockEntity instanceof DungeonBossSpawnerBlockEntity
                     || blockEntity instanceof RaidBossSpawnerBlockEntity;
@@ -103,6 +105,7 @@ public class DungeonToolItem extends Item {
                 case ENTRANCE_POSITION -> "message.arenas_ld.configurator.select_source.entrance";
                 case RESPAWN_POSITION -> "message.arenas_ld.configurator.select_source.respawn";
                 case PROTECT_POSITION -> "message.arenas_ld.configurator.select_source.protect";
+                case GOAL_ZONE -> "message.arenas_ld.configurator.select_source.goal_zone";
             };
         }
     }
@@ -128,12 +131,35 @@ public class DungeonToolItem extends Item {
         DungeonToolDataComponent data = stack.getOrDefault(DataComponentRegistry.DUNGEON_TOOL_DATA, DungeonToolDataComponent.DEFAULT);
         BlockEntity clicked = world.getBlockEntity(pos);
 
-        return switch (selectedMode(data)) {
+        InteractionResult result = switch (selectedMode(data)) {
             case LINK -> handleLink(world, pos, player, stack, clicked, data);
             case ROOM_DOOR -> handleDoor(world, pos, player, stack, clicked, data);
-            case MOB_SPAWN_POSITION, ENTRANCE_POSITION, RESPAWN_POSITION, PROTECT_POSITION ->
+            case MOB_SPAWN_POSITION, ENTRANCE_POSITION, RESPAWN_POSITION, PROTECT_POSITION, GOAL_ZONE ->
                 handlePosition(world, pos, player, stack, clicked, data);
         };
+        syncFarSource(player, stack);
+        return result;
+    }
+
+    /**
+     * The tool's source (and a room's picked spawner) to the builder when it is out of their client's range, so
+     * the selection overlay shows what they just changed (4.44.0).
+     */
+    private static void syncFarSource(Player player, ItemStack stack) {
+        if (!(player instanceof net.minecraft.server.level.ServerPlayer serverPlayer)) {
+            return;
+        }
+        DungeonToolDataComponent now = stack.getOrDefault(DataComponentRegistry.DUNGEON_TOOL_DATA, DungeonToolDataComponent.DEFAULT);
+        if (now.sourcePos().isEmpty() || now.sourceDimension().isEmpty()) {
+            return;
+        }
+        ServerLevel level = serverPlayer.server.getLevel(now.sourceDimension().get());
+        if (level == null) {
+            return;
+        }
+        net.ledok.arenas_ld.packet.ToolSourceSyncPayload.send(serverPlayer, level, now.sourcePos().get());
+        now.spawnerPos().ifPresent(spawner ->
+            net.ledok.arenas_ld.packet.ToolSourceSyncPayload.send(serverPlayer, level, spawner));
     }
 
     // ---- LINK mode ----
@@ -439,6 +465,29 @@ public class DungeonToolItem extends Item {
                     } else {
                         room.setProtectPos(protectAbsolute);
                         player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.protect_pos_set", clickedPos.toShortString()));
+                    }
+                }
+                break;
+            }
+            case GOAL_ZONE: {
+                if (!sourceDim.equals(clickedDimension)) {
+                    player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.spawn_pos_wrong_dimension"));
+                    return InteractionResult.FAIL;
+                }
+                // The clicked blocks themselves are the corners (the zone is the box of blocks between them,
+                // inclusive). One corner set and not the other: this click is the second; else a new zone starts.
+                if (sourceBlockEntity instanceof RoomControllerBlockEntity room) {
+                    BlockPos a = room.getZoneCornerA();
+                    BlockPos b = room.getZoneCornerB();
+                    if (a != null && b == null) {
+                        room.setZone(a, clickedPos);
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.goal_zone_set",
+                            Math.abs(a.getX() - clickedPos.getX()) + 1, Math.abs(a.getY() - clickedPos.getY()) + 1,
+                            Math.abs(a.getZ() - clickedPos.getZ()) + 1));
+                    } else {
+                        room.setZone(clickedPos, null);
+                        player.sendSystemMessage(Component.translatable("message.arenas_ld.configurator.goal_zone_first",
+                            clickedPos.toShortString()));
                     }
                 }
                 break;

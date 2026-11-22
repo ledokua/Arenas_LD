@@ -236,6 +236,17 @@ public final class DungeonRun {
     public Map<UUID, net.ledok.arenas_ld.util.EndRewardPerks> perkSnapshots() { return perkSnapshots; }
     /** The run's live combat stats; its totals go into the run's save. */
     private net.ledok.arenas_ld.stats.RunStats runStats;
+    private boolean restoredIndexRegistered;
+    private boolean practice;
+
+    public boolean practice() { return practice; }
+    void setPractice(boolean practice) { this.practice = practice; }
+
+    boolean registerRestoredIndex() {
+        if (restoredIndexRegistered) return false;
+        restoredIndexRegistered = true;
+        return true;
+    }
 
     /** Its totals from the save, until the stats exist (after a restart). */
     private String savedRunStats = "";
@@ -359,8 +370,10 @@ public final class DungeonRun {
             // Absent in saves from before 4.7.0: those runs force-loaded their chunks.
             Codec.BOOL.optionalFieldOf("chunkTickets", false).forGetter(run -> !run.legacyForcedChunks),
             Codec.STRING.listOf().optionalFieldOf("runModifiers", java.util.List.of()).forGetter(r -> r.runModifiers),
-            net.ledok.arenas_ld.stats.RunStatsSave.CODEC.optionalFieldOf("runStats", "").forGetter(DungeonRun::runStatsForSave)
-        ).apply(instance, (run, partyHealthMultiplier, roomProgress, perkSnapshots, chunkTickets, runModifiers, runStats) -> {
+            net.ledok.arenas_ld.stats.RunStatsSave.CODEC.optionalFieldOf("runStats", "").forGetter(DungeonRun::runStatsForSave),
+            Codec.BOOL.optionalFieldOf("practice", false).forGetter(DungeonRun::practice)
+        ).apply(instance, (run, partyHealthMultiplier, roomProgress, perkSnapshots, chunkTickets, runModifiers, runStats, practice) -> {
+            run.practice = practice;
             run.savedRunStats = runStats;
             // Saved before hardcore became the hardcore_run modifier: the flag alone means it.
             run.runModifiers.addAll(net.ledok.arenas_ld.rewards.RunModifierCatalog.withLegacyHardcore(runModifiers, run.hardcoreEnabled()));

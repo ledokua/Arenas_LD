@@ -2,6 +2,7 @@ package net.ledok.arenas_ld.arena.screen;
 
 import io.netty.buffer.ByteBuf;
 import net.ledok.arenas_ld.dungeon.run.LeaderboardEntry;
+import net.ledok.arenas_ld.util.BreakableBlocks;
 import net.ledok.arenas_ld.util.InstanceStatus;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
@@ -46,6 +47,7 @@ public record ArenaControllerAdminData(
     List<InstanceEntry> instances,
     Set<BlockPos> pendingRemovals,
     List<LeaderboardEntry> leaderboard,
+    BreakableBlocks breakableBlocks,
     /** The op who last saved through an admin screen; empty if none since the restart. */
     String lastEditor
 ) {
@@ -58,6 +60,8 @@ public record ArenaControllerAdminData(
         ResourceKey.streamCodec(Registries.DIMENSION);
     private static final StreamCodec<RegistryFriendlyByteBuf, List<LeaderboardEntry>> LEADERBOARD =
         ByteBufCodecs.fromCodecWithRegistries(LeaderboardEntry.CODEC).apply(ByteBufCodecs.list());
+
+    private static final StreamCodec<ByteBuf, List<String>> BLOCK_IDS = ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list());
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ArenaControllerAdminData> STREAM_CODEC = StreamCodec.of(
         ArenaControllerAdminData::encode, ArenaControllerAdminData::decode);
@@ -92,6 +96,8 @@ public record ArenaControllerAdminData(
             buf.writeBlockPos(pos);
         }
         LEADERBOARD.encode(buf, data.leaderboard());
+        buf.writeUtf(data.breakableBlocks().mode());
+        BLOCK_IDS.encode(buf, data.breakableBlocks().blocks());
         buf.writeUtf(data.lastEditor());
     }
 
@@ -129,10 +135,11 @@ public record ArenaControllerAdminData(
             pendingRemovals.add(buf.readBlockPos());
         }
         List<LeaderboardEntry> leaderboard = LEADERBOARD.decode(buf);
+        BreakableBlocks breakableBlocks = new BreakableBlocks(buf.readUtf(), BLOCK_IDS.decode(buf));
         String lastEditor = buf.readUtf();
         return new ArenaControllerAdminData(blockPos, dimension, name, activityId, maxPartySize, maxWave,
             closeTimerSeconds, cooldownTicks, respawnTimeTicks, inviteExpiryTicks, deathTimePenaltyTicks,
             hpScalePerPlayer, hpScalePerWave, rewardCurrencyBase, rewardCurrencyExp, rewardXpBase, rewardXpExp,
-            List.copyOf(instances), Set.copyOf(pendingRemovals), List.copyOf(leaderboard), lastEditor);
+            List.copyOf(instances), Set.copyOf(pendingRemovals), List.copyOf(leaderboard), breakableBlocks, lastEditor);
     }
 }

@@ -356,6 +356,8 @@ public class RaidControllerBlockEntity extends BlockEntity
             net.ledok.arenas_ld.util.RunEffects.refresh(server, run.runModifiers(), run.participants());
             // Its live stats: its players carry them, mobs spawned this tick count for it.
             net.ledok.arenas_ld.stats.RunStats stats = runStats(run);
+            net.ledok.arenas_ld.util.RunRentals.tickRun(server, stats);
+            if (!activeRuns.containsKey(run.instanceKey())) continue;
             stats.tick(server);
             net.ledok.arenas_ld.util.RunEffects.during(run.runModifiers(),
                 () -> net.ledok.arenas_ld.stats.RunStats.during(stats, () -> RaidRunLifecycle.tick(spawnerLevel, this, run)));
@@ -793,6 +795,17 @@ public class RaidControllerBlockEntity extends BlockEntity
     /** Instances held by a lobby's start countdown (lobby id → instance), not saved: free but not offered. */
     private final java.util.Map<UUID, net.ledok.arenas_ld.activity.InstanceKey> preparing = new java.util.HashMap<>();
 
+    @Override
+    public boolean holdsInstance(net.ledok.arenas_ld.activity.InstanceKey key) {
+        return activeRuns.containsKey(key) || preparing.containsValue(key) || instances.stream()
+            .anyMatch(inst -> inst.key().equals(key) && inst.status() == InstanceStatus.RUNNING);
+    }
+
+    private boolean isFree(RaidInstanceState inst) {
+        return inst.status() == InstanceStatus.FREE && !isPreparingInstance(inst)
+            && !net.ledok.arenas_ld.activity.ActivityRegistry.instanceHeldByOther(this, inst.key());
+    }
+
     private boolean isPreparingInstance(RaidInstanceState inst) {
         return preparing.containsValue(inst.key());
     }
@@ -801,7 +814,7 @@ public class RaidControllerBlockEntity extends BlockEntity
     private @Nullable RaidInstanceState reserveInstance(net.ledok.arenas_ld.activity.InstanceKey key) {
         for (int i = 0; i < instances.size(); i++) {
             RaidInstanceState inst = instances.get(i);
-            if (inst.key().equals(key) && inst.status() == InstanceStatus.FREE) {
+            if (inst.key().equals(key) && isFree(inst)) {
                 RaidInstanceState running = inst.withStatus(InstanceStatus.RUNNING, 0);
                 instances.set(i, running);
                 return running;
@@ -813,7 +826,7 @@ public class RaidControllerBlockEntity extends BlockEntity
     private @Nullable RaidInstanceState reserveFreeInstance() {
         for (int i = 0; i < instances.size(); i++) {
             RaidInstanceState inst = instances.get(i);
-            if (inst.status() == InstanceStatus.FREE && !isPreparingInstance(inst)) {
+            if (isFree(inst)) {
                 RaidInstanceState running = inst.withStatus(InstanceStatus.RUNNING, 0);
                 instances.set(i, running);
                 return running;
@@ -823,7 +836,7 @@ public class RaidControllerBlockEntity extends BlockEntity
     }
 
     private boolean hasAnyFreeInstance() {
-        return instances.stream().anyMatch(i -> i.status() == InstanceStatus.FREE && !isPreparingInstance(i));
+        return instances.stream().anyMatch(this::isFree);
     }
 
     private void releaseInstance(net.ledok.arenas_ld.activity.InstanceKey key) {
@@ -1040,16 +1053,11 @@ public class RaidControllerBlockEntity extends BlockEntity
         if (!lobby.isMember(targetUuid)) return false;
 
         Lobby updated = lobby.withMemberRemoved(targetUuid);
+        net.ledok.arenas_ld.packet.LobbyRemovedPayload.kicked(owner.server, targetUuid, activityId(), lobby.lobbyId());
         replaceLobby(updated);
         offlineSinceTick.remove(targetUuid);
         BusyStateCompat.clearBusy(targetUuid, BUSY_REASON);
-        // Notify kicked player
-        if (level instanceof ServerLevel sl) {
-            ServerPlayer kicked = sl.getServer().getPlayerList().getPlayer(targetUuid);
-            if (kicked != null) {
-                kicked.sendSystemMessage(Component.translatable("message.arenas_ld.you_were_kicked"));
-            }
-        }
+        // The kicked player gets a notice (4.43.1: a toast, and the hub goes back to its lobby list).
         markDirtyAndSync();
         return true;
     }
@@ -1691,38 +1699,26 @@ public class RaidControllerBlockEntity extends BlockEntity
         }
     }
 
+    private void freeReservation(net.ledok.arenas_ld.activity.InstanceKey key) {
+        for (int i = 0; i < instances.size(); i++) {
+            RaidInstanceState instance = instances.get(i);
+            if (instance.key().equals(key)) {
+                instances.set(i, instance.withStatus(InstanceStatus.FREE, 0));
+                return;
+            }
+        }
+    }
+
     private boolean launchRaidOnInstance(ServerLevel serverLevel, Lobby lobby, RaidInstanceState instance) {
         ServerLevel spawnerLevel = serverLevel.getServer().getLevel(instance.dimension());
-        if (spawnerLevel == null) {
-            // Release the reserved instance
-            for (int i = 0; i < instances.size(); i++) {
-                if (instances.get(i).spawnerPos().equals(instance.spawnerPos())) {
-                    instances.set(i, instances.get(i).withStatus(InstanceStatus.FREE, 0));
-                    break;
-                }
-            }
-            return false;
-        }
-
-        var be = spawnerLevel.getBlockEntity(instance.spawnerPos());
-        if (!(be instanceof RaidBossSpawnerBlockEntity spawner)) {
-            for (int i = 0; i < instances.size(); i++) {
-                if (instances.get(i).spawnerPos().equals(instance.spawnerPos())) {
-                    instances.set(i, instances.get(i).withStatus(InstanceStatus.FREE, 0));
-                    break;
-                }
-            }
+        if (spawnerLevel == null || !(spawnerLevel.getBlockEntity(instance.spawnerPos()) instanceof RaidBossSpawnerBlockEntity)) {
+            freeReservation(instance.key());
             return false;
         }
 
         List<ServerPlayer> players = resolveOnlinePlayers(lobby, serverLevel.getServer());
         if (players.isEmpty()) {
-            for (int i = 0; i < instances.size(); i++) {
-                if (instances.get(i).spawnerPos().equals(instance.spawnerPos())) {
-                    instances.set(i, instances.get(i).withStatus(InstanceStatus.FREE, 0));
-                    break;
-                }
-            }
+            freeReservation(instance.key());
             return false;
         }
 
@@ -1744,10 +1740,14 @@ public class RaidControllerBlockEntity extends BlockEntity
             serverLevel.getGameTime()
         );
         run.setRunModifiers(lobby.modifiers());
-        activeRuns.put(run.instanceKey(), run);
-
         net.ledok.arenas_ld.stats.RunStats startStats = runStats(run);
-        startStats.tick(spawnerLevel.getServer());
+        if (!net.ledok.arenas_ld.util.RunRentals.beginRun(serverLevel.getServer(), startStats, this, lobby, players)) {
+            freeReservation(instance.key());
+            startStats.discard(serverLevel.getServer());
+            markDirtyAndSync();
+            return false;
+        }
+        activeRuns.put(run.instanceKey(), run);
         net.ledok.arenas_ld.util.RunEffects.during(run.runModifiers(), () -> net.ledok.arenas_ld.stats.RunStats.during(startStats, () -> RaidRunLifecycle.startBattle(
             spawnerLevel,
             run,
@@ -1755,6 +1755,15 @@ public class RaidControllerBlockEntity extends BlockEntity
             difficulty,
             lobby.hardcoreEnabled()
         )));
+        if (run.bossUuid() == null) {
+            activeRuns.remove(run.instanceKey());
+            freeReservation(instance.key());
+            net.ledok.arenas_ld.util.RunRentals.cancelRun(serverLevel.getServer(), startStats);
+            startStats.discard(serverLevel.getServer());
+            notifyLobbyMembers(lobby, Component.translatableWithFallback("message.arenas_ld.raid.invalid_boss", "The raid boss could not spawn."));
+            markDirtyAndSync();
+            return false;
+        }
 
         for (ServerPlayer p : players) {
             BusyStateCompat.setBusy(p.getUUID(), BUSY_REASON);

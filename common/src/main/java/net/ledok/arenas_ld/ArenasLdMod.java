@@ -89,5 +89,6 @@ public class ArenasLdMod {
         net.ledok.arenas_ld.util.RunRentals.register();
         net.ledok.arenas_ld.activity.LobbyBadges.register();
         net.ledok.arenas_ld.stats.RunDetails.register();
+        net.ledok.arenas_ld.stats.CombatSessions.register();
     }
 }

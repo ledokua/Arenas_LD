@@ -59,6 +59,35 @@ public final class ActivityRegistry {
             .toList();
     }
 
+    /** Checks other controllers' live reservations, including restored runs, without loading chunks. */
+    public static boolean instanceHeldByOther(ActivityHost host, InstanceKey instance) {
+        if (!(host.asBlockEntity().getLevel() instanceof ServerLevel level)) return false;
+        MinecraftServer server = level.getServer();
+        return switch (host.activityType()) {
+            case ARENA -> net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity.getControllers().stream()
+                .anyMatch(key -> heldAt(server.getLevel(key.dimension()), key.pos(), host, instance));
+            case RAID -> net.ledok.arenas_ld.raid.blockentity.RaidControllerBlockEntity.getControllers().stream()
+                .anyMatch(key -> heldAt(server.getLevel(key.dimension()), key.pos(), host, instance));
+            case DUNGEON -> heldByOtherDungeon(server, host, instance);
+        };
+    }
+
+    private static boolean heldByOtherDungeon(MinecraftServer server, ActivityHost host, InstanceKey instance) {
+        for (ServerLevel level : server.getAllLevels()) {
+            for (BlockPos pos : ArenasLdMod.DUNGEON_MANAGER.getControllersIn(level.dimension())) {
+                if (heldAt(level, pos, host, instance)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean heldAt(@Nullable ServerLevel level, BlockPos pos, ActivityHost host, InstanceKey instance) {
+        if (level == null || !level.isLoaded(pos)
+            || (host.asBlockEntity().getLevel() == level && host.asBlockEntity().getBlockPos().equals(pos))) return false;
+        return level.getBlockEntity(pos) instanceof ActivityHost other && !other.asBlockEntity().isRemoved()
+            && other.holdsInstance(instance);
+    }
+
     /** Every controller the world knows of (it may be gone since); read straight from the saved index. */
     public static List<ActivityIndex.Entry> knownControllers(MinecraftServer server) {
         if (server.overworld() == null) {

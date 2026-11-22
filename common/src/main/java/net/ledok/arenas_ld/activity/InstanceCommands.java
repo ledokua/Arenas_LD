@@ -63,6 +63,7 @@ public final class InstanceCommands {
                         .executes(ctx -> add(ctx, ctx.getSource().getLevel()))
                         .then(argument("dimension", DimensionArgument.dimension())
                             .executes(ctx -> add(ctx, DimensionArgument.getDimension(ctx, "dimension")))))))
+            .then(literal("test").then(testNode("room")).then(testNode("wave")))
             .then(literal("check")
                 .then(literal("at")
                     .then(argument("pos", BlockPosArgument.blockPos())
@@ -72,6 +73,37 @@ public final class InstanceCommands {
                 .then(argument("activity", ResourceLocationArgument.id())
                     .suggests(ACTIVITY_IDS)
                     .executes(InstanceCommands::checkActivity)));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> testNode(String kind) {
+        return literal(kind).then(argument("activity", ResourceLocationArgument.id()).suggests(ACTIVITY_IDS)
+            .then(argument("pos", BlockPosArgument.blockPos()).then(argument("dimension", DimensionArgument.dimension())
+                .then(argument("number", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1))
+                    .executes(ctx -> test(ctx, kind))))));
+    }
+
+    private static int test(CommandContext<CommandSourceStack> ctx, String kind) throws CommandSyntaxException {
+        var source = ctx.getSource();
+        var player = source.getPlayerOrException();
+        ActivityHost host = ActivityRegistry.resolve(source.getServer(), ResourceLocationArgument.getId(ctx, "activity"));
+        ServerLevel level = DimensionArgument.getDimension(ctx, "dimension");
+        BlockPos pos = BlockPosArgument.getBlockPos(ctx, "pos");
+        int number = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "number");
+        boolean started = switch (host) {
+            case ArenaControllerBlockEntity arena when kind.equals("wave") ->
+                arena.testWave(player, new InstanceKey(level.dimension(), pos), number);
+            case DungeonControllerBlockEntity dungeon when kind.equals("room") ->
+                net.ledok.arenas_ld.dungeon.run.DungeonRunLifecycle.testRoom(player, level, dungeon, pos, number);
+            case null, default -> false;
+        };
+        if (!started) {
+            source.sendFailure(Component.translatableWithFallback("message.arenas_ld.instance.test_failed",
+                "Test run could not start. Choose a valid room or wave in a free instance."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.translatableWithFallback("message.arenas_ld.instance.test_started",
+            "Test run started. Rewards and rankings are disabled."), false);
+        return 1;
     }
 
     private static int add(CommandContext<CommandSourceStack> ctx, ServerLevel level) throws CommandSyntaxException {
@@ -209,6 +241,18 @@ public final class InstanceCommands {
                 .withStyle(ChatFormatting.GRAY);
         source.sendSuccess(() -> Component.literal(" ").append(linked), false);
         source.sendSuccess(() -> Component.literal(" ").append(report.summary()).withStyle(ChatFormatting.GRAY), false);
+        if (source.getEntity() instanceof net.minecraft.server.level.ServerPlayer && report.testKind() != null
+            && report.linkedTo().size() == 1) {
+            BlockPos pos = report.pos();
+            String command = "/arenasld instance test " + report.testKind() + " " + report.linkedTo().getFirst()
+                + " " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + " " + report.dimension().location() + " ";
+            source.sendSuccess(() -> Component.translatableWithFallback("message.arenas_ld.instance.test_button", "[Test Run]")
+                .withStyle(style -> style.withColor(ChatFormatting.AQUA)
+                    .withClickEvent(new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.SUGGEST_COMMAND, command))
+                    .withHoverEvent(new net.minecraft.network.chat.HoverEvent(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT,
+                        Component.translatableWithFallback("message.arenas_ld.instance.test_button.hover",
+                            "Enter the room or wave number to test. No rewards or rankings.")))), false);
+        }
         List<InstanceCheck.Problem> problems = report.problems();
         for (int i = 0; i < Math.min(problems.size(), MAX_PROBLEM_LINES); i++) {
             InstanceCheck.Problem problem = problems.get(i);

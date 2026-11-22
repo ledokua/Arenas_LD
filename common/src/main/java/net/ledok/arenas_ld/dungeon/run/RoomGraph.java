@@ -98,6 +98,26 @@ public final class RoomGraph {
         return roomPositions;
     }
 
+    /** Rooms connected by intact, unambiguous doors to the start room. */
+    public boolean canReach(ServerLevel world, BlockPos start, BlockPos target) {
+        if (!roomPositions.contains(start) || !roomPositions.contains(target)) return false;
+        Set<BlockPos> seen = new HashSet<>();
+        java.util.ArrayDeque<BlockPos> pending = new java.util.ArrayDeque<>();
+        seen.add(start);
+        pending.add(start);
+        while (!pending.isEmpty()) {
+            BlockPos room = pending.removeFirst();
+            if (room.equals(target)) return true;
+            for (Door door : doorsOf(room)) {
+                if (door.rooms().size() != 2 || !(world.getBlockState(door.anchor()).getBlock()
+                    instanceof net.ledok.arenas_ld.block.PhaseBlock)) continue;
+                BlockPos other = door.partnerOf(room);
+                if (other != null && seen.add(other)) pending.addLast(other);
+            }
+        }
+        return false;
+    }
+
     public java.util.Collection<Door> doors() {
         return doorsByAnchor.values();
     }

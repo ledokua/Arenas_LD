@@ -85,6 +85,7 @@ public class ArenasLdClient {
         // Telegraph expiry compares absolute game time, so stale positions would
         // render again in any world whose clock is behind the stored deadline.
         ClientEvents.DISCONNECTED.add(SpawnTelegraphStore::clear);
+        ClientEvents.DISCONNECTED.add(() -> SpawnTelegraphRenderer.onRunHud(net.ledok.arenas_ld.packet.RunHudPayload.HIDDEN));
 
         // Run HUD overlays (timer bar + loot reveal): one OVERLAY listener drives their
         // per-frame animation; the drawing itself happens through CanvasOverlay handles.
@@ -112,12 +113,16 @@ public class ArenasLdClient {
         DevLobbyHost.registerIfEnabled();
         // Set at once (no execute): the menu's open-screen packet right behind it must find it.
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.LobbyOpeningPayload.TYPE, (payload, context) ->
-            net.ledok.arenas_ld.screen.lobby.LobbyScreen.nextActivity(payload.activity()));
+            net.ledok.arenas_ld.screen.lobby.LobbyScreen.nextActivity(payload));
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.AllyHealthPayload.TYPE, (payload, context) ->
             context.client().execute(() -> net.ledok.arenas_ld.client.hud.AllyHealthHud.onPayload(payload)));
         ClientEvents.DISCONNECTED.add(() -> net.ledok.arenas_ld.util.RunEffectsClientState.frozenGround = false);
         ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.util.RunBlockBreaking::clearClient);
         ClientEvents.DISCONNECTED.add(net.ledok.arenas_ld.screen.RentalPick::clear);
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.ToolSourceSyncPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> net.ledok.arenas_ld.client.SelectionOverlayRenderer.onToolSourceSync(payload)));
+        ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.LobbyRemovedPayload.TYPE, (payload, context) ->
+            context.client().execute(() -> net.ledok.arenas_ld.screen.lobby.LobbyScreen.onRemoved(payload)));
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RentalLobbyPayload.TYPE, (payload, context) ->
             context.client().execute(() -> net.ledok.arenas_ld.screen.RentalPick.onPayload(payload)));
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RentalPreviewPayload.TYPE, (payload, context) ->
@@ -130,7 +135,10 @@ public class ArenasLdClient {
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RunFrozenGroundPayload.TYPE, (payload, context) ->
             net.ledok.arenas_ld.util.RunEffectsClientState.frozenGround = payload.frozen());
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.RunHudPayload.TYPE, (payload, context) ->
-                context.client().execute(() -> net.ledok.arenas_ld.client.hud.RunTimerHud.onPayload(payload)));
+                context.client().execute(() -> {
+                    net.ledok.arenas_ld.client.hud.RunTimerHud.onPayload(payload);
+                    SpawnTelegraphRenderer.onRunHud(payload);
+                }));
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.LootRewardPayload.TYPE, (payload, context) ->
                 context.client().execute(() -> net.ledok.arenas_ld.client.hud.LootRevealHud.onPayload(payload)));
         ArenasClientNetwork.registerReceiver(net.ledok.arenas_ld.packet.LootHudClearPayload.TYPE, (payload, context) ->

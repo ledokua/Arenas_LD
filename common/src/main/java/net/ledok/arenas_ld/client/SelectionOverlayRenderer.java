@@ -392,7 +392,11 @@ public final class SelectionOverlayRenderer {
          *  edits, red belongs to the other spawners. Never any mode's own kind, so it always sits in
          *  the dim tier and ranks by inset — one step deeper than MOB_SPAWN, so a block shared by two
          *  spawners shows both outlines instead of stacking them. */
-        OTHER_MOB_SPAWN(1.00f, 0.28f, 0.22f, 0.95f, 0.12f, 0.08f, POINT_FILL_ALPHA, -0.12f); // red
+        OTHER_MOB_SPAWN(1.00f, 0.28f, 0.22f, 0.95f, 0.12f, 0.08f, POINT_FILL_ALPHA, -0.12f), // red
+        /** A room's goal zone (REACH_ZONE, 4.44.0): its whole box as one outline (no tint: it is a volume that
+         *  can hold every other marker), and a lone first corner as a cell while the second is being picked.
+         *  Lime, pushed toward white so it reads apart from LINK green. */
+        ZONE(0.80f, 1.00f, 0.55f, 0.70f, 1.00f, 0.30f, VOLUME_FILL_ALPHA, 0.00f);           // lime
 
         private final float[] color;
         private final float[] fillColor;
@@ -668,7 +672,7 @@ public final class SelectionOverlayRenderer {
      * Outline of the block region spanning {@code min}..{@code max} inclusive, pushed {@code inflate}
      * blocks outward on every side.
      */
-    private static void addBoundsEdges(BufferBuilder buffer, Matrix4f matrix, BlockPos min, BlockPos max,
+    static void addBoundsEdges(BufferBuilder buffer, Matrix4f matrix, BlockPos min, BlockPos max,
                                        float[] color, float alpha, float inflate) {
         float x0 = min.getX() - inflate;
         float y0 = min.getY() - inflate;
@@ -808,7 +812,7 @@ public final class SelectionOverlayRenderer {
             return;
         }
         BlockPos sourcePos = posOpt.get();
-        BlockEntity be = mc.level.getBlockEntity(sourcePos);
+        BlockEntity be = lookup(mc, sourcePos);
         // Loaded but empty: the selected block was broken or replaced, and the tool will reject the next
         // click. A gold box on plain stone is worse than showing nothing. An unloaded chunk is different
         // — the attachments are unreadable, but the selection still draws so it stays findable.
@@ -825,6 +829,9 @@ public final class SelectionOverlayRenderer {
             BlockEntity picked = DungeonToolItem.resolveRoomSpawner(mc.level, room, data);
             if (picked != null) {
                 pickedPos = picked.getBlockPos();
+            } else if (data.spawnerPos().isPresent() && room.getSpawnerPositions().contains(data.spawnerPos().get())
+                    && !mc.level.isLoaded(data.spawnerPos().get())) {
+                pickedPos = data.spawnerPos().get(); // out of the client's range: still marked
             }
         }
         List<Box> boxes = overlay.boxes();
@@ -1041,6 +1048,7 @@ public final class SelectionOverlayRenderer {
             case ENTRANCE_POSITION -> kind == Kind.ENTRANCE;
             case RESPAWN_POSITION -> kind == Kind.RESPAWN;
             case PROTECT_POSITION -> kind == Kind.PROTECT;
+            case GOAL_ZONE -> kind == Kind.ZONE;
         };
     }
 
@@ -1104,6 +1112,16 @@ public final class SelectionOverlayRenderer {
             if (protectPos != null) {
                 out.add(Kind.PROTECT, protectPos);
             }
+            BlockPos zoneA = room.getZoneCornerA();
+            BlockPos zoneB = room.getZoneCornerB();
+            if (zoneA != null && zoneB != null) {
+                out.addOutline(Kind.ZONE,
+                    new BlockPos(Math.min(zoneA.getX(), zoneB.getX()), Math.min(zoneA.getY(), zoneB.getY()), Math.min(zoneA.getZ(), zoneB.getZ())),
+                    new BlockPos(Math.max(zoneA.getX(), zoneB.getX()), Math.max(zoneA.getY(), zoneB.getY()), Math.max(zoneA.getZ(), zoneB.getZ())),
+                    0.04f);
+            } else if (zoneA != null) {
+                out.add(Kind.ZONE, zoneA);
+            }
         } else if (be instanceof MobSpawnerBlockEntity spawner) {
             out.addOffsets(Kind.MOB_SPAWN, sourcePos, spawner.getEntityDefinition().spawnOffsets());
         } else if (be instanceof RaidBossSpawnerBlockEntity spawner) {
@@ -1125,10 +1143,7 @@ public final class SelectionOverlayRenderer {
      * list also covers the spawner whose chunk the client has not loaded.
      */
     private static List<BlockPos> linkedSpawnOffsets(Minecraft mc, BlockPos spawnerPos) {
-        if (!mc.level.isLoaded(spawnerPos)) {
-            return List.of();
-        }
-        BlockEntity linked = mc.level.getBlockEntity(spawnerPos);
+        BlockEntity linked = lookup(mc, spawnerPos);
         if (linked instanceof MobSpawnerBlockEntity mobSpawner) {
             return mobSpawner.getEntityDefinition().spawnOffsets();
         }
@@ -1152,6 +1167,87 @@ public final class SelectionOverlayRenderer {
             return;
         }
         out.add(Kind.ENTRANCE, absolutePos);
+    }
+
+    // ---- Far-away selections (4.44.0) ----
+
+    /**
+     * The block entities the overlay has read, kept after their chunk leaves the client's view distance: a
+     * builder who selected a room and walked off to place its far doors and spawn positions still sees every
+     * outline. The client keeps the object it last had (its data as last synced); edits made with the tool
+     * while out of range arrive as {@link net.ledok.arenas_ld.packet.ToolSourceSyncPayload}. Bounded, and
+     * dropped with the level.
+     */
+    private static final int REMEMBERED_LIMIT = 512;
+    private static final java.util.LinkedHashMap<BlockPos, BlockEntity> REMEMBERED =
+        new java.util.LinkedHashMap<>(64, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(java.util.Map.Entry<BlockPos, BlockEntity> eldest) {
+                return size() > REMEMBERED_LIMIT;
+            }
+        };
+    private static final java.util.LinkedHashMap<BlockPos, Bounds> LAST_DOOR_GROUPS =
+        new java.util.LinkedHashMap<>(64, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(java.util.Map.Entry<BlockPos, Bounds> eldest) {
+                return size() > REMEMBERED_LIMIT;
+            }
+        };
+    @Nullable
+    private static WeakReference<Level> rememberedLevel;
+
+    /** The block entity at {@code pos}: the live one while its chunk is loaded, else the one last seen there. */
+    @Nullable
+    private static BlockEntity lookup(Minecraft mc, BlockPos pos) {
+        forgetOnLevelChange(mc.level);
+        if (mc.level.isLoaded(pos)) {
+            BlockEntity be = mc.level.getBlockEntity(pos);
+            if (be != null) {
+                REMEMBERED.put(pos.immutable(), be);
+            } else {
+                REMEMBERED.remove(pos);
+            }
+            return be;
+        }
+        return REMEMBERED.get(pos);
+    }
+
+    private static void rememberDoor(BlockPos anchor, Bounds bounds) {
+        LAST_DOOR_GROUPS.put(anchor.immutable(), bounds);
+    }
+
+    private static void forgetOnLevelChange(Level level) {
+        if (rememberedLevel == null || rememberedLevel.get() != level) {
+            REMEMBERED.clear();
+            LAST_DOOR_GROUPS.clear();
+            rememberedLevel = new WeakReference<>(level);
+        }
+    }
+
+    /**
+     * The server's copy of a block the player just edited with the Dungeon Tool while its chunk is out of the
+     * client's range: the remembered object takes the new data, or one is made for it.
+     */
+    public static void onToolSourceSync(net.ledok.arenas_ld.packet.ToolSourceSyncPayload payload) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || !mc.level.dimension().equals(payload.dimension())) {
+            return;
+        }
+        forgetOnLevelChange(mc.level);
+        if (mc.level.isLoaded(payload.pos())) {
+            return; // the chunk's own block entity update covers it
+        }
+        BlockEntity known = REMEMBERED.get(payload.pos());
+        if (known != null) {
+            known.loadWithComponents(payload.data(), mc.level.registryAccess());
+            return;
+        }
+        net.minecraft.world.level.block.state.BlockState state =
+            net.minecraft.world.level.block.Block.stateById(payload.stateId());
+        BlockEntity made = BlockEntity.loadStatic(payload.pos(), state, payload.data(), mc.level.registryAccess());
+        if (made != null) {
+            REMEMBERED.put(payload.pos().immutable(), made);
+        }
     }
 
     // ---- Door group cache ----
@@ -1222,6 +1318,11 @@ public final class SelectionOverlayRenderer {
             if (!seen.add(anchor)) {
                 continue;
             }
+            // Out of the client's range: the group as it was last seen (the flood fill can't see unloaded blocks).
+            if (!mc.level.isLoaded(anchor) && LAST_DOOR_GROUPS.get(anchor) instanceof Bounds last) {
+                groups.add(last);
+                continue;
+            }
             Set<BlockPos> group = RoomGraph.expandDoorGroup(mc.level, anchor);
             seen.addAll(group);
             // An unloaded anchor expands to the lone-anchor group too, so only call the link broken when
@@ -1250,8 +1351,12 @@ public final class SelectionOverlayRenderer {
                     faceBudget -= faces;
                 }
             }
-            groups.add(new Bounds(
-                new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ), intact, cells));
+            Bounds bounds = new Bounds(
+                new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ), intact, cells);
+            groups.add(bounds);
+            if (mc.level.isLoaded(anchor)) {
+                rememberDoor(anchor, bounds);
+            }
         }
 
         doorCacheLevel = new WeakReference<>(mc.level);

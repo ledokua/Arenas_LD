@@ -80,6 +80,8 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
         loaded = true;
         ArenaSpawnerBlockEntity s = spawner();
         if (s == null) return;
+        survivalMode = s.survivalMode();
+        allowBlockBreaking = s.allowsBlockBreaking();
         objectives.clear();
         objectives.addAll(s.getEnabledObjectives());
         mobs.clear();
@@ -131,7 +133,7 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
                 List<AttributeData> def = new ArrayList<>();
                 def.add(new AttributeData("minecraft:generic.max_health", 20.0));
                 def.add(new AttributeData("minecraft:generic.attack_damage", 3.0));
-                mobs.add(new MobArenaMobData("minecraft:zombie", def, new EquipmentData(), 10, 1, 100, false));
+                mobs.add(new MobArenaMobData("minecraft:zombie", def, new EquipmentData(), 10, 1, Integer.MAX_VALUE, false));
                 rebuildMobs();
             }));
 
@@ -140,7 +142,7 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
             rewardsArea = content.item(Flex.column().gap(3));
             rewardsArea.sizing(Sizing.fill(), Sizing.content());
             content.item(button(Component.translatable("gui.arenas_ld.add"), () -> {
-                rewards.add(new MobArenaRewardData(false, "", 10, 1, 1, 100, 1));
+                rewards.add(new MobArenaRewardData(true, "", 10, 1, 1, 100, 1));
                 rebuildRewards();
             }));
         }
@@ -152,6 +154,9 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
         rebuildMobs();
         rebuildRewards();
     }
+
+    private boolean survivalMode;
+    private boolean allowBlockBreaking;
 
     private Flex buildSettings(ArenaSpawnerBlockEntity s) {
         Flex box = Flex.column().gap(3);
@@ -169,6 +174,10 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
         box.item(intRow("eliteEveryN", Component.translatable("gui.arenas_ld.arena.elite_every"), s.getEliteEveryNWaves()));
         box.item(intRow("objectiveEveryN", Component.translatable("gui.arenas_ld.arena.objective_every"), s.getObjectiveEveryNWaves()));
         box.item(intRow("entityHighlightTime", Component.translatable("gui.arenas_ld.arena.highlight_time"), s.getEntityHighlightTime()));
+        box.item(toggle(Component.translatableWithFallback("gui.arenas_ld.arena.survival", "Survival mode"),
+            () -> survivalMode, () -> survivalMode = !survivalMode));
+        box.item(toggle(Component.translatableWithFallback("gui.arenas_ld.arena.breakable", "Allow configured block breaking"),
+            () -> allowBlockBreaking, () -> allowBlockBreaking = !allowBlockBreaking));
 
         Flex objRow = Flex.row().gap(4);
         objRow.sizing(Sizing.fill(), Sizing.content());
@@ -179,6 +188,15 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
         box.item(objRow);
         box.item(button(Component.translatable("gui.arenas_ld.save"), this::save));
         return box;
+    }
+
+    private Button toggle(Component label, java.util.function.BooleanSupplier enabled, Runnable flip) {
+        Button toggle = button(label.copy().append(enabled.getAsBoolean() ? " ✓" : " ✗"), null);
+        toggle.onClick(() -> {
+            flip.run();
+            toggle.label(label.copy().append(enabled.getAsBoolean() ? " ✓" : " ✗"));
+        });
+        return toggle;
     }
 
     /** Content-width toggle that relabels (and re-measures) itself in place, like owo's setMessage. */
@@ -207,7 +225,8 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
             row.item(box(Sizing.expand(), mob.mobId, v -> mob.mobId = v));
             row.item(box(Sizing.fixed(34), String.valueOf(mob.weight), v -> mob.weight = parseInt(v, mob.weight)));
             row.item(box(Sizing.fixed(30), String.valueOf(mob.minWave), v -> mob.minWave = parseInt(v, mob.minWave)));
-            row.item(box(Sizing.fixed(30), String.valueOf(mob.maxWave), v -> mob.maxWave = parseInt(v, mob.maxWave)));
+            row.item(box(Sizing.fixed(30), mob.maxWave == Integer.MAX_VALUE ? "∞" : String.valueOf(mob.maxWave),
+                v -> mob.maxWave = "∞".equals(v.trim()) ? Integer.MAX_VALUE : parseInt(v, mob.maxWave)));
             row.item(button(Component.literal(mob.isBoss ? "BOSS" : "reg"), 40, 16,
                 () -> { mob.isBoss = !mob.isBoss; rebuildMobs(); }));
             // Extra mob data (SNBT) and, for slimes, the split strength; saved with the list (Save).
@@ -235,7 +254,7 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
             row.item(box(Sizing.fixed(30), String.valueOf(rw.minWave), v -> rw.minWave = parseInt(v, rw.minWave)));
             row.item(box(Sizing.fixed(30), String.valueOf(rw.maxWave), v -> rw.maxWave = parseInt(v, rw.maxWave)));
             row.item(box(Sizing.fixed(28), String.valueOf(rw.waveFrequency), v -> rw.waveFrequency = parseInt(v, rw.waveFrequency)));
-            row.item(button(Component.literal(rw.perPlayer ? "each" : "one"), 40, 16,
+            row.item(button(Component.translatable(rw.perPlayer ? "gui.arenas_ld.arena.loot.personal" : "gui.arenas_ld.arena.loot.shared"), 65, 16,
                 () -> { rw.perPlayer = !rw.perPlayer; rebuildRewards(); }));
             row.item(button(Component.literal("✕"), 16, 16,
                 () -> { rewards.remove(idx); rebuildRewards(); }));
@@ -248,8 +267,8 @@ public class ArenaSpawnerScreen extends FitCanvasHandledScreen<ArenaSpawnerScree
         for (ObjectiveType t : objectives) objNames.add(t.name());
         ArenasNetwork.sendToServer(new ArenaSpawnerSettingsPayload(pos,
             si("battleRadius", 64), si("spawnDistance", 8), sd("attributeScale", 0.1), si("entityHighlightTime", 0),
-            si("waveTimer", 120), si("additionalTime", 5), si("timeBetweenWaves", 10), si("prepareTime", 10),
-            si("bossWaveAdditionalTime", 60), si("bossEveryN", 5), si("eliteEveryN", 3), si("objectiveEveryN", 7), objNames));
+            si("waveTimer", 120), si("additionalTime", 5), si("timeBetweenWaves", 10), si("prepareTime", 3),
+            si("bossWaveAdditionalTime", 60), si("bossEveryN", 5), si("eliteEveryN", 3), si("objectiveEveryN", 7), objNames, survivalMode, allowBlockBreaking));
         ArenasNetwork.sendToServer(new ArenaSpawnerMobsPayload(pos, new ArrayList<>(mobs)));
         ArenasNetwork.sendToServer(new ArenaSpawnerRewardsPayload(pos, new ArrayList<>(rewards)));
     }

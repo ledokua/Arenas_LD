@@ -14,7 +14,8 @@ import java.util.List;
 public record ArenaSpawnerSettingsPayload(
     BlockPos spawnerPos, int battleRadius, int spawnDistance, double attributeScale, int entityHighlightTime,
     int waveTimer, int additionalTime, int timeBetweenWaves, int prepareTime, int bossWaveAdditionalTime,
-    int bossEveryN, int eliteEveryN, int objectiveEveryN, List<String> objectives
+    int bossEveryN, int eliteEveryN, int objectiveEveryN, List<String> objectives,
+    boolean survivalMode, boolean allowBlockBreaking
 ) implements CustomPacketPayload {
     public static final Type<ArenaSpawnerSettingsPayload> TYPE =
         new Type<>(ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, "arena_spawner_settings"));
@@ -29,6 +30,8 @@ public record ArenaSpawnerSettingsPayload(
             buf.writeVarInt(p.bossEveryN()); buf.writeVarInt(p.eliteEveryN()); buf.writeVarInt(p.objectiveEveryN());
             buf.writeVarInt(p.objectives().size());
             for (String o : p.objectives()) buf.writeUtf(o);
+            buf.writeBoolean(p.survivalMode());
+            buf.writeBoolean(p.allowBlockBreaking());
         },
         buf -> {
             BlockPos pos = buf.readBlockPos();
@@ -40,7 +43,7 @@ public record ArenaSpawnerSettingsPayload(
             int n = net.minecraft.network.codec.ByteBufCodecs.readCount(buf, net.ledok.arenas_ld.networking.ModPackets.MAX_C2S_LIST);
             List<String> objs = new ArrayList<>(n);
             for (int i = 0; i < n; i++) objs.add(buf.readUtf());
-            return new ArenaSpawnerSettingsPayload(pos, br, sd, as, eh, wt, at, tbw, pt, bwt, bn, en, on, objs);
+            return new ArenaSpawnerSettingsPayload(pos, br, sd, as, eh, wt, at, tbw, pt, bwt, bn, en, on, objs, buf.readBoolean(), buf.readBoolean());
         });
 
     @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }

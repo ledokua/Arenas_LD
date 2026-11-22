@@ -1,7 +1,11 @@
 package net.ledok.arenas_ld.packet;
 
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
+import org.jetbrains.annotations.Nullable;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.codec.StreamCodec;
@@ -14,8 +18,21 @@ import net.minecraft.resources.ResourceLocation;
  * between packets and hides the bar on {@link Kind#HIDDEN} or when updates stop arriving.
  */
 public record RunHudPayload(Kind kind, Component label, int remainingTicks, int totalTicks,
-                            boolean hardcore, int bossHpPercent)
+                            boolean hardcore, int bossHpPercent, @Nullable GoalZone goalZone)
     implements CustomPacketPayload {
+
+    public record GoalZone(ResourceKey<Level> dimension, BlockPos min, BlockPos max) {
+        public static GoalZone between(ResourceKey<Level> dimension, BlockPos a, BlockPos b) {
+            return new GoalZone(dimension,
+                new BlockPos(Math.min(a.getX(), b.getX()), Math.min(a.getY(), b.getY()), Math.min(a.getZ(), b.getZ())),
+                new BlockPos(Math.max(a.getX(), b.getX()), Math.max(a.getY(), b.getY()), Math.max(a.getZ(), b.getZ())));
+        }
+    }
+
+    public RunHudPayload(Kind kind, Component label, int remainingTicks, int totalTicks,
+                         boolean hardcore, int bossHpPercent) {
+        this(kind, label, remainingTicks, totalTicks, hardcore, bossHpPercent, null);
+    }
 
     public enum Kind {
         /** No bar; clears whatever is showing. */
@@ -47,6 +64,12 @@ public record RunHudPayload(Kind kind, Component label, int remainingTicks, int 
         buf.writeVarInt(payload.totalTicks);
         buf.writeBoolean(payload.hardcore);
         buf.writeByte(payload.bossHpPercent);
+        buf.writeBoolean(payload.goalZone != null);
+        if (payload.goalZone != null) {
+            buf.writeResourceLocation(payload.goalZone.dimension().location());
+            buf.writeBlockPos(payload.goalZone.min());
+            buf.writeBlockPos(payload.goalZone.max());
+        }
     }
 
     private static RunHudPayload read(RegistryFriendlyByteBuf buf) {
@@ -56,7 +79,11 @@ public record RunHudPayload(Kind kind, Component label, int remainingTicks, int 
         int totalTicks = buf.readVarInt();
         boolean hardcore = buf.readBoolean();
         int bossHpPercent = buf.readByte();
-        return new RunHudPayload(kind, label, remainingTicks, totalTicks, hardcore, bossHpPercent);
+        GoalZone zone = buf.readBoolean()
+            ? new GoalZone(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, buf.readResourceLocation()),
+                buf.readBlockPos(), buf.readBlockPos())
+            : null;
+        return new RunHudPayload(kind, label, remainingTicks, totalTicks, hardcore, bossHpPercent, zone);
     }
 
     @Override

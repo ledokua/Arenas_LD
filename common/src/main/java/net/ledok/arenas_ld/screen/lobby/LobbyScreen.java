@@ -32,6 +32,8 @@ public abstract class LobbyScreen<T extends AbstractContainerMenu> extends FitCa
     implements LobbyHost, RentalPick.Host {
 
     private static volatile @Nullable ResourceLocation nextActivity;
+    private static volatile String nextName = "";
+    private static volatile boolean nextLeaderboard;
     private static @Nullable LobbyScreen<?> hostedScreen;
 
     protected final LobbyView view;
@@ -39,6 +41,9 @@ public abstract class LobbyScreen<T extends AbstractContainerMenu> extends FitCa
     private long snapshotEpochMs = System.currentTimeMillis();
     private int rentalVersion = RentalPick.version();
     private final @Nullable ResourceLocation activity;
+    /** The activity's display name for a hub's title ("" = the controller's name) and the Leaderboard request (4.43.2). */
+    private final String activityName;
+    private final boolean leaderboard;
 
     // hosted
     private boolean handingOff;
@@ -51,7 +56,11 @@ public abstract class LobbyScreen<T extends AbstractContainerMenu> extends FitCa
         fillWindow();
         this.view = new LobbyView(this, canvas);
         this.activity = nextActivity;
+        this.activityName = nextName;
+        this.leaderboard = nextLeaderboard;
         nextActivity = null;
+        nextName = "";
+        nextLeaderboard = false;
     }
 
     // ── hosting ──────────────────────────────────────────────────────────────
@@ -59,6 +68,13 @@ public abstract class LobbyScreen<T extends AbstractContainerMenu> extends FitCa
     /** {@code LobbyOpeningPayload}: the activity of the lobby menu that opens next. */
     public static void nextActivity(ResourceLocation activity) {
         nextActivity = activity;
+    }
+
+    /** The coming lobby menu's activity, its name and whether it opens on the Leaderboard tab. */
+    public static void nextActivity(net.ledok.arenas_ld.packet.LobbyOpeningPayload payload) {
+        nextActivity = payload.activity();
+        nextName = payload.name();
+        nextLeaderboard = payload.leaderboard();
     }
 
     /** The lobby screen updates go to: the one on screen, or the one a hub is showing. */
@@ -81,6 +97,35 @@ public abstract class LobbyScreen<T extends AbstractContainerMenu> extends FitCa
             return;
         }
         hosted.tickView();
+    }
+
+    /**
+     * Kicked from the lobby (4.43.1): a toast with why, and a hub-hosted view on that controller closes, so the hub
+     * goes back to its lobby list as after «Leave». Arenas' own lobby screen stays open (it shows the lobby list).
+     */
+    public static void onRemoved(net.ledok.arenas_ld.packet.LobbyRemovedPayload payload) {
+        Component message = Component.translatable(payload.kicked()
+            ? "message.arenas_ld.lobby.removed.kicked" : "message.arenas_ld.lobby.removed.disbanded");
+        LobbyScreen<?> hosted = hostedScreen;
+        if (hosted != null && !hosted.hostedGone() && hosted.matchesRemovedLobby(payload)) {
+            VectorCanvas canvas = hosted.rentalCanvas();
+            if (canvas != null) {
+                net.ledok.vectorlib.client.canvas.widget.Toast.text(canvas, message, 0xFFE0A040);
+            }
+            hosted.closeHosted();
+            return;
+        }
+        if (Minecraft.getInstance().screen instanceof LobbyScreen<?> own && own.matchesRemovedLobby(payload)) {
+            net.ledok.vectorlib.client.canvas.widget.Toast.text(own.rentalCanvas(), message, 0xFFE0A040);
+            return;
+        }
+        // Not looking at that lobby: the action bar (not chat).
+        Minecraft.getInstance().gui.setOverlayMessage(message, false);
+    }
+
+    private boolean matchesRemovedLobby(net.ledok.arenas_ld.packet.LobbyRemovedPayload payload) {
+        return payload.activity().equals(activity)
+            && ownLobby().map(lobby -> lobby.lobbyId().equals(payload.lobbyId())).orElse(false);
     }
 
     public static void clearHosted() {
@@ -116,9 +161,12 @@ public abstract class LobbyScreen<T extends AbstractContainerMenu> extends FitCa
             hostedRoot = CanvasGroup.create();
             hostedView = new LobbyView(this, hostedRoot);
             hostedView.open();
+            if (leaderboard) {
+                hostedView.openOnLeaderboard();
+            }
             try {
                 accepted = host.open(activity != null ? activity : ResourceLocation.fromNamespaceAndPath(ArenasLdMod.MOD_ID, ""),
-                    getTitle(), new Hosted());
+                    activityName.isBlank() ? getTitle() : Component.literal(activityName), new Hosted());
             } catch (RuntimeException e) {
                 ArenasLdMod.LOGGER.warn("[Arenas] The lobby host failed; showing Arenas' own lobby screen", e);
             }
@@ -135,7 +183,7 @@ public abstract class LobbyScreen<T extends AbstractContainerMenu> extends FitCa
         hostedView = null;
         hostedRoot = null;
         if (mc.screen == this) {
-            view.open();
+            openOwnView();
             view.build();
         }
     }
@@ -211,6 +259,14 @@ public abstract class LobbyScreen<T extends AbstractContainerMenu> extends FitCa
 
     // ── own screen ───────────────────────────────────────────────────────────
 
+    /** The own screen's view opens (on the Leaderboard tab once, when asked). */
+    private void openOwnView() {
+        view.open();
+        if (leaderboard) {
+            view.openOnLeaderboard();
+        }
+    }
+
     /** The server tick the latest snapshot was taken at (invite expiries and cooldowns count from it). */
     protected void snapshot(long serverTick) {
         this.snapshotTick = serverTick;
@@ -222,7 +278,7 @@ public abstract class LobbyScreen<T extends AbstractContainerMenu> extends FitCa
         if (handingOff || hostedView != null) {
             return; // the hub shows the hosted view; this screen draws nothing
         }
-        view.open();
+        openOwnView();
         view.build();
     }
 

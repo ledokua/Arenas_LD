@@ -5,7 +5,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.nbt.CompoundTag;
 
 public class MobArenaRewardData {
-    public boolean perPlayer = false;
+    public boolean perPlayer = true;
     public String lootTableId = "";
     public int weight = 10;
     public int rolls = 1;

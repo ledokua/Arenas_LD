@@ -1,6 +1,9 @@
 package net.ledok.arenas_ld.util;
 
 import net.ledok.arenas_ld.ArenasLdMod;
+import net.ledok.arenas_ld.arena.blockentity.ArenaControllerBlockEntity;
+import net.ledok.arenas_ld.arena.blockentity.ArenaSpawnerBlockEntity;
+import net.ledok.arenas_ld.dungeon.run.RunParticipant;
 import net.ledok.arenas_ld.activity.InstanceKey;
 import net.ledok.arenas_ld.config.ArenasLdConfig;
 import net.ledok.arenas_ld.dungeon.blockentity.DungeonControllerBlockEntity;
@@ -169,6 +172,21 @@ public final class RunBlockBreaking {
             RaidControllerBlockEntity controller = RaidRunLifecycle.findOwningController(server, key);
             RaidRun raidRun = controller == null ? null : controller.getActiveRuns().get(key);
             return raidRun == null ? List.of() : entries(raidRun.resolvedTierConfig().allowBlockBreaking(), controller);
+        }
+        if (!RunLeftovers.isInRun(player.getUUID())) return null;
+        for (var key : ArenaControllerBlockEntity.getControllers()) {
+            ServerLevel level = server.getLevel(key.dimension());
+            if (level == null || !level.isLoaded(key.pos())
+                || !(level.getBlockEntity(key.pos()) instanceof ArenaControllerBlockEntity controller)) continue;
+            for (var run : controller.getActiveRuns().values()) {
+                var member = run.participants().get(player.getUUID());
+                if (member == null || member.status() == RunParticipant.ParticipantStatus.REMOVED || run.survivalMode()) continue;
+                ServerLevel arena = server.getLevel(run.spawnerDimension());
+                boolean allowed = arena == player.level() && arena.isLoaded(run.spawnerPos())
+                    && arena.getBlockEntity(run.spawnerPos()) instanceof ArenaSpawnerBlockEntity arenaSpawner
+                    && arenaSpawner.allowsBlockBreaking();
+                return entries(allowed, controller);
+            }
         }
         return null;
     }

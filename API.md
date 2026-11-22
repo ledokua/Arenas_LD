@@ -80,7 +80,12 @@ or enabled difficulties change.
 
 ```java
 boolean opened = ArenasApi.openLobbies(player, ResourceLocation.parse("arenas_ld:crypt"));
+boolean shown = ArenasApi.openLeaderboard(player, ResourceLocation.parse("arenas_ld:crypt")); // 4.43.2
 ```
+
+`openLeaderboard` opens the same screen on its Leaderboard tab (it stays there until the player picks another tab).
+A hub-hosted view (`ArenasClientApi.LobbyHost.open`) gets the activity's name as its title (4.43.2), or the
+controller's name when the activity has none.
 
 Opens the same screen as right-clicking the controller — lobbies, my lobby, leaderboard, invites — from
 any distance and any dimension; it stays open until the player closes it, and lobby actions from it
@@ -135,6 +140,50 @@ run start, in party order; -1 when unknown; 4.24.1: `classes` the equipped spell
 covers the last 30 days (files under `<world>/arenas_ld/runs/`). `runHistory` reads the in-memory index, cheap to
 call; `openRunDetails(staff, runId)` reads the run's file off the server thread and opens the screen when it is in
 (false for an unknown id). Check staff permission yourself.
+
+### Combat log sessions: duels (4.42.0+)
+
+`ArenasCombatLog` records fights that are not Arenas runs, so far duels, with the run recorder. Each fighter gets the
+same data as in a run: the event log (hits with raw and applied amounts and block reasons, spells through Spell Engine
+Expansion, effects, gear swaps, deaths), damage and healing by source, top hits, the best minute, and gear and skills
+at the start. Fighters' hits on each other count as dealt damage. Only a real attacker (or their pet, summon or
+projectile) or the fighter who applied a harmful effect is credited. Damage with neither, such as falls, lava or an
+effect from the console, is nobody's dealt damage; a death from it goes to the last fighter who hit them. A hit that leaves someone at 0 HP counts as a kill
+and a death (the duel mod stops the death itself). Others who did 10%+ of the victim's max HP since their last death
+get an assist.
+
+```java
+if (!ArenasCombatLog.inRun(uuid)) { … }                     // in a dungeon/raid run now?
+ArenasCombatLog.Start start = ArenasCombatLog.start(server, "duels:1a2b3c4d", title, List.of(
+    new ArenasCombatLog.Fighter(alice, "A", "kits:rental_mage"),   // side label, rental kit id or "" (own gear)
+    new ArenasCombatLog.Fighter(bob,   "B", "")));
+ArenasCombatLog.Session session = start.session();          // null: start.refusal() says why
+session.rejoin(player);                                     // optional: a relog is picked up within a second anyway
+session.remove(uuid);                                       // out for good: their row shows "out"
+ArenasCombatLog.Result result = session.end(server, "A");   // winning side, or "draw"; null if already ended
+session.cancel(server);                                     // ends without storing anything
+boolean shown = ArenasCombatLog.openDetails(viewer, result.recordId(), staff);
+```
+
+- **`start`** is refused when run stats are off, the list is empty, or a fighter is in a run or another session.
+  Recording starts at once: call it when the fight begins, after any rental lend. Fighters are listed side by side
+  in the details.
+- **`end`** stores the session like a run, with type `"duel"`. It's kept 30 days, and stays out of
+  `ArenasApi.runHistory`, `openLastRunDetails` and `/arenasld run last`; Arenas sends no chat line for it. It returns
+  `Result(recordId, players)`, one `Summary(uuid, name, side, dealt, taken, healed, blocked, topHit, kills, deaths,
+  assists, bestMinute, durationSeconds)` per fighter. `topHit` is the most HP one hit took off (a 1000 hit on 70 HP
+  counts 70). `blocked` is what shield, armor, Resistance, protection enchantments and absorption stopped. A hit
+  cancelled outright (immunity, a dodge, another mod refusing it) shows in the Timeline as "Hit stopped" but isn't
+  counted as blocked. Call it before cleaning up the arena or giving inventories back,
+  so those don't end up in the log.
+- **The details screen** shows the session's title. The result reads "<names> won" or "Draw", and the winning side's
+  fighters show as won, the rest as lost. Its tabs are Party, Damage, Healing and Timeline, with the kind and player
+  toggles.
+- **`openDetails`** without `staff` opens the record only for its own fighters; with `staff` (check the permission
+  yourself) anyone can open it, staff lines included. It returns false for an unknown id.
+- **A server stop** cancels the sessions still going.
+- **Timeline attackers:** since 4.42.0 the event log names player attackers as `player:<name>`. Before, they showed
+  as `minecraft:player`, in runs too.
 
 ## Client: hosting the lobby view in another screen (4.35.0+)
 

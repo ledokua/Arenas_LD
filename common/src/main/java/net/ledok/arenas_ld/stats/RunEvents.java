@@ -22,7 +22,8 @@ import java.util.Set;
  * <p>One event = one compact list {@code [tick, type, fields…]} (saved as a JSON array in the run record). Types and
  * their fields (numbers rounded to 0.1):
  * <ul>
- *   <li>{@code hit_taken}: attacker (entity type id, "boss:" in front for a run boss, "" without), damage type, raw,
+ *   <li>{@code hit_taken}: attacker (entity type id, "boss:" in front for a run boss, "player:&lt;name&gt;" for a
+ *       player (4.42.0), "" without), damage type, raw,
  *       after armor, after Resistance/enchantments, absorbed, HP before, HP after, procs (passives that fired during
  *       the hit, comma-separated), flag, applied, other reductions (4.37.1). {@code applied} is what really came off
  *       health; {@code other} = after Resistance/enchantments − absorbed − applied: what other mods took off on the
@@ -188,6 +189,9 @@ public final class RunEvents {
         Entity entity = source.getEntity();
         if (entity == null) {
             return "";
+        }
+        if (entity instanceof Player player) {
+            return "player:" + player.getName().getString(); // 4.42.0: duels, and PvP in runs
         }
         String id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString();
         return entity instanceof RunStatsHolder holder && holder.arenasLd$boss() ? "boss:" + id : id;

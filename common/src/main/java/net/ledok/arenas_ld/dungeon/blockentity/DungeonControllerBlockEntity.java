@@ -911,6 +911,7 @@ public class DungeonControllerBlockEntity extends BlockEntity
         if (kicker.getUUID().equals(targetUuid)) return false;
         if (!lobby.isMember(targetUuid)) return false;
 
+        net.ledok.arenas_ld.packet.LobbyRemovedPayload.kicked(kicker.server, targetUuid, activityId(), lobby.lobbyId());
         replaceLobby(recomputeLobbyReadiness(lobby.withMemberRemoved(targetUuid)));
         removeInvitesForPlayer(targetUuid);
         removeJoinRequestsForPlayer(targetUuid);
@@ -1078,8 +1079,7 @@ public class DungeonControllerBlockEntity extends BlockEntity
         if (checkOnly) {
             return available;
         }
-        queuedLobbyIds.remove(lobby.lobbyId());
-        removeLobby(lobby.lobbyId());
+        holdForPreparation(lobby.lobbyId(), available.orElseThrow());
         return available;
     }
 
@@ -1093,6 +1093,21 @@ public class DungeonControllerBlockEntity extends BlockEntity
         } else {
             preparing.put(lobbyId, instancePos.immutable());
         }
+    }
+
+    public void finishLaunch(UUID lobbyId, boolean started) {
+        holdForPreparation(lobbyId, null);
+        if (started) {
+            queuedLobbyIds.remove(lobbyId);
+            removeLobby(lobbyId);
+        }
+    }
+
+    @Override
+    public boolean holdsInstance(net.ledok.arenas_ld.activity.InstanceKey instance) {
+        DungeonRun run = activeRuns.get(instance.pos());
+        return (run != null && run.dbsDimension().equals(instance.dimension()))
+            || (preparing.containsValue(instance.pos()) && getInstanceDimension(instance.pos()).equals(instance.dimension()));
     }
 
     public List<UUID> getQueuedLobbyIds() {
@@ -1321,7 +1336,9 @@ public class DungeonControllerBlockEntity extends BlockEntity
     private boolean instanceAvailable(BlockPos pos) {
         return instances.contains(pos) && !pendingInstanceRemovals.contains(pos)
             && instanceCooldownTimers.getOrDefault(pos, 0) <= 0 && !isInstanceInActiveRun(pos)
-            && !preparing.containsValue(pos);
+            && !preparing.containsValue(pos)
+            && !net.ledok.arenas_ld.activity.ActivityRegistry.instanceHeldByOther(this,
+                new net.ledok.arenas_ld.activity.InstanceKey(getInstanceDimension(pos), pos));
     }
 
     private Lobby recomputeLobbyReadiness(Lobby lobby) {
@@ -1506,7 +1523,13 @@ public class DungeonControllerBlockEntity extends BlockEntity
             // The run's picked modifiers: mobs spawned this tick get them, its players keep them.
             net.ledok.arenas_ld.util.RunEffects.refresh(serverLevel.getServer(), run.runModifiers(), run.participants());
             // Its live stats: its players carry them, mobs spawned this tick count for it.
+            if (run.practice()) {
+                DungeonRunLifecycle.tick(tickLevel, be, run);
+                continue;
+            }
             net.ledok.arenas_ld.stats.RunStats stats = be.runStats(run);
+            net.ledok.arenas_ld.util.RunRentals.tickRun(serverLevel.getServer(), stats);
+            if (be.activeRuns.get(run.dbsPos()) != run) continue;
             stats.tick(serverLevel.getServer());
             net.ledok.arenas_ld.util.RunEffects.during(run.runModifiers(),
                 () -> net.ledok.arenas_ld.stats.RunStats.during(stats, () -> DungeonRunLifecycle.tick(tickLevel, be, run)));

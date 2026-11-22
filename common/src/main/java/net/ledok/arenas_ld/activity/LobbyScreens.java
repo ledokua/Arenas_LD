@@ -36,6 +36,11 @@ public final class LobbyScreens {
      * @param remote true when not opened at the block: the screen then stays open at any distance
      */
     public static boolean open(ServerPlayer player, BlockEntity controller, boolean remote) {
+        return open(player, controller, remote, false);
+    }
+
+    /** {@link #open}; {@code leaderboard}: the screen opens on its Leaderboard tab (4.43.2). */
+    public static boolean open(ServerPlayer player, BlockEntity controller, boolean remote, boolean leaderboard) {
         if (!(controller instanceof ActivityHost host)
             || !(controller instanceof ExtendedMenuProvider<?> provider)
             || !(controller.getLevel() instanceof ServerLevel level)) {
@@ -49,7 +54,8 @@ public final class LobbyScreens {
         if (host.activityId() != null) {
             // For a hub hosting the view (Eden): which activity this menu is. Sent first, so it arrives before the menu.
             net.ledok.arenas_ld.platform.ArenasNetwork.sendToPlayer(player,
-                new net.ledok.arenas_ld.packet.LobbyOpeningPayload(host.activityId()));
+                new net.ledok.arenas_ld.packet.LobbyOpeningPayload(host.activityId(),
+                    host.activityName() == null ? "" : host.activityName(), leaderboard));
         }
         ArenasMenus.open(player, bound(provider, level.dimension(), remote));
         return true;
@@ -57,8 +63,13 @@ public final class LobbyScreens {
 
     /** {@code ArenasApi.openLobbies}: by id, from anywhere. */
     public static boolean openRemote(ServerPlayer player, ResourceLocation activity) {
+        return openRemote(player, activity, false);
+    }
+
+    /** {@code ArenasApi.openLeaderboard} with {@code leaderboard} on. */
+    public static boolean openRemote(ServerPlayer player, ResourceLocation activity, boolean leaderboard) {
         ActivityHost host = ActivityRegistry.resolve(player.server, activity);
-        return host != null && open(player, host.asBlockEntity(), true);
+        return host != null && open(player, host.asBlockEntity(), true, leaderboard);
     }
 
     private static <D> ExtendedMenuProvider<D> bound(ExtendedMenuProvider<D> delegate, ResourceKey<Level> dimension,

@@ -96,6 +96,7 @@ final class ModPacketTypeRegistry {
         ArenasNetwork.playC2S(RoomSetRewardPayload.TYPE, RoomSetRewardPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(net.ledok.arenas_ld.dungeon.packet.RoomSetObjectivePayload.TYPE, net.ledok.arenas_ld.dungeon.packet.RoomSetObjectivePayload.STREAM_CODEC);
         ArenasNetwork.playC2S(net.ledok.arenas_ld.dungeon.packet.RoomClearProtectPosPayload.TYPE, net.ledok.arenas_ld.dungeon.packet.RoomClearProtectPosPayload.STREAM_CODEC);
+        ArenasNetwork.playC2S(net.ledok.arenas_ld.dungeon.packet.RoomClearZonePayload.TYPE, net.ledok.arenas_ld.dungeon.packet.RoomClearZonePayload.STREAM_CODEC);
         ArenasNetwork.playC2S(net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload.TYPE, net.ledok.arenas_ld.dungeon.packet.DbsSetRoomMarkerPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(UpdateMobSpawnerEntityDefPayload.TYPE, UpdateMobSpawnerEntityDefPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(UpdateDbsEntityDefPayload.TYPE, UpdateDbsEntityDefPayload.STREAM_CODEC);
@@ -184,6 +185,8 @@ final class ModPacketTypeRegistry {
         ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.RunTimelinePayload.TYPE, net.ledok.arenas_ld.packet.RunTimelinePayload.STREAM_CODEC);
         ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.RunBreakableBlocksPayload.TYPE, net.ledok.arenas_ld.packet.RunBreakableBlocksPayload.STREAM_CODEC);
         ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.RentalLobbyPayload.TYPE, net.ledok.arenas_ld.packet.RentalLobbyPayload.STREAM_CODEC);
+        ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.LobbyRemovedPayload.TYPE, net.ledok.arenas_ld.packet.LobbyRemovedPayload.STREAM_CODEC);
+        ArenasNetwork.playS2C(net.ledok.arenas_ld.packet.ToolSourceSyncPayload.TYPE, net.ledok.arenas_ld.packet.ToolSourceSyncPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(net.ledok.arenas_ld.packet.SetRentalChoicePayload.TYPE, net.ledok.arenas_ld.packet.SetRentalChoicePayload.STREAM_CODEC);
         ArenasNetwork.playC2S(net.ledok.arenas_ld.packet.RequestRentalPreviewPayload.TYPE, net.ledok.arenas_ld.packet.RequestRentalPreviewPayload.STREAM_CODEC);
         ArenasNetwork.playC2S(net.ledok.arenas_ld.packet.SummonDataPayloads.Set.TYPE, net.ledok.arenas_ld.packet.SummonDataPayloads.Set.STREAM_CODEC);

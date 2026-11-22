@@ -75,6 +75,9 @@ public class RunDetailsScreen extends CanvasScreen {
         fillWindow();
         this.payload = payload;
         this.tab = payload.over() && ownRewards(payload) ? Tab.REWARDS : lastTab;
+        if (tab == Tab.REWARDS && !hasRewards(payload)) {
+            tab = Tab.PARTY; // a duel has no rewards
+        }
         if (tab == Tab.TIMELINE) {
             net.ledok.arenas_ld.screen.run.TimelineView.open(payload, this::timelineChanged);
         }
@@ -247,7 +250,11 @@ public class RunDetailsScreen extends CanvasScreen {
         header.backgroundFill(pal.panel2(), pal.hairline(), 1);
         Flex bar = header.item(Flex.row().gap(6).alignItems(Align.CENTER));
         bar.sizing(Sizing.fill(), Sizing.fixed(22));
-        bar.item(RunWidgets.grow(p.activity().copy().append(" — ").append(p.tier()), pal.ink()));
+        MutableComponent title = p.activity().copy();
+        if (!p.tier().getString().isEmpty()) {
+            title.append(" — ").append(p.tier()); // a duel has none
+        }
+        bar.item(RunWidgets.grow(title, pal.ink()));
         if (p.hardcore()) {
             bar.item(RunWidgets.pill(Component.translatable("hud.arenas_ld.hardcore"), pal.danger()));
         }
@@ -305,6 +312,9 @@ public class RunDetailsScreen extends CanvasScreen {
         Flex row = null;
         float used = 0;
         for (Tab target : Tab.values()) {
+            if (target == Tab.REWARDS && !hasRewards(payload)) {
+                continue;
+            }
             RunWidgets.Tab button = tabButton(target, target.name().toLowerCase(java.util.Locale.ROOT));
             float width = button.bounds().width();
             if (row == null || used + 2 + width > availableWidth) {
@@ -672,6 +682,11 @@ public class RunDetailsScreen extends CanvasScreen {
     }
 
     /** A finished run that paid the viewer: its details open on Rewards. */
+    /** A rewards line or anyone's reward breakdown (a duel has neither; 4.42.0). */
+    private static boolean hasRewards(RunDetailsPayload p) {
+        return !p.rewards().getString().isEmpty() || p.rows().stream().anyMatch(r -> !r.rewards().isEmpty());
+    }
+
     private static boolean ownRewards(RunDetailsPayload p) {
         UUID self = Minecraft.getInstance().player == null ? null : Minecraft.getInstance().player.getUUID();
         return p.rows().stream().anyMatch(r -> r.uuid().equals(self) && !r.rewards().isEmpty());

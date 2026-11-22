@@ -16,7 +16,7 @@ public class MobArenaMobData {
     public EquipmentData equipment = new EquipmentData();
     public int weight = 10;
     public int minWave = 1;
-    public int maxWave = 100;
+    public int maxWave = Integer.MAX_VALUE;
     public boolean isBoss = false;
     /** Extra mob data as SNBT, applied before Arenas' own settings (see {@code EntityDefinition.nbt}). */
     public String nbt = "";

@@ -67,7 +67,7 @@ import net.ledok.arenas_ld.platform.ExtendedMenuProvider;
  */
 public class ArenaControllerBlockEntity extends BlockEntity
     implements ExtendedMenuProvider<net.ledok.arenas_ld.arena.screen.ArenaControllerData>,
-    net.ledok.arenas_ld.activity.ActivityHost {
+    net.ledok.arenas_ld.activity.ActivityHost, net.ledok.arenas_ld.util.BreakableBlocks.Holder {
 
     public record ControllerKey(BlockPos pos, ResourceKey<Level> dimension) {}
 
@@ -204,6 +204,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
         be.tickCooldowns(serverLevel);
         be.tickLobbies(serverLevel);
         be.tickActiveRuns(serverLevel);
+        if (!be.queuedLobbyIds.isEmpty() && serverLevel.getGameTime() % 20 == 0) be.promoteNextQueuedLobby();
         be.pushViewersIfDirty(serverLevel);
     }
 
@@ -258,6 +259,17 @@ public class ArenaControllerBlockEntity extends BlockEntity
         // (a player who left listed as ACTIVE, a finished run as RUNNING). Cheaper than
         // setChanged(), which also pokes neighbouring comparators.
         controllerLevel.blockEntityChanged(worldPosition);
+    }
+
+    private net.ledok.arenas_ld.util.BreakableBlocks breakableBlocks = net.ledok.arenas_ld.util.BreakableBlocks.DEFAULT;
+
+    @Override
+    public net.ledok.arenas_ld.util.BreakableBlocks getBreakableBlocks() { return breakableBlocks; }
+
+    @Override
+    public void setBreakableBlocks(net.ledok.arenas_ld.util.BreakableBlocks blocks) {
+        breakableBlocks = blocks;
+        markDirtyAndSync();
     }
 
     // ── Accessors ──────────────────────────────────────────────────────────
@@ -487,6 +499,17 @@ public class ArenaControllerBlockEntity extends BlockEntity
     /** Instances held by a lobby's start countdown (lobby id → instance), not saved: free but not offered. */
     private final java.util.Map<UUID, net.ledok.arenas_ld.activity.InstanceKey> preparing = new java.util.HashMap<>();
 
+    @Override
+    public boolean holdsInstance(net.ledok.arenas_ld.activity.InstanceKey key) {
+        return activeRuns.containsKey(key) || preparing.containsValue(key) || instances.stream()
+            .anyMatch(inst -> inst.key().equals(key) && inst.status() == InstanceStatus.RUNNING);
+    }
+
+    private boolean isFree(ArenaInstanceState inst) {
+        return inst.status() == InstanceStatus.FREE && !isPreparingInstance(inst)
+            && !net.ledok.arenas_ld.activity.ActivityRegistry.instanceHeldByOther(this, inst.key());
+    }
+
     private boolean isPreparingInstance(ArenaInstanceState inst) {
         return preparing.containsValue(inst.key());
     }
@@ -495,7 +518,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
     private @Nullable ArenaInstanceState reserveInstance(net.ledok.arenas_ld.activity.InstanceKey key) {
         for (int i = 0; i < instances.size(); i++) {
             ArenaInstanceState inst = instances.get(i);
-            if (inst.key().equals(key) && inst.status() == InstanceStatus.FREE) {
+            if (inst.key().equals(key) && isFree(inst)) {
                 ArenaInstanceState running = inst.withStatus(InstanceStatus.RUNNING, 0);
                 instances.set(i, running);
                 return running;
@@ -507,7 +530,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
     private @Nullable ArenaInstanceState reserveFreeInstance() {
         for (int i = 0; i < instances.size(); i++) {
             ArenaInstanceState inst = instances.get(i);
-            if (inst.status() == InstanceStatus.FREE && !isPreparingInstance(inst)) {
+            if (isFree(inst)) {
                 ArenaInstanceState running = inst.withStatus(InstanceStatus.RUNNING, 0);
                 instances.set(i, running);
                 return running;
@@ -517,7 +540,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
     }
 
     private boolean hasAnyFreeInstance() {
-        return instances.stream().anyMatch(i -> i.status() == InstanceStatus.FREE && !isPreparingInstance(i));
+        return instances.stream().anyMatch(this::isFree);
     }
 
     private void releaseInstance(net.ledok.arenas_ld.activity.InstanceKey key) {
@@ -673,13 +696,10 @@ public class ArenaControllerBlockEntity extends BlockEntity
         Lobby lobby = getLobbyByMember(owner.getUUID());
         if (lobby == null || !lobby.isOwner(owner.getUUID())) return false;
         if (lobby.status() == LobbyStatus.IN_RUN || owner.getUUID().equals(targetUuid) || !lobby.isMember(targetUuid)) return false;
+        net.ledok.arenas_ld.packet.LobbyRemovedPayload.kicked(owner.server, targetUuid, activityId(), lobby.lobbyId());
         replaceLobby(lobby.withMemberRemoved(targetUuid));
         offlineSinceTick.remove(targetUuid);
         BusyStateCompat.clearBusy(targetUuid, BUSY_REASON);
-        if (level instanceof ServerLevel sl) {
-            ServerPlayer kicked = sl.getServer().getPlayerList().getPlayer(targetUuid);
-            if (kicked != null) kicked.sendSystemMessage(Component.translatable("message.arenas_ld.you_were_kicked"));
-        }
         markDirtyAndSync();
         return true;
     }
@@ -859,6 +879,8 @@ public class ArenaControllerBlockEntity extends BlockEntity
         if (pendingInstanceRemovals.remove(key)) {
             // This instance only: the same position in another dimension is another instance.
             instances.removeIf(inst -> inst.key().equals(key));
+        } else if (endingRun != null && endingRun.practice()) {
+            freeReservedInstance(key);
         } else {
             releaseInstance(key);
         }
@@ -939,7 +961,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
     }
 
     private void promoteNextQueuedLobby() {
-        if (!hasAnyFreeInstance() || queuedLobbyIds.isEmpty() || !(level instanceof ServerLevel serverLevel)) return;
+        if (queuedLobbyIds.isEmpty() || !hasAnyFreeInstance() || !(level instanceof ServerLevel serverLevel)) return;
         UUID nextLobbyId = queuedLobbyIds.get(0);
         Lobby lobby = getLobbyById(nextLobbyId);
         if (lobby == null) {
@@ -975,7 +997,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
             return launchOnInstance(serverLevel, lobby, reserved);
         }
         net.ledok.arenas_ld.activity.InstanceKey key = reserved.key();
-        freeReservedInstance(reserved.spawnerPos());
+        freeReservedInstance(key);
         UUID lobbyId = lobby.lobbyId();
         java.util.Set<UUID> party = new java.util.HashSet<>(lobby.members());
         preparing.put(lobbyId, key);
@@ -1045,15 +1067,37 @@ public class ArenaControllerBlockEntity extends BlockEntity
         return true;
     }
 
+    /** Starts a single wave for the builder, through the same reservation and combat loop. */
+    public boolean testWave(ServerPlayer player, net.ledok.arenas_ld.activity.InstanceKey key, int wave) {
+        if (!player.hasPermissions(2) || !(level instanceof ServerLevel serverLevel)
+            || BusyStateCompat.isBusy(player.getUUID())
+            || net.ledok.arenas_ld.util.RunItemRestrictions.isPlayerInRun(player)
+            || (maxWave > 0 && wave > maxWave)) return false;
+        ServerLevel spawnerLevel = player.server.getLevel(key.dimension());
+        if (wave < 1 || spawnerLevel == null
+            || !(spawnerLevel.getBlockEntity(key.pos()) instanceof ArenaSpawnerBlockEntity spawner)
+            || !ArenaRunLifecycle.hasValidWave(spawnerLevel, spawner, wave)) return false;
+        ArenaInstanceState instance = reserveInstance(key);
+        if (instance == null) return false;
+        ArenaRun run = new ArenaRun(UUID.randomUUID(), player.getScoreboardName(), false, key.pos(), key.dimension(),
+            wave, serverLevel.getGameTime());
+        run.preparePracticeWave(wave);
+        activeRuns.put(key, run);
+        BusyStateCompat.setBusy(player.getUUID(), BUSY_REASON);
+        ArenaRunLifecycle.beginRun(spawnerLevel, this, run, List.of(player));
+        markDirtyAndSync();
+        return true;
+    }
+
     private boolean launchOnInstance(ServerLevel serverLevel, Lobby lobby, ArenaInstanceState instance) {
         ServerLevel spawnerLevel = serverLevel.getServer().getLevel(instance.dimension());
         if (spawnerLevel == null || !(spawnerLevel.getBlockEntity(instance.spawnerPos()) instanceof ArenaSpawnerBlockEntity)) {
-            freeReservedInstance(instance.spawnerPos());
+            freeReservedInstance(instance.key());
             return false;
         }
         List<ServerPlayer> players = resolveOnlinePlayers(lobby, serverLevel.getServer());
         if (players.isEmpty()) {
-            freeReservedInstance(instance.spawnerPos());
+            freeReservedInstance(instance.key());
             return false;
         }
 
@@ -1075,9 +1119,9 @@ public class ArenaControllerBlockEntity extends BlockEntity
         return true;
     }
 
-    private void freeReservedInstance(BlockPos spawnerPos) {
+    private void freeReservedInstance(net.ledok.arenas_ld.activity.InstanceKey key) {
         for (int i = 0; i < instances.size(); i++) {
-            if (instances.get(i).spawnerPos().equals(spawnerPos)) {
+            if (instances.get(i).key().equals(key)) {
                 instances.set(i, instances.get(i).withStatus(InstanceStatus.FREE, 0));
                 break;
             }
@@ -1218,6 +1262,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
     @Override
     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.saveAdditional(nbt, registryLookup);
+        breakableBlocks.save(nbt);
         List<InstanceEntry> instanceEntries = new ArrayList<>();
         for (ArenaInstanceState inst : instances) {
             instanceEntries.add(new InstanceEntry(inst.spawnerPos(), inst.dimension().location().toString(),
@@ -1246,6 +1291,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
     @Override
     protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
         super.loadAdditional(nbt, registryLookup);
+        breakableBlocks = net.ledok.arenas_ld.util.BreakableBlocks.load(nbt);
         arenaName = nbt.getString("ArenaName");
         activityId = nbt.contains("ActivityId") ? ResourceLocation.tryParse(nbt.getString("ActivityId")) : null;
         loadedWithoutId = activityId == null;
@@ -1394,7 +1440,7 @@ public class ArenaControllerBlockEntity extends BlockEntity
             inviteExpiryTicks, deathTimePenaltyTicks, hpScalePerPlayer, hpScalePerWave,
             rewardCurrencyBase, rewardCurrencyExp, rewardXpBase, rewardXpExp,
             entries, pendingInstanceRemovals.stream().map(net.ledok.arenas_ld.activity.InstanceKey::pos).collect(java.util.stream.Collectors.toUnmodifiableSet()), List.copyOf(leaderboard),
-            AdminScreens.lastEditor(this));
+            breakableBlocks, AdminScreens.lastEditor(this));
     }
     @Override
     public boolean createLobbyFor(ServerPlayer player) {

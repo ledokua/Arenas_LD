@@ -72,8 +72,8 @@ creative tab; nothing has a recipe.
     game mode and position when it ends; `/exit` leaves early at any time.
 
 Arenas and raids are shorter — one spawner block, an entrance, respawn points, and a controller. An
-Arena Spawner ships with an **empty mob list**, though: add at least one mob row on its screen, or the
-arena cycles through instantly-cleared waves forever. A fresh Mob Spawner (a husk) and a fresh Raid
+Arena Spawner ships with an **empty mob list**. Add at least one valid mob row on its screen.
+A wave that cannot spawn enemies ends the run and awards no progress for that wave. A fresh Mob Spawner (a husk) and a fresh Raid
 Boss Spawner (a 300 HP zombie) already work untouched. See [Arenas](#arenas) and [Raids](#raids).
 
 ### If the run won't start
@@ -162,6 +162,7 @@ holding the item can change its mode.
   | Cyan | a respawn point |
   | Orange | the entrance |
   | Magenta | a PROTECT objective's target position |
+  | Lime | a REACH_ZONE objective's goal zone (one outline around the whole box; a lone first corner as a block) |
 
   Every box is also tinted: its block's sides are washed in its own color under the outline, so a
   marker reads as a volume rather than a wire frame, and a door is skinned over its real shape
@@ -172,6 +173,10 @@ holding the item can change its mode.
   drawn while you are in the same dimension as the target, and an entrance that was never set is not
   drawn at all.
 
+  Walking out of view distance doesn't lose the overlay (4.44.0): the client keeps what it last saw of the
+  selected block and its spawners and doors, and a tool click on a block out of your client's range sends
+  you that block's new data, so its outlines update even from across the dungeon.
+
 | Mode | Valid sources | What a target click does |
 |---|---|---|
 | **Link structures** | Dungeon / Raid / Arena Controller, Dungeon Boss Spawner, Room Controller | The (source, target) pair decides the relationship — nothing to pick. |
@@ -180,6 +185,7 @@ holding the item can change its mode.
 | **Entrance position** | Dungeon Boss Spawner, Raid Boss Spawner, Arena Spawner | Sets where the party lands. Always replaces, never toggles. |
 | **Respawn position** | Room Controller, Raid Boss Spawner, Arena Spawner | Toggles one respawn point on top of the clicked block. |
 | **Protect target position** | Room Controller | Sets (or clears) where a PROTECT objective's target spawns. |
+| **Goal zone** | Room Controller | A REACH_ZONE objective's zone: the first click sets one corner, the next the opposite corner (the box of blocks between them, inclusive). A click with both set starts a new zone. Cleared from the Room Controller screen. |
 
 The six link pairs, and nothing else:
 
@@ -222,7 +228,13 @@ reports:
 - an entrance in another dimension, since a copy keeps the same offset there. For a dungeon this is
   a warning, since its entrance may be elsewhere. For a raid or arena it is an error, because the
   fight happens at the spawner;
-- which activity lists the instance.
+- missing room respawn points or goal-zone corners, and an unreachable Final room;
+- arena waves without a valid enemy;
+- which activities list the instance and whether it has duplicate links.
+
+For a linked arena or dungeon, operators can choose **Test Run** in the report and enter a wave
+or room number. The test plays one wave or room solo, then returns the operator home. It skips
+Arenas_LD rewards, lifetime stats and leaderboard records.
 
 It loads the chunks it looks at, so run it as an admin action, not on a timer. Don't paste a
 controller along with an instance: a copied controller gets a fresh id and none of the original's
@@ -304,7 +316,7 @@ validates anything. Fix the markers or the door, then Create Lobby, Ready and St
 
 ### Room objectives
 
-Four types, as a segmented row on the Room Controller. An untouched room is **Kill everything**, which
+Five types, as a segmented row on the Room Controller. An untouched room is **Kill everything**, which
 is exactly the pre-objective behavior.
 
 | Objective | How it clears | Options |
@@ -313,11 +325,18 @@ is exactly the pre-objective behavior.
 | **Survive** | the timer expires — mob deaths never clear it | *Survive time (s)* 1–3600, default 60; *Wave every (s)* 5–600, default 15 |
 | **Kill the boss** | the wave's boss mobs die; the remaining adds are discarded on the spot and unspawned waves skipped | falls back to Kill everything with no boss spawner linked |
 | **Protect the target** | all waves die while the target lives; the target dying **loses the run** | *Target mob* (default `minecraft:villager`), absolute attribute overrides, *Stationary* On/Off, and the protect position |
+| **Reach the zone** (4.44.0) | *Required players %* of the active party (online, not downed) stand in the goal zone at once — mob deaths never clear it, and there is no time limit | *Wave every (s)* 5–600, default 15; *Mob cap*; the goal zone (Dungeon Tool, **Goal zone** mode) |
 
 - **Survive** force-spawns the next wave every interval on top of whatever is still alive, looping past
   the last wave back to the first, so a party cannot stall behind one leftover mob. When the timer
   expires every remaining mob is discarded. A long survive time with a short interval piles up a very
   large number of mobs.
+- **Reach the zone** spawns waves on the Survive schedule (every interval, looping, on top of what is alive)
+  until enough players stand in the zone; then every remaining mob is discarded and the room clears. The
+  zone's edges are drawn as a green outline for the party (by the client, from the run HUD), and the HUD reads *Reach the zone: 1/2 · enemies 7*.
+  Without a full zone the room logs a warning and plays as Kill everything.
+- **Mob cap** (Survive and Reach the zone; 0 = no cap, at most 500): a wave spawns only as many mobs as fit
+  under it, so looping waves can't bury a party under hundreds of mobs. Boss spawners always spawn.
 - **Protect** costs more than it looks. The target joins the party's no-friendly-fire team (players
   cannot hurt it) but deliberately not the mob team (wave mobs can), and idle mobs with no live target
   are retargeted onto it each tick. While it lives, a downed player's respawn timer is multiplied by
@@ -480,7 +499,7 @@ spawner block between *Spawn distance* and *Battle radius − 2*, at a y from th
 requiring solid ground, no collision and no liquid, with up to 10 attempts before falling back to one
 block above the spawner. Bosses spawn at the spawner's own x/z.
 
-Entry puts players in **Survival**, unlike dungeons and raids, which use Adventure. Arenas_LD does no
+Entry puts players in **Adventure**. Enable **Survival mode** on the Arena Spawner for an instance built around vanilla placing or breaking. Arenas_LD does no
 block protection of its own, so arena players can mine and build inside your arena; only the mod's own
 nine blocks are unbreakable. Claim the arena in your protection plugin, or build it out of blocks you
 do not mind losing.
@@ -541,13 +560,15 @@ multiplier. With *Mob HP per wave* at its default 0, a wave-50 boss is exactly a
 boss while the regular mobs around it have grown enormously. Raise that setting, or give bosses high
 attribute values, if bosses should keep up.
 
-The party's **mob count** uses the live active-player count each wave, while the HP multiplier is frozen
+The party's **mob count** uses the live active-player count each wave, up to 64 wave mobs, while the HP multiplier is frozen
 at run start — players dropping out reduce how many mobs spawn, not how tough they are.
 
 ### Waves, timing and the wave-clear bonus
 
 Each wave's clock is `waveTimer + (wave − 1) × additionalTime` seconds, plus `bossWaveAdditionalTime`
-if a boss spawned. Zero means TIMEOUT.
+if a boss spawned. A zero wave clock means no time limit. A zero intermission starts the next wave
+without a wait. With a longer intermission, every standing player can click **Ready for next wave**
+in chat to continue early.
 
 | Arena Spawner setting | Default |
 |---|---|
@@ -557,7 +578,7 @@ if a boss spawned. Zero means TIMEOUT.
 | Wave timer | 120 s |
 | Added time per wave | 5 s |
 | Time between waves | 10 s |
-| Prepare time | 10 s |
+| Arrival grace | 3 s (0–3 s) |
 | Boss wave bonus time | 60 s |
 | Boss / Elite / Objective wave every N | 5 / 3 / 7 |
 
@@ -567,7 +588,7 @@ has all four armor pieces plus both hands repaired by `maxDamage × pct`, where 
 
 **Downed players revive only between waves.** A lethal hit makes them a full-health spectator with
 "You're downed. You'll revive next wave.", and the wave clock loses the death penalty; they come back
-in Survival at the closest respawn point (or the entrance) when the wave is cleared. There is no
+in the instance’s configured game mode at the closest respawn point (or the entrance) when the wave is cleared. There is no
 mid-wave respawn timer — the admin screen's *Respawn time (ticks)* is stored but never counted down in
 an arena. If everyone is down at once, the run ends as a wipe first.
 
@@ -1014,10 +1035,9 @@ tellraw @a {"text":"The Fallen Icon has been defeated!"}
 **Arena per-wave rows** fire on wave *W* when `W ≥ minWave && W ≤ maxWave && every > 0 && (W − minWave) % every == 0`
 — so "every" counts from that row's `minWave`, not from wave 1 (minWave 3, every 5 pays on 3, 8, 13…),
 and an `every` of 0 disables the row. A row is either **each** (per-player: rolled separately for every
-online participant, delivered to their inventory) or **one** (communal: rolled once and scattered on
-the arena floor). Communal drops are **deleted when the next wave starts**, along with every other
-dropped item in the battle radius — use per-player rows for loot that must not be missed. Arena mobs
-also default to suppressed natural drops, so all arena loot is expected to come from these rows.
+online participant, delivered to their inventory) or **Shared** (rolled for the party and scattered on
+the arena floor). New rows default to per-player rewards. Loose items follow normal Minecraft despawn
+rules between waves. Arena mobs suppress natural drops by default, so the reward rows supply wave loot.
 
 ### Reward modifiers
 
@@ -1257,14 +1277,15 @@ value. `/arenasld activity settings <id>` shows both settings.
 
 ## Breakable blocks in runs
 
-Dungeon and raid players are in Adventure mode and can't break blocks. A run can let them break chosen blocks (a
+Dungeon, raid and default arena runs use Adventure mode. A run can let them break chosen blocks (a
 boss's vine walls, say):
 - **Global list** `run_breakable_blocks` in the config: block ids or `#tags`.
-- **Controller list**: the dungeon or raid admin screen's General tab (or `/arenasld activity breakable <id>`): its
+- **Controller list**: the activity’s admin screen (or `/arenasld activity breakable <id>`): its
   own entries, **added** to the global list or **replacing** it (an empty replacing list allows nothing). Use it to
   let one raid break a block that another dungeon keeps protected.
 - **Per difficulty**: the **Block breaking** switch in each tier tab, off by default for every tier. Off means
-  nothing is breakable in that difficulty, whatever the lists say.
+  nothing is breakable in that difficulty. For arenas, enable **Allow configured block breaking** on the
+  Arena Spawner to use the same lists.
 
 Only the run's own players in Adventure can break (not spectators or downed players); a broken block drops nothing
 and gives no XP, and nothing is put back after the run. Other blocks show "This block can't be broken here".
@@ -1299,6 +1320,9 @@ and gives no XP, and nothing is put back after the run. Other blocks show "This 
 /arenasld instance add <activity> <pos> [dim]   link a pasted instance to the activity's controller, then check it
 /arenasld instance check <activity>             check every instance of the activity
 /arenasld instance check at <pos> [dim]         check one Dungeon Boss / Raid Boss / Arena Spawner
+/arenasld instance test room <id> <pos> <dim> <number>   test one linked dungeon room
+/arenasld instance test wave <id> <pos> <dim> <number>   test one linked arena wave
+/arenasld nextwave                              mark yourself ready during arena intermission
 ```
 
 `admin`, `reload`, `activity` and `instance` require **permission level 2**; everything else is open to all

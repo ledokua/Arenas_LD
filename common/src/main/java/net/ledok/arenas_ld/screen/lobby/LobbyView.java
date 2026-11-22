@@ -82,6 +82,9 @@ public final class LobbyView {
     private float builtWidth = 560;
 
     private Tab tab = Tab.MY_LOBBY;
+    private boolean leaderboardAsked;
+    /** Set by {@link #openOnLeaderboard}: the own lobby's snapshot doesn't switch the tab until the player does. */
+    private boolean stayOnTab;
     private Sub sub = Sub.PARTY;
     private DifficultyTier leaderboardTier = DifficultyTier.NORMAL;
     private @Nullable String footerError;
@@ -135,10 +138,22 @@ public final class LobbyView {
         }
     }
 
+    /**
+     * Opens on the Leaderboard tab (4.43.2, {@code ArenasApi.openLeaderboard}), once: it stays there until the player
+     * picks a tab, even when the first snapshot shows them in a lobby.
+     */
+    public void openOnLeaderboard() {
+        if (!leaderboardAsked) {
+            leaderboardAsked = true;
+            tab = Tab.LEADERBOARD;
+            stayOnTab = true;
+        }
+    }
+
     /** A new snapshot: follow the own lobby (joined → My lobby, lost → the list), then rebuild. */
     public void dataChanged() {
         boolean has = host.ownLobby().isPresent();
-        if (has && !hadOwnLobby) {
+        if (has && !hadOwnLobby && !stayOnTab) {
             tab = Tab.MY_LOBBY;
             sub = Sub.PARTY;
         }
@@ -306,6 +321,7 @@ public final class LobbyView {
     private RunWidgets.Tab tabButton(Tab target, Component label) {
         return new RunWidgets.Tab(p, label, () -> tab == target, () -> {
             tab = target;
+            stayOnTab = false;
             footerError = null;
             savedScroll.clear();
             build();
@@ -393,10 +409,7 @@ public final class LobbyView {
         boolean owner = lobby.ownerUuid().equals(self);
         boolean ready = lobby.readyMembers().contains(self);
 
-        Button leave = RunWidgets.button(tr("gui.arenas_ld.lobby.leave"), () -> {
-            footerError = null;
-            host.leave();
-        });
+        Button leave = RunWidgets.button(tr("gui.arenas_ld.lobby.leave"), this::leave);
         leave.style(RunWidgets.flatStyle(p));
         bar.item(leave);
         bar.item(RunWidgets.button(tr(ready ? "gui.arenas_ld.dungeon_controller.button.unready"
@@ -573,12 +586,21 @@ public final class LobbyView {
             banner.item(RunWidgets.button(tr("gui.arenas_ld.raid_controller.button.start"), this::start));
         }
         if (owner && host.kind() != LobbyHost.Kind.DUNGEON) {
-            banner.item(RunWidgets.button(tr("gui.arenas_ld.raid_controller.button.leave_queue"), () -> {
-                footerError = null;
-                host.leave();
-            }));
+            banner.item(RunWidgets.button(tr("gui.arenas_ld.raid_controller.button.leave_queue"), this::leave));
         }
         return banner;
+    }
+
+    /**
+     * Leaves the lobby. In a hub (hosted, 4.43.0) the view is done then: its menu closes from the client (closed()
+     * turns true) and the hub goes back to its lobby list, instead of showing "You're not in a lobby" here.
+     */
+    private void leave() {
+        footerError = null;
+        host.leave();
+        if (hosted) {
+            host.close();
+        }
     }
 
     private Flex partyContent(Lobby lobby, boolean owner) {
@@ -592,7 +614,8 @@ public final class LobbyView {
         if (owner && !lobby.isFull(host.maxPartySize())) {
             col.item(emptySlot());
         }
-        Flex rental = RentalPick.build(host.controllerPos(), p);
+        // The party column's content width: the column less its padding (18) and the scroll bar (6).
+        Flex rental = RentalPick.build(host.controllerPos(), p, (wide ? PARTY_COLUMN_W : builtWidth) - 24);
         col.item(rental);
         return col;
     }

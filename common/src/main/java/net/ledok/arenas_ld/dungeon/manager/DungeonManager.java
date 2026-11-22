@@ -90,7 +90,7 @@ public final class DungeonManager {
             }
             for (BlockPos pos : entry.getValue()) {
                 if (level.getBlockEntity(pos) instanceof DungeonControllerBlockEntity controller
-                    && controller.getActiveRuns().containsKey(run.dbsPos())) {
+                    && controller.getActiveRuns().get(run.dbsPos()) == run) {
                     return controller;
                 }
             }

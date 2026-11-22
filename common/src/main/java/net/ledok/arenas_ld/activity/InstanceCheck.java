@@ -44,7 +44,7 @@ public final class InstanceCheck {
 
     /** What was checked, the problems found and the activities whose controller lists this instance. */
     public record Report(Component what, BlockPos pos, ResourceKey<Level> dimension, Component summary,
-                         List<Problem> problems, List<ResourceLocation> linkedTo) {
+                         List<Problem> problems, List<ResourceLocation> linkedTo, @Nullable String testKind) {
         public long errors() {
             return problems.stream().filter(p -> p.severity() == Severity.ERROR).count();
         }
@@ -72,6 +72,7 @@ public final class InstanceCheck {
                                        BlockPos entrance, List<BlockPos> respawnOffsets) {
         List<Problem> problems = new ArrayList<>();
         ServerLevel entranceLevel = checkEntrance(level, pos, entranceDimension, entrance, true, problems);
+        if (be instanceof ArenaSpawnerBlockEntity arena) checkArenaWaves(level, arena, problems);
         // Their respawn points are used in the entrance's dimension.
         int respawns = checkRespawns(entranceLevel != null ? entranceLevel : level, pos, respawnOffsets, problems);
         return report(level, pos, be, Component.translatable("message.arenas_ld.instance.summary_spawner", respawns),
@@ -107,6 +108,15 @@ public final class InstanceCheck {
                     problems.add(error("message.arenas_ld.instance.door_missing", label, doorPos.toShortString()));
                 }
             }
+            if (room.getRespawnPositions().isEmpty()) {
+                problems.add(new Problem(Severity.ERROR, Component.translatableWithFallback(
+                    "message.arenas_ld.instance.respawn_missing", "Room %s has no respawn point. Set one with the Dungeon Tool.", label)));
+            }
+            if (room.getObjective().type() == net.ledok.arenas_ld.dungeon.room.RoomObjectiveConfig.Type.REACH_ZONE
+                && !room.getObjective().hasZone()) {
+                problems.add(new Problem(Severity.ERROR, Component.translatableWithFallback(
+                    "message.arenas_ld.instance.zone_missing", "Room %s needs both corners of its goal zone.", label)));
+            }
             for (BlockPos respawn : room.getRespawnPositions()) {
                 respawns++;
                 if (!isFree(level, respawn)) {
@@ -131,8 +141,13 @@ public final class InstanceCheck {
                     Component.translatable("message.arenas_ld.instance.marker_final"), fin.toShortString()));
             }
             if (startIsRoom && level.getBlockEntity(start) instanceof RoomControllerBlockEntity) {
-                boolean hasWayIn = RoomGraph.build(level, dbs).doorsOf(start).stream()
-                    .anyMatch(door -> door.partnerOf(start) == null);
+                RoomGraph graph = RoomGraph.build(level, dbs);
+                boolean hasWayIn = graph.doorsOf(start).stream().anyMatch(door -> door.partnerOf(start) == null
+                    && level.getBlockState(door.anchor()).getBlock() instanceof PhaseBlock);
+                if (fin != null && rooms.contains(fin) && !graph.canReach(level, start, fin)) {
+                    problems.add(new Problem(Severity.ERROR, Component.translatableWithFallback(
+                        "message.arenas_ld.instance.final_unreachable", "No connected path from the Start room to the Final room.")));
+                }
                 if (!hasWayIn) {
                     problems.add(error("message.arenas_ld.instance.start_no_way_in"));
                 }
@@ -144,6 +159,40 @@ public final class InstanceCheck {
         return report(level, pos, dbs,
             Component.translatable("message.arenas_ld.instance.summary_dungeon", rooms.size(), spawners, doors, respawns),
             problems);
+    }
+
+    private static void checkArenaWaves(ServerLevel level, ArenaSpawnerBlockEntity arena, List<Problem> problems) {
+        int maxWave = Integer.MAX_VALUE;
+        List<ResourceLocation> owners = linkedTo(level.getServer(), level.dimension(), arena.getBlockPos());
+        if (owners.size() == 1 && ActivityRegistry.resolve(level.getServer(), owners.getFirst()) instanceof ArenaControllerBlockEntity host
+            && host.getMaxWave() > 0) maxWave = host.getMaxWave();
+        var eligible = arena.getMobs().stream()
+            .filter(mob -> net.ledok.arenas_ld.arena.run.ArenaRunLifecycle.isValidMob(level, mob))
+            .toList();
+        var boundaries = new java.util.TreeSet<Long>();
+        boundaries.add(1L);
+        boundaries.add(maxWave + 1L);
+        for (var mob : eligible) {
+            long from = Math.max(1, mob.minWave);
+            long to = Math.min(maxWave, mob.maxWave);
+            if (from <= to) {
+                boundaries.add(from);
+                boundaries.add(to + 1L);
+            }
+        }
+
+        int cadence = arena.getBossEveryNWaves();
+        for (long at : boundaries) {
+            if (at > maxWave) break;
+            boolean regular = eligible.stream().anyMatch(mob -> !mob.isBoss && at >= mob.minWave && at <= mob.maxWave);
+            if (regular) continue;
+            boolean boss = cadence > 0 && eligible.stream().anyMatch(mob -> mob.isBoss && at >= mob.minWave && at <= mob.maxWave);
+            long invalid = !boss || at % cadence != 0 ? at : at + (cadence == 1 ? Integer.MAX_VALUE : 1L);
+            if (invalid >= boundaries.higher(at)) continue;
+            problems.add(new Problem(Severity.ERROR, Component.translatableWithFallback(
+                "message.arenas_ld.instance.arena_no_mobs", "Wave %s has no valid enemy. Check mob IDs, wave ranges, and boss cadence.", invalid)));
+            return;
+        }
     }
 
     /** Checks the entrance; returns its level, or null when there is none to use. */
@@ -190,11 +239,17 @@ public final class InstanceCheck {
     }
 
     private static Report report(ServerLevel level, BlockPos pos, BlockEntity be, Component summary, List<Problem> problems) {
-        // Errors first (a stable sort keeps the order they were found in), so a cut-off list never hides one.
+        List<ResourceLocation> owners = linkedTo(level.getServer(), level.dimension(), pos);
         List<Problem> sorted = new ArrayList<>(problems);
+        if (owners.size() > 1) {
+            sorted.add(new Problem(Severity.ERROR, Component.translatableWithFallback(
+                "message.arenas_ld.instance.shared", "Several activities link this instance. Give each activity its own copy.")));
+        }
+        // Errors first (a stable sort keeps the order they were found in), so a cut-off list never hides one.
         sorted.sort(java.util.Comparator.comparing(Problem::severity));
+        String testKind = be instanceof ArenaSpawnerBlockEntity ? "wave" : be instanceof DungeonBossSpawnerBlockEntity ? "room" : null;
         return new Report(be.getBlockState().getBlock().getName(), pos.immutable(), level.dimension(), summary,
-            List.copyOf(sorted), linkedTo(level.getServer(), level.dimension(), pos));
+            List.copyOf(sorted), owners, testKind);
     }
 
     /** The activities whose controller lists this instance (controllers keep their chunks loaded). */

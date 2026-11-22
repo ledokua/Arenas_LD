@@ -490,6 +490,9 @@ public final class TimelineView {
         if (id.isEmpty()) {
             return Component.literal(damageType.isEmpty() ? "?" : damageType.substring(damageType.indexOf(':') + 1).replace('_', ' '));
         }
+        if (id.startsWith("player:")) {
+            return Component.literal(id.substring(7));
+        }
         boolean boss = id.startsWith("boss:");
         String plain = boss ? id.substring(5) : id;
         Component name = EntityType.byString(plain).map(EntityType::getDescription)
